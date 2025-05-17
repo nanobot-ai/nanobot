@@ -1,0 +1,82 @@
+publish:
+  tools: [manager]
+
+agents:
+  planner:
+    model: gpt-4o
+    instructions: |-
+      You are a helpful research assistant. Given a query, come up with a set of web searches
+      to perform to best answer the query. Output between 5 and 20 terms to query for.
+    output:
+      strict: true
+      schema:
+        type: object
+        additionalProperties: false
+        required: [searches]
+        properties:
+          searches:
+            type: array
+            description: A list of web searches to perform to best answer the query.
+            items:
+              type: object
+              required: [reason, query]
+              additionalProperties: false
+              properties:
+                reason:
+                  type: string
+                  description: Your reasoning for why this search is important to the query.
+                query:
+                  type: string
+                  description: The search term to use for the web search.
+
+  searchAgent:
+    model: gpt-4o
+    instructions: |-
+      You are a research assistant. Given a search term, you search the web for that term and
+      produce a concise summary of the results. The summary must 2-3 paragraphs and less than 300
+      words. Capture the main points. Write succinctly, no need to have complete sentences or good
+      grammar. This will be consumed by someone synthesizing a report, so its vital you capture the
+      essence and ignore any fluff. Do not include any additional commentary other than the summary
+      itself.
+    toolChoice: required
+    tools:
+    - search
+
+  writer:
+    model: o3-mini
+    instructions: |-
+      You are a senior researcher tasked with writing a cohesive report for a research query.
+      You will be provided with the original query, and some initial research done by a research
+      assistant.
+      
+      You should first come up with an outline for the report that describes the structure and
+      flow of the report. Then, generate the report and return that as your final output.
+      
+      The final output should be in markdown format, and it should be lengthy and detailed. Aim
+      for 5-10 pages of content, at least 1000 words.
+    output:
+      type: object
+      required: [short_summary, markdown_report, follow_up_questions]
+      properties:
+        short_summary:
+          type: string
+          description: A short 2-3 sentence summary of the findings.
+        markdown_report:
+          type: string
+          description: The final report in markdown format.
+        follow_up_questions:
+          type: array
+          description: Suggested topics to research further.
+          items:
+            type: string
+            description: A follow up question to research further.
+
+mcpServers:
+  search:
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-brave-search" ]
+    env:
+      BRAVE_API_KEY: ${BRAVE_API_KEY}
+  manager:
+    command: npx
+    args: ["tsx", "manager.ts" ]

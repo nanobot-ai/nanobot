@@ -1,7 +1,10 @@
 package main
 
-import "fmt"
+import (
+	"github.com/obot-platform/nanobot/pkg/cli"
+	"github.com/obot-platform/nanobot/pkg/cmd"
+)
 
 func main() {
-	fmt.Println("Hello, World!")
+	cmd.Main(cli.New())
 }

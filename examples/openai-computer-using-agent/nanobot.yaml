@@ -1,0 +1,20 @@
+publish:
+  tools: [cua, browser/browser_agent]
+
+agents:
+  cua:
+    model: computer-use-preview
+    stateful: true
+    truncation: auto
+    tools: [browser/browser, browser/open_url]
+    toolExtensions:
+      browser:
+        display_width: 1024
+        display_height: 768
+        environment: browser
+        type: "computer_use_preview"
+
+mcpServers:
+  browser:
+    command: "uv"
+    args: [ "run", "browsertool.py" ]
