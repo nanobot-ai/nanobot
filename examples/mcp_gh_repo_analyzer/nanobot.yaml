@@ -1,0 +1,87 @@
+publish:
+  tools: [mcp_gh_repo_analyzer]
+
+agents:
+  mcp_gh_repo_analyzer:
+    model: gpt-4.1
+    instructions: |
+      You are an agent that extracts features from GitHub repositories for Model Context Protocol (MCP) servers.
+      1. Use search_repositories to get the Repo object (stars, forks, license, etc).
+      2. Retrieve the entire README (do not truncate).
+      3. Using the repo and README, determine if the project is an MCP server (not an SDK, client, inspector, or platform).
+         - If not an MCP server, set description to 'Not an MCP server' and leave other fields blank.
+      4. For MCP servers, extract: repo URL, name, description, readme, license, stars, forks.
+      5. Use only the README to determine if the server runs via Docker, UVX, or NPX, and extract activation commands.
+      6. Determine if filesystem access or credentials are required.
+      7. If the server command is run via Docker, UVX, or NPX, use the test_mcp_stdio_server tool and list its tools. (or provide the raw response if unsuccessful).
+    tools: [github_mcp_server, test_mcp_stdio_server]
+    output:
+      strict: true
+      schema:
+        type: object
+        required:
+          - repo_name
+          - description
+          - license
+          - stars
+          - forks
+          - docker
+          - uvx
+          - npx
+          - filesystem_access
+          - credentials
+          - example_activation_commands
+          - readme
+          - tools
+        additionalProperties: false
+        properties:
+          repo_name:
+            type: string
+          description:
+            type: string
+            description: "Explains what the MCP Server does in a succinct way."
+          license:
+            type: string
+          stars:
+            type: integer
+          forks:
+            type: integer
+          docker:
+            type: string
+            description: "Does the repo run via Docker? (Y/N)"
+          uvx:
+            type: string
+            description: "Does the repo run via UVX? (Y/N)"
+          npx:
+            type: string
+            description: "Does the repo run via NPX? (Y/N)"
+          filesystem_access:
+            type: string
+            description: "Does the MCP Server require filesystem access? (Y/N)"
+          credentials:
+            type: string
+            description: "Does the MCP Server require credentials? (Y/N)"
+          example_activation_commands:
+            type: string
+          readme:
+            type: string
+            description: "The entire unabbreviated README of the repo."
+          tools:
+            type: string
+            description: "The tools returned via the test_mcp_stdio_server tool, or the error message if unsuccessful."
+
+mcpServers:
+  github_mcp_server:
+    command: "docker"
+    args:
+      - run
+      - -i
+      - --rm
+      - -e
+      - GITHUB_PERSONAL_ACCESS_TOKEN
+      - ghcr.io/github/github-mcp-server
+  test_mcp_stdio_server:
+    command: "uv"
+    args:
+      - run
+      - main.py
