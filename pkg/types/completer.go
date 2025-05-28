@@ -59,17 +59,30 @@ type CompletionInput struct {
 	Message        *mcp.SamplingMessage `json:"message,omitempty"`
 	ToolCall       *ToolCall            `json:"toolCall,omitempty"`
 	ToolCallResult *ToolCallResult      `json:"toolCallResul,omitempty"`
+	Reasoning      *Reasoning           `json:"reasoning,omitempty"`
 }
 
 type CompletionOutput struct {
-	Message  *mcp.SamplingMessage `json:"message,omitempty"`
-	ToolCall *ToolCall            `json:"toolCall,omitempty"`
+	Message   *mcp.SamplingMessage `json:"message,omitempty"`
+	ToolCall  *ToolCall            `json:"toolCall,omitempty"`
+	Reasoning *Reasoning           `json:"reasoning,omitempty"`
+}
+
+type Reasoning struct {
+	ID               string        `json:"id,omitempty"`
+	EncryptedContent string        `json:"encryptedContent,omitempty"`
+	Summary          []SummaryText `json:"summary,omitempty"`
+}
+
+type SummaryText struct {
+	Text string `json:"text,omitempty"`
 }
 
 func (c *CompletionOutput) ToInput() CompletionInput {
 	return CompletionInput{
-		Message:  c.Message,
-		ToolCall: c.ToolCall,
+		Message:   c.Message,
+		ToolCall:  c.ToolCall,
+		Reasoning: c.Reasoning,
 	}
 }
 
