@@ -20,9 +20,10 @@ type Client struct {
 }
 
 type Config struct {
-	APIKey  string
-	BaseURL string
-	Headers map[string]string
+	APIKey     string
+	BaseURL    string
+	Headers    map[string]string
+	APIVersion string
 }
 
 // NewClient creates a new OpenAI client with the provided API key and base URL.
@@ -71,7 +72,11 @@ func (c *Client) complete(ctx context.Context, req Request, opts ...types.Comple
 
 	data, _ := json.Marshal(req)
 	log.Messages(ctx, "responses-api", true, data)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/responses", bytes.NewBuffer(data))
+	url := c.BaseURL + "/responses"
+	if c.APIVersion != "" {
+		url += "?api-version=" + c.APIVersion
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +91,7 @@ func (c *Client) complete(ctx context.Context, req Request, opts ...types.Comple
 	defer httpResp.Body.Close()
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
-		return nil, fmt.Errorf("failed to get response: %s %q", httpResp.Status, string(body))
+		return nil, fmt.Errorf("failed to get response from %s: %s %q", url, httpResp.Status, string(body))
 	}
 
 	lines := bufio.NewScanner(httpResp.Body)

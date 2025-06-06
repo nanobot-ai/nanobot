@@ -37,6 +37,7 @@ type Nanobot struct {
 	OpenAIAPIKey     string            `usage:"OpenAI API key" env:"OPENAI_API_KEY" name:"openai-api-key"`
 	OpenAIBaseURL    string            `usage:"OpenAI API URL" env:"OPENAI_BASE_URL" name:"openai-base-url"`
 	OpenAIHeaders    map[string]string `usage:"OpenAI API headers" env:"OPENAI_HEADERS" name:"openai-headers"`
+	OpenAIAPIVersion string            `usage:"OpenAI API version" env:"OPENAI_API_VERSION" name:"openai-api-version"`
 	AnthropicAPIKey  string            `usage:"Anthropic API key" env:"ANTHROPIC_API_KEY" name:"anthropic-api-key"`
 	AnthropicBaseURL string            `usage:"Anthropic API URL" env:"ANTHROPIC_BASE_URL" name:"anthropic-base-url"`
 	AnthropicHeaders map[string]string `usage:"Anthropic API headers" env:"ANTHROPIC_HEADERS" name:"anthropic-headers"`
@@ -142,6 +143,7 @@ func (n *Nanobot) GetRuntime(cfgPath string, opts ...runtime.Options) (*runtime.
 			APIKey:  n.OpenAIAPIKey,
 			BaseURL: n.OpenAIBaseURL,
 			Headers: n.OpenAIHeaders,
+			APIVersion: n.OpenAIAPIVersion,
 		},
 		Anthropic: anthropic.Config{
 			APIKey:  n.AnthropicAPIKey,
