@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"maps"
-	"os"
-	"os/exec"
-	"slices"
+	"net/http"
 	"strings"
+	"time"
 
+	"github.com/obot-platform/nanobot/pkg/complete"
+	"github.com/obot-platform/nanobot/pkg/envvar"
 	"github.com/obot-platform/nanobot/pkg/log"
+	"github.com/obot-platform/nanobot/pkg/version"
 )
 
 type Client struct {
@@ -18,6 +19,7 @@ type Client struct {
 }
 
 type ClientOption struct {
+	Roots         []Root
 	OnSampling    func(ctx context.Context, sampling CreateMessageRequest) (CreateMessageResult, error)
 	OnRoots       func(ctx context.Context, msg Message) error
 	OnLogging     func(ctx context.Context, logMsg LoggingMessage) error
@@ -28,12 +30,69 @@ type ClientOption struct {
 	SessionID     string
 }
 
-type MCPServer struct {
-	Env     map[string]string `json:"env,omitempty"`
-	Command string            `json:"command,omitempty"`
-	Args    []string          `json:"args,omitempty"`
-	BaseURL string            `json:"baseURL,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
+func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
+	result.OnSampling = c.OnSampling
+	if other.OnSampling != nil {
+		result.OnSampling = other.OnSampling
+	}
+	result.OnRoots = c.OnRoots
+	if other.OnRoots != nil {
+		result.OnRoots = other.OnRoots
+	}
+	result.OnLogging = c.OnLogging
+	if other.OnLogging != nil {
+		result.OnLogging = other.OnLogging
+	}
+	result.OnMessage = c.OnMessage
+	if other.OnMessage != nil {
+		result.OnMessage = other.OnMessage
+	}
+	result.OnNotify = c.OnNotify
+	if other.OnNotify != nil {
+		result.OnNotify = other.OnNotify
+	}
+	result.Env = complete.MergeMap(c.Env, other.Env)
+	result.SessionID = complete.Last(c.SessionID, other.SessionID)
+	result.ParentSession = complete.Last(c.ParentSession, other.ParentSession)
+	result.Roots = append(c.Roots, other.Roots...)
+	return result
+}
+
+type Server struct {
+	BaseImage    string            `json:"baseImage,omitempty"`
+	Dockerfile   string            `json:"dockerfile,omitempty"`
+	Source       ServerSource      `json:"source,omitempty"`
+	Unsandboxed  bool              `json:"unsandboxed,omitempty"`
+	Env          map[string]string `json:"env,omitempty"`
+	Command      string            `json:"command,omitempty"`
+	Args         []string          `json:"args,omitempty"`
+	BaseURL      string            `json:"url,omitempty"`
+	Ports        []string          `json:"ports,omitempty"`
+	ReversePorts []int             `json:"reversePorts"`
+	Headers      map[string]string `json:"headers,omitempty"`
+}
+
+type ServerSource struct {
+	Repo      string `json:"repo,omitempty"`
+	Tag       string `json:"tag,omitempty"`
+	Commit    string `json:"commit,omitempty"`
+	Branch    string `json:"branch,omitempty"`
+	SubPath   string `json:"subPath,omitempty"`
+	Reference string `json:"reference,omitempty"`
+}
+
+func (s *ServerSource) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '"' {
+		// If the data is a string, treat it as a repo URL
+		var subPath string
+		if err := json.Unmarshal(data, &subPath); err != nil {
+			return fmt.Errorf("failed to unmarshal server source: %w", err)
+		}
+		s.SubPath = subPath
+		return nil
+	}
+	type Alias ServerSource
+	return json.Unmarshal(data, (*Alias)(s))
 }
 
 func toHandler(opts ClientOption) MessageHandler {
@@ -41,13 +100,13 @@ func toHandler(opts ClientOption) MessageHandler {
 		if msg.Method == "sampling/createMessage" && opts.OnSampling != nil {
 			var param CreateMessageRequest
 			if err := json.Unmarshal(msg.Params, &param); err != nil {
-				msg.SendUnknownError(ctx, fmt.Errorf("failed to unmarshal sampling/createMessage: %w", err))
+				msg.SendError(ctx, fmt.Errorf("failed to unmarshal sampling/createMessage: %w", err))
 				return
 			}
 			go func() {
 				resp, err := opts.OnSampling(ctx, param)
 				if err != nil {
-					msg.SendUnknownError(ctx, fmt.Errorf("failed to handle sampling/createMessage: %w", err))
+					msg.SendError(ctx, fmt.Errorf("failed to handle sampling/createMessage: %w", err))
 					return
 				}
 				err = msg.Reply(ctx, resp)
@@ -58,18 +117,18 @@ func toHandler(opts ClientOption) MessageHandler {
 		} else if msg.Method == "roots/list" && opts.OnRoots != nil {
 			go func() {
 				if err := opts.OnRoots(ctx, msg); err != nil {
-					msg.SendUnknownError(ctx, fmt.Errorf("failed to handle roots/list: %w", err))
+					msg.SendError(ctx, fmt.Errorf("failed to handle roots/list: %w", err))
 					return
 				}
 			}()
 		} else if msg.Method == "notifications/message" && opts.OnLogging != nil {
 			var param LoggingMessage
 			if err := json.Unmarshal(msg.Params, &param); err != nil {
-				msg.SendUnknownError(ctx, fmt.Errorf("failed to unmarshal notifications/message: %w", err))
+				msg.SendError(ctx, fmt.Errorf("failed to unmarshal notifications/message: %w", err))
 				return
 			}
 			if err := opts.OnLogging(ctx, param); err != nil {
-				msg.SendUnknownError(ctx, fmt.Errorf("failed to handle notifications/message: %w", err))
+				msg.SendError(ctx, fmt.Errorf("failed to handle notifications/message: %w", err))
 				return
 			}
 		} else if strings.HasPrefix(msg.Method, "notifications/") && opts.OnNotify != nil {
@@ -84,120 +143,55 @@ func toHandler(opts ClientOption) MessageHandler {
 	})
 }
 
-func complete(opts ...ClientOption) ClientOption {
-	var all ClientOption
-	for _, opt := range opts {
-		if opt.OnRoots != nil {
-			if all.OnRoots != nil {
-				panic("multiple OnRoots handlers provided")
-			}
-			all.OnRoots = opt.OnRoots
+func waitForURL(ctx context.Context, serverName, baseURL string) error {
+	if baseURL == "" {
+		return fmt.Errorf("base URL is empty for server %s", serverName)
+	}
+
+	for i := 0; i < 120; i++ {
+		if i%20 == 0 {
+			log.Infof(ctx, "Waiting for server %s at %s to be ready...", serverName, baseURL)
 		}
-		if opt.OnSampling != nil {
-			if all.OnSampling != nil {
-				panic("multiple OnSampling handlers provided")
+		resp, err := http.Get(baseURL)
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("context cancelled while waiting for server %s at %s: %w", serverName, baseURL, ctx.Err())
+			case <-time.After(500 * time.Millisecond):
 			}
-			all.OnSampling = opt.OnSampling
-		}
-		if opt.OnNotify != nil {
-			if all.OnNotify != nil {
-				panic("multiple OnNotify handlers provided")
-			}
-			all.OnNotify = opt.OnNotify
-		}
-		if opt.OnMessage != nil {
-			if all.OnMessage != nil {
-				panic("multiple OnMessage handlers provided")
-			}
-			all.OnMessage = opt.OnMessage
-		}
-		if opt.OnLogging != nil {
-			if all.OnLogging != nil {
-				panic("multiple OnLogging handlers provided")
-			}
-			all.OnLogging = opt.OnLogging
-		}
-		if len(opt.Env) > 0 {
-			if all.Env == nil {
-				all.Env = make(map[string]string)
-			}
-			for k, v := range opt.Env {
-				all.Env[k] = v
-			}
-		}
-		if opt.SessionID != "" {
-			if all.SessionID != "" {
-				panic("multiple SessionID provided")
-			}
-			all.SessionID = opt.SessionID
-		}
-		if opt.ParentSession != nil {
-			if all.ParentSession != nil {
-				panic("multiple ParentSession provided")
-			}
-			all.ParentSession = opt.ParentSession
+		} else {
+			_ = resp.Body.Close()
+			log.Infof(ctx, "Server %s at %s is ready", serverName, baseURL)
+			return nil
 		}
 	}
-	return all
+
+	return fmt.Errorf("server %s at %s did not respond within the timeout period", serverName, baseURL)
 }
 
-func ReplaceString(envs map[string]string, str string) string {
-	return os.Expand(str, func(key string) string {
-		if val, ok := envs[key]; ok {
-			return val
-		}
-		return "${" + key + "}"
-	})
-}
-
-func ReplaceMap(envs map[string]string, m map[string]string) map[string]string {
-	newMap := make(map[string]string, len(m))
-	for k, v := range m {
-		newMap[ReplaceString(envs, k)] = ReplaceString(envs, v)
-	}
-	return newMap
-}
-
-func replaceEnv(envs map[string]string, command string, args []string, env map[string]string) (string, []string, []string) {
-	newEnvMap := maps.Clone(envs)
-	if newEnvMap == nil {
-		newEnvMap = make(map[string]string, len(env))
-	}
-	maps.Copy(newEnvMap, ReplaceMap(envs, env))
-
-	newEnv := make([]string, 0, len(env))
-	for _, k := range slices.Sorted(maps.Keys(newEnvMap)) {
-		newEnv = append(newEnv, fmt.Sprintf("%s=%s", k, newEnvMap[k]))
-	}
-
-	newArgs := make([]string, len(args))
-	for i, arg := range args {
-		newArgs[i] = ReplaceString(envs, arg)
-	}
-	return ReplaceString(envs, command), newArgs, newEnv
-}
-
-func NewSession(ctx context.Context, serverName string, config MCPServer, opts ...ClientOption) (*Session, error) {
+func NewSession(ctx context.Context, serverName string, config Server, opts ...ClientOption) (*Session, error) {
 	var (
 		wire wire
 		err  error
-		opt  = complete(opts...)
+		opt  = complete.Complete(opts...)
 	)
-
-	cmd, args, env := replaceEnv(opt.Env, config.Command, config.Args, config.Env)
-	headers := ReplaceMap(opt.Env, config.Headers)
 
 	if config.Command == "" && config.BaseURL == "" {
 		return nil, fmt.Errorf("no command or base URL provided")
 	} else if config.BaseURL != "" {
 		if config.Command != "" {
-			if err := runCommand(ctx, cmd, args, env); err != nil {
+			var err error
+			config, err = r.Run(ctx, opt.Roots, opt.Env, serverName, config)
+			if err != nil {
+				return nil, err
+			}
+			if err := waitForURL(ctx, serverName, config.BaseURL); err != nil {
 				return nil, err
 			}
 		}
-		wire = NewHTTPClient(serverName, config.BaseURL, headers)
+		wire = NewHTTPClient(serverName, config.BaseURL, envvar.ReplaceMap(opt.Env, config.Headers))
 	} else {
-		wire, err = newStdioClient(ctx, serverName, cmd, args, env)
+		wire, err = newStdioClient(ctx, opt.Roots, opt.Env, serverName, config)
 		if err != nil {
 			return nil, err
 		}
@@ -211,23 +205,12 @@ func NewSession(ctx context.Context, serverName string, config MCPServer, opts .
 	return session, nil
 }
 
-func runCommand(ctx context.Context, cmd string, args []string, env []string) error {
-	osCmd := exec.CommandContext(ctx, cmd, args...)
-	osCmd.Env = env
-	osCmd.Stdout = os.Stdout
-	osCmd.Stderr = os.Stderr
-	if err := osCmd.Start(); err != nil {
-		return fmt.Errorf("failed to start command: %w", err)
-	}
-	return nil
-}
-
-func NewClient(ctx context.Context, serverName string, config MCPServer, opts ...ClientOption) (*Client, error) {
+func NewClient(ctx context.Context, serverName string, config Server, opts ...ClientOption) (*Client, error) {
 	var (
-		opt = complete(opts...)
+		opt = complete.Complete(opts...)
 	)
 
-	session, err := NewSession(ctx, serverName, config, opts...)
+	session, err := NewSession(context.Background(), serverName, config, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +235,10 @@ func NewClient(ctx context.Context, serverName string, config MCPServer, opts ..
 			Sampling: sampling,
 			Roots:    roots,
 		},
-		ClientInfo: ClientInfo{},
+		ClientInfo: ClientInfo{
+			Name:    "nanobot",
+			Version: version.Get().String(),
+		},
 	})
 	return c, err
 }
@@ -319,25 +305,16 @@ func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 }
 
 type CallOption struct {
-	ID            string
 	ProgressToken any
 }
 
-func CompleteCallOptions(opts ...CallOption) CallOption {
-	var all CallOption
-	for _, opt := range opts {
-		if opt.ID != "" {
-			all.ID = opt.ID
-		}
-		if opt.ProgressToken != nil {
-			all.ProgressToken = opt.ProgressToken
-		}
-	}
-	return all
+func (c CallOption) Merge(other CallOption) (result CallOption) {
+	result.ProgressToken = complete.Last(c.ProgressToken, other.ProgressToken)
+	return
 }
 
 func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOption) (result *CallToolResult, err error) {
-	opt := CompleteCallOptions(opts...)
+	opt := complete.Complete(opts...)
 	result = new(CallToolResult)
 
 	err = c.Session.Exchange(ctx, "tools/call", struct {
@@ -347,7 +324,6 @@ func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOp
 		Name:      tool,
 		Arguments: args,
 	}, result, ExchangeOption{
-		ID:            opt.ID,
 		ProgressToken: opt.ProgressToken,
 	})
 

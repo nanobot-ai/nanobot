@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/obot-platform/nanobot/pkg/complete"
 	"github.com/obot-platform/nanobot/pkg/mcp"
 )
 
@@ -14,22 +15,21 @@ type Completer interface {
 type CompletionOptions struct {
 	ProgressToken any
 	Progress      chan<- json.RawMessage
+	ChatHistory   *bool
 }
 
-func CompleteCompletionOptions(opts ...CompletionOptions) CompletionOptions {
-	var all CompletionOptions
-	for _, opt := range opts {
-		if opt.Progress != nil {
-			if all.Progress != nil {
-				panic("multiple progress handlers provided")
-			}
-			all.Progress = opt.Progress
+func (c CompletionOptions) Merge(other CompletionOptions) (result CompletionOptions) {
+	result.ProgressToken = complete.Last(c.ProgressToken, other.ProgressToken)
+	if c.Progress != nil {
+		if other.Progress != nil {
+			panic("multiple progress channels provided")
 		}
-		if opt.ProgressToken != "" {
-			all.ProgressToken = opt.ProgressToken
-		}
+		result.Progress = c.Progress
+	} else {
+		result.Progress = other.Progress
 	}
-	return all
+	result.ChatHistory = complete.Last(c.ChatHistory, other.ChatHistory)
+	return
 }
 
 type CompletionRequest struct {
@@ -59,17 +59,30 @@ type CompletionInput struct {
 	Message        *mcp.SamplingMessage `json:"message,omitempty"`
 	ToolCall       *ToolCall            `json:"toolCall,omitempty"`
 	ToolCallResult *ToolCallResult      `json:"toolCallResul,omitempty"`
+	Reasoning      *Reasoning           `json:"reasoning,omitempty"`
 }
 
 type CompletionOutput struct {
-	Message  *mcp.SamplingMessage `json:"message,omitempty"`
-	ToolCall *ToolCall            `json:"toolCall,omitempty"`
+	Message   *mcp.SamplingMessage `json:"message,omitempty"`
+	ToolCall  *ToolCall            `json:"toolCall,omitempty"`
+	Reasoning *Reasoning           `json:"reasoning,omitempty"`
+}
+
+type Reasoning struct {
+	ID               string        `json:"id,omitempty"`
+	EncryptedContent string        `json:"encryptedContent,omitempty"`
+	Summary          []SummaryText `json:"summary,omitempty"`
+}
+
+type SummaryText struct {
+	Text string `json:"text,omitempty"`
 }
 
 func (c *CompletionOutput) ToInput() CompletionInput {
 	return CompletionInput{
-		Message:  c.Message,
-		ToolCall: c.ToolCall,
+		Message:   c.Message,
+		ToolCall:  c.ToolCall,
+		Reasoning: c.Reasoning,
 	}
 }
 
@@ -79,8 +92,9 @@ type CompletionResponse struct {
 }
 
 type ToolCallResult struct {
-	CallID string             `json:"call_id,omitempty"`
-	Output mcp.CallToolResult `json:"output,omitempty"`
+	OutputRole string             `json:"outputRole,omitempty"`
+	CallID     string             `json:"call_id,omitempty"`
+	Output     mcp.CallToolResult `json:"output,omitempty"`
 }
 
 type ToolCall struct {

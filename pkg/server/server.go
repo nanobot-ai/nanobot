@@ -9,8 +9,10 @@ import (
 	"regexp"
 	"slices"
 
+	"github.com/obot-platform/nanobot/pkg/expr"
 	"github.com/obot-platform/nanobot/pkg/mcp"
 	"github.com/obot-platform/nanobot/pkg/runtime"
+	"github.com/obot-platform/nanobot/pkg/tools"
 	"github.com/obot-platform/nanobot/pkg/types"
 )
 
@@ -169,7 +171,7 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 		return fmt.Errorf("tool %s not found", payload.Name)
 	}
 
-	result, err := s.runtime.Call(ctx, toolMapping.MCPServer, toolMapping.TargetName, payload.Arguments, mcp.CallOption{
+	result, err := s.runtime.Call(ctx, toolMapping.MCPServer, toolMapping.TargetName, payload.Arguments, tools.CallOptions{
 		ProgressToken: msg.ProgressToken(),
 	})
 	if err != nil {
@@ -186,6 +188,10 @@ func (s *Server) handleListTools(ctx context.Context, msg mcp.Message, _ mcp.Lis
 
 	toolMappings, _ := msg.Session.Get(toolMappingKey).(types.ToolMappings)
 	for _, k := range slices.Sorted(maps.Keys(toolMappings)) {
+		if k == types.AgentTool {
+			// entrypoint is essentially hidden
+			continue
+		}
 		result.Tools = append(result.Tools, toolMappings[k].Target.(mcp.Tool))
 	}
 
@@ -198,7 +204,7 @@ func (s *Server) handlePing(ctx context.Context, msg mcp.Message, _ mcp.PingRequ
 
 func (s *Server) buildResourceMappings(ctx context.Context) (types.ResourceMappings, error) {
 	resourceMappings := types.ResourceMappings{}
-	for _, ref := range s.runtime.GetConfig().Publish.Resources {
+	for _, ref := range append(s.runtime.GetConfig().Publish.Resources, s.runtime.GetConfig().Publish.MCPServers...) {
 		toolRef := types.ParseToolRef(ref)
 		if toolRef.Server == "" {
 			continue
@@ -227,7 +233,7 @@ func (s *Server) buildResourceMappings(ctx context.Context) (types.ResourceMappi
 
 func (s *Server) buildResourceTemplateMappings(ctx context.Context) (types.ResourceTemplateMappings, error) {
 	resourceTemplateMappings := types.ResourceTemplateMappings{}
-	for _, ref := range s.runtime.GetConfig().Publish.ResourceTemplates {
+	for _, ref := range append(s.runtime.GetConfig().Publish.ResourceTemplates, s.runtime.GetConfig().Publish.MCPServers...) {
 		toolRef := types.ParseToolRef(ref)
 		if toolRef.Server == "" {
 			continue
@@ -269,7 +275,7 @@ type templateMatch struct {
 func (s *Server) buildPromptMappings(ctx context.Context) (types.PromptMappings, error) {
 	serverPrompts := map[string]*mcp.ListPromptsResult{}
 	result := types.PromptMappings{}
-	for _, ref := range s.runtime.GetConfig().Publish.Prompts {
+	for _, ref := range append(s.runtime.GetConfig().Publish.Prompts, s.runtime.GetConfig().Publish.MCPServers...) {
 		toolRef := types.ParseToolRef(ref)
 		if toolRef.Server == "" {
 			continue
@@ -302,10 +308,72 @@ func (s *Server) buildPromptMappings(ctx context.Context) (types.PromptMappings,
 	return result, nil
 }
 
+func getEnvVal(envMap map[string]string, envKey string, envDef types.EnvDef) string {
+	val, ok := expr.Lookup(envMap, envKey)
+	if ok {
+		return val
+	}
+
+	if envDef.UseBearerToken {
+		bearer, ok := envMap["http:bearer-token"]
+		if ok && bearer != "" {
+			return bearer
+		}
+	}
+
+	if !envDef.Optional {
+		return ""
+	}
+
+	return envDef.Default
+}
+
+func reconcileEnv(session *mcp.Session, c types.Config) error {
+	envMap := session.EnvMap()
+	var missing []string
+	for envKey, envDef := range c.Env {
+		envVal := getEnvVal(envMap, envKey, envDef)
+		if envVal == "" && !envDef.Optional {
+			missing = append(missing, envKey)
+			continue
+		}
+		envMap[envKey] = envVal
+	}
+
+	if len(missing) == 0 {
+		return nil
+	}
+
+	var missingEnv []any
+	for _, key := range missing {
+		values := map[string]any{
+			"name":        key,
+			"description": c.Env[key].Description,
+			"default":     c.Env[key].Default,
+		}
+		if len(c.Env[key].Options) > 0 {
+			values["options"] = c.Env[key].Options
+		}
+		missingEnv = append(missingEnv, values)
+	}
+	return &mcp.RPCError{
+		Code:    401,
+		Message: fmt.Sprintf("missing required environment variables: %v", missing),
+		DataObject: map[string]any{
+			"missingEnv": missingEnv,
+		},
+	}
+}
+
 func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload mcp.InitializeRequest) error {
 	c := s.runtime.GetConfig()
+	session := mcp.SessionFromContext(ctx)
 
-	toolMappings, err := s.runtime.BuildToolMappings(ctx, c.Publish.Tools)
+	if err := reconcileEnv(session, c); err != nil {
+		return err
+	}
+
+	toolMappings, err := s.runtime.BuildToolMappings(ctx, append(c.Publish.Tools, c.Publish.MCPServers...))
 	if err != nil {
 		return err
 	}
@@ -367,7 +435,7 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	for _, h := range s.handlers {
 		ok, err := h(ctx, msg)
 		if err != nil {
-			msg.SendUnknownError(ctx, err)
+			msg.SendError(ctx, err)
 		} else if ok {
 			return
 		}

@@ -5,18 +5,22 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
+	"strings"
 	"sync"
 )
 
 type HTTPServer struct {
+	env            map[string]string
 	MessageHandler MessageHandler
 	sessions       sync.Map
 }
 
-func NewHTTPServer(handler MessageHandler) *HTTPServer {
+func NewHTTPServer(env map[string]string, handler MessageHandler) *HTTPServer {
 	return &HTTPServer{
 		MessageHandler: handler,
+		env:            env,
 	}
 }
 
@@ -110,7 +114,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			response = Message{
 				JSONRPC: msg.JSONRPC,
 				ID:      msg.ID,
-				Error: &Error{
+				Error: &RPCError{
 					Code:    http.StatusInternalServerError,
 					Message: err.Error(),
 				},
@@ -150,6 +154,8 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	maps.Copy(session.session.EnvMap(), h.getEnv(req))
+
 	resp, err := session.Exchange(req.Context(), msg)
 	if err != nil {
 		http.Error(rw, "Failed to handle message: "+err.Error(), http.StatusInternalServerError)
@@ -164,4 +170,19 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		http.Error(rw, "Failed to encode response: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+func (h *HTTPServer) getEnv(req *http.Request) map[string]string {
+	env := make(map[string]string)
+	maps.Copy(env, h.env)
+	token, ok := strings.CutPrefix(req.Header.Get("Authorization"), "Bearer ")
+	if ok {
+		env["http:bearer-token"] = token
+	}
+	for k, v := range req.Header {
+		if key, ok := strings.CutPrefix(k, "X-Nanobot-Env-"); ok {
+			env[key] = strings.Join(v, ", ")
+		}
+	}
+	return env
 }

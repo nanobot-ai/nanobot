@@ -120,6 +120,10 @@ type Content struct {
 	// Text is set when type is "text"
 	Text string `json:"text,omitempty"`
 
+	// StructuredContent is set when the content is structured. The spec isn't clear when, but it's
+	// likely to only be set when type is "text".
+	StructuredContent any `json:"structuredContent,omitempty"`
+
 	// Data is set when type is "image" or "audio"
 	Data string `json:"data,omitempty"`
 	// MIMEType is set when type is "image" or "audio"
@@ -141,10 +145,11 @@ type EmbeddedResource struct {
 }
 
 type Tool struct {
-	Name        string           `json:"name"`
-	Description string           `json:"description,omitempty"`
-	InputSchema json.RawMessage  `json:"inputSchema,omitzero"`
-	Annotations *ToolAnnotations `json:"annotations,omitempty"`
+	Name         string           `json:"name"`
+	Description  string           `json:"description,omitempty"`
+	InputSchema  json.RawMessage  `json:"inputSchema,omitzero"`
+	OutputSchema json.RawMessage  `json:"outputSchema,omitzero"`
+	Annotations  *ToolAnnotations `json:"annotations,omitempty"`
 }
 
 type ToolAnnotations struct {

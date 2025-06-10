@@ -1,0 +1,100 @@
+publish:
+  introduction: |-
+    This is a research bot that can help you with research queries. It will first come up with
+    a set of web searches to perform, then it will perform those searches and summarize the
+    results. Finally, it will write a detailed report based on the findings.
+
+    Entry a topic or query to research.
+  entrypoint: chat
+
+env:
+  BRAVE_API_KEY: "Your Brave Search API key. You can get one from https://search.brave.com/settings/api"
+
+agents:
+  chat:
+    model: default
+    chatHistory: true
+    instructions: |-
+      You are a helpful research assistant. Given a query, you will call the research flow to
+      perform research on the query. Before calling the research flow, first ask the user one follow
+      up question to clarify the query. This will help you to better understand the query and
+      form a better description to pass to the research flow.
+    flows:
+      - research
+
+  planner:
+    model: default
+    chatHistory: false
+    instructions: |-
+      You are a helpful research assistant. Given a query, come up with a set of web searches
+      to perform to best answer the query. Output between 5 and 20 terms to query for.
+    output:
+      strict: true
+      fields:
+        searches[]:
+          description: A list of web searches to perform to best answer the query.
+          fields:
+            reason: Your reasoning for why this search is important to the query.
+            query: The search term to use for the web search.
+
+  searchAgent:
+    model: default
+    chatHistory: false
+    instructions: |-
+      You are a research assistant. Given a search term, you search the web for that term and
+      produce a concise summary of the results. The summary must 2-3 paragraphs and less than 300
+      words. Capture the main points. Write succinctly, no need to have complete sentences or good
+      grammar. This will be consumed by someone synthesizing a report, so its vital you capture the
+      essence and ignore any fluff. Do not include any additional commentary other than the summary
+      itself.
+    toolChoice: required
+    tools:
+      - search
+
+  writer:
+    model: o3-mini
+    chatHistory: false
+    instructions: |-
+      You are a senior researcher tasked with writing a cohesive report for a research query.
+      You will be provided with the original query, and some initial research done by a research
+      assistant.
+
+      You should first come up with an outline for the report that describes the structure and
+      flow of the report. Then, generate the report and return that as your final output.
+
+      The final output should be in markdown format, and it should be lengthy and detailed. Aim
+      for 5-10 pages of content, at least 1000 words.
+    output:
+      fields:
+        short_summary: A short 2-3 sentence summary of the findings.
+        markdown_report: The final report in markdown format.
+        follow_up_questions[]: Suggested topics to research further.
+
+flows:
+  research:
+    description: |-
+      This flow is used to perform research on a given topic. It will first come up with a set of
+      web searches to perform, then it will perform those searches and summarize the results.
+      Finally, it will write a detailed report based on the findings.
+    input:
+      fields:
+        prompt: A description of the topic you wish to research.
+    outputRole: assistant
+    steps:
+    - agent: planner
+      input: "Query: ${input.prompt}"
+    - forEach: ${previous.output.searches}
+      input: "Search term: ${item.query}\nReason for searching: ${item.reason}"
+      agent: searchAgent
+    - agent: writer
+      input: "Original query: ${input.prompt}\nSummarized search results: ${JSON.stringify(previous.output)}"
+
+mcpServers:
+  search:
+    command: npx
+    args: [ "-y", "@modelcontextprotocol/server-brave-search" ]
+    env:
+      BRAVE_API_KEY: ${BRAVE_API_KEY}
+  manager:
+    command: npx
+    args: [ "tsx", "manager.ts" ]

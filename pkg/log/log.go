@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/obot-platform/nanobot/pkg/printer"
 )
 
 var (
@@ -26,25 +28,34 @@ func Messages(_ context.Context, server string, out bool, data []byte) {
 		return
 	}
 
-	fmtStr := "->(%s) %s\n"
+	prefixFmt := "->(%s)"
 	if !out {
-		fmtStr = "<-(%s) %s\n"
+		prefixFmt = "<-(%s)"
 	}
 	data = Base64Replace.ReplaceAll(data, Base64Replacement)
-	_, _ = fmt.Fprintf(os.Stderr, fmtStr, server, strings.ReplaceAll(strings.TrimSpace(string(data)), "\n", " "))
+	printer.Prefix(fmt.Sprintf(prefixFmt, server), strings.ReplaceAll(strings.TrimSpace(string(data)), "\n", " ")+"\n")
+}
+
+func StderrMessages(_ context.Context, server, line string) {
+	printer.Prefix(fmt.Sprintf("<-(%s:stderr)", server), line+"\n")
 }
 
 func Errorf(_ context.Context, format string, args ...any) {
-	_, _ = fmt.Fprintf(os.Stderr, "ERROR: "+format+"\n", args...)
+	printer.Prefix("ERROR:", fmt.Sprintf(format+"\n", args...))
 }
 
 func Infof(_ context.Context, format string, args ...any) {
-	_, _ = fmt.Fprintf(os.Stderr, "INFO: "+format+"\n", args...)
+	printer.Prefix("INFO:", fmt.Sprintf(format+"\n", args...))
+}
+
+func Fatalf(_ context.Context, format string, args ...any) {
+	printer.Prefix("FATAL:", fmt.Sprintf(format+"\n", args...))
+	os.Exit(1)
 }
 
 func Debugf(_ context.Context, format string, args ...any) {
 	if !DebugLog {
 		return
 	}
-	_, _ = fmt.Fprintf(os.Stderr, format+"\n", args...)
+	printer.Prefix("DEBUG:", fmt.Sprintf(format+"\n", args...))
 }

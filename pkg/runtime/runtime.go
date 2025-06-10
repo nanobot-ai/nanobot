@@ -17,7 +17,7 @@ import (
 )
 
 type Runtime struct {
-	*tools.Registry
+	*tools.Service
 	config    types.Config
 	sessionID string
 }
@@ -43,10 +43,10 @@ func CompleteOptions(opts ...Options) Options {
 	return options
 }
 
-func NewRuntime(env map[string]string, cfg llm.Config, config types.Config, opts ...Options) *Runtime {
+func NewRuntime(cfg llm.Config, config types.Config, opts ...Options) *Runtime {
 	opt := CompleteOptions(opts...)
 	completer := llm.NewClient(cfg, config)
-	registry := tools.NewRegistry(env, config, tools.RegistryOptions{
+	registry := tools.NewToolsService(config, tools.RegistryOptions{
 		Roots: opt.Roots,
 	})
 	agents := agents.New(completer, registry, opt.Confirmations, config)
@@ -56,8 +56,8 @@ func NewRuntime(env map[string]string, cfg llm.Config, config types.Config, opts
 	registry.SetSampler(sampler)
 
 	return &Runtime{
-		config:   config,
-		Registry: registry,
+		config:  config,
+		Service: registry,
 	}
 }
 

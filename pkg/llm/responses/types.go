@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
+
+	"github.com/obot-platform/nanobot/pkg/types"
 )
 
 type Status string
@@ -18,6 +21,10 @@ const (
 	StatusIncomplete Status = "incomplete"
 	// StatusFailed indicates that the request has failed.
 	StatusFailed Status = "failed"
+)
+
+var (
+	reasoningPrefix = regexp.MustCompile("^o[0-9]")
 )
 
 type Request struct {
@@ -889,10 +896,20 @@ type FileSearchResult struct {
 }
 
 type Reasoning struct {
-	Type    string        `json:"type,omitempty"`
-	ID      string        `json:"id,omitempty"`
-	Summary []SummaryText `json:"summary,omitempty"`
-	Status  Status        `json:"status,omitempty"`
+	Type             string        `json:"type,omitempty"`
+	ID               string        `json:"id,omitempty"`
+	Summary          []SummaryText `json:"summary"`
+	Status           Status        `json:"status,omitempty"`
+	EncryptedContent *string       `json:"encrypted_content,omitempty"`
+}
+
+func (r Reasoning) GetSummary() (result []types.SummaryText) {
+	for _, s := range r.Summary {
+		result = append(result, types.SummaryText{
+			Text: s.Text,
+		})
+	}
+	return result
 }
 
 func (r Reasoning) MarshalJSON() ([]byte, error) {

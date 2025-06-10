@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/obot-platform/nanobot/pkg/complete"
 	"github.com/obot-platform/nanobot/pkg/confirm"
 	"github.com/obot-platform/nanobot/pkg/mcp"
 	"github.com/obot-platform/nanobot/pkg/tools"
@@ -17,7 +18,7 @@ import (
 type Agents struct {
 	config        types.Config
 	completer     types.Completer
-	registry      *tools.Registry
+	registry      *tools.Service
 	confirmations *confirm.Service
 }
 
@@ -26,7 +27,7 @@ type ToolListOptions struct {
 	Names    []string
 }
 
-func New(completer types.Completer, registry *tools.Registry, confirmations *confirm.Service, config types.Config) *Agents {
+func New(completer types.Completer, registry *tools.Service, confirmations *confirm.Service, config types.Config) *Agents {
 	return &Agents{
 		config:        config,
 		completer:     completer,
@@ -36,7 +37,7 @@ func New(completer types.Completer, registry *tools.Registry, confirmations *con
 }
 
 func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, agent *types.Agent) (types.ToolMappings, error) {
-	toolMappings, err := a.registry.BuildToolMappings(ctx, agent.Tools)
+	toolMappings, err := a.registry.BuildToolMappings(ctx, slices.Concat(agent.Tools, agent.Agents, agent.Flows))
 	if err != nil {
 		return nil, fmt.Errorf("failed to build tool mappings: %w", err)
 	}
@@ -124,17 +125,17 @@ func (a *Agents) populateRequest(ctx context.Context, run *run, previousRun *run
 		req.ToolChoice = ""
 	}
 
-	if req.OutputSchema == nil && agent.Output != nil && len(agent.Output.Schema) > 0 {
-		name := agent.Output.Name
-		if name == "" {
-			name = "output_schema"
-		}
+	if req.OutputSchema == nil && agent.Output != nil && len(agent.Output.ToSchema()) > 0 {
 		req.OutputSchema = &types.OutputSchema{
-			Name:        name,
+			Name:        agent.Output.Name,
 			Description: agent.Output.Description,
-			Schema:      agent.Output.Schema,
+			Schema:      agent.Output.ToSchema(),
 			Strict:      agent.Output.Strict,
 		}
+	}
+
+	if req.OutputSchema != nil && req.OutputSchema.Name == "" {
+		req.OutputSchema.Name = "output_schema"
 	}
 
 	req.Model = agent.Model
@@ -164,6 +165,10 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 		stateful = false
 	}
 
+	if ch := complete.Complete(opts...).ChatHistory; ch != nil {
+		stateful = *ch
+	}
+
 	if stateful {
 		previousRun, _ = session.Get(previousRunKey).(*run)
 	}
@@ -186,10 +191,9 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 
 		previousRun = currentRun
 		currentRun = &run{
-			Request: types.CompletionRequest{
-				Model: currentRun.Request.Model,
-			},
+			Request: req,
 		}
+		currentRun.Request.Input = nil
 	}
 }
 

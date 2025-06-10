@@ -3,7 +3,8 @@ package anthropic
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+
+	"github.com/obot-platform/nanobot/pkg/printer"
 )
 
 func PrintProgress(msg json.RawMessage) bool {
@@ -20,22 +21,20 @@ func PrintProgress(msg json.RawMessage) bool {
 	case "message_start":
 	case "content_block_start":
 		if delta.ContentBlock.Type == "tool_use" {
-			_, _ = fmt.Fprintf(os.Stderr, "* Preparing to call (%s) with args: ", delta.ContentBlock.Name)
-		} else if delta.ContentBlock.Type == "text" {
-			_, _ = fmt.Fprint(os.Stderr, "< ")
+			printer.Prefix("<-(llm)", fmt.Sprintf("Preparing to call (%s) with args: ", delta.ContentBlock.Name))
 		}
 	case "content_block_delta":
 		switch delta.Delta.Type {
 		case "text_delta":
-			_, _ = fmt.Fprint(os.Stderr, delta.Delta.Text)
+			printer.Prefix("<-(llm)", delta.Delta.Text)
 		case "input_json_delta":
-			_, _ = fmt.Fprint(os.Stderr, delta.Delta.PartialJSON)
+			printer.Prefix("<-(llm)", delta.Delta.PartialJSON)
 		}
 	case "content_block_stop":
-		_, _ = fmt.Fprintln(os.Stderr)
+		printer.Prefix("<-(llm)", "\n")
 	case "message_delta":
 	case "message_stop":
-		_, _ = fmt.Fprintln(os.Stderr)
+		printer.Prefix("<-(llm)", "\n")
 	default:
 		return false
 	}

@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/obot-platform/nanobot/pkg/complete"
+	"github.com/obot-platform/nanobot/pkg/envvar"
 	"github.com/obot-platform/nanobot/pkg/log"
 	"github.com/obot-platform/nanobot/pkg/mcp"
 	"github.com/obot-platform/nanobot/pkg/sampling"
@@ -17,8 +18,7 @@ import (
 	"github.com/obot-platform/nanobot/pkg/uuid"
 )
 
-type Registry struct {
-	env        map[string]string
+type Service struct {
 	servers    map[string]map[string]*mcp.Client
 	roots      []mcp.Root
 	config     types.Config
@@ -45,37 +45,19 @@ func completeOptions(opts ...RegistryOptions) RegistryOptions {
 	return options
 }
 
-var validEnvVarName = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
-
-func NewRegistry(env map[string]string, config types.Config, opts ...RegistryOptions) *Registry {
-	if env == nil {
-		env = make(map[string]string)
-	}
-	for k, v := range mcp.ReplaceMap(env, config.Env) {
-		env[k] = v
-	}
-	roots := completeOptions(opts...).Roots
-	for _, root := range roots {
-		if root.Name != "" && strings.HasPrefix(root.URI, "file://") {
-			name := strings.ToUpper(root.Name)
-			if validEnvVarName.MatchString(name) {
-				env["ROOT_"+name] = strings.TrimPrefix(root.URI, "file://")
-			}
-		}
-	}
-	return &Registry{
+func NewToolsService(config types.Config, opts ...RegistryOptions) *Service {
+	return &Service{
 		servers: make(map[string]map[string]*mcp.Client),
-		env:     env,
 		config:  config,
 		roots:   completeOptions(opts...).Roots,
 	}
 }
 
-func (r *Registry) SetSampler(sampler Sampler) {
+func (r *Service) SetSampler(sampler Sampler) {
 	r.sampler = sampler
 }
 
-func (r *Registry) GetDynamicInstruction(ctx context.Context, instruction types.DynamicInstructions) (string, error) {
+func (r *Service) GetDynamicInstruction(ctx context.Context, instruction types.DynamicInstructions) (string, error) {
 	if !instruction.IsSet() {
 		return "", nil
 	}
@@ -83,7 +65,9 @@ func (r *Registry) GetDynamicInstruction(ctx context.Context, instruction types.
 		return instruction.Instructions, nil
 	}
 
-	prompt, err := r.GetPrompt(ctx, instruction.MCPServer, instruction.Prompt, mcp.ReplaceMap(r.env, instruction.Args))
+	session := mcp.SessionFromContext(ctx)
+
+	prompt, err := r.GetPrompt(ctx, instruction.MCPServer, instruction.Prompt, envvar.ReplaceMap(session.EnvMap(), instruction.Args))
 	if err != nil {
 		return "", fmt.Errorf("failed to get prompt: %w", err)
 	}
@@ -94,7 +78,7 @@ func (r *Registry) GetDynamicInstruction(ctx context.Context, instruction types.
 	return prompt.Messages[0].Content.Text, nil
 }
 
-func (r *Registry) GetPrompt(ctx context.Context, target, prompt string, args map[string]string) (*mcp.GetPromptResult, error) {
+func (r *Service) GetPrompt(ctx context.Context, target, prompt string, args map[string]string) (*mcp.GetPromptResult, error) {
 	c, err := r.GetClient(ctx, target)
 	if err != nil {
 		return nil, err
@@ -103,7 +87,7 @@ func (r *Registry) GetPrompt(ctx context.Context, target, prompt string, args ma
 	return c.GetPrompt(ctx, prompt, args)
 }
 
-func (r *Registry) GetClient(ctx context.Context, name string) (*mcp.Client, error) {
+func (r *Service) GetClient(ctx context.Context, name string) (*mcp.Client, error) {
 	r.serverLock.Lock()
 	defer r.serverLock.Unlock()
 
@@ -123,18 +107,31 @@ func (r *Registry) GetClient(ctx context.Context, name string) (*mcp.Client, err
 		return s, nil
 	}
 
+	var roots mcp.ListRootsResult
+	if session.ClientCapabilities != nil && session.ClientCapabilities.Roots != nil {
+		err := session.Exchange(ctx, "roots/list", mcp.ListRootsRequest{}, &roots)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list roots: %w", err)
+		}
+	}
+
 	mcpConfig, ok := r.config.MCPServers[name]
 	if !ok {
 		return nil, fmt.Errorf("MCP server %s not found in config", name)
 	}
 
+	if len(r.roots) > 0 {
+		roots.Roots = append(roots.Roots, r.roots...)
+	}
+
 	clientOpts := mcp.ClientOption{
-		Env:           r.env,
+		Roots:         roots.Roots,
+		Env:           session.EnvMap(),
 		ParentSession: session,
 		SessionID:     session.ID() + "/" + uuid.String(),
 		OnRoots: func(ctx context.Context, msg mcp.Message) error {
 			return msg.Reply(ctx, mcp.ListRootsResult{
-				Roots: r.roots,
+				Roots: roots.Roots,
 			})
 		},
 		OnLogging: func(ctx context.Context, logMsg mcp.LoggingMessage) error {
@@ -166,7 +163,7 @@ func (r *Registry) GetClient(ctx context.Context, name string) (*mcp.Client, err
 		}
 	}
 
-	c, err := mcp.NewClient(context.Background(), name, mcpConfig, clientOpts)
+	c, err := mcp.NewClient(ctx, name, mcpConfig, clientOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -176,16 +173,17 @@ func (r *Registry) GetClient(ctx context.Context, name string) (*mcp.Client, err
 	return c, nil
 }
 
-func (r *Registry) SampleCall(ctx context.Context, agent string, args any, opts ...SampleCallOptions) (*mcp.CallToolResult, error) {
+func (r *Service) SampleCall(ctx context.Context, agent string, args any, opts ...SampleCallOptions) (*mcp.CallToolResult, error) {
 	createMessageRequest, err := r.convertToSampleRequest(agent, args)
 	if err != nil {
 		return nil, err
 	}
 
-	opt := completeSampleCallOptions(opts...)
+	opt := complete.Complete(opts...)
 
 	result, err := r.sampler.Sample(ctx, *createMessageRequest, sampling.SamplerOptions{
 		ProgressToken: opt.ProgressToken,
+		AgentOverride: opt.AgentOverride,
 	})
 	if err != nil {
 		return nil, err
@@ -198,12 +196,86 @@ func (r *Registry) SampleCall(ctx context.Context, agent string, args any, opts 
 	}, nil
 }
 
-func (r *Registry) Call(ctx context.Context, server, tool string, args any, opts ...mcp.CallOption) (*mcp.CallToolResult, error) {
+type CallOptions struct {
+	ProgressToken any
+	AgentOverride types.AgentCall
+}
+
+func (o CallOptions) Merge(other CallOptions) (result CallOptions) {
+	result.ProgressToken = complete.Last(o.ProgressToken, other.ProgressToken)
+	result.AgentOverride = complete.Merge(o.AgentOverride, other.AgentOverride)
+	return
+}
+
+func (r *Service) Call(ctx context.Context, server, tool string, args any, opts ...CallOptions) (ret *mcp.CallToolResult, err error) {
+	defer func() {
+		if ret == nil {
+			return
+		}
+		for i, content := range ret.Content {
+			if content.Text != "" {
+				var obj any
+				if err := json.Unmarshal([]byte(content.Text), &obj); err == nil {
+					ret.Content[i].StructuredContent = obj
+				}
+			}
+		}
+	}()
+
+	opt := complete.Complete(opts...)
+	session := mcp.SessionFromContext(ctx)
+
+	target := server
+	if tool != "" {
+		target = server + "/" + tool
+	}
+
+	if session != nil && opt.ProgressToken != nil {
+		callID := uuid.String()
+		_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
+			ProgressToken: opt.ProgressToken,
+			Data: map[string]any{
+				"type":   "nanobot/call",
+				"id":     callID,
+				"target": target,
+				"input":  args,
+			},
+		})
+
+		defer func() {
+			if err == nil {
+				_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
+					ProgressToken: opt.ProgressToken,
+					Data: map[string]any{
+						"type":   "nanobot/call/complete",
+						"id":     callID,
+						"target": target,
+						"output": ret,
+					},
+				})
+			} else {
+				_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
+					ProgressToken: opt.ProgressToken,
+					Data: map[string]any{
+						"type":   "nanobot/toolcall/error",
+						"id":     callID,
+						"target": target,
+						"error":  err.Error(),
+					},
+				})
+			}
+		}()
+	}
+
 	if _, ok := r.config.Agents[server]; ok {
-		opt := mcp.CompleteCallOptions(opts...)
 		return r.SampleCall(ctx, server, args, SampleCallOptions{
 			ProgressToken: opt.ProgressToken,
+			AgentOverride: opt.AgentOverride,
 		})
+	}
+
+	if _, ok := r.config.Flows[server]; ok {
+		return r.startFlow(ctx, server, args, opt)
 	}
 
 	c, err := r.GetClient(ctx, server)
@@ -211,7 +283,9 @@ func (r *Registry) Call(ctx context.Context, server, tool string, args any, opts
 		return nil, err
 	}
 
-	return c.Call(ctx, tool, args, opts...)
+	return c.Call(ctx, tool, args, mcp.CallOption{
+		ProgressToken: opt.ProgressToken,
+	})
 }
 
 type ListToolsOptions struct {
@@ -224,7 +298,7 @@ type ListToolsResult struct {
 	Tools  []mcp.Tool `json:"tools,omitempty"`
 }
 
-func (r *Registry) ListTools(ctx context.Context, opts ...ListToolsOptions) (result []ListToolsResult, _ error) {
+func (r *Service) ListTools(ctx context.Context, opts ...ListToolsOptions) (result []ListToolsResult, _ error) {
 	var opt ListToolsOptions
 	for _, o := range opts {
 		for _, server := range o.Servers {
@@ -241,8 +315,10 @@ func (r *Registry) ListTools(ctx context.Context, opts ...ListToolsOptions) (res
 
 	serverList := slices.Sorted(maps.Keys(r.config.MCPServers))
 	agentsList := slices.Sorted(maps.Keys(r.config.Agents))
+	flowsList := slices.Sorted(maps.Keys(r.config.Flows))
 	if len(opt.Servers) == 0 {
 		opt.Servers = append(serverList, agentsList...)
+		opt.Servers = append(opt.Servers, flowsList...)
 	}
 
 	for _, server := range opt.Servers {
@@ -298,6 +374,32 @@ func (r *Registry) ListTools(ctx context.Context, opts ...ListToolsOptions) (res
 		})
 	}
 
+	for _, flowName := range opt.Servers {
+		flow, ok := r.config.Flows[flowName]
+		if !ok {
+			continue
+		}
+
+		tools := filterTools(&mcp.ListToolsResult{
+			Tools: []mcp.Tool{
+				{
+					Name:        flowName,
+					Description: flow.Description,
+					InputSchema: flow.Input.ToSchema(),
+				},
+			},
+		}, opt.Tools)
+
+		if len(tools.Tools) == 0 {
+			continue
+		}
+
+		result = append(result, ListToolsResult{
+			Server: flowName,
+			Tools:  tools.Tools,
+		})
+	}
+
 	return
 }
 
@@ -314,7 +416,7 @@ func filterTools(tools *mcp.ListToolsResult, filter []string) *mcp.ListToolsResu
 	return &filteredTools
 }
 
-func (r *Registry) getMatches(ref string, tools []ListToolsResult) types.ToolMappings {
+func (r *Service) getMatches(ref string, tools []ListToolsResult) types.ToolMappings {
 	toolRef := types.ParseToolRef(ref)
 	result := types.ToolMappings{}
 
@@ -340,7 +442,7 @@ func (r *Registry) getMatches(ref string, tools []ListToolsResult) types.ToolMap
 	return result
 }
 
-func (r *Registry) GetEntryPoint(ctx context.Context, existingTools types.ToolMappings) (types.TargetMapping, error) {
+func (r *Service) GetEntryPoint(ctx context.Context, existingTools types.ToolMappings) (types.TargetMapping, error) {
 	if tm, ok := existingTools[types.AgentTool]; ok {
 		return tm, nil
 	}
@@ -368,7 +470,7 @@ func (r *Registry) GetEntryPoint(ctx context.Context, existingTools types.ToolMa
 	panic("unreachable")
 }
 
-func (r *Registry) listToolsForReferences(ctx context.Context, toolList []string) ([]ListToolsResult, error) {
+func (r *Service) listToolsForReferences(ctx context.Context, toolList []string) ([]ListToolsResult, error) {
 	if len(toolList) == 0 {
 		return nil, nil
 	}
@@ -386,7 +488,7 @@ func (r *Registry) listToolsForReferences(ctx context.Context, toolList []string
 	})
 }
 
-func (r *Registry) BuildToolMappings(ctx context.Context, toolList []string) (types.ToolMappings, error) {
+func (r *Service) BuildToolMappings(ctx context.Context, toolList []string) (types.ToolMappings, error) {
 	tools, err := r.listToolsForReferences(ctx, toolList)
 	if err != nil {
 		return nil, err
@@ -400,10 +502,40 @@ func (r *Registry) BuildToolMappings(ctx context.Context, toolList []string) (ty
 	return result, nil
 }
 
-func (r *Registry) convertToSampleRequest(agent string, args any) (*mcp.CreateMessageRequest, error) {
+func hasOnlySampleKeys(args map[string]any) bool {
+	for key := range args {
+		if key != "prompt" && key != "attachments" {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *Service) convertToSampleRequest(agent string, args any) (*mcp.CreateMessageRequest, error) {
 	var sampleArgs types.SampleCallRequest
-	if err := types.Marshal(args, &sampleArgs); err != nil {
-		return nil, fmt.Errorf("failed to marshal args: %w", err)
+	switch args := args.(type) {
+	case string:
+		sampleArgs.Prompt = args
+	case map[string]any:
+		if hasOnlySampleKeys(args) {
+			if err := types.Marshal(args, &sampleArgs); err != nil {
+				return nil, fmt.Errorf("failed to marshal args: %w", err)
+			}
+		} else {
+			if err := types.Marshal(args, &sampleArgs.Prompt); err != nil {
+				return nil, fmt.Errorf("failed to marshal args to prompt: %w", err)
+			}
+		}
+	case *types.SampleCallRequest:
+		if args != nil {
+			if err := types.Marshal(*args, &sampleArgs); err != nil {
+				return nil, fmt.Errorf("failed to marshal args to prompt: %w", err)
+			}
+		}
+	default:
+		if err := types.Marshal(args, &sampleArgs); err != nil {
+			return nil, fmt.Errorf("failed to marshal args to prompt: %w", err)
+		}
 	}
 
 	var sampleRequest = mcp.CreateMessageRequest{
@@ -492,14 +624,11 @@ func setupProgress(ctx context.Context, progressToken any) (chan json.RawMessage
 
 type SampleCallOptions struct {
 	ProgressToken any
+	AgentOverride types.AgentCall
 }
 
-func completeSampleCallOptions(opts ...SampleCallOptions) SampleCallOptions {
-	var opt SampleCallOptions
-	for _, o := range opts {
-		if o.ProgressToken != nil {
-			opt.ProgressToken = o.ProgressToken
-		}
-	}
-	return opt
+func (s SampleCallOptions) Merge(other SampleCallOptions) (result SampleCallOptions) {
+	result.ProgressToken = complete.Last(s.ProgressToken, other.ProgressToken)
+	result.AgentOverride = complete.Merge(s.AgentOverride, other.AgentOverride)
+	return
 }

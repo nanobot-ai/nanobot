@@ -24,7 +24,7 @@ type Run struct {
 	MCP           bool     `usage:"Run the nanobot as an MCP server" default:"false" short:"m" env:"NANOBOT_MCP"`
 	AutoConfirm   bool     `usage:"Automatically confirm all tool calls" default:"false" short:"y"`
 	Output        string   `usage:"Output file for the result. Use - for stdout" default:"" short:"o"`
-	ListenAddress string   `usage:"Address to listen on (ex: localhost:8099)" default:"stdio" short:"a"`
+	ListenAddress string   `usage:"Address to listen on (ex: localhost:8099) (implies -m)" default:"stdio" short:"a"`
 	Roots         []string `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
 	Input         string   `usage:"Input file for the prompt" default:"" short:"f"`
 	n             *Nanobot
@@ -99,6 +99,10 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		runtimeOpt runtime.Options
 	)
 
+	if r.ListenAddress != "stdio" {
+		r.MCP = true
+	}
+
 	roots, err := r.getRoots()
 	if err != nil {
 		return err
@@ -107,7 +111,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 	runtimeOpt.Roots = roots
 
 	if r.MCP {
-		runtime, err := r.n.GetRuntime(args[0], runtimeOpt)
+		runtime, err := r.n.GetRuntime(cmd.Context(), args[0], runtimeOpt)
 		if err != nil {
 			return err
 		}
@@ -118,7 +122,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 	runtimeOpt.Confirmations = confirm.NewService()
 	runtimeOpt.Confirmations.Start(context.Background())
 
-	runtime, err := r.n.GetRuntime(args[0], runtimeOpt)
+	runtime, err := r.n.GetRuntime(cmd.Context(), args[0], runtimeOpt)
 	if err != nil {
 		return err
 	}
@@ -133,7 +137,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 			break
 		}
 		if agentName != "" {
-			example = ", for example:\n\npublish:\n  entrypoint: " + agentName + "\nagents:\n  " + agentName + ": ...\n"
+			example = ", for example:\n\n```\npublish:\n  entrypoint: " + agentName + "\nagents:\n  " + agentName + ": ...\n```\n"
 		}
 		return fmt.Errorf("there are no entrypoints defined in the config file, please add one to the publish section%s", example)
 	}
@@ -166,6 +170,11 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 }
 
 func (r *Run) runMCP(ctx context.Context, runtime *runtime.Runtime, l net.Listener) error {
+	env, err := r.n.loadEnv()
+	if err != nil {
+		return fmt.Errorf("failed to load environment: %w", err)
+	}
+
 	address := r.ListenAddress
 	if strings.HasPrefix("address", "http://") {
 		address = strings.TrimPrefix(address, "http://")
@@ -176,7 +185,7 @@ func (r *Run) runMCP(ctx context.Context, runtime *runtime.Runtime, l net.Listen
 	mcpServer := server.NewServer(runtime)
 
 	if address == "stdio" {
-		stdio := mcp.NewStdioServer(mcpServer)
+		stdio := mcp.NewStdioServer(env, mcpServer)
 		if err := stdio.Start(ctx, os.Stdin, os.Stdout); err != nil {
 			return fmt.Errorf("failed to start stdio server: %w", err)
 		}
@@ -185,13 +194,11 @@ func (r *Run) runMCP(ctx context.Context, runtime *runtime.Runtime, l net.Listen
 		return nil
 	}
 
-	httpServer := mcp.HTTPServer{
-		MessageHandler: mcpServer,
-	}
+	httpServer := mcp.NewHTTPServer(env, mcpServer)
 
 	s := &http.Server{
 		Addr:    address,
-		Handler: &httpServer,
+		Handler: httpServer,
 	}
 
 	context.AfterFunc(ctx, func() {
@@ -200,7 +207,6 @@ func (r *Run) runMCP(ctx context.Context, runtime *runtime.Runtime, l net.Listen
 		_ = s.Shutdown(ctx)
 	})
 
-	var err error
 	if l == nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Starting server on %s\n", address)
 		err = s.ListenAndServe()
@@ -208,5 +214,5 @@ func (r *Run) runMCP(ctx context.Context, runtime *runtime.Runtime, l net.Listen
 		err = s.Serve(l)
 	}
 	log.Debugf(ctx, "Server stopped: %v", err)
-	return nil
+	return err
 }

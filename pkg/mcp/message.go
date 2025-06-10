@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -16,7 +17,7 @@ type Message struct {
 	Method  string          `json:"method,omitempty"`
 	Params  json.RawMessage `json:"params,omitempty"`
 	Result  json.RawMessage `json:"result,omitempty"`
-	Error   *Error          `json:"error,omitempty"`
+	Error   *RPCError       `json:"error,omitempty"`
 
 	Session *Session `json:"-"`
 }
@@ -93,35 +94,25 @@ func (r *Message) UID(sessionID string, in bool) string {
 	return fmt.Sprintf("%s::%s::%s", sessionID, id, direction)
 }
 
-func (r *Message) SendUnknownError(ctx context.Context, err error) {
-	r.SendError(ctx, 500, err.Error(), nil)
-}
-
-func (r *Message) SendError(ctx context.Context, code int, message string, data any) {
+func (r *Message) SendError(ctx context.Context, err error) {
 	if r.Session == nil {
 		return
 	}
+	var data RPCError
+	if rpcError := (JSONRPCError)(nil); errors.As(err, &rpcError) {
+		data = *rpcError.RPCError()
+	} else {
+		data.Code = 500
+		data.Message = err.Error()
+	}
+
 	resp := Message{
 		JSONRPC: r.JSONRPC,
 		ID:      r.ID,
-		Error: &Error{
-			Code:    code,
-			Message: message,
-		},
-	}
-	if err, ok := data.(error); ok {
-		resp.Error.Message += ": " + err.Error()
-	} else if data != nil {
-		dataBytes, err := json.Marshal(data)
-		if err != nil {
-			log.Errorf(ctx, "failed to marshal result: %v", err)
-			return
-		}
-		resp.Error.Data = dataBytes
+		Error:   &data,
 	}
 
-	err := r.Session.Send(ctx, resp)
-	if err != nil {
+	if err := r.Session.Send(ctx, resp); err != nil {
 		log.Errorf(ctx, "failed to send error response: %v", err)
 	}
 }
@@ -138,8 +129,35 @@ func (r *Message) Reply(ctx context.Context, result any) error {
 	})
 }
 
-type Error struct {
-	Code    int             `json:"code,omitempty"`
-	Message string          `json:"message,omitempty"`
-	Data    json.RawMessage `json:"data,omitempty"`
+type JSONRPCError interface {
+	RPCError() *RPCError
+}
+
+type RPCError struct {
+	Code       int             `json:"code,omitempty"`
+	Message    string          `json:"message,omitempty"`
+	Data       json.RawMessage `json:"data,omitempty"`
+	DataObject any             `json:"-"`
+}
+
+func (e *RPCError) RPCError() *RPCError {
+	if e == nil {
+		return nil
+	}
+	if e.DataObject != nil {
+		result := *e
+		result.Data, _ = json.Marshal(e.DataObject)
+		return &result
+	}
+	return e
+}
+
+func (e *RPCError) Error() string {
+	if e == nil {
+		return "nil error"
+	}
+	if e.Data != nil {
+		return fmt.Sprintf("%d: %s (%s)", e.Code, e.Message, string(e.Data))
+	}
+	return fmt.Sprintf("%d: %s", e.Code, e.Message)
 }

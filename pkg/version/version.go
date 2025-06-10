@@ -6,7 +6,8 @@ import (
 )
 
 var (
-	Tag = "v0.0.0-dev"
+	Tag       = "v0.0.0-dev"
+	BaseImage = "nanobot-base"
 )
 
 func Get() Version {

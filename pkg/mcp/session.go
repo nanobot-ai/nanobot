@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/obot-platform/nanobot/pkg/complete"
 	"github.com/obot-platform/nanobot/pkg/uuid"
 )
 
@@ -102,6 +103,24 @@ type Session struct {
 	attributes         map[string]any
 }
 
+const SessionEnvMapKey = "env"
+
+func (s *Session) EnvMap() map[string]string {
+	if s == nil {
+		return map[string]string{}
+	}
+	if s.attributes == nil {
+		s.attributes = make(map[string]any)
+	}
+
+	env, ok := s.attributes[SessionEnvMapKey].(map[string]string)
+	if !ok {
+		env = make(map[string]string)
+		s.attributes[SessionEnvMapKey] = env
+	}
+	return env
+}
+
 func (s *Session) Set(key string, value any) {
 	if s == nil {
 		return
@@ -141,7 +160,38 @@ func (s *Session) Wait() {
 	s.wire.Wait()
 }
 
+func (s *Session) normalizeProgress(progress *NotificationProgressRequest) {
+	var (
+		progressKey     = fmt.Sprintf("progress-token:%v", progress.ProgressToken)
+		lastProgress, _ = s.Get(progressKey).(float64)
+		newProgress     float64
+	)
+
+	if progress.Progress != "" {
+		newF, err := progress.Progress.Float64()
+		if err == nil {
+			newProgress = newF
+		}
+	}
+
+	if newProgress <= lastProgress {
+		if progress.Total == nil {
+			newProgress = lastProgress + 1
+		} else {
+			// If total is set then something is probably trying to make the progress pretty
+			// so we don't want to just increment by 1 and mess that up.
+			newProgress = lastProgress + 0.01
+		}
+	}
+	progress.Progress = json.Number(fmt.Sprintf("%f", newProgress))
+	s.Set(progressKey, newProgress)
+}
+
 func (s *Session) SendPayload(ctx context.Context, method string, payload any) error {
+	if progress, ok := payload.(NotificationProgressRequest); ok {
+		s.normalizeProgress(&progress)
+	}
+
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
@@ -170,25 +220,16 @@ func (s *Session) Send(ctx context.Context, req Message) error {
 }
 
 type ExchangeOption struct {
-	ID            string
 	ProgressToken any
 }
 
-func completeExchangeOption(opts ...ExchangeOption) ExchangeOption {
-	var opt ExchangeOption
-	for _, o := range opts {
-		if o.ID != "" {
-			opt.ID = o.ID
-		}
-		if o.ProgressToken != nil {
-			opt.ProgressToken = o.ProgressToken
-		}
-	}
-	return opt
+func (e ExchangeOption) Merge(other ExchangeOption) (result ExchangeOption) {
+	result.ProgressToken = complete.Last(e.ProgressToken, other.ProgressToken)
+	return
 }
 
 func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts ...ExchangeOption) error {
-	opt := completeExchangeOption(opts...)
+	opt := complete.Complete(opts...)
 	req, ok := in.(*Message)
 	if !ok {
 		data, err := json.Marshal(in)
@@ -196,7 +237,6 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 			return fmt.Errorf("failed to marshal request: %w", err)
 		}
 		req = &Message{
-			ID:     opt.ID,
 			Method: method,
 			Params: data,
 		}

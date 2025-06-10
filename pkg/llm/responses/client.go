@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/obot-platform/nanobot/pkg/complete"
 	"github.com/obot-platform/nanobot/pkg/log"
 	"github.com/obot-platform/nanobot/pkg/types"
 )
@@ -63,7 +64,7 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 func (c *Client) complete(ctx context.Context, req Request, opts ...types.CompletionOptions) (*Response, error) {
 	var (
 		response Response
-		opt      = types.CompleteCompletionOptions(opts...)
+		opt      = complete.Complete(opts...)
 	)
 
 	req.Stream = &[]bool{true}[0]

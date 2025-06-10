@@ -41,6 +41,14 @@ func toResponse(req *types.CompletionRequest, resp *Response) (*types.Completion
 			})
 		} else if output.Message != nil {
 			result.Output = append(result.Output, toSamplingMessageFromOutputMessage(output.Message)...)
+		} else if output.Reasoning != nil && output.Reasoning.EncryptedContent != nil {
+			result.Output = append(result.Output, types.CompletionOutput{
+				Reasoning: &types.Reasoning{
+					ID:               output.Reasoning.ID,
+					EncryptedContent: *output.Reasoning.EncryptedContent,
+					Summary:          output.Reasoning.GetSummary(),
+				},
+			})
 		}
 	}
 
@@ -77,6 +85,10 @@ func toSamplingMessageFromOutputMessage(output *Message) (result []types.Complet
 func toRequest(completion *types.CompletionRequest) (req Request, _ error) {
 	req = Request{
 		Model: completion.Model,
+	}
+
+	if reasoningPrefix.MatchString(req.Model) {
+		req.Include = append(req.Include, "reasoning.encrypted_content")
 	}
 
 	if completion.Truncation != "" {
@@ -133,10 +145,13 @@ func toRequest(completion *types.CompletionRequest) (req Request, _ error) {
 				JSONSchema: &JSONSchema{
 					Name:        completion.OutputSchema.Name,
 					Description: completion.OutputSchema.Description,
-					Schema:      completion.OutputSchema.Schema,
+					Schema:      completion.OutputSchema.ToSchema(),
 					Strict:      completion.OutputSchema.Strict,
 				},
 			},
+		}
+		if req.Text.Format.Name == "" {
+			req.Text.Format.Name = "output-schema"
 		}
 	}
 
@@ -167,6 +182,25 @@ func toRequest(completion *types.CompletionRequest) (req Request, _ error) {
 		}
 		if input.ToolCallResult != nil {
 			req.Input.Items = append(req.Input.Items, toolCallResultToInputItems(completion, input.ToolCallResult)...)
+		}
+		if input.Reasoning != nil && input.Reasoning.EncryptedContent != "" {
+			// summary must not be nil
+			summary := make([]SummaryText, 0)
+			for _, s := range input.Reasoning.Summary {
+				summary = append(summary, SummaryText{
+					Text: s.Text,
+				})
+			}
+
+			req.Input.Items = append(req.Input.Items, InputItem{
+				Item: &Item{
+					Reasoning: &Reasoning{
+						ID:               input.Reasoning.ID,
+						EncryptedContent: &input.Reasoning.EncryptedContent,
+						Summary:          summary,
+					},
+				},
+			})
 		}
 	}
 

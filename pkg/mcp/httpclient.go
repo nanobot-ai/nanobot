@@ -66,12 +66,16 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 	if err != nil {
 		return nil, err
 	}
+	if in != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	for k, v := range s.headers {
 		req.Header.Set(k, v)
 	}
 	req.Header.Set("Accept", "text/event-stream")
 	if method != http.MethodGet {
-		req.Header.Add("Accept", "application/json")
+		// Don't add because some *cough* CloudFront *cough* proxies don't like it
+		req.Header.Set("Accept", "application/json, text/event-stream")
 	}
 	return req, nil
 }
@@ -136,10 +140,11 @@ func (s *HTTPClient) startSSE(ctx context.Context, msg *Message) error {
 				gotResponse <- fmt.Errorf("failed to POST initialize message: %w", err)
 				return
 			}
+			body, _ := io.ReadAll(initResp.Body)
 			_ = initResp.Body.Close()
 
 			if initResp.StatusCode != http.StatusOK && initResp.StatusCode != http.StatusAccepted {
-				gotResponse <- fmt.Errorf("failed to POST initialize message got status: %s", initResp.Status)
+				gotResponse <- fmt.Errorf("failed to POST initialize message got status: %s: %s", initResp.Status, body)
 				return
 			}
 		}
@@ -189,7 +194,11 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) (err error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return s.startSSE(ctx, &msg)
+		streamingErrorMessage, _ := io.ReadAll(resp.Body)
+		streamError := fmt.Errorf("failed to initialize HTTP Streaming client: %s: %s", resp.Status, streamingErrorMessage)
+		if err := s.startSSE(ctx, &msg); err != nil {
+			return errors.Join(streamError, err)
+		}
 	}
 
 	sessionID := resp.Header.Get("Mcp-Session-Id")
@@ -293,7 +302,7 @@ func (s *SSEStream) readNextMessage() (string, bool) {
 		if strings.HasPrefix(line, "event:") {
 			eventName = strings.TrimSpace(line[6:])
 			continue
-		} else if strings.HasPrefix(line, "data:") && (eventName == "message" || eventName == "") {
+		} else if strings.HasPrefix(line, "data:") && (eventName == "message" || eventName == "" || eventName == "endpoint") {
 			data := strings.TrimSpace(line[5:])
 			return data, true
 		}

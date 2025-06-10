@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/obot-platform/nanobot/pkg/complete"
 	"github.com/obot-platform/nanobot/pkg/log"
 	"github.com/obot-platform/nanobot/pkg/mcp"
 	"github.com/obot-platform/nanobot/pkg/types"
@@ -92,26 +93,18 @@ func (s *Sampler) getMatchingModel(req *mcp.CreateMessageRequest) (string, bool)
 type SamplerOptions struct {
 	ProgressToken any
 	Continue      bool
+	AgentOverride types.AgentCall
 }
 
-func completeSamplerOptions(opts ...SamplerOptions) SamplerOptions {
-	var all SamplerOptions
-	for _, opt := range opts {
-		if opt.ProgressToken != nil {
-			if all.ProgressToken != nil {
-				panic("multiple progress tokens provided")
-			}
-			all.ProgressToken = opt.ProgressToken
-		}
-		if opt.Continue {
-			all.Continue = true
-		}
-	}
-	return all
+func (s SamplerOptions) Merge(other SamplerOptions) (result SamplerOptions) {
+	result.ProgressToken = complete.Last(s.ProgressToken, other.ProgressToken)
+	result.Continue = complete.Last(s.Continue, other.Continue)
+	result.AgentOverride = complete.Merge(s.AgentOverride, other.AgentOverride)
+	return
 }
 
 func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts ...SamplerOptions) (result mcp.CreateMessageResult, _ error) {
-	opt := completeSamplerOptions(opts...)
+	opt := complete.Complete(opts...)
 
 	model, ok := s.getMatchingModel(&req)
 	if !ok {
@@ -119,7 +112,11 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 	}
 
 	request := types.CompletionRequest{
-		Model: model,
+		Model:        model,
+		ToolChoice:   opt.AgentOverride.ToolChoice,
+		OutputSchema: opt.AgentOverride.Output,
+		Temperature:  opt.AgentOverride.Temperature,
+		TopP:         opt.AgentOverride.TopP,
 	}
 
 	if req.MaxTokens != 0 {
@@ -138,7 +135,9 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 		})
 	}
 
-	var completeOptions types.CompletionOptions
+	completeOptions := types.CompletionOptions{
+		ChatHistory: opt.AgentOverride.ChatHistory,
+	}
 
 	if opt.ProgressToken != nil {
 		var cancel func()
@@ -183,20 +182,10 @@ func setupProgress(ctx context.Context, progressToken any) (chan json.RawMessage
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		var counter int
 		for payload := range c {
-			counter++
-			data, err := json.Marshal(mcp.NotificationProgressRequest{
+			err := session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
 				ProgressToken: progressToken,
-				Progress:      json.Number(fmt.Sprint(counter)),
 				Data:          payload,
-			})
-			if err != nil {
-				continue
-			}
-			err = session.Send(ctx, mcp.Message{
-				Method: "notifications/progress",
-				Params: data,
 			})
 			if err != nil {
 				log.Errorf(ctx, "failed to send progress notification: %v", err)

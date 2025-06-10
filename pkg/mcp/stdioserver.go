@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 
 	"github.com/obot-platform/nanobot/pkg/log"
 )
@@ -12,10 +13,12 @@ import (
 type StdioServer struct {
 	MessageHandler MessageHandler
 	stdio          *Stdio
+	env            map[string]string
 }
 
-func NewStdioServer(handler MessageHandler) *StdioServer {
+func NewStdioServer(env map[string]string, handler MessageHandler) *StdioServer {
 	return &StdioServer{
+		env:            env,
 		MessageHandler: handler,
 	}
 }
@@ -32,7 +35,9 @@ func (s *StdioServer) Start(ctx context.Context, in io.ReadCloser, out io.WriteC
 		return fmt.Errorf("failed to create stdio session: %w", err)
 	}
 
-	s.stdio = NewStdio("proxy", in, out)
+	maps.Copy(session.session.EnvMap(), s.env)
+
+	s.stdio = NewStdio("proxy", in, out, func() {})
 
 	return s.stdio.Start(ctx, func(msg Message) {
 		resp, err := session.Exchange(ctx, msg)

@@ -1,0 +1,26 @@
+publish:
+  entrypoint: main
+
+agents:
+  llm:
+    tools: [fs]
+
+flows:
+  main:
+    steps:
+    - input: List the all the go files in ${PWD}
+      agent: 
+        name: llm
+        output:
+          fields:
+            "files[]": The full path of the filename
+
+mcpServers:
+  fs:
+    command: npx
+    args: [
+      "-y",
+      "@modelcontextprotocol/server-filesystem",
+      # Because this is sandboxed it doesn't matter if it can list everything
+      "/"
+    ]

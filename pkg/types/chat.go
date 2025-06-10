@@ -2,7 +2,7 @@ package types
 
 import "encoding/json"
 
-var AgentTool = "agent"
+var AgentTool = "__agent"
 
 var ChatInputSchema = []byte(`{
   "type": "object",
@@ -32,6 +32,16 @@ var ChatInputSchema = []byte(`{
 }`)
 
 func Marshal[T any](in any, out *T) error {
+	switch s := any(out).(type) {
+	case *string:
+		data, err := json.Marshal(in)
+		if err != nil {
+			return err
+		}
+		*s = string(data)
+		return nil
+	}
+
 	if v, ok := in.(T); ok {
 		*out = v
 		return nil

@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	log2 "log"
-	"os"
-	"os/exec"
 	"strings"
 	"sync"
 
@@ -41,8 +39,9 @@ func (w *waiter) Close() {
 }
 
 type Stdio struct {
-	stdout         io.ReadCloser
-	stdin          io.WriteCloser
+	stdout         io.Reader
+	stdin          io.Writer
+	closer         func()
 	server         string
 	pendingRequest pendingRequest
 	waiter         *waiter
@@ -68,9 +67,8 @@ func (s *Stdio) Wait() {
 }
 
 func (s *Stdio) Close() {
+	s.closer()
 	s.waiter.Close()
-	_ = s.stdout.Close()
-	_ = s.stdin.Close()
 }
 
 func (s *Stdio) Start(ctx context.Context, handler wireHandler) error {
@@ -103,42 +101,22 @@ func (s *Stdio) start(ctx context.Context, handler wireHandler) error {
 	return buf.Err()
 }
 
-func newStdioClient(ctx context.Context, serverName, command string, args, env []string) (*Stdio, error) {
-	cmd := exec.CommandContext(ctx, command, args...)
-	cmd.Env = env
-
-	inRead, inWrite := io.Pipe()
-	outRead, outWrite := io.Pipe()
-
-	context.AfterFunc(ctx, func() {
-		_ = inRead.Close()
-		_ = inWrite.Close()
-		_ = outRead.Close()
-		_ = outWrite.Close()
-	})
-
-	cmd.Stdout = outWrite
-	cmd.Stdin = inRead
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("failed to start command: %w", err)
+func newStdioClient(ctx context.Context, roots []Root, env map[string]string, serverName string, config Server) (*Stdio, error) {
+	result, err := r.Stream(ctx, roots, env, serverName, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stream: %w", err)
 	}
 
-	s := NewStdio(serverName, outRead, inWrite)
-	go func() {
-		_ = cmd.Wait()
-		s.Close()
-	}()
-
+	s := NewStdio(serverName, result.Stdout, result.Stdin, result.Close)
 	return s, nil
 }
 
-func NewStdio(server string, in io.ReadCloser, out io.WriteCloser) *Stdio {
+func NewStdio(server string, in io.Reader, out io.Writer, close func()) *Stdio {
 	return &Stdio{
 		server: server,
 		stdout: in,
 		stdin:  out,
+		closer: close,
 		waiter: newWaiter(),
 	}
 }

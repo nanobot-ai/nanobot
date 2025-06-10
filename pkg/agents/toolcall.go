@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/obot-platform/nanobot/pkg/complete"
 	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/tools"
 	"github.com/obot-platform/nanobot/pkg/types"
 )
 
@@ -93,8 +95,8 @@ func (a *Agents) invoke(ctx context.Context, target types.TargetMapping, funcCal
 		return nil, fmt.Errorf("failed to confirm tool call: %w", err)
 	}
 
-	response, err := a.registry.Call(ctx, target.MCPServer, target.TargetName, data, mcp.CallOption{
-		ProgressToken: types.CompleteCompletionOptions(opts...).ProgressToken,
+	response, err := a.registry.Call(ctx, target.MCPServer, target.TargetName, data, tools.CallOptions{
+		ProgressToken: complete.Complete(opts...).ProgressToken,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to invoke tool %s on mcp server %s: %w", target.TargetName, target.MCPServer, err)
@@ -103,8 +105,9 @@ func (a *Agents) invoke(ctx context.Context, target types.TargetMapping, funcCal
 	return []types.CompletionInput{
 		{
 			ToolCallResult: &types.ToolCallResult{
-				CallID: funcCall.CallID,
-				Output: *response,
+				CallID:     funcCall.CallID,
+				Output:     *response,
+				OutputRole: a.config.Flows[target.MCPServer].OutputRole,
 			},
 		},
 	}, nil

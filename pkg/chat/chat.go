@@ -13,6 +13,7 @@ import (
 	"github.com/obot-platform/nanobot/pkg/confirm"
 	"github.com/obot-platform/nanobot/pkg/llm"
 	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/printer"
 	"github.com/obot-platform/nanobot/pkg/types"
 	"github.com/obot-platform/nanobot/pkg/uuid"
 )
@@ -20,7 +21,7 @@ import (
 func Chat(ctx context.Context, listenAddress string, confirmations *confirm.Service, autoConfirm bool, prompt, output string) error {
 	progressToken := uuid.String()
 
-	c, err := mcp.NewClient(ctx, "nanobot", mcp.MCPServer{
+	c, err := mcp.NewClient(ctx, "nanobot", mcp.Server{
 		BaseURL: "http://" + listenAddress,
 		Headers: nil,
 	}, mcp.ClientOption{
@@ -182,27 +183,28 @@ func handleConfirm(data map[string]any, confirmations *confirm.Service, autoConf
 func printToolCall(params json.RawMessage) {
 	var toolCall struct {
 		Data struct {
-			Type   string                  `json:"type"`
-			Target types.TargetMapping     `json:"target"`
-			Output []types.CompletionInput `json:"output,omitempty"`
+			Type   string              `json:"type"`
+			Input  any                 `json:"input,omitempty"`
+			Error  string              `json:"error,omitempty"`
+			Target string              `json:"target"`
+			Output *mcp.CallToolResult `json:"output,omitempty"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(params, &toolCall); err != nil || toolCall.Data.Type != "nanobot/toolcall/output" {
+	if err := json.Unmarshal(params, &toolCall); err != nil || !strings.HasPrefix(toolCall.Data.Type, "nanobot/call") {
 		return
 	}
-	for _, output := range toolCall.Data.Output {
-		if output.ToolCallResult == nil {
-			continue
-		}
-		for _, content := range output.ToolCallResult.Output.Content {
-			if strings.TrimSpace(content.Text) != "" {
-				for _, line := range strings.Split(content.Text, "\n") {
-					if line == "" {
-						continue
-					}
-					_, _ = fmt.Fprintf(os.Stderr, "* <-(%s) %s\n", toolCall.Data.Target.TargetName, line)
-				}
-			}
+	server, tool, _ := strings.Cut(toolCall.Data.Target, "/")
+	if server == tool {
+		toolCall.Data.Target = server
+	}
+	if toolCall.Data.Input != nil {
+		var text string
+		_ = types.Marshal(toolCall.Data.Input, &text)
+		printer.Prefix(fmt.Sprintf("->(%s)", toolCall.Data.Target), text)
+	}
+	if toolCall.Data.Output != nil {
+		for _, content := range toolCall.Data.Output.Content {
+			printer.Prefix(fmt.Sprintf("<-(%s)", toolCall.Data.Target), content.Text)
 		}
 	}
 

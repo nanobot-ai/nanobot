@@ -1,0 +1,615 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+
+title: Nanobot Configuration Schema
+description: |
+  This schema defines the structure of a Nanobot configuration file which is typically
+  nanobot.yaml.
+
+definitions:
+  NonZeroLengthString:
+    type: string
+    minLength: 1
+    description: |
+      A simple string value.
+
+  StringOrStringList:
+    oneOf:
+      - type: string
+        description: |
+          A single string value, typically used for a single tool or command.
+      - type: array
+        items:
+          $ref: "#/definitions/NonZeroLengthString"
+        description: |
+          A list of strings, typically used for multiple tools or commands.
+
+  StringMap:
+    type: object
+    additionalProperties:
+      type: string
+    description: |
+      A map of strings to strings. This is used for various configurations that
+      require key-value pairs.
+
+  DynamicInstruction:
+    oneOf:
+      - type: string
+        description: |
+          A static instruction that will be used as-is.
+      - type: object
+        description: |
+          A reference to a MCP Server prompt that will be used to generate the
+          instruction at runtime.
+        required: [ mcpServer, prompt ]
+        additionalProperties: false
+        properties:
+          mcpServer:
+            type: string
+            description: |
+              The name of the MCP Server
+          prompt:
+            type: string
+            description: |
+              The name of the prompt to use from the MCP Server.
+          args:
+            description: |
+              A map of arguments to pass to the prompt. The keys are the argument names
+              and the values are the values to pass.
+            $ref: "#/definitions/StringMap"
+
+  Fields:
+    type: object
+    description: |
+      A map of field names to their descriptions. This is a simpler syntax than
+      the schema field which is JSONSchema.
+    additionalProperties:
+      $ref: "#/definitions/Field"
+
+  Field:
+    oneOf:
+      - type: string
+        description: |
+          A simple string field where the value is the description of the field.
+      - type: object
+        description: |
+          A nested object definition.
+        additionalProperties: false
+        properties:
+          description:
+            type: string
+            description: |
+              A human-readable description of the field. This is used to help the LLM
+              understand what the field should contain.
+          fields:
+            $ref: "#/definitions/Fields"
+
+  InputSchema:
+    type: object
+    description: |
+      The input schema defines how the input of an agent should be structured.
+      The LLM will interpret and render the input based on this schema.
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        description: |
+          The name of the output schema. This is used to help identify the schema
+          by the agent.
+      description:
+        type: string
+        description: |
+          A human-readable description of the output schema. This is used to help
+          the LLM understand what the output should look like.
+      fields:
+        $ref: "#/definitions/Fields"
+      schema:
+        type: object
+        description: |
+          The JSON Schema that defines the structure of the output. This is used
+          to validate the output against the schema.
+        additionalProperties: true
+    oneOf:
+      - required: [ fields ]
+      - required: [ schema ]
+
+  OutputSchema:
+    type: object
+    description: |
+      The output schema defines how the output of an agent should be structured.
+      It can include fields that are expected in the output and their types.
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        description: |
+          The name of the output schema. This is used to help identify the schema
+          by the agent.
+      description:
+        type: string
+        description: |
+          A human-readable description of the output schema. This is used to help
+          the LLM understand what the output should look like.
+      strict:
+        type: boolean
+        description: |
+          Whether the output schema is strict. If true, the output must match the
+          schema exactly. If false, the output can include additional fields not
+          defined in the schema or possibly invalid JSON depending on the LLM.
+      fields:
+        $ref: "#/definitions/Fields"
+      schema:
+        type: object
+        description: |
+          The JSON Schema that defines the structure of the output. This is used
+          to validate the output against the schema.
+        additionalProperties: true
+    oneOf:
+      - required: [ fields ]
+      - required: [ schema ]
+
+  EnvVarDefinition:
+    oneOf:
+      - type: string
+        description: |
+          A description of the environment variable. This is used to help the user.
+      - type: object
+        description: |
+          A definition for an environment variable that can be set for the Nanobot process.
+          This is useful for configuring the environment in which the Nanobot runs.
+        additionalProperties: false
+        properties:
+          default:
+            type: string
+            description: |
+              The default value of the environment variable if none is supplied. If the
+              environment variable is set as non-optional this value will not be used and
+              only presented to the user as a hint.
+          description:
+            type: string
+            description: |
+              A description of the environment variable. This is used to help the user.
+          options:
+            $ref: "#/definitions/StringOrStringList"
+            description: |
+              A list of valid values for the environment variable. These values
+              should be presented to the user to help them choose a value.
+          optional:
+            type: boolean
+            description: |
+              Whether the environment variable is optional. If true, the user can
+              choose to not set this variable and the default value will be used.
+              If false, the user must provide a value for this variable.
+              Defaults to false if unset.
+          sensitive:
+            type: boolean
+            description: |
+              Whether the environment variable is sensitive. If true, the value of
+              this variable will not be displayed in the UI and will be treated as
+              a secret. Defaults to true if unset.
+          useBearerToken:
+            type: boolean
+            description: |
+              Whether the environment variable can be populated from the bearer token
+              of the MCP HTTP initialization request.
+
+  Publish:
+    type: object
+    description: |
+      Configuration for the published interface of the Nanobot.
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        description: |
+          The name of the Nanobot and the MCP Server that will be published.
+      version:
+        type: string
+        description: |
+          The version of the Nanobot and the MCP Server that will be published.
+      introduction:
+        $ref: "#/definitions/DynamicInstruction"
+        description: |
+          An introduction that will be displayed to the user when they run nanobot interactive chat.
+      prompts:
+        $ref: "#/definitions/StringOrStringList"
+        description: |
+          MCP prompts that will be published as this MCP server. The prompts can come from
+          any registered MCP Server.
+      mcpServers:
+        $ref: "#/definitions/StringOrStringList"
+        description: |
+          A list of MCP Servers that this Nanobot will publish as this MCP server. All the tools, prompts,
+          resources, and resources templates will be published for each referenced MCP Server.
+      tools:
+        $ref: "#/definitions/StringOrStringList"
+        description: |
+          A list of tools that this Nanobot will publish.
+      instructions:
+        type: string
+        description: |
+          The instructions to include in the published MCP server.
+      resources:
+        $ref: "#/definitions/StringOrStringList"
+        description: |
+          A list of resources that this Nanobot will publish.
+      resourceTemplates:
+        $ref: "#/definitions/StringOrStringList"
+        description: |
+          A list of resource templates that this Nanobot will publish. Resource templates
+          are predefined configurations that can be used to create resources.
+      entrypoint:
+        type: string
+        description: |
+          The entrypoint for the Nanobot. This is the tool, agent, or flow that
+          will be invoked when "nanobot run" is executed.
+
+  MCPServer:
+    type: object
+    description: |
+      Configuration for a MCP Server that can be used by the Nanobot. This is
+      typically used to define the tools, prompts, and other resources that
+      the Nanobot can use.
+    additionalProperties: false
+    properties:
+      command:
+        type: string
+        description: |
+          The command to execute to run the MCP Server.
+      args:
+        type: array
+        items:
+          type: string
+        description: |
+          Arguments to pass to the MCP Server command.
+      url:
+        type: string
+        description: |
+          The URL of the MCP Server. This is used to connect to the MCP Server
+          and access its resources. If a command is specified also, this URL should refer to localhost
+          and should use a port from the port array so that Nanobot can randomly select a port to use.
+      baseImage:
+        type: string
+        description: |
+          The base Docker image to use for the MCP Server.
+      unsandboxed:
+        type: boolean
+        description: |
+          Whether the MCP Server should run in an unsandboxed mode. If true, the MCP Server
+          will not be isolated and can access the host system. Defaults to false if unset.
+      ports:
+        type: array
+        items:
+          type: string
+        description: |
+          A list of ports port names that the MCP Server will use. These ports will be randomly selected
+          and an env variable of the format ${port:NAME} will be set and can be used in the MCP Server command/args.
+      reversePorts:
+        type: array
+        items:
+          type: integer
+        description: |
+          A list of ports that will be exposed to the MCP Server from the host system.
+      dockerfile:
+        type: string
+        description: |
+          The source of the Dockerfile to use for building the MCP Server image.
+      headers:
+        $ref: "#/definitions/StringMap"
+        description: |
+          A map of headers that will be sent with requests to the MCP Server.
+          This is useful for authentication or other custom headers that the
+          MCP Server requires.
+      env:
+        $ref: "#/definitions/StringMap"
+        description: |
+          A map of environment variables that will be set for the MCP Server process.
+          This is useful for configuring the environment in which the MCP Server runs.
+          The server will not automatically get the environment variables from the host system.
+          Only the variables defined in the global env configuration will be available.
+      source:
+        oneOf:
+          - type: string
+            description: |
+              The source code repository URL for the MCP Server. This is used to
+              clone the repository and build the MCP Server.
+          - type: object
+            description: |
+              The source code repository configuration for the MCP Server.
+            properties:
+              repo:
+                type: string
+                description: |
+                  The source code repository URL for the MCP Server.
+              branch:
+                type: string
+                description: |
+                  The branch of the source code repository to use. If not specified,
+                  the default branch will be used.
+              tag:
+                type: string
+                description: |
+                  The tag of the source code repository to use. If not specified,
+                  the latest commit will be used.
+              reference:
+                type: string
+                description: |
+                  A specific reference (commit, tag, or branch) to use from the source code repository.
+              subPath:
+                type: string
+                description: |
+                  A subpath within the repository to use as the MCP Server source.
+                  This is useful if the MCP Server is located in a subdirectory of the repository.
+
+  Step:
+    type: object
+    description: |
+      A single step in a flow. A step can call a tool, agent, or another flow.
+      Steps are executed in sequence and can pass data between them.
+    additionalProperties: false
+    oneOf:
+      - required: [ tool ]
+      - required: [ flow ]
+      - required: [ agent ]
+    properties:
+      id:
+        type: string
+        description: |
+          A unique identifier for the step. This is used to reference the step
+          in other parts of the configuration.
+      forEach:
+        oneOf:
+          - type: string
+            description: |
+              An expression that evaluates to a list of items. This is used to iterate.
+          - type: array
+            description: |
+              An list of items to iterate over in the forEach loop. Each item
+      forEachVar:
+        type: string
+        description: |
+          The name of the variable that will be used to refer to the current item
+          in the forEach loop. This is used to access the current item in the loop.
+          The default value is "item" if not set.
+      input:
+        oneOf:
+          - type: "string"
+            description: |
+              A simple string input that will be passed to the tool, agent, or flow.
+          - type: "object"
+            description: |
+              A structured input that will be passed to the tool, agent, or flow.
+              This can include multiple fields and their values.
+            additionalProperties: true
+      tool:
+        type: string
+        description: |
+          The name of the tool to call in this step. The tool will be invoked
+          with the input provided to the step.
+      flow:
+        type: string
+        description: |
+          The name of the flow to call in this step. The flow will be executed
+          with the input provided to the step.
+      agent:
+        oneOf:
+          - type: string
+            description: |
+              The name of the agent to call in this step. The agent will be invoked
+              with the input provided to the step.
+          - type: object
+            description: |
+              A reference to an agent configuration. This allows for more complex
+              configurations where the agent can be customized for this step.
+            required: [ name ]
+            additionalProperties: false
+            properties:
+              name:
+                type: string
+                description: |
+                  The name of the agent to call in this step.
+              output:
+                $ref: "#/definitions/OutputSchema"
+                description: |
+                  The output schema that the agent should produce. This is used to
+                  structure the output of the agent.
+              chatHistory:
+                type: boolean
+                description: |
+                  Whether to keep a chat history for this agent in this step. If true,
+                  the agent will remember previous interactions and use them to inform
+                  future responses. Defaults to true if unset.
+              toolChoice:
+                type: string
+                description: |
+                  The strategy for choosing which tool to use when multiple tools are available.
+                  Can be one of "auto", "none", or a specific tool name.
+              temperature:
+                type: number
+                description: |
+                  The temperature to use for the LLM when generating responses in this step.
+                  A higher temperature will result in more creative and varied responses,
+                  while a lower temperature will result in more focused and deterministic responses.
+                  Defaults to unset which means it's up to the LLM provider to decide when default value is used.
+              topP:
+                type: number
+                description: |
+                  The top P value to use for the LLM when generating responses in this step.
+                  This is a probability threshold that controls the diversity of the generated text.
+                  Either the top P value or temperature can be set, but not both. Defaults to unset which means
+                  it's up to the LLM provider to decide when default value is used.
+  
+  
+
+  Flow:
+    type: object
+    description: |
+      Configuration for a flow that can be used by the Nanobot. A flow is a predefined
+      sequence of steps that the agent can execute.
+    additionalProperties: false
+    properties:
+      description:
+        type: string
+        description: |
+          The description of the flow when used as a tool given to an agent.
+      input:
+        $ref: "#/definitions/InputSchema"
+      outputRole:
+        type: string
+        description: |
+          The role of the output when this flow is used as a tool given to an agent.
+          If the role is set to assistant then the tool output will be returns as though it was
+          the output of the agent. The only valid value is "assistant" or unset.
+      steps:
+        type: array
+        items:
+          $ref: "#/definitions/Step"
+        description: |
+          A list of steps that the flow will execute. Each step can call a tool, agent, or another flow.
+
+  Agent:
+    type: object
+    description: |
+      Configuration for a single agent in the Nanobot system. An agent is primary
+      defined by being backed by an LLM and that has tools to interact with.
+    additionalProperties: false
+    properties:
+      description:
+        type: string
+        description: |
+          A human-readable description that will be used by the LLM to determine when
+          to use this agent when this agent is given to another agent as a tool.
+      model:
+        type: string
+        description: |
+          The name of the LLM model to use for this agent. If no model is specified the
+          agent will use the global nanobot model.
+      instructions:
+        description: |
+          Instructions that will be used by the LLM to guide the agent's behavior.
+        $ref: "#/definitions/DynamicInstruction"
+      tools:
+        description: |
+          A list of tools that this agent can use. Tools are from MCP Servers
+          that provide additional functionality to the agent.
+        $ref: "#/definitions/StringOrStringList"
+      flows:
+        description: |
+          A list of flows that this agent can use. Flows are predefined sequences
+          of steps that the agent can execute.
+        $ref: "#/definitions/StringOrStringList"
+      agents:
+        description: |
+          A list of other agents that this agent can use as tools. This allows
+          agents to delegate tasks to other agents.
+        $ref: "#/definitions/StringOrStringList"
+      chatHistory:
+        type: boolean
+        description: |
+          Whether to keep a chat history for this agent. If true, the agent will
+          remember previous interactions and use them to inform future responses.
+          Defaults to true if unset.
+      toolExtensions:
+        type: object
+        description: |
+          A map of tool names to their extensions. Extensions are additional
+          configurations for tools that can modify their behavior.
+        additionalProperties:
+          type: object
+          description: |
+            The configuration for the tool extension. The structure of this object
+            depends on the specific tool and its extension.
+      toolChoice:
+        type: string
+        description: |
+          The strategy for choosing which tool to use when multiple tools are available.
+          Can be one of "auto", "none", or a specific tool name.
+      temperature:
+        type: number
+        description: |
+          The temperature to use for the LLM when generating responses. A higher
+          temperature will result in more creative and varied responses, while a
+          lower temperature will result in more focused and deterministic responses.
+          Defaults to unset which means it's up to the LLM provider to decide when
+          default value is used.
+      topP:
+        type: number
+        description: |
+          The top P value to use for the LLM when generating responses. This is a
+          probability threshold that controls the diversity of the generated text.
+          Either the top P value or temperature can be set, but not both. Defaults
+          to unset which means it's up to the LLM provider to decide when default
+          value is used.
+      output:
+        $ref: "#/definitions/OutputSchema"
+      truncation:
+        type: boolean
+        description: |
+          Whether the chat history should be truncated to fit within the LLM's.
+          This is dependent on the LLM and its capabilities and currently supported
+          by the OpenAI LLMs.
+      maxTokens:
+        type: number
+        description: |
+          The maximum number of tokens to generate in the response. This is used
+          to limit the length of the response from the LLM. If not set, the LLM
+          provider will decide the default value.
+      aliases:
+        type: array
+        items:
+          type: string
+        description: |
+          A list of aliases for the agent. Aliases are alternative names that can
+          be used to refer to the agent. This is useful for model preferences hints
+          in MCP sampling.
+      cost:
+        type: number
+        description: |
+          The cost of using this agent. This value is evaluated against the
+          model preferences in MCP sampling requests to select a model.
+      intelligence:
+        type: number
+        description: |
+          The intelligence level of the agent. This is used to help the LLM
+          understand the capabilities of the agent and how it should be used.
+          Higher values indicate more capable agents.
+      speed:
+        type: number
+        description: |
+          The speed of the agent. This is used to help the LLM understand how
+          quickly the agent can respond. Higher values indicate faster agents.
+
+type: object
+additionalProperties: false
+properties:
+  publish:
+    $ref: "#/definitions/Publish"
+    description: |
+      Configuration for the published interface of the Nanobot. This defines
+      how the Nanobot can be invoked and what entrypoint to use.
+  env:
+    type: object
+    description: |
+      A map of environment variables that will be set for the Nanobot process.
+      This is useful for configuring the environment in which the Nanobot runs.
+    additionalProperties:
+      $ref: "#/definitions/EnvVarDefinition"
+  agents:
+    type: object
+    description: |
+      A map of agent names to their configurations.
+    additionalProperties:
+      $ref: "#/definitions/Agent"
+  flows:
+    type: object
+    description: |
+      A map of flow names to their configurations. Flows are predefined sequences
+      of steps that the agent can execute.
+    additionalProperties:
+      $ref: "#/definitions/Flow"
+  mcpServers:
+    type: object
+    description: |
+      A map of MCP Server names to their configurations. MCP Servers provide
+      tools, prompts, and other resources that the Nanobot can use.
+    additionalProperties:
+      $ref: "#/definitions/MCPServer"
