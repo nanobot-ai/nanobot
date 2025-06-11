@@ -95,7 +95,8 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 
 func (s *HTTPClient) startSSE(ctx context.Context, msg *Message, lastEventID any) error {
 	gotResponse := make(chan error, 1)
-	req, err := s.newRequest(ctx, http.MethodGet, nil)
+	// Start the SSE stream with the managed context.
+	req, err := s.newRequest(s.ctx, http.MethodGet, nil)
 	if err != nil {
 		return err
 	}
