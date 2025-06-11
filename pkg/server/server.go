@@ -12,6 +12,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/expr"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
+	"github.com/nanobot-ai/nanobot/pkg/schema"
 	"github.com/nanobot-ai/nanobot/pkg/tools"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
@@ -383,6 +384,8 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 			return err
 		}
 	}
+
+	toolMappings = schema.ValidateToolMappings(toolMappings)
 	msg.Session.Set(toolMappingKey, toolMappings)
 
 	promptMappings, err := s.buildPromptMappings(ctx)
