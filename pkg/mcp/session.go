@@ -96,7 +96,7 @@ type Session struct {
 	handler            MessageHandler
 	pendingRequest     pendingRequest
 	ClientCapabilities *ClientCapabilities
-	ServerCapabilities *ServerCapabilities
+	InitializeResult   *InitializeResult
 	recorder           *recorder
 	sessionID          string
 	Parent             *Session

@@ -251,7 +251,7 @@ func (c *Client) Initialize(ctx context.Context, param InitializeRequest) (resul
 			Method: "notifications/initialized",
 		})
 	}
-	c.Session.ServerCapabilities = &result.Capabilities
+	c.Session.InitializeResult = &result
 	return
 }
 
@@ -265,7 +265,7 @@ func (c *Client) ReadResource(ctx context.Context, uri string) (*ReadResourceRes
 
 func (c *Client) ListResourceTemplates(ctx context.Context) (*ListResourceTemplatesResult, error) {
 	var result ListResourceTemplatesResult
-	if c.Session.ServerCapabilities == nil || c.Session.ServerCapabilities.Resources == nil {
+	if c.Session.InitializeResult == nil || c.Session.InitializeResult.Capabilities.Resources == nil {
 		return &result, nil
 	}
 	err := c.Session.Exchange(ctx, "resources/templates/list", struct{}{}, &result)
@@ -274,7 +274,7 @@ func (c *Client) ListResourceTemplates(ctx context.Context) (*ListResourceTempla
 
 func (c *Client) ListResources(ctx context.Context) (*ListResourcesResult, error) {
 	var result ListResourcesResult
-	if c.Session.ServerCapabilities == nil || c.Session.ServerCapabilities.Resources == nil {
+	if c.Session.InitializeResult == nil || c.Session.InitializeResult.Capabilities.Resources == nil {
 		return &result, nil
 	}
 	err := c.Session.Exchange(ctx, "resources/list", struct{}{}, &result)
@@ -283,7 +283,7 @@ func (c *Client) ListResources(ctx context.Context) (*ListResourcesResult, error
 
 func (c *Client) ListPrompts(ctx context.Context) (*ListPromptsResult, error) {
 	var prompts ListPromptsResult
-	if c.Session.ServerCapabilities == nil || c.Session.ServerCapabilities.Prompts == nil {
+	if c.Session.InitializeResult == nil || c.Session.InitializeResult.Capabilities.Prompts == nil {
 		return &prompts, nil
 	}
 	err := c.Session.Exchange(ctx, "prompts/list", struct{}{}, &prompts)

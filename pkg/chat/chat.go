@@ -76,7 +76,7 @@ func Chat(ctx context.Context, listenAddress string, confirmations *confirm.Serv
 	}
 
 	_, _ = fmt.Fprintln(os.Stderr)
-	intro, _ := c.Session.ServerCapabilities.Experimental["nanobot/intro"].(string)
+	intro, _ := c.Session.InitializeResult.Capabilities.Experimental["nanobot/intro"].(string)
 	if intro != "" {
 		printer.Prefix("INTRO", intro+"\n")
 	}
