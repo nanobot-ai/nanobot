@@ -7,6 +7,9 @@ import (
 )
 
 func Bin() string {
+	if bin := os.Getenv("NANOBOT_BIN"); bin != "" {
+		return bin
+	}
 	return currentBin()
 }
 
