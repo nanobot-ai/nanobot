@@ -110,7 +110,7 @@ func (s *HTTPClient) startSSE(ctx context.Context, msg *Message, lastEventID any
 		return err
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 		_ = resp.Body.Close()
 		// If msg is nil, then this is an SSE request for HTTP streaming.
 		// If the server doesn't support a separate SSE endpoint, then we can just return.
