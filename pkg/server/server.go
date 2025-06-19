@@ -446,4 +446,9 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 			return
 		}
 	}
+
+	msg.SendError(ctx, &mcp.RPCError{
+		Code:    -32601,
+		Message: fmt.Sprintf("method %q not allowed", msg.Method),
+	})
 }
