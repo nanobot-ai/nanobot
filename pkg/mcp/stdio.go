@@ -43,7 +43,7 @@ type Stdio struct {
 	stdin          io.Writer
 	closer         func()
 	server         string
-	pendingRequest pendingRequest
+	pendingRequest PendingRequests
 	waiter         *waiter
 	writeLock      sync.Mutex
 }

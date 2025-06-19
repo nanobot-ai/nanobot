@@ -30,7 +30,7 @@ func (s *StdioServer) Wait() {
 }
 
 func (s *StdioServer) Start(ctx context.Context, in io.ReadCloser, out io.WriteCloser) error {
-	session, err := newServerSession(ctx, s.MessageHandler)
+	session, err := NewServerSession(ctx, s.MessageHandler)
 	if err != nil {
 		return fmt.Errorf("failed to create stdio session: %w", err)
 	}
