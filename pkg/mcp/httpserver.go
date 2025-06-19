@@ -8,19 +8,50 @@ import (
 	"maps"
 	"net/http"
 	"strings"
-	"sync"
+
+	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
 type HTTPServer struct {
 	env            map[string]string
 	MessageHandler MessageHandler
-	sessions       sync.Map
+	sessions       SessionStore
+	ctx            context.Context
 }
 
-func NewHTTPServer(env map[string]string, handler MessageHandler) *HTTPServer {
+type HTTPServerOptions struct {
+	SessionStore SessionStore
+	BaseContext  context.Context
+}
+
+func completeHTTPServerOptions(opts ...HTTPServerOptions) HTTPServerOptions {
+	o := HTTPServerOptions{}
+	for _, opt := range opts {
+		if opt.SessionStore != nil {
+			o.SessionStore = opt.SessionStore
+		}
+		if opt.BaseContext != nil {
+			o.BaseContext = opt.BaseContext
+		}
+	}
+
+	if o.SessionStore == nil {
+		o.SessionStore = NewInMemorySessionStore()
+	}
+	if o.BaseContext == nil {
+		o.BaseContext = context.Background()
+	}
+
+	return o
+}
+
+func NewHTTPServer(env map[string]string, handler MessageHandler, opts ...HTTPServerOptions) *HTTPServer {
+	o := completeHTTPServerOptions(opts...)
 	return &HTTPServer{
 		MessageHandler: handler,
 		env:            env,
+		sessions:       o.SessionStore,
+		ctx:            o.BaseContext,
 	}
 }
 
@@ -35,13 +66,12 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	s, ok := h.sessions.Load(id)
+	session, ok := h.sessions.Load(id)
 	if !ok {
 		http.Error(rw, "Session not found", http.StatusNotFound)
 		return
 	}
 
-	session := s.(*serverSession)
 	rw.Header().Set("Content-Type", "text/event-stream")
 	rw.Header().Set("Cache-Control", "no-cache")
 	rw.Header().Set("Connection", "keep-alive")
@@ -77,14 +107,13 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	sseID := req.URL.Query().Get("id")
 
 	if streamingID != "" && req.Method == http.MethodDelete {
-		session, ok := h.sessions.LoadAndDelete(streamingID)
+		sseSession, ok := h.sessions.LoadAndDelete(streamingID)
 		if !ok {
 			http.Error(rw, "Session not found", http.StatusNotFound)
 			return
 		}
 
-		sseSession := session.(*serverSession)
-		sseSession.session.Close()
+		sseSession.Close()
 		rw.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -101,14 +130,22 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	if streamingID != "" {
-		session, ok := h.sessions.Load(streamingID)
+		sseSession, ok := h.sessions.Load(streamingID)
 		if !ok {
 			http.Error(rw, "Session not found", http.StatusNotFound)
 			return
 		}
 
-		sseSession := session.(*serverSession)
+		var setID bool
+		if msg.ID == nil {
+			msg.ID = uuid.String()
+			setID = true
+		}
+
 		response, err := sseSession.Exchange(req.Context(), msg)
+		if setID {
+			response.ID = nil
+		}
 		if errors.Is(err, ErrNoResponse) {
 			rw.WriteHeader(http.StatusAccepted)
 			return
@@ -134,13 +171,12 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		}
 		return
 	} else if sseID != "" {
-		session, ok := h.sessions.Load(sseID)
+		sseSession, ok := h.sessions.Load(sseID)
 		if !ok {
 			http.Error(rw, "Session not found", http.StatusNotFound)
 			return
 		}
 
-		sseSession := session.(*serverSession)
 		if err := sseSession.Send(req.Context(), msg); err != nil {
 			http.Error(rw, "Failed to handle message: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -155,7 +191,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	session, err := newServerSession(context.Background(), h.MessageHandler)
+	session, err := NewServerSession(h.ctx, h.MessageHandler)
 	if err != nil {
 		http.Error(rw, "Failed to create session: "+err.Error(), http.StatusInternalServerError)
 		return

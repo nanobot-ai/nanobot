@@ -29,46 +29,6 @@ type wire interface {
 
 type wireHandler func(msg Message)
 
-type pendingRequest struct {
-	lock sync.Mutex
-	ids  map[any]chan Message
-}
-
-func (p *pendingRequest) waitFor(id any) chan Message {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-	if p.ids == nil {
-		p.ids = make(map[any]chan Message)
-	}
-	ch := make(chan Message, 1)
-	p.ids[id] = ch
-	return ch
-}
-
-func (p *pendingRequest) notify(msg Message) bool {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	ch, ok := p.ids[msg.ID]
-	if ok {
-		select {
-		case ch <- msg:
-			return true
-			// don't let it block, we are holding the lock
-		default:
-		}
-		delete(p.ids, msg.ID)
-	}
-	return false
-}
-
-func (p *pendingRequest) done(id any) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	delete(p.ids, id)
-}
-
 var sessionKey = struct{}{}
 
 func SessionFromContext(ctx context.Context) *Session {
@@ -94,7 +54,7 @@ type Session struct {
 	cancel             context.CancelFunc
 	wire               wire
 	handler            MessageHandler
-	pendingRequest     pendingRequest
+	pendingRequest     PendingRequests
 	ClientCapabilities *ClientCapabilities
 	InitializeResult   *InitializeResult
 	recorder           *recorder
@@ -256,8 +216,8 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 		}
 	}
 
-	ch := s.pendingRequest.waitFor(req.ID)
-	defer s.pendingRequest.done(req.ID)
+	ch := s.pendingRequest.WaitFor(req.ID)
+	defer s.pendingRequest.Done(req.ID)
 
 	if err := s.Send(ctx, *req); err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
@@ -287,7 +247,7 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 func (s *Session) onWire(message Message) {
 	s.recorder.save(s.ctx, s.sessionID, false, message)
 	message.Session = s
-	if s.pendingRequest.notify(message) {
+	if s.pendingRequest.Notify(message) {
 		return
 	}
 	s.handler.OnMessage(s.ctx, message)
