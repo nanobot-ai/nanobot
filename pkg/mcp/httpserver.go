@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
@@ -24,29 +25,24 @@ type HTTPServerOptions struct {
 	BaseContext  context.Context
 }
 
-func completeHTTPServerOptions(opts ...HTTPServerOptions) HTTPServerOptions {
-	o := HTTPServerOptions{}
-	for _, opt := range opts {
-		if opt.SessionStore != nil {
-			o.SessionStore = opt.SessionStore
-		}
-		if opt.BaseContext != nil {
-			o.BaseContext = opt.BaseContext
-		}
+func (h HTTPServerOptions) Complete() HTTPServerOptions {
+	if h.SessionStore == nil {
+		h.SessionStore = NewInMemorySessionStore()
 	}
+	if h.BaseContext == nil {
+		h.BaseContext = context.Background()
+	}
+	return h
+}
 
-	if o.SessionStore == nil {
-		o.SessionStore = NewInMemorySessionStore()
-	}
-	if o.BaseContext == nil {
-		o.BaseContext = context.Background()
-	}
-
-	return o
+func (h HTTPServerOptions) Merge(other HTTPServerOptions) (result HTTPServerOptions) {
+	h.SessionStore = complete.Last(h.SessionStore, other.SessionStore)
+	h.BaseContext = complete.Last(h.BaseContext, other.BaseContext)
+	return h
 }
 
 func NewHTTPServer(env map[string]string, handler MessageHandler, opts ...HTTPServerOptions) *HTTPServer {
-	o := completeHTTPServerOptions(opts...)
+	o := complete.Complete(opts...)
 	return &HTTPServer{
 		MessageHandler: handler,
 		env:            env,
