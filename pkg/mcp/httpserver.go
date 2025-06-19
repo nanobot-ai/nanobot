@@ -43,6 +43,8 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request) {
 
 	session := s.(*serverSession)
 	rw.Header().Set("Content-Type", "text/event-stream")
+	rw.Header().Set("Cache-Control", "no-cache")
+	rw.Header().Set("Connection", "keep-alive")
 	rw.WriteHeader(http.StatusOK)
 	if flusher, ok := rw.(http.Flusher); ok {
 		flusher.Flush()
@@ -119,6 +121,11 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 					Message: err.Error(),
 				},
 			}
+		}
+
+		if len(response.Result) <= 2 && msg.Method != "ping" {
+			// Response has no data, write status accepted.
+			rw.WriteHeader(http.StatusAccepted)
 		}
 
 		rw.Header().Set("Content-Type", "application/json")
