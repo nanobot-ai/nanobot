@@ -24,6 +24,7 @@ type Server struct {
 
 const (
 	toolMappingKey             = "toolMapping"
+	currentAgentKey            = "currentAgent"
 	promptMappingKey           = "promptMapping"
 	resourceMappingKey         = "resourceMapping"
 	resourceTemplateMappingKey = "resourceTemplateMapping"
@@ -126,12 +127,7 @@ func (s *Server) handleGetPrompt(ctx context.Context, msg mcp.Message, payload m
 		return fmt.Errorf("prompt %s not found", payload.Name)
 	}
 
-	c, err := s.runtime.GetClient(ctx, promptMapping.MCPServer)
-	if err != nil {
-		return fmt.Errorf("failed to get client for server %s: %w", promptMapping.MCPServer, err)
-	}
-
-	result, err := c.GetPrompt(ctx, promptMapping.TargetName, payload.Arguments)
+	result, err := s.runtime.GetPrompt(ctx, promptMapping.MCPServer, promptMapping.TargetName, payload.Arguments)
 	if err != nil {
 		return err
 	}
@@ -172,6 +168,15 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 		return fmt.Errorf("tool %s not found", payload.Name)
 	}
 
+	if payload.Name == types.AgentTool {
+		if currentAgent, _ := msg.Session.Get(currentAgentKey).(string); currentAgent != "" {
+			toolMapping = types.TargetMapping{
+				MCPServer:  currentAgent,
+				TargetName: currentAgent,
+			}
+		}
+	}
+
 	result, err := s.runtime.Call(ctx, toolMapping.MCPServer, toolMapping.TargetName, payload.Arguments, tools.CallOptions{
 		ProgressToken: msg.ProgressToken(),
 		LogData: map[string]any{
@@ -182,7 +187,16 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 		return err
 	}
 
-	return msg.Reply(ctx, result)
+	if payload.Name == types.AgentTool && result.ChatResponse && result.Agent != "" {
+		msg.Session.Set(currentAgentKey, result.Agent)
+	}
+
+	mcpResult := mcp.CallToolResult{
+		IsError: result.IsError,
+		Content: result.Content,
+	}
+
+	return msg.Reply(ctx, mcpResult)
 }
 
 func (s *Server) handleListTools(ctx context.Context, msg mcp.Message, _ mcp.ListToolsRequest) error {
@@ -279,9 +293,19 @@ type templateMatch struct {
 func (s *Server) buildPromptMappings(ctx context.Context) (types.PromptMappings, error) {
 	serverPrompts := map[string]*mcp.ListPromptsResult{}
 	result := types.PromptMappings{}
+	c := s.runtime.GetConfig()
 	for _, ref := range append(s.runtime.GetConfig().Publish.Prompts, s.runtime.GetConfig().Publish.MCPServers...) {
 		toolRef := types.ParseToolRef(ref)
 		if toolRef.Server == "" {
+			continue
+		}
+
+		if inlinePrompt, ok := c.Prompts[toolRef.Server]; ok && toolRef.Tool == "" {
+			result[toolRef.PublishedName(toolRef.Server)] = types.TargetMapping{
+				MCPServer:  toolRef.Server,
+				TargetName: toolRef.Server,
+				Target:     inlinePrompt.ToPrompt(toolRef.PublishedName(toolRef.Server)),
+			}
 			continue
 		}
 
@@ -300,6 +324,7 @@ func (s *Server) buildPromptMappings(ctx context.Context) (types.PromptMappings,
 
 		for _, prompt := range prompts.Prompts {
 			if prompt.Name == toolRef.Tool || toolRef.Tool == "" {
+				prompt.Name = toolRef.PublishedName(prompt.Name)
 				result[toolRef.PublishedName(prompt.Name)] = types.TargetMapping{
 					MCPServer:  toolRef.Server,
 					TargetName: prompt.Name,
@@ -386,6 +411,12 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 		if err != nil {
 			return err
 		}
+	} else if agent, ok := c.Agents["main"]; ok {
+		toolMappings[types.AgentTool] = types.TargetMapping{
+			MCPServer:  "main",
+			TargetName: "main",
+			Target:     agent,
+		}
 	}
 
 	toolMappings = schema.ValidateToolMappings(toolMappings)
@@ -419,6 +450,8 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 			"nanobot/intro": intro,
 		}
 	}
+
+	session.ClientCapabilities = &payload.Capabilities
 
 	return msg.Reply(ctx, mcp.InitializeResult{
 		ProtocolVersion: payload.ProtocolVersion,

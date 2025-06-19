@@ -101,7 +101,7 @@ func (s *Stdio) start(ctx context.Context, handler wireHandler) error {
 	return buf.Err()
 }
 
-func newStdioClient(ctx context.Context, roots []Root, env map[string]string, serverName string, config Server) (*Stdio, error) {
+func newStdioClient(ctx context.Context, roots []Root, env map[string]string, serverName string, config Server, r *Runner) (*Stdio, error) {
 	result, err := r.Stream(ctx, roots, env, serverName, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create stream: %w", err)

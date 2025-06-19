@@ -21,6 +21,7 @@ type Client struct {
 type ClientOption struct {
 	Roots         []Root
 	OnSampling    func(ctx context.Context, sampling CreateMessageRequest) (CreateMessageResult, error)
+	OnElicit      func(ctx context.Context, req ElicitRequest) (ElicitResult, error)
 	OnRoots       func(ctx context.Context, msg Message) error
 	OnLogging     func(ctx context.Context, logMsg LoggingMessage) error
 	OnMessage     func(ctx context.Context, msg Message) error
@@ -28,6 +29,14 @@ type ClientOption struct {
 	Env           map[string]string
 	ParentSession *Session
 	SessionID     string
+	Runner        *Runner
+}
+
+func (c ClientOption) Complete() ClientOption {
+	if c.Runner == nil {
+		c.Runner = &Runner{}
+	}
+	return c
 }
 
 func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
@@ -51,9 +60,14 @@ func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
 	if other.OnNotify != nil {
 		result.OnNotify = other.OnNotify
 	}
+	result.OnElicit = c.OnElicit
+	if other.OnElicit != nil {
+		result.OnElicit = other.OnElicit
+	}
 	result.Env = complete.MergeMap(c.Env, other.Env)
 	result.SessionID = complete.Last(c.SessionID, other.SessionID)
 	result.ParentSession = complete.Last(c.ParentSession, other.ParentSession)
+	result.Runner = complete.Last(c.Runner, other.Runner)
 	result.Roots = append(c.Roots, other.Roots...)
 	return result
 }
@@ -62,13 +76,14 @@ type Server struct {
 	Image        string            `json:"image,omitempty"`
 	Dockerfile   string            `json:"dockerfile,omitempty"`
 	Source       ServerSource      `json:"source,omitempty"`
-	Unsandboxed  bool              `json:"unsandboxed,omitempty"`
+	Sandboxed    bool              `json:"sandboxed,omitempty"`
 	Env          map[string]string `json:"env,omitempty"`
 	Command      string            `json:"command,omitempty"`
 	Args         []string          `json:"args,omitempty"`
 	BaseURL      string            `json:"url,omitempty"`
 	Ports        []string          `json:"ports,omitempty"`
 	ReversePorts []int             `json:"reversePorts"`
+	Cwd          string            `json:"cwd,omitempty"`
 	Workdir      string            `json:"workdir,omitempty"`
 	Headers      map[string]string `json:"headers,omitempty"`
 }
@@ -113,6 +128,23 @@ func toHandler(opts ClientOption) MessageHandler {
 				err = msg.Reply(ctx, resp)
 				if err != nil {
 					log.Errorf(ctx, "failed to reply to sampling/createMessage: %v", err)
+				}
+			}()
+		} else if msg.Method == "elicitation/create" && opts.OnElicit != nil {
+			var param ElicitRequest
+			if err := json.Unmarshal(msg.Params, &param); err != nil {
+				msg.SendError(ctx, fmt.Errorf("failed to unmarshal elicitation/create: %w", err))
+				return
+			}
+			go func() {
+				resp, err := opts.OnElicit(ctx, param)
+				if err != nil {
+					msg.SendError(ctx, fmt.Errorf("failed to handle elicitation/create: %w", err))
+					return
+				}
+				err = msg.Reply(ctx, resp)
+				if err != nil {
+					log.Errorf(ctx, "failed to reply to elicitation/create: %v", err)
 				}
 			}()
 		} else if msg.Method == "roots/list" && opts.OnRoots != nil {
@@ -182,7 +214,7 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 	} else if config.BaseURL != "" {
 		if config.Command != "" {
 			var err error
-			config, err = r.Run(ctx, opt.Roots, opt.Env, serverName, config)
+			config, err = opt.Runner.Run(ctx, opt.Roots, opt.Env, serverName, config)
 			if err != nil {
 				return nil, err
 			}
@@ -192,7 +224,7 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 		}
 		wire = NewHTTPClient(serverName, config.BaseURL, envvar.ReplaceMap(opt.Env, config.Headers))
 	} else {
-		wire, err = newStdioClient(ctx, opt.Roots, opt.Env, serverName, config)
+		wire, err = newStdioClient(ctx, opt.Roots, opt.Env, serverName, config, opt.Runner)
 		if err != nil {
 			return nil, err
 		}
@@ -221,8 +253,9 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 	}
 
 	var (
-		sampling *struct{}
-		roots    *RootsCapability
+		sampling     *struct{}
+		roots        *RootsCapability
+		elicitations *struct{}
 	)
 	if opt.OnSampling != nil {
 		sampling = &struct{}{}
@@ -230,11 +263,15 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 	if opt.OnRoots != nil {
 		roots = &RootsCapability{}
 	}
+	if opt.OnElicit != nil {
+		elicitations = &struct{}{}
+	}
 	_, err = c.Initialize(ctx, InitializeRequest{
 		ProtocolVersion: "2025-03-26",
 		Capabilities: ClientCapabilities{
-			Sampling: sampling,
-			Roots:    roots,
+			Sampling:    sampling,
+			Roots:       roots,
+			Elicitation: elicitations,
 		},
 		ClientInfo: ClientInfo{
 			Name:    "nanobot",

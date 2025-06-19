@@ -21,6 +21,15 @@ func MergeMap[K comparable, V any](m ...map[K]V) (result map[K]V) {
 	return
 }
 
+func First[T comparable](o ...T) (result T) {
+	for _, v := range o {
+		if v != result {
+			return v
+		}
+	}
+	return
+}
+
 func Last[T comparable](o ...T) (result T) {
 	for i := len(o) - 1; i >= 0; i-- {
 		if o[i] != result {

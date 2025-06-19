@@ -1,3 +1,6 @@
+env:
+  DISPLAY: "X11 Display env"
+
 publish:
   introduction: "I'm an example of a computer use agent. Ask me to do something with a website. Make sure you
     specify the website you want me to use."
@@ -22,6 +25,7 @@ agents:
 
 mcpServers:
   browser:
-    source: .
+    env:
+      DISPLAY: ${DISPLAY}
     command: "uv"
     args: [ "run", "browsertool.py" ]

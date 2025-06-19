@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -70,12 +71,22 @@ func loadResource(ctx context.Context, configResource *resource, profiles ...str
 		}
 	}
 
+	last = rewriteCwd(last, targetCwd)
+
 	last, err = rewriteSourceReferences(last, configResource)
 	if err != nil {
 		return nil, "", fmt.Errorf("error rewriting source references: %w", err)
 	}
 
 	return &last, targetCwd, last.Validate(configResource.resourceType == "path")
+}
+
+func rewriteCwd(cfg types.Config, cwd string) types.Config {
+	for name, mcpServer := range cfg.MCPServers {
+		mcpServer.Cwd = filepath.Join(cwd, mcpServer.Cwd)
+		cfg.MCPServers[name] = mcpServer
+	}
+	return cfg
 }
 
 func rewriteSourceReferences(cfg types.Config, resource *resource) (types.Config, error) {

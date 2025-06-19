@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/confirm"
@@ -58,6 +59,34 @@ func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, age
 	return toolMappings, nil
 }
 
+func populateToolCallResult(previousRun *run, req *types.CompletionRequest, callID string) {
+	if previousRun.ToolOutputs == nil {
+		previousRun.ToolOutputs = make(map[string]toolCall)
+	}
+	var newContent []mcp.Content
+	for _, input := range req.Input {
+		if input.Message != nil {
+			newContent = append(newContent, input.Message.Content)
+		}
+	}
+
+	previousRun.ToolOutputs[callID] = toolCall{
+		Output: []types.CompletionInput{
+			{
+				ToolCallResult: &types.ToolCallResult{
+					CallID: callID,
+					Output: types.CallResult{
+						Content: newContent,
+					},
+				},
+			},
+		},
+		Done: true,
+	}
+	req.InputAsToolResult = nil
+	req.Input = nil
+}
+
 func (a *Agents) populateRequest(ctx context.Context, run *run, previousRun *run) (types.CompletionRequest, types.ToolMappings, error) {
 	req := run.Request
 
@@ -65,7 +94,17 @@ func (a *Agents) populateRequest(ctx context.Context, run *run, previousRun *run
 		input := previousRun.PopulatedRequest.Input
 
 		for _, output := range previousRun.Response.Output {
-			input = append(input, output.ToInput())
+			prevInput := output.ToInput()
+			if prevInput.ToolCall != nil {
+				if _, exists := previousRun.ToolOutputs[prevInput.ToolCall.CallID]; !exists {
+					if req.InputAsToolResult != nil && *req.InputAsToolResult {
+						populateToolCallResult(previousRun, &req, prevInput.ToolCall.CallID)
+					} else {
+						continue
+					}
+				}
+			}
+			input = append(input, prevInput)
 		}
 
 		for _, callID := range slices.Sorted(maps.Keys(previousRun.ToolOutputs)) {
@@ -139,6 +178,10 @@ func (a *Agents) populateRequest(ctx context.Context, run *run, previousRun *run
 		req.OutputSchema.Name = "output_schema"
 	}
 
+	if req.ThreadName == "" {
+		req.ThreadName = agent.ThreadName
+	}
+
 	req.Model = agent.Model
 
 	toolMapping, err := a.addTools(ctx, &req, &agent)
@@ -155,28 +198,48 @@ func (a *Agents) populateRequest(ctx context.Context, run *run, previousRun *run
 	return req, toolMapping, nil
 }
 
-const previousRunKey = "previous_run"
+const previousRunKey = "thread"
 
-func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts ...types.CompletionOptions) (*types.CompletionResponse, error) {
+func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts ...types.CompletionOptions) (_ *types.CompletionResponse, err error) {
 	var (
-		previousRunKey = previousRunKey + "/" + req.Model
+		previousRunKey = previousRunKey
 		session        = mcp.SessionFromContext(ctx)
-		stateful       = session != nil
+		isChat         = session != nil
 		previousRun    *run
-		currentRun     = &run{
-			Request: req,
-		}
+		currentRun     = &run{}
 	)
 
-	if stateful && a.config.Agents[req.Model].ChatHistory != nil && !*a.config.Agents[req.Model].ChatHistory {
-		stateful = false
+	if req.ThreadName != "" {
+		previousRunKey = fmt.Sprintf("%s/%s", previousRunKey, req.ThreadName)
 	}
 
-	if ch := complete.Complete(opts...).ChatHistory; ch != nil {
-		stateful = *ch
+	if isChat && a.config.Agents[req.Model].Chat != nil && !*a.config.Agents[req.Model].Chat {
+		isChat = false
 	}
 
-	if stateful {
+	if ch := complete.Complete(opts...).Chat; ch != nil {
+		isChat = *ch
+	}
+
+	if isChat && req.InputAsToolResult == nil {
+		req.InputAsToolResult = &isChat
+	}
+
+	// Save the original request to the run status
+	currentRun.Request = req
+
+	if isChat {
+		fallBack, _ := session.Get(previousRunKey).(*run)
+		if req.NewThread && fallBack != nil {
+			session.Set(previousRunKey+"/"+time.Now().Format(time.RFC3339), fallBack)
+			session.Set(previousRunKey, nil)
+		}
+
+		defer func() {
+			if err != nil && fallBack != nil {
+				session.Set(previousRunKey, fallBack)
+			}
+		}()
 		previousRun, _ = session.Get(previousRunKey).(*run)
 	}
 
@@ -185,12 +248,34 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 			return nil, err
 		}
 
+		if isChat {
+			session.Set(previousRunKey, currentRun)
+		}
+
 		if err := a.toolCalls(ctx, currentRun, opts); err != nil {
 			return nil, err
 		}
 
+		if isChat {
+			for _, toolOutput := range currentRun.ToolOutputs {
+				for _, output := range toolOutput.Output {
+					if output.ToolCallResult != nil && output.ToolCallResult.Output.ChatResponse {
+						return &types.CompletionResponse{
+							Output: []types.CompletionOutput{
+								{
+									CallResult: &output.ToolCallResult.Output,
+								},
+							},
+						}, nil
+					}
+
+				}
+			}
+		}
+
 		if currentRun.Done {
-			if stateful {
+			if isChat {
+				currentRun.Response.ChatResponse = true
 				session.Set(previousRunKey, currentRun)
 			}
 			return currentRun.Response, nil
@@ -198,9 +283,8 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 
 		previousRun = currentRun
 		currentRun = &run{
-			Request: req,
+			Request: req.Reset(),
 		}
-		currentRun.Request.Input = nil
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -101,6 +102,17 @@ func (s *Session) Get(key string) any {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	return s.attributes[key]
+}
+
+func (s *Session) Attributes() map[string]any {
+	if s == nil || len(s.attributes) == 0 {
+		return nil
+	}
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return maps.Clone(s.attributes)
 }
 
 func (s *Session) ID() string {

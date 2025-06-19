@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -18,6 +19,7 @@ type Config struct {
 	MCPServers map[string]mcp.Server `json:"mcpServers,omitempty"`
 	Flows      map[string]Flow       `json:"flows,omitempty"`
 	Profiles   map[string]Config     `json:"profiles,omitempty"`
+	Prompts    map[string]Prompt     `json:"prompts,omitempty"`
 }
 
 func (c Config) Validate(allowLocal bool) error {
@@ -76,6 +78,27 @@ func validateMCPServer(mcpServerName string, mcpServer mcp.Server, allowLocal bo
 	return nil
 }
 
+type Prompt struct {
+	Description string           `json:"description,omitempty"`
+	Input       map[string]Field `json:"input,omitempty"`
+	Template    string           `json:"template,omitempty"`
+}
+
+func (p Prompt) ToPrompt(name string) mcp.Prompt {
+	result := mcp.Prompt{
+		Name:        name,
+		Description: p.Description,
+	}
+	for fieldName, field := range p.Input {
+		result.Arguments = append(result.Arguments, mcp.PromptArgument{
+			Name:        fieldName,
+			Description: field.Description,
+			Required:    field.Required == nil || *field.Required,
+		})
+	}
+	return result
+}
+
 type EnvDef struct {
 	Default        string     `json:"default,omitempty"`
 	Description    string     `json:"description,omitempty"`
@@ -101,6 +124,8 @@ func (e *EnvDef) UnmarshalJSON(data []byte) error {
 type Flow struct {
 	Description string      `json:"description,omitempty"`
 	Input       InputSchema `json:"input,omitempty"`
+	Before      StringList  `json:"before,omitempty"`
+	After       StringList  `json:"after,omitempty"`
 	OutputRole  string      `json:"outputRole,omitempty"`
 	Steps       []Step      `json:"steps,omitzero"`
 }
@@ -122,12 +147,45 @@ type Step struct {
 	Flow       string         `json:"flow,omitempty"`
 	If         string         `json:"if,omitempty"`
 	While      string         `json:"while,omitempty"`
+	Elicit     *Elicit        `json:"elicit,omitempty"`
 	ForEach    any            `json:"forEach,omitempty"`
 	ForEachVar string         `json:"forEachVar,omitempty"`
 	Set        map[string]any `json:"set,omitempty"`
+	Evaluate   any            `json:"evaluate,omitempty"`
+	Return     map[string]any `json:"return,omitempty"`
 	Input      any            `json:"input,omitempty"`
 	Parallel   bool
 	Steps      []Step `json:"steps,omitzero"`
+	Else       []Step `json:"else,omitzero"`
+}
+
+type Elicit struct {
+	Message      string       `json:"message,omitempty"`
+	CancelResult any          `json:"cancelResult,omitempty"`
+	RejectResult any          `json:"rejectResult,omitempty"`
+	Input        *InputSchema `json:"input,omitempty"`
+}
+
+func (e Elicit) MarshalJSON() ([]byte, error) {
+	if e.Input == nil && e.Message != "" {
+		return json.Marshal(e.Message)
+	}
+	type Alias Elicit
+	return json.Marshal(Alias(e))
+}
+
+func (e *Elicit) UnmarshalJSON(data []byte) error {
+	if data[0] == '"' && data[len(data)-1] == '"' {
+		var raw string
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return err
+		}
+		e.Message = raw
+		e.Input = nil
+		return nil
+	}
+	type Alias Elicit
+	return json.Unmarshal(data, (*Alias)(e))
 }
 
 func ignoreEmptyStringList(s string) []string {
@@ -148,27 +206,31 @@ func (s Step) validate(c Config) error {
 }
 
 type AgentCall struct {
-	Name        string        `json:"name,omitempty"`
-	Output      *OutputSchema `json:"output,omitempty"`
-	ChatHistory *bool         `json:"chatHistory,omitempty"`
-	ToolChoice  string        `json:"toolChoice,omitempty"`
-	Temperature *json.Number  `json:"temperature,omitempty"`
-	TopP        *json.Number  `json:"topP,omitempty"`
+	Name              string        `json:"name,omitempty"`
+	Output            *OutputSchema `json:"output,omitempty"`
+	Chat              *bool         `json:"chat,omitempty"`
+	ToolChoice        string        `json:"toolChoice,omitempty"`
+	Temperature       *json.Number  `json:"temperature,omitempty"`
+	TopP              *json.Number  `json:"topP,omitempty"`
+	NewThread         *bool         `json:"newThread,omitempty"`
+	InputAsToolResult *bool         `json:"inputAsToolResult,omitempty"`
 	// NOTE: DON'T ADD A NEW FIELD HERE WITHOUT UPDATING MarshalJSON/UnmarshalJSON/Merge
 }
 
 func (a AgentCall) Merge(other AgentCall) (result AgentCall) {
 	result.Name = complete.Last(a.Name, other.Name)
 	result.Output = complete.Last(a.Output, other.Output)
-	result.ChatHistory = complete.Last(a.ChatHistory, other.ChatHistory)
+	result.Chat = complete.Last(a.Chat, other.Chat)
 	result.ToolChoice = complete.Last(a.ToolChoice, other.ToolChoice)
 	result.Temperature = complete.Last(a.Temperature, other.Temperature)
 	result.TopP = complete.Last(a.TopP, other.TopP)
+	result.NewThread = complete.Last(a.NewThread, other.NewThread)
+	result.InputAsToolResult = complete.Last(a.InputAsToolResult, other.InputAsToolResult)
 	return
 }
 
 func (a AgentCall) MarshalJSON() ([]byte, error) {
-	if a.Output == nil && a.ChatHistory == nil && a.ToolChoice == "" && a.Temperature == nil && a.TopP == nil {
+	if a.Output == nil && a.Chat == nil && a.ToolChoice == "" && a.Temperature == nil && a.TopP == nil && a.NewThread == nil {
 		return json.Marshal(a.Name)
 	}
 	type Alias AgentCall
@@ -267,7 +329,8 @@ type Agent struct {
 	Tools          StringList                `json:"tools,omitempty"`
 	Agents         StringList                `json:"agents,omitempty"`
 	Flows          StringList                `json:"flows,omitempty"`
-	ChatHistory    *bool                     `json:"chatHistory,omitempty"`
+	ThreadName     string                    `json:"threadName,omitempty"`
+	Chat           *bool                     `json:"chat,omitempty"`
 	ToolExtensions map[string]map[string]any `json:"toolExtensions,omitempty"`
 	ToolChoice     string                    `json:"toolChoice,omitempty"`
 	Temperature    *json.Number              `json:"temperature,omitempty"`
@@ -407,6 +470,7 @@ type OutputSchema struct {
 type Field struct {
 	Description string           `json:"description,omitempty"`
 	Fields      map[string]Field `json:"fields,omitempty"`
+	Required    *bool            `json:"required,omitempty"`
 }
 
 func (f *Field) UnmarshalJSON(data []byte) error {
@@ -453,6 +517,10 @@ func (i InputSchema) ToSchema() json.RawMessage {
 	}
 	return i.Schema
 }
+
+// enumSyntaxRegexp is string like name(option1,option2,option3). This is not a complete regex for enum syntax,
+// but it is used to detect if a field is an enum based on the presence of parentheses.
+var enumSyntaxRegexp = regexp.MustCompile(`^.+\(.+,`)
 
 func BuildSimpleSchema(name, description string, args map[string]Field) map[string]any {
 	required := make([]string, 0)
@@ -502,6 +570,26 @@ func BuildSimpleSchema(name, description string, args map[string]Field) map[stri
 				"type":        "boolean",
 				"description": field.Description,
 			}
+		} else if enumSyntaxRegexp.MatchString(name) {
+			name, args, _ := strings.Cut(name, "(")
+			var (
+				enum      []string
+				enumNames []string
+			)
+			for _, arg := range strings.Split(strings.TrimSuffix(args, ")"), ",") {
+				val, valName, ok := strings.Cut(arg, "=")
+				if !ok {
+					valName = val
+				}
+				enum = append(enum, strings.TrimSpace(val))
+				enumNames = append(enumNames, strings.TrimSpace(valName))
+			}
+			jsonschema["properties"].(map[string]any)[name] = map[string]any{
+				"type":        "enum",
+				"description": field.Description,
+				"enum":        enum,
+				"enumNames":   enumNames,
+			}
 		} else if len(field.Fields) > 0 {
 			jsonschema["properties"].(map[string]any)[name] = BuildSimpleSchema("", field.Description, field.Fields)
 		} else {
@@ -511,7 +599,9 @@ func BuildSimpleSchema(name, description string, args map[string]Field) map[stri
 			}
 		}
 
-		required = append(required, name)
+		if field.Required == nil || *field.Required {
+			required = append(required, name)
+		}
 	}
 
 	jsonschema["required"] = required

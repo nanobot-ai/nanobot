@@ -15,7 +15,7 @@ type Completer interface {
 type CompletionOptions struct {
 	ProgressToken any
 	Progress      chan<- json.RawMessage
-	ChatHistory   *bool
+	Chat          *bool
 }
 
 func (c CompletionOptions) Merge(other CompletionOptions) (result CompletionOptions) {
@@ -28,24 +28,34 @@ func (c CompletionOptions) Merge(other CompletionOptions) (result CompletionOpti
 	} else {
 		result.Progress = other.Progress
 	}
-	result.ChatHistory = complete.Last(c.ChatHistory, other.ChatHistory)
+	result.Chat = complete.Last(c.Chat, other.Chat)
 	return
 }
 
 type CompletionRequest struct {
-	Model            string
-	Input            []CompletionInput    `json:"input,omitzero"`
-	ModelPreferences mcp.ModelPreferences `json:"modelPreferences,omitzero"`
-	SystemPrompt     string               `json:"systemPrompt,omitzero"`
-	IncludeContext   string               `json:"includeContext,omitempty"`
-	MaxTokens        int                  `json:"maxTokens,omitempty"`
-	ToolChoice       string               `json:"toolChoice,omitempty"`
-	OutputSchema     *OutputSchema        `json:"outputSchema,omitempty"`
-	Temperature      *json.Number         `json:"temperature,omitempty"`
-	Truncation       string               `json:"truncation,omitempty"`
-	TopP             *json.Number         `json:"topP,omitempty"`
-	Metadata         map[string]any       `json:"metadata,omitempty"`
-	Tools            []ToolUseDefinition  `json:"tools,omitzero"`
+	Model             string
+	ThreadName        string               `json:"threadName,omitempty"`
+	NewThread         bool                 `json:"newThread,omitempty"`
+	Input             []CompletionInput    `json:"input,omitzero"`
+	ModelPreferences  mcp.ModelPreferences `json:"modelPreferences,omitzero"`
+	SystemPrompt      string               `json:"systemPrompt,omitzero"`
+	IncludeContext    string               `json:"includeContext,omitempty"`
+	MaxTokens         int                  `json:"maxTokens,omitempty"`
+	ToolChoice        string               `json:"toolChoice,omitempty"`
+	OutputSchema      *OutputSchema        `json:"outputSchema,omitempty"`
+	Temperature       *json.Number         `json:"temperature,omitempty"`
+	Truncation        string               `json:"truncation,omitempty"`
+	TopP              *json.Number         `json:"topP,omitempty"`
+	Metadata          map[string]any       `json:"metadata,omitempty"`
+	Tools             []ToolUseDefinition  `json:"tools,omitzero"`
+	InputAsToolResult *bool                `json:"inputAsToolResult,omitempty"`
+}
+
+func (r CompletionRequest) Reset() CompletionRequest {
+	r.Input = nil
+	r.InputAsToolResult = &[]bool{false}[0]
+	r.NewThread = false
+	return r
 }
 
 type ToolUseDefinition struct {
@@ -63,9 +73,10 @@ type CompletionInput struct {
 }
 
 type CompletionOutput struct {
-	Message   *mcp.SamplingMessage `json:"message,omitempty"`
-	ToolCall  *ToolCall            `json:"toolCall,omitempty"`
-	Reasoning *Reasoning           `json:"reasoning,omitempty"`
+	CallResult *CallResult          `json:"callResult,omitempty"`
+	Message    *mcp.SamplingMessage `json:"message,omitempty"`
+	ToolCall   *ToolCall            `json:"toolCall,omitempty"`
+	Reasoning  *Reasoning           `json:"reasoning,omitempty"`
 }
 
 type Reasoning struct {
@@ -87,14 +98,15 @@ func (c *CompletionOutput) ToInput() CompletionInput {
 }
 
 type CompletionResponse struct {
-	Output []CompletionOutput `json:"output,omitempty"`
-	Model  string             `json:"model,omitempty"`
+	Output       []CompletionOutput `json:"output,omitempty"`
+	ChatResponse bool               `json:"chatResponse,omitempty"`
+	Model        string             `json:"model,omitempty"`
 }
 
 type ToolCallResult struct {
-	OutputRole string             `json:"outputRole,omitempty"`
-	CallID     string             `json:"call_id,omitempty"`
-	Output     mcp.CallToolResult `json:"output,omitempty"`
+	OutputRole string     `json:"outputRole,omitempty"`
+	CallID     string     `json:"call_id,omitempty"`
+	Output     CallResult `json:"output,omitempty"`
 }
 
 type ToolCall struct {
@@ -102,4 +114,13 @@ type ToolCall struct {
 	CallID    string `json:"call_id,omitempty"`
 	Name      string `json:"name,omitempty"`
 	ID        string `json:"id,omitempty"`
+}
+
+type CallResult struct {
+	Content      []mcp.Content
+	IsError      bool   `json:"isError,omitempty"`
+	ChatResponse bool   `json:"chatResponse,omitempty"`
+	Agent        string `json:"agent,omitempty"`
+	Model        string `json:"model,omitempty"`
+	StopReason   string `json:"stopReason,omitempty"`
 }

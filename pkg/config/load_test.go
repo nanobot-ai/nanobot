@@ -91,7 +91,7 @@ func TestSchema(t *testing.T) {
 			"tools": "atool",
 			"flows": "atool",
 			"agents": "atool",
-			"chatHistory": true,
+			"chat": true,
 			"instructions": "These are the instructions for the agent.",
 			"toolExtensions": {
 				"tool1": {
@@ -126,6 +126,7 @@ func TestSchema(t *testing.T) {
 			"intelligence": 0.7
 		},
 		"agent2": {
+			"threadName": "a different thread",
 			"tools": ["tool1", "tool2"],
 			"flows": ["tool1", "tool2"],
 			"agents": ["tool1", "tool2"],
@@ -150,6 +151,8 @@ func TestSchema(t *testing.T) {
 			]
 		},
 		"flow1": {
+			"before": "target/foo",
+			"after": ["target/foo"],
 			"description": "This is the first flow.",
 			"outputRole": "assistant",
 			"input": {
@@ -171,7 +174,17 @@ func TestSchema(t *testing.T) {
 				{
 					"id": "step1",
 					"input": {},
-					"tool": "tool1"
+					"tool": "tool1",
+					"steps": [
+						{
+							"id": "subStep"
+						}
+					],
+					"else": [
+						{
+							"id": "subStep"
+						}
+					]
 				},
 				{
 					"id": "step1",
@@ -179,14 +192,39 @@ func TestSchema(t *testing.T) {
 					"agent": "tool1"
 				},
 				{
+					"id": "elicit1",
+					"elicit": "a string"
+				},
+				{
+					"id": "step1",
+					"evaluate": "an expression",
+					"elicit": {
+						"message": "a message",
+						"rejectResult": "user declined",
+						"cancelResult": {
+							"data": "user canceled"
+						},
+						"input": {
+							"fields": {
+								"elicit1": "description1"
+							}
+						}
+					}
+				},
+				{
 					"id": "step1",
 					"input": "a string",
+					"evaluate": {
+						"x": "an expression"
+					},
 					"agent": {
 						"name": "tool1",
-						"chatHistory": false,
+						"chat": false,
+						"newThread": true,
 						"temperature": 0.5,
 						"topP": 0.5,
 						"toolChoice": "tool1",
+						"inputAsToolResult": true,
 						"output": {
 							"description": "output1",	
 							"fields": {
@@ -195,6 +233,19 @@ func TestSchema(t *testing.T) {
 							}
 						}
 					}	
+				},
+				{
+					"id": "step1",
+					"input": "a string",
+					"flow": "tool1",
+					"while": "an expression",
+					"return": {
+						"key1": {
+							"something": 1
+						},
+						"key2": null,
+						"key3": 4
+					}
 				},
 				{
 					"id": "step1",
@@ -228,6 +279,19 @@ func TestSchema(t *testing.T) {
 					"flow": "tool1"
 				}
 			]
+		}
+	},
+	"prompts": {
+		"prompt1": {
+			"description": "a description",
+			"template": "This is the template for prompt1.",
+			"input": {
+				"field1": "description1",
+				"field2": {
+					"description": "description2",
+					"required": false
+				}
+			}
 		}
 	}
 }`), &obj)

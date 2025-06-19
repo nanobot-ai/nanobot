@@ -12,7 +12,7 @@ publish:
 agents:
   planner:
     model: gpt-4o
-    chatHistory: false
+    chat: false
     instructions: |-
       You are a helpful research assistant. Given a query, come up with a set of web searches
       to perform to best answer the query. Output between 5 and 20 terms to query for.
@@ -40,7 +40,7 @@ agents:
 
   searchAgent:
     model: gpt-4o
-    chatHistory: false
+    chat: false
     instructions: |-
       You are a research assistant. Given a search term, you search the web for that term and
       produce a concise summary of the results. The summary must 2-3 paragraphs and less than 300
@@ -54,7 +54,7 @@ agents:
 
   writer:
     model: o3-mini
-    chatHistory: false
+    chat: false
     instructions: |-
       You are a senior researcher tasked with writing a cohesive report for a research query.
       You will be provided with the original query, and some initial research done by a research

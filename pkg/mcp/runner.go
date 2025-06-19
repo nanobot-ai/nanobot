@@ -18,14 +18,10 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/system"
 )
 
-type runner struct {
+type Runner struct {
 	lock    sync.Mutex
 	running map[string]Server
 }
-
-var (
-	r runner
-)
 
 type streamResult struct {
 	Stdout io.Reader
@@ -33,42 +29,47 @@ type streamResult struct {
 	Close  func()
 }
 
-func (r *runner) newCommand(ctx context.Context, currentEnv map[string]string, root []Root, config Server) (Server, *sandbox.Cmd, error) {
+func (r *Runner) newCommand(ctx context.Context, currentEnv map[string]string, root []Root, config Server) (Server, *sandbox.Cmd, error) {
 	var publishPorts []string
-	if len(config.Ports) > 0 {
-		if currentEnv == nil {
-			currentEnv = make(map[string]string)
-		} else {
-			currentEnv = maps.Clone(currentEnv)
+	ports := config.Ports
+	if len(ports) == 0 {
+		// If no ports are specified, use the default port
+		ports = []string{"mcp"}
+	}
+	if currentEnv == nil {
+		currentEnv = make(map[string]string)
+	} else {
+		currentEnv = maps.Clone(currentEnv)
+	}
+	for _, port := range ports {
+		l, err := net.Listen("tcp4", "localhost:0")
+		if err != nil {
+			return config, nil, fmt.Errorf("failed to allocate port for %s: %w", port, err)
 		}
-		for _, port := range config.Ports {
-			l, err := net.Listen("tcp4", "localhost:0")
-			if err != nil {
-				return config, nil, fmt.Errorf("failed to allocate port for %s: %w", port, err)
-			}
-			addrString := l.Addr().String()
-			_, portStr, err := net.SplitHostPort(addrString)
-			if err != nil {
-				_ = l.Close()
-				return config, nil, fmt.Errorf("failed to get port for %s, addr %s: %w", port, addrString, err)
-			}
-			if err := l.Close(); err != nil {
-				return config, nil, fmt.Errorf("failed to close listener for %s, addr %s: %w", port, addrString, err)
-			}
-			publishPorts = append(publishPorts, portStr)
-			currentEnv["port:"+port] = portStr
+		addrString := l.Addr().String()
+		_, portStr, err := net.SplitHostPort(addrString)
+		if err != nil {
+			_ = l.Close()
+			return config, nil, fmt.Errorf("failed to get port for %s, addr %s: %w", port, addrString, err)
 		}
+		if err := l.Close(); err != nil {
+			return config, nil, fmt.Errorf("failed to close listener for %s, addr %s: %w", port, addrString, err)
+		}
+		publishPorts = append(publishPorts, portStr)
+		currentEnv["port:"+port] = portStr
+		currentEnv["nanobot:port:"+port] = portStr
 	}
 
 	config.BaseURL = envvar.ReplaceString(currentEnv, config.BaseURL)
 
 	command, args, env := envvar.ReplaceEnv(currentEnv, config.Command, config.Args, config.Env)
-	if config.Unsandboxed || command == "nanobot" {
+	if !config.Sandboxed || command == "nanobot" {
 		if command == "nanobot" {
 			command = system.Bin()
 		}
 		cmd := supervise.Cmd(ctx, command, args...)
-		cmd.Env = append(os.Environ(), env...)
+		cmd.Dir = envvar.ReplaceString(currentEnv, config.Cwd)
+		cmd.Env = append(cleanOSEnv(), env...)
 		return config, &sandbox.Cmd{
 			Cmd: cmd,
 		}, nil
@@ -100,11 +101,31 @@ func (r *runner) newCommand(ctx context.Context, currentEnv map[string]string, r
 		return config, nil, fmt.Errorf("failed to create sandbox command: %w", err)
 	}
 
-	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = append(cleanOSEnv(), env...)
 	return config, cmd, nil
 }
 
-func (r *runner) doRun(ctx context.Context, serverName string, config Server, cmd *sandbox.Cmd) (Server, error) {
+var allowedEnv = map[string]bool{
+	"PATH": true,
+	"HOME": true,
+	"USER": true,
+}
+
+func cleanOSEnv() []string {
+	// Clean up the environment variables to avoid issues with sandboxing
+	env := os.Environ()
+	cleanedEnv := make([]string, 0, len(allowedEnv))
+	for _, e := range env {
+		k, _, found := strings.Cut(e, "=")
+		if found && allowedEnv[k] {
+			// Only allow specific environment variables
+			cleanedEnv = append(cleanedEnv, e)
+		}
+	}
+	return cleanedEnv
+}
+
+func (r *Runner) doRun(ctx context.Context, serverName string, config Server, cmd *sandbox.Cmd) (Server, error) {
 	// hold open stdin for the supervisor
 	_, err := cmd.StdinPipe()
 	if err != nil {
@@ -155,7 +176,7 @@ func (r *runner) doRun(ctx context.Context, serverName string, config Server, cm
 	return config, nil
 }
 
-func (r *runner) doStream(ctx context.Context, serverName string, cmd *sandbox.Cmd) (*streamResult, error) {
+func (r *Runner) doStream(ctx context.Context, serverName string, cmd *sandbox.Cmd) (*streamResult, error) {
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get stdout pipe: %w", err)
@@ -186,7 +207,7 @@ func (r *runner) doStream(ctx context.Context, serverName string, cmd *sandbox.C
 	}, nil
 }
 
-func (r *runner) Run(ctx context.Context, roots []Root, env map[string]string, serverName string, config Server) (Server, error) {
+func (r *Runner) Run(ctx context.Context, roots []Root, env map[string]string, serverName string, config Server) (Server, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -202,7 +223,7 @@ func (r *runner) Run(ctx context.Context, roots []Root, env map[string]string, s
 	return r.doRun(ctx, serverName, newConfig, cmd)
 }
 
-func (r *runner) Stream(ctx context.Context, roots []Root, env map[string]string, serverName string, config Server) (*streamResult, error) {
+func (r *Runner) Stream(ctx context.Context, roots []Root, env map[string]string, serverName string, config Server) (*streamResult, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	_, cmd, err := r.newCommand(ctx, env, roots, config)
 	if err != nil {

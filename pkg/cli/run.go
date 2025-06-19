@@ -140,18 +140,20 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 	}
 
 	if c := runtime.GetConfig(); c.Publish.Entrypoint == "" {
-		var (
-			agentName string
-			example   string
-		)
-		for name := range c.Agents {
-			agentName = name
-			break
+		if _, ok := c.Agents["main"]; !ok {
+			var (
+				agentName string
+				example   string
+			)
+			for name := range c.Agents {
+				agentName = name
+				break
+			}
+			if agentName != "" {
+				example = ", for example:\n\n```\npublish:\n  entrypoint: " + agentName + "\nagents:\n  " + agentName + ": ...\n```\n"
+			}
+			return fmt.Errorf("there are no entrypoints defined in the config file, please add one to the publish section%s", example)
 		}
-		if agentName != "" {
-			example = ", for example:\n\n```\npublish:\n  entrypoint: " + agentName + "\nagents:\n  " + agentName + ": ...\n```\n"
-		}
-		return fmt.Errorf("there are no entrypoints defined in the config file, please add one to the publish section%s", example)
 	}
 
 	l, err := net.Listen("tcp", "localhost:0")

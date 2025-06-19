@@ -85,6 +85,7 @@ func toSamplingMessageFromOutputMessage(output *Message) (result []types.Complet
 func toRequest(completion *types.CompletionRequest) (req Request, _ error) {
 	req = Request{
 		Model: completion.Model,
+		Store: &[]bool{false}[0],
 	}
 
 	if reasoningPrefix.MatchString(req.Model) {

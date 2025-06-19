@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/llm/anthropic"
 	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
@@ -31,15 +32,12 @@ type Client struct {
 	anthropic    *anthropic.Client
 }
 
-func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts ...types.CompletionOptions) (*types.CompletionResponse, error) {
-	if req.Model == "default" || req.Model == "" {
-		req.Model = c.defaultModel
-	}
+func (c *Client) handleAssistantRolesFromTools(req types.CompletionRequest) (_ types.CompletionRequest, resp *types.CompletionResponse) {
 	if len(req.Input) > 0 {
 		if last := req.Input[len(req.Input)-1]; last.ToolCallResult != nil &&
 			last.ToolCallResult.OutputRole == "assistant" &&
 			len(last.ToolCallResult.Output.Content) > 0 {
-			resp := &types.CompletionResponse{
+			resp = &types.CompletionResponse{
 				Model: req.Model,
 			}
 			for _, content := range last.ToolCallResult.Output.Content {
@@ -50,9 +48,10 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 					},
 				})
 			}
-			return resp, nil
+			return req, resp
 		}
 	}
+
 	newInput := make([]types.CompletionInput, 0, len(req.Input))
 	for _, input := range req.Input {
 		if input.ToolCallResult != nil && input.ToolCallResult.OutputRole == "assistant" &&
@@ -61,7 +60,7 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 			input = types.CompletionInput{
 				ToolCallResult: &types.ToolCallResult{
 					CallID: input.ToolCallResult.CallID,
-					Output: mcp.CallToolResult{
+					Output: types.CallResult{
 						Content: []mcp.Content{{Text: "complete"}},
 					},
 				},
@@ -70,5 +69,21 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 		newInput = append(newInput, input)
 	}
 	req.Input = newInput
+	return req, nil
+}
+
+func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts ...types.CompletionOptions) (*types.CompletionResponse, error) {
+	if req.Model == "default" || req.Model == "" {
+		req.Model = c.defaultModel
+	}
+
+	req, resp := c.handleAssistantRolesFromTools(req)
+	if resp != nil {
+		return resp, nil
+	}
+
+	if strings.HasPrefix(req.Model, "claude") {
+		return c.anthropic.Complete(ctx, req, opts...)
+	}
 	return c.responses.Complete(ctx, req, opts...)
 }

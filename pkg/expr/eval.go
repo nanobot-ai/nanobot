@@ -2,15 +2,15 @@ package expr
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/dop251/goja"
 )
 
-func EvalString(ctx context.Context, env map[string]string, expr string) (string, error) {
-	ret, err := evalString(ctx, env, nil, expr)
+func EvalString(ctx context.Context, env map[string]string, data map[string]any, expr string) (string, error) {
+	ret, err := evalString(ctx, env, data, expr)
 	if err != nil {
 		return "", fmt.Errorf("failed to evaluate string expression %s: %w", expr, err)
 	}
@@ -96,6 +96,10 @@ func newRuntime(data map[string]any) (*goja.Runtime, error) {
 }
 
 func evalString(_ context.Context, env map[string]string, data map[string]any, expr string) (any, error) {
+	if strings.TrimSpace(expr) == "" {
+		return "", nil
+	}
+
 	if strings.HasPrefix(expr, "${") && strings.HasSuffix(expr, "}") {
 		envVal, ok := Lookup(env, expr[2:len(expr)-1])
 		if ok {
@@ -121,7 +125,7 @@ func evalString(_ context.Context, env map[string]string, data map[string]any, e
 	}
 
 	var lastErr error
-	return os.Expand(expr, func(name string) string {
+	return Expand(expr, func(name string) string {
 		if lastErr != nil {
 			return name
 		}
@@ -134,7 +138,18 @@ func evalString(_ context.Context, env map[string]string, data map[string]any, e
 			lastErr = err
 			return ""
 		}
-		return val.ToString().String()
+		nativeVal := val.Export()
+		switch nativeVal := nativeVal.(type) {
+		case string:
+			return nativeVal
+		default:
+			result, err := json.Marshal(nativeVal)
+			if err != nil {
+				lastErr = err
+				return ""
+			}
+			return string(result)
+		}
 	}), lastErr
 }
 

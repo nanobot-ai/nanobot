@@ -137,7 +137,7 @@ func toRequest(req *types.CompletionRequest) (Request, error) {
 
 func contentToContent(content []mcp.Content) (result []Content) {
 	for _, item := range content {
-		if item.Type == "text" {
+		if item.Type == "text" || item.Type == "" {
 			result = append(result, Content{
 				Type: "text",
 				Text: &item.Text,

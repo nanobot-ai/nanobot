@@ -5,8 +5,9 @@ import (
 )
 
 type ClientCapabilities struct {
-	Roots    *RootsCapability `json:"roots,omitempty"`
-	Sampling *struct{}        `json:"sampling,omitzero"`
+	Roots       *RootsCapability `json:"roots,omitempty"`
+	Sampling    *struct{}        `json:"sampling,omitzero"`
+	Elicitation *struct{}        `json:"elicitation,omitzero"`
 }
 
 type RootsCapability struct {
@@ -63,6 +64,39 @@ type PingRequest struct {
 type PingResult struct {
 }
 
+type ElicitResult struct {
+	// Action must be one of "accept", "decline", "cancel"
+	Action  string         `json:"action"`
+	Content map[string]any `json:"content,omitempty"`
+}
+
+type ElicitRequest struct {
+	Message         string          `json:"message,omitempty"`
+	RequestedSchema PrimitiveSchema `json:"requestedSchema,omitzero"`
+}
+
+type PrimitiveSchema struct {
+	// Type must be "object" only
+	Type       string                       `json:"type"`
+	Properties map[string]PrimitiveProperty `json:"properties"`
+}
+
+type PrimitiveProperty struct {
+	// Type must be one of "string", "number", "boolean", "enum", "integer"
+	Type        string       `json:"type"`
+	Title       string       `json:"title,omitempty"`
+	Description string       `json:"description,omitempty"`
+	MinLength   *int         `json:"minLength,omitempty"`
+	MaxLength   *int         `json:"maxLength,omitempty"`
+	Minimum     *json.Number `json:"minimum,omitempty"`
+	Maximum     *json.Number `json:"maximum,omitempty"`
+	Default     *bool        `json:"default,omitempty"`
+	Enum        []string     `json:"enum,omitempty"`
+	EnumNames   []string     `json:"enumNames,omitempty"`
+	// Format must be one of "date-time", "email", "uri", "date"
+	Format string `json:"format,omitempty"`
+}
+
 type ModelPreferences struct {
 	Hints                []ModelHint `json:"hints,omitzero"`
 	CostPriority         *float64    `json:"costPriority"`
@@ -107,13 +141,6 @@ type SamplingMessage struct {
 	Content Content `json:"content,omitempty"`
 }
 
-type CreateMessageResult struct {
-	Content    Content `json:"content,omitempty"`
-	Role       string  `json:"role,omitempty"`
-	Model      string  `json:"model,omitempty"`
-	StopReason string  `json:"stopReason,omitempty"`
-}
-
 type Content struct {
 	Type string `json:"type,omitempty"`
 
@@ -131,6 +158,27 @@ type Content struct {
 
 	// Resource is set when type is "resource"
 	Resource *EmbeddedResource `json:"resource,omitempty"`
+}
+
+func (c Content) MarshalJSON() ([]byte, error) {
+	type Alias Content
+	if c.Type == "" {
+		if c.Resource != nil {
+			c.Type = "resource"
+		} else if c.Text != "" || c.StructuredContent != nil {
+			c.Type = "text"
+		} else if c.Data != "" {
+			c.Type = "image"
+		}
+	}
+	return json.Marshal((*Alias)(&c))
+}
+
+type CreateMessageResult struct {
+	Content    Content `json:"content,omitempty"`
+	Role       string  `json:"role,omitempty"`
+	Model      string  `json:"model,omitempty"`
+	StopReason string  `json:"stopReason,omitempty"`
 }
 
 func (c *Content) ToImageURL() string {

@@ -63,7 +63,7 @@ type Content struct {
 
 	// Type = tool_use
 	ID    string         `json:"id,omitempty"`
-	Input map[string]any `json:"input,omitempty"`
+	Input map[string]any `json:"input,omitzero"`
 	Name  string         `json:"name,omitempty"`
 
 	// Type = tool_result

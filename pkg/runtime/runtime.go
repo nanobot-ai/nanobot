@@ -157,5 +157,12 @@ func (r *Runtime) CallFromCLI(ctx context.Context, serverRef string, args ...str
 		argValue = map[string]any{}
 	}
 
-	return r.Call(ctx, tools.Server, tools.Tools[0].Name, argValue)
+	callResult, err := r.Call(ctx, tools.Server, tools.Tools[0].Name, argValue)
+	if err != nil {
+		return nil, err
+	}
+	return &mcp.CallToolResult{
+		IsError: callResult.IsError,
+		Content: callResult.Content,
+	}, nil
 }

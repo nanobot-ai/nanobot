@@ -33,6 +33,11 @@ func Chat(ctx context.Context, listenAddress string, confirmations *confirm.Serv
 		OnLogging: func(ctx context.Context, logMsg mcp.LoggingMessage) error {
 			return handleLog(logMsg, confirmations, autoConfirm)
 		},
+		OnElicit: func(ctx context.Context, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {
+			return mcp.ElicitResult{
+				Action: "cancel",
+			}, nil
+		},
 		OnNotify: func(ctx context.Context, msg mcp.Message) error {
 			if llm.PrintProgress(msg.Params) {
 				return nil

@@ -24,6 +24,7 @@ var (
 func Messages(_ context.Context, server string, out bool, data []byte) {
 	if EnableProgress && bytes.Contains(data, []byte(`"notifications/progress"`)) {
 	} else if EnableMessages && !bytes.Contains(data, []byte(`"notifications/progress"`)) {
+	} else if slices.Contains(debugs, server) {
 	} else {
 		return
 	}

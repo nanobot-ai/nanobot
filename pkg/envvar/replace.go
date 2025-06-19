@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/expr"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 )
 
 func ReplaceString(envs map[string]string, str string) string {
-	r, err := expr.EvalString(context.TODO(), envs, str)
+	r, err := expr.EvalString(context.TODO(), envs, nil, str)
 	if err != nil {
 		log.Errorf(context.TODO(), "failed to evaluate expression %s: %v", str, err)
 		return str
@@ -29,13 +28,7 @@ func ReplaceMap(envs map[string]string, m map[string]string) map[string]string {
 }
 
 func ReplaceEnv(envs map[string]string, command string, args []string, env map[string]string) (string, []string, []string) {
-	newEnvMap := make(map[string]string, len(envs)+len(env))
-	for k, v := range envs {
-		if !strings.Contains(k, ":") {
-			newEnvMap[k] = v
-		}
-	}
-
+	newEnvMap := make(map[string]string, len(env))
 	maps.Copy(newEnvMap, ReplaceMap(envs, env))
 
 	newEnv := make([]string, 0, len(env))

@@ -1,6 +1,7 @@
 package printer
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -10,6 +11,7 @@ import (
 )
 
 var (
+	prettyPrint   = os.Getenv("NANOBOT_LOG_PRETTY_PRINT") != ""
 	noColors      = os.Getenv("NANOBOT_NO_COLORS") != "" || os.Getenv("NO_COLOR") != ""
 	printLock     sync.Mutex
 	lastPrefix    string
@@ -98,6 +100,15 @@ func formatPrefix(prefix string) string {
 }
 
 func Prefix(prefix, content string) {
+	if prettyPrint {
+		jsonData := map[string]any{}
+		if err := json.Unmarshal([]byte(content), &jsonData); err == nil {
+			if jsonFormatted, err := json.MarshalIndent(jsonData, "", "  "); err == nil {
+				content = string(jsonFormatted)
+			}
+		}
+	}
+
 	printLock.Lock()
 	defer printLock.Unlock()
 

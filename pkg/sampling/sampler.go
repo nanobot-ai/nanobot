@@ -103,20 +103,22 @@ func (s SamplerOptions) Merge(other SamplerOptions) (result SamplerOptions) {
 	return
 }
 
-func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts ...SamplerOptions) (result mcp.CreateMessageResult, _ error) {
+func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts ...SamplerOptions) (result *types.CallResult, _ error) {
 	opt := complete.Complete(opts...)
 
 	model, ok := s.getMatchingModel(&req)
 	if !ok {
-		return result, fmt.Errorf("no matching model found")
+		return nil, fmt.Errorf("no matching model found")
 	}
 
 	request := types.CompletionRequest{
-		Model:        model,
-		ToolChoice:   opt.AgentOverride.ToolChoice,
-		OutputSchema: opt.AgentOverride.Output,
-		Temperature:  opt.AgentOverride.Temperature,
-		TopP:         opt.AgentOverride.TopP,
+		Model:             model,
+		ToolChoice:        opt.AgentOverride.ToolChoice,
+		OutputSchema:      opt.AgentOverride.Output,
+		Temperature:       opt.AgentOverride.Temperature,
+		TopP:              opt.AgentOverride.TopP,
+		NewThread:         opt.AgentOverride.NewThread != nil && *opt.AgentOverride.NewThread,
+		InputAsToolResult: opt.AgentOverride.InputAsToolResult,
 	}
 
 	if req.MaxTokens != 0 {
@@ -136,7 +138,7 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 	}
 
 	completeOptions := types.CompletionOptions{
-		ChatHistory: opt.AgentOverride.ChatHistory,
+		Chat: opt.AgentOverride.Chat,
 	}
 
 	if opt.ProgressToken != nil {
@@ -148,26 +150,33 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 
 	resp, err := s.completer.Complete(ctx, request, completeOptions)
 	if err != nil {
-		return result, err
+		return nil, err
 	}
 
-	result.Model = request.Model
+	result = &types.CallResult{
+		Model:        resp.Model,
+		ChatResponse: resp.ChatResponse,
+	}
+
+	if _, ok := s.config.Agents[request.Model]; ok {
+		result.Agent = request.Model
+	}
 
 	for _, output := range resp.Output {
+		if output.CallResult != nil {
+			return output.CallResult, nil
+		}
 		if output.Message == nil {
 			continue
 		}
-		result.Role = output.Message.Role
-		result.Content = output.Message.Content
+		result.Content = append(result.Content, output.Message.Content)
 	}
 
-	if result.Content.Type == "" {
-		result.Content.Type = "text"
-		result.Content.Text = "[NO CONTENT]"
-	}
-
-	if result.Role == "" {
-		result.Role = "assistant"
+	if len(result.Content) == 0 {
+		result.Content = append(result.Content, mcp.Content{
+			Type: "text",
+			Text: "[NO CONTENT]",
+		})
 	}
 
 	return result, nil
