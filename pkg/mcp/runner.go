@@ -106,9 +106,10 @@ func (r *Runner) newCommand(ctx context.Context, currentEnv map[string]string, r
 }
 
 var allowedEnv = map[string]bool{
-	"PATH": true,
-	"HOME": true,
-	"USER": true,
+	"PATH":             true,
+	"HOME":             true,
+	"USER":             true,
+	"NANOBOT_EMBEDDED": true,
 }
 
 func cleanOSEnv() []string {
