@@ -17,7 +17,7 @@ var (
 	EnableMessages    = slices.Contains(debugs, "messages")
 	EnableProgress    = slices.Contains(debugs, "progress")
 	DebugLog          = slices.Contains(debugs, "log")
-	Base64Replace     = regexp.MustCompile(`((;base64,|")[a-zA-Z0-9+/=]{60})[a-zA-Z0-9+/=]+"`)
+	Base64Replace     = regexp.MustCompile(`((;base64,|")[a-zA-Z0-9+/=]{20})[a-zA-Z0-9+/=]*"`)
 	Base64Replacement = []byte(`$1..."`)
 )
 

@@ -1,0 +1,256 @@
+env:
+  PASSENGER_ID:
+    description: "The passenger ID for the end user."
+  TAVILY_API_KEY: "Tavily API key for web search."
+
+agents:
+  flightAgent:
+    model: claude-3-sonnet-20240229
+    maxTokens: 4096
+    temperature: 1
+    instructions: |
+      You are a specialized assistant for handling flight updates.
+      The primary assistant delegates work to you whenever the user needs help updating their bookings.
+      Confirm the updated flight details with the customer and inform them of any additional fees.
+      When searching, be persistent. Expand your query bounds if the first search returns no results.
+      If you need more information or the customer changes their mind, escalate the task back to the main assistant.
+      Remember that a booking isn't completed until after the relevant tool has successfully been used.
+      Current user flight information: <Flights>${call("flights/fetch_user_flight_information").output}</Flights>
+      Current time: ${nanobot:time}
+      If the user needs help, and none of your tools are appropriate for it, then "completeOrEscalate" the dialog to the host assistant. Do not waste the user\'s time. Do not make up invalid tools or functions.
+    tools:
+      - flights/search_flights
+      - flights/update_ticket_to_new_flight
+      - flights/cancel_ticket
+    flows:
+      - completeOrEscalate
+
+  hotelBookingAgent:
+    model: claude-3-sonnet-20240229
+    maxTokens: 4096
+    temperature: 1
+    instructions: |
+      You are a specialized assistant for handling hotel bookings.
+      The primary assistant delegates work to you whenever the user needs help booking a hotel.
+      Search for available hotels based on the user's preferences and confirm the booking details with the customer.
+      When searching, be persistent. Expand your query bounds if the first search returns no results.
+      If you need more information or the customer changes their mind, escalate the task back to the main assistant.
+      Remember that a booking isn't completed until after the relevant tool has successfully been used.
+      Current time: ${nanobot:time}.
+      If the user needs help, and none of your tools are appropriate for it, then CompleteOrEscalate the dialog to the host assistant.
+      Do not waste the user's time. Do not make up invalid tools or functions.
+      Some examples for which you should completeOrEscalate:
+      - 'what's the weather like this time of year?'
+      - 'nevermind i think I'll book separately'
+      - 'i need to figure out transportation while i'm there'
+      - 'Oh wait i haven't booked my flight yet i'll do that first'
+      - 'Hotel booking confirmed',
+    tools:
+      - hotels/search_hotels
+      - hotels/book_hotel
+      - hotels/update_hotel
+      - hotels/cancel_hotel
+    flows:
+      - completeOrEscalate
+
+  carRentalAgent:
+    model: claude-3-sonnet-20240229
+    maxTokens: 4096
+    temperature: 1
+    instructions: |
+      You are a specialized assistant for handling car rental bookings.
+      The primary assistant delegates work to you whenever the user needs help booking a car rental.
+      Search for available car rentals based on the user's preferences and confirm the booking details with the customer.
+      When searching, be persistent. Expand your query bounds if the first search returns no results.
+      If you need more information or the customer changes their mind, escalate the task back to the main assistant.
+      Remember that a booking isn't completed until after the relevant tool has successfully been used.
+      Current time: ${nanobot:time}.
+      If the user needs help, and none of your tools are appropriate for it, then
+      'completeOrEscalate the dialog to the host assistant. Do not waste the user's time. Do not make up invalid tools or functions.
+      Some examples for which you should completeOrEscalate:
+      - 'what's the weather like this time of year?'
+      - 'What flights are available?'
+      - 'nevermind i think I'll book separately'
+      - 'Oh wait i haven't booked my flight yet i'll do that first'
+      - 'Car rental booking confirmed',
+    tools:
+      - carrental/search_car_rentals
+      - carrental/book_car_rental
+      - carrental/update_car_rental
+      - carrental/cancel_car_rental
+    flows:
+      - completeOrEscalate
+
+  excursionAgent:
+    model: claude-3-sonnet-20240229
+    maxTokens: 4096
+    temperature: 1
+    instructions: |
+      You are a specialized assistant for handling trip recommendations.
+      The primary assistant delegates work to you whenever the user needs help booking a recommended trip.
+      Search for available trip recommendations based on the user's preferences and confirm the booking details with the customer.
+      If you need more information or the customer changes their mind, escalate the task back to the main assistant.
+      When searching, be persistent. Expand your query bounds if the first search returns no results.
+      Remember that a booking isn't completed until after the relevant tool has successfully been used.
+      Current time: {time}.
+      If the user needs help, and none of your tools are appropriate for it, then completeOrEscalate the dialog to the host assistant. Do not waste the user\'s time. Do not make up invalid tools or functions.
+      Some examples for which you should completeOrEscalate:
+      - 'nevermind i think I'll book separately'
+      - 'i need to figure out transportation while i'm there'
+      - 'Oh wait i haven't booked my flight yet i'll do that first'
+      - 'Excursion booking confirmed!'
+    tools:
+      - excursions/search_excursions
+      - excursions/book_excursion
+      - excursions/update_excursion
+      - excursions/cancel_excursion
+    flows:
+      - completeOrEscalate
+
+  main:
+    model: claude-3-sonnet-20240229
+    maxTokens: 4096
+    tools:
+      - tavily/tavily-search
+      - flights/search_flights
+    flows:
+      - toFlightAgent
+      - toCarRentalAgent
+      - toHotelBookingAgent
+      - toExcursionAgent
+    temperature: 1
+    instructions: |
+      You are a helpful customer support assistant for Swiss Airlines.
+      Your primary role is to search for flight information and company policies to answer customer queries.
+      If a customer requests to update or cancel a flight, book a car rental, book a hotel, or get trip recommendations,
+      delegate the task to the appropriate specialized assistant by invoking the corresponding tool. You are not able to make these types of changes yourself.
+      Only the specialized assistants are given permission to do this for the user.
+      The user is not aware of the different specialized assistants, so do not mention them; just quietly delegate through function calls.
+      Provide detailed information to the customer, and always double-check the database before concluding that information is unavailable.
+      When searching, be persistent. Expand your query bounds if the first search returns no results.
+      If a search comes up empty, expand your search before giving up.
+      Current user flight information: <Flights>${call("flights/fetch_user_flight_information").output}</Flights>
+      Current time: ${nanobot:time}
+
+flows:
+  toFlightAgent:
+    description: "Transfers work to a specialized assistant to handle flight updates and cancellations."
+    input:
+      fields:
+        request: "Any necessary followup questions the update flight assistant should clarify before proceeding."
+    steps:
+      - agent: flightAgent
+        input: |
+          ${prompt("handoff", {"assistant_name": "Flight Update Assistant"})}
+
+
+  toCarRentalAgent:
+    description: "Transfers work to a specialized assistant to handle car rental bookings."
+    input:
+      fields:
+        location: "The location where the user wants to rent a car."
+        start_date: "The start date of the car rental."
+        end_date: "The end date of the car rental."
+        request: "Any additional information or requests from the user regarding the car rental."
+    steps:
+      - agent: carRentalAgent
+        input: |
+          ${prompt("handoff", {"assistant_name": "Car Rental Assistant"})}
+
+  toHotelBookingAgent:
+    description: "Transfers work to a specialized assistant to handle hotel bookings."
+    input:
+      fields:
+        location: "The location where the user wants to book a hotel."
+        checkin_date: "The check-in date for the hotel."
+        checkout_date: "The check-out date for the hotel."
+        request: "Any additional information or requests from the user regarding the hotel booking."
+    steps:
+      - agent: hotelBookingAgent
+        input: |
+          ${prompt("handoff", {"assistant_name": "Hotel Booking Assistant"})}
+
+  toExcursionAgent:
+    description: "Transfers work to a specialized assistant to handle trip recommendation and other excursion bookings."
+    input:
+      fields:
+        location: "The location where the user wants to book a recommended trip."
+        request: "Any additional information or requests from the user regarding the trip recommendation."
+    steps:
+      - agent: excursionAgent
+        input: |
+          ${prompt("handoff", {"assistant_name": "Trip Recommendation Assistant"})}
+
+  completeOrEscalate:
+    description: |
+      A tool to mark the current task as completed and/or to escalate control of the dialog to the main assistant,
+      who can re-route the dialog based on the user's needs.
+    input:
+      fields:
+        cancel: "Whether the user wants to cancel the current task."
+        reason: "The reason the user is cancelling the task or a description of the completed task."
+    steps:
+      - agent:
+          name: main
+        input: |
+          Resuming dialog with the host assistant. Please reflect on the past conversation and assist the user as needed.
+
+  confirm:
+    before:
+    - flights/update_ticket_to_new_flight
+    - flights/cancel_ticket
+    - carrental/book_car_rental
+    - carrental/update_car_rental
+    - carrental/cancel_car_rental
+    - hotels/book_hotel
+    - hotels/update_hotel
+    - hotels/cancel_hotel
+    - excursions/book_excursion
+    - excursions/update_excursion
+    - excursions/cancel_excursion
+    steps:
+      - elicit:
+          message: "Can you please confirm if you would like to proceed with this call (${target.description})?"
+          cancelResult: "The user has chosen not to allow this tool call to proceed. No information can be retried at this time."
+
+mcpServers:
+  tavily:
+    command: npx
+    args: ["-y", "tavily-mcp@0.1.2"]
+    env:
+      TAVILY_API_KEY: ${TAVILY_API_KEY}
+
+  flights:
+    command: uv
+    url: "http://localhost:${nanobot:port:mcp}/mcp/"
+    env:
+      FLIGHTS_PORT: "${nanobot:port:mcp}"
+      PASSENGER_ID: ${PASSENGER_ID}
+    args: ["run", "./tools/flights.py"]
+
+  carrental:
+    command: uv
+    args: ["run", "./tools/carrental.py"]
+
+  excursions:
+    command: uv
+    args: ["run", "./tools/excursions.py"]
+
+  hotels:
+    command: uv
+    args: ["run", "./tools/hotels.py"]
+
+  policy:
+    command: uv
+    args: ["run", "./tools/policy.py"]
+
+prompts:
+  handoff:
+    input:
+      assistant_name: "The name of the assistant taking over the conversation."
+    template: |
+      The assistant is now the ${assistant_name}. Reflect on the above conversation between the host assistant and the user.
+      The user's intent is unsatisfied. Use the provided tools to assist the user. Remember, you are ${assistant_name},
+      and the booking, update, other other action is not complete until after you have successfully invoked the appropriate tool.
+      If the user changes their mind or needs help for other tasks, call the CompleteOrEscalate function to let the primary host assistant take control.
+      Do not mention who you are - just act as the proxy for the assistant.

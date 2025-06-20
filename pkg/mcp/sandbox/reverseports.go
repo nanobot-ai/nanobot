@@ -14,7 +14,7 @@ import (
 )
 
 func startReversePort(ctx context.Context, targetContainerName string, port int, cancel func()) error {
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		if err := exec.Command("docker", "start", targetContainerName).Run(); err == nil {
 			break
 		}

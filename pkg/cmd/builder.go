@@ -45,7 +45,8 @@ func fields(obj any) []fieldInfo {
 
 	var result []fieldInfo
 
-	for i := 0; i < objValue.NumField(); i++ {
+	numFields := objValue.NumField()
+	for i := range numFields {
 		fieldType := objValue.Type().Field(i)
 		if fieldType.Anonymous {
 			if fieldType.Type.Kind() == reflect.Struct {
@@ -294,7 +295,7 @@ func assignOptBool(app *cobra.Command, maps map[string]reflect.Value) error {
 }
 
 func assignQuantities(app *cobra.Command, maps map[string]reflect.Value) error {
-	for k, _ := range maps {
+	for k := range maps {
 		k = contextKey(k)
 
 		i, err := app.Flags().GetString(k)
@@ -445,7 +446,7 @@ func name(name, setName, short string) (string, string) {
 	name = caseRegexp.ReplaceAllString(parts[i], "$1-$2")
 	name = strings.ToLower(name)
 	result := append([]string{name}, parts[0:i]...)
-	for i := 0; i < len(result); i++ {
+	for i := range result {
 		result[i] = strings.ToLower(result[i])
 	}
 	if short == "" && len(result) > 1 {

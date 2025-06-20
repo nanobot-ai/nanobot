@@ -1,0 +1,16 @@
+[project]
+name = "customer"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=2.8.1",
+    "mcp",
+    "numpy>=2.3.0",
+    "openai>=1.86.0",
+    "pytz>=2025.2",
+    "requests>=2.32.4",
+]
+
+[tool.uv.sources]
+mcp = { path = "../python-sdk" }
