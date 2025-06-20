@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/nanobot-ai/nanobot/pkg/chat/elicit"
 	"github.com/nanobot-ai/nanobot/pkg/chat/prompter"
 	"github.com/nanobot-ai/nanobot/pkg/confirm"
 	"github.com/nanobot-ai/nanobot/pkg/llm"
@@ -34,9 +35,7 @@ func Chat(ctx context.Context, listenAddress string, confirmations *confirm.Serv
 			return handleLog(logMsg, confirmations, autoConfirm)
 		},
 		OnElicit: func(ctx context.Context, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {
-			return mcp.ElicitResult{
-				Action: "cancel",
-			}, nil
+			return elicit.Answer(elicitation)
 		},
 		OnNotify: func(ctx context.Context, msg mcp.Message) error {
 			if llm.PrintProgress(msg.Params) {
