@@ -73,6 +73,7 @@ type ElicitResult struct {
 type ElicitRequest struct {
 	Message         string          `json:"message,omitempty"`
 	RequestedSchema PrimitiveSchema `json:"requestedSchema,omitzero"`
+	Meta            json.RawMessage `json:"_meta,omitzero"`
 }
 
 type PrimitiveSchema struct {

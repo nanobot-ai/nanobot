@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/chat/elicit"
 	"github.com/nanobot-ai/nanobot/pkg/chat/prompter"
-	"github.com/nanobot-ai/nanobot/pkg/confirm"
 	"github.com/nanobot-ai/nanobot/pkg/llm"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -20,7 +18,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
-func Chat(ctx context.Context, listenAddress string, confirmations *confirm.Service,
+func Chat(ctx context.Context, listenAddress string,
 	autoConfirm bool, prompt, output string, reload func(*mcp.Client) error) error {
 	progressToken := uuid.String()
 
@@ -32,10 +30,10 @@ func Chat(ctx context.Context, listenAddress string, confirmations *confirm.Serv
 		Headers: nil,
 	}, mcp.ClientOption{
 		OnLogging: func(ctx context.Context, logMsg mcp.LoggingMessage) error {
-			return handleLog(logMsg, confirmations, autoConfirm)
+			return handleLog(logMsg)
 		},
 		OnElicit: func(ctx context.Context, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {
-			return elicit.Answer(elicitation)
+			return elicit.Answer(elicitation, autoConfirm)
 		},
 		OnNotify: func(ctx context.Context, msg mcp.Message) error {
 			if llm.PrintProgress(msg.Params) {
@@ -119,74 +117,10 @@ func Chat(ctx context.Context, listenAddress string, confirmations *confirm.Serv
 	}
 }
 
-var always = map[string]struct{}{}
-
-func handleConfirm(data map[string]any, confirmations *confirm.Service, autoConfirm bool) error {
-	request, _ := data["request"].(map[string]any)
-	id, _ := request["id"].(string)
-
-	if id == "" {
-		return nil
-	}
-
-	if autoConfirm {
-		confirmations.Reply(id, true)
-		return nil
-	}
-
-	mcpServer, _ := request["mcpServer"].(string)
-	toolName, _ := request["toolName"].(string)
-	invocation, _ := request["invocation"].(map[string]any)
-	args, _ := invocation["arguments"].(string)
-
-	if _, ok := always[mcpServer+"/"+toolName]; ok {
-		confirmations.Reply(id, true)
-		return nil
-	}
-
-	_, _ = fmt.Fprintf(os.Stderr, "! Allow call to tool (%s) on MCP Server (%s)\n", toolName, mcpServer)
-	if args != "" && args != "{}" {
-		argsData := make(map[string]any)
-		if err := json.Unmarshal([]byte(args), &argsData); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "!  args: %s\n", args)
-		} else if len(argsData) > 0 {
-			_, _ = fmt.Fprintf(os.Stderr, "!  args:\n")
-			for k, v := range argsData {
-				if _, ok := v.(string); !ok {
-					vData, err := json.Marshal(v)
-					if err == nil {
-						v = string(vData)
-					}
-				}
-				_, _ = fmt.Fprintf(os.Stderr, "!    %s: %s\n", k, v)
-			}
-		}
-	}
-
-	for {
-		_, _ = fmt.Fprintf(os.Stderr, "!  (y/n/a) ? ")
-		line, err := bufio.NewReader(os.Stdin).ReadBytes('\n')
-		if err != nil {
-			return err
-		}
-		switch strings.TrimSpace(strings.ToLower(string(line))) {
-		case "y", "yes":
-			confirmations.Reply(id, true)
-			return nil
-		case "n", "no":
-			confirmations.Reply(id, false)
-			return nil
-		case "a", "always":
-			always[mcpServer+"/"+toolName] = struct{}{}
-			confirmations.Reply(id, true)
-			return nil
-		}
-	}
-}
-
 func printToolCall(params json.RawMessage, seenAgentOut func()) {
 	var toolCall struct {
 		Data struct {
+			ID     string              `json:"id"`
 			Type   string              `json:"type"`
 			Input  any                 `json:"input,omitempty"`
 			Error  string              `json:"error,omitempty"`
@@ -206,7 +140,7 @@ func printToolCall(params json.RawMessage, seenAgentOut func()) {
 	}
 	if toolCall.Data.Input != nil {
 		var text string
-		_ = types.Marshal(toolCall.Data.Input, &text)
+		_ = types.JSONCoerce(toolCall.Data.Input, &text)
 		printer.Prefix(fmt.Sprintf("->(%s)", toolCall.Data.Target), text)
 	}
 	if toolCall.Data.Output != nil && toolCall.Data.Data.MCPToolName != types.AgentTool {
@@ -219,14 +153,9 @@ func printToolCall(params json.RawMessage, seenAgentOut func()) {
 	}
 }
 
-func handleLog(msg mcp.LoggingMessage, confirmations *confirm.Service, autoConfirm bool) error {
+func handleLog(msg mcp.LoggingMessage) error {
 	printed := false
 	dataMap, ok := msg.Data.(map[string]any)
-	msgType, _ := dataMap["type"].(string)
-
-	if msgType == "nanobot/confirm" {
-		return handleConfirm(dataMap, confirmations, autoConfirm)
-	}
 
 	if ok {
 		server, serverOK := dataMap["server"].(string)

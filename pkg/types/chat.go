@@ -31,9 +31,13 @@ var ChatInputSchema = []byte(`{
   }
 }`)
 
-func Marshal[T any](in any, out *T) error {
+func JSONCoerce[T any](in any, out *T) error {
 	switch s := any(out).(type) {
 	case *string:
+		if inStr, ok := in.(string); ok {
+			*s = inStr
+			return nil
+		}
 		data, err := json.Marshal(in)
 		if err != nil {
 			return err
@@ -46,9 +50,18 @@ func Marshal[T any](in any, out *T) error {
 		*out = v
 		return nil
 	}
-	data, err := json.Marshal(in)
-	if err != nil {
-		return err
+
+	var data []byte
+	if inBytes, ok := in.([]byte); ok {
+		data = inBytes
+	} else if inStr, ok := in.(string); ok {
+		data = []byte(inStr)
+	} else {
+		var err error
+		data, err = json.Marshal(in)
+		if err != nil {
+			return err
+		}
 	}
 	return json.Unmarshal(data, out)
 }

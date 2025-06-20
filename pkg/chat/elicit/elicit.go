@@ -1,15 +1,27 @@
 package elicit
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func Answer(request mcp.ElicitRequest) (mcp.ElicitResult, error) {
+func Answer(request mcp.ElicitRequest, autoApproveTool bool) (mcp.ElicitResult, error) {
+	var tool types.ToolCallConfirm
+	if err := json.Unmarshal(request.Meta, &tool); err == nil && tool.Type == types.ToolCallConfirmType && autoApproveTool {
+		return mcp.ElicitResult{
+			Action: "accept",
+			Content: map[string]any{
+				"answer": "always",
+			},
+		}, nil
+	}
+
 	p := tea.NewProgram(initialModel(request))
 	m, err := p.Run()
 	if err != nil {
@@ -202,7 +214,7 @@ func initialModel(request mcp.ElicitRequest) model {
 			if len(enums) == len(names) {
 				opts := make([]huh.Option[string], len(enums))
 				for i, e := range enums {
-					opts[i] = huh.NewOption(e, names[i])
+					opts[i] = huh.NewOption(names[i], e)
 				}
 				field = field.Options(opts...)
 			} else {
@@ -249,8 +261,9 @@ func initialModel(request mcp.ElicitRequest) model {
 	}
 
 	return model{
-		form: form,
-		keys: keys,
+		form:    form,
+		keys:    keys,
+		request: request,
 	}
 }
 

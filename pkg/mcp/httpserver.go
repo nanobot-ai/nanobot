@@ -156,12 +156,13 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			}
 		}
 
-		if len(response.Result) <= 2 && msg.Method != "ping" {
+		rw.Header().Set("Content-Type", "application/json")
+
+		if (len(response.Result) <= 2 && response.Error == nil) && msg.Method != "ping" {
 			// Response has no data, write status accepted.
 			rw.WriteHeader(http.StatusAccepted)
 		}
 
-		rw.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(rw).Encode(response); err != nil {
 			http.Error(rw, "Failed to encode response: "+err.Error(), http.StatusInternalServerError)
 		}

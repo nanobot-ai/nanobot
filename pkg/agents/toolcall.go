@@ -64,17 +64,18 @@ func (a *Agents) toolCalls(ctx context.Context, run *run, opts []types.Completio
 	return nil
 }
 
-func (a *Agents) confirm(ctx context.Context, target types.TargetMapping, funcCall *types.ToolCall) error {
-	if a.confirmations == nil {
-		return nil
-	}
+func (a *Agents) confirm(ctx context.Context, target types.TargetMapping, funcCall *types.ToolCall) (*types.CallResult, error) {
 	if _, ok := a.config.Agents[target.MCPServer]; ok {
 		// Don't require confirmations to talk to another agent
-		return nil
+		return nil, nil
+	}
+	if _, ok := a.config.Flows[target.MCPServer]; ok {
+		// Don't require confirmations to talk to a flow
+		return nil, nil
 	}
 	session := mcp.SessionFromContext(ctx)
 	if session == nil {
-		return nil
+		return nil, nil
 	}
 	return a.confirmations.Confirm(ctx, session, target, funcCall)
 }
@@ -91,17 +92,19 @@ func (a *Agents) invoke(ctx context.Context, target types.TargetMapping, funcCal
 		}
 	}
 
-	if err := a.confirm(ctx, target, funcCall); err != nil {
+	response, err := a.confirm(ctx, target, funcCall)
+	if err != nil {
 		return nil, fmt.Errorf("failed to confirm tool call: %w", err)
 	}
 
-	response, err := a.registry.Call(ctx, target.MCPServer, target.TargetName, data, tools.CallOptions{
-		ProgressToken: complete.Complete(opts...).ProgressToken,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to invoke tool %s on mcp server %s: %w", target.TargetName, target.MCPServer, err)
+	if response == nil {
+		response, err = a.registry.Call(ctx, target.MCPServer, target.TargetName, data, tools.CallOptions{
+			ProgressToken: complete.Complete(opts...).ProgressToken,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to invoke tool %s on mcp server %s: %w", target.TargetName, target.MCPServer, err)
+		}
 	}
-
 	return []types.CompletionInput{
 		{
 			ToolCallResult: &types.ToolCallResult{

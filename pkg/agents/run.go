@@ -29,12 +29,12 @@ type ToolListOptions struct {
 	Names    []string
 }
 
-func New(completer types.Completer, registry *tools.Service, confirmations *confirm.Service, config types.Config) *Agents {
+func New(completer types.Completer, registry *tools.Service, config types.Config) *Agents {
 	return &Agents{
 		config:        config,
 		completer:     completer,
 		registry:      registry,
-		confirmations: confirmations,
+		confirmations: confirm.New(),
 	}
 }
 

@@ -1,1 +1,2 @@
-Download from https://storage.googleapis.com/benchmarks-artifacts/travel-db/travel2.sqlite
+# Download from https://storage.googleapis.com/benchmarks-artifacts/travel-db/travel2.sqlite
+curl -O https://storage.googleapis.com/benchmarks-artifacts/travel-db/travel2.sqlite

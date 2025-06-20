@@ -684,22 +684,22 @@ func (s *Service) convertToSampleRequest(agent string, args any) (*mcp.CreateMes
 		sampleArgs.Prompt = args
 	case map[string]any:
 		if hasOnlySampleKeys(args) {
-			if err := types.Marshal(args, &sampleArgs); err != nil {
+			if err := types.JSONCoerce(args, &sampleArgs); err != nil {
 				return nil, fmt.Errorf("failed to marshal args: %w", err)
 			}
 		} else {
-			if err := types.Marshal(args, &sampleArgs.Prompt); err != nil {
+			if err := types.JSONCoerce(args, &sampleArgs.Prompt); err != nil {
 				return nil, fmt.Errorf("failed to marshal args to prompt: %w", err)
 			}
 		}
 	case *types.SampleCallRequest:
 		if args != nil {
-			if err := types.Marshal(*args, &sampleArgs); err != nil {
+			if err := types.JSONCoerce(*args, &sampleArgs); err != nil {
 				return nil, fmt.Errorf("failed to marshal args to prompt: %w", err)
 			}
 		}
 	default:
-		if err := types.Marshal(args, &sampleArgs); err != nil {
+		if err := types.JSONCoerce(args, &sampleArgs); err != nil {
 			return nil, fmt.Errorf("failed to marshal args to prompt: %w", err)
 		}
 	}

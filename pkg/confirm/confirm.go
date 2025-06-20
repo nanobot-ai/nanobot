@@ -2,133 +2,107 @@ package confirm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
-	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
 const Timeout = 15 * time.Minute
 
 type Service struct {
-	cond     sync.Cond
-	requests map[string]request
 }
 
-func NewService() *Service {
-	return &Service{
-		cond:     sync.Cond{L: &sync.Mutex{}},
-		requests: make(map[string]request),
-	}
+func New() *Service {
+	return &Service{}
 }
 
-type request struct {
-	ID            string          `json:"id"`
-	RequestedTime time.Time       `json:"requestedTime"`
-	Accepted      *bool           `json:"-"`
-	MCPServer     string          `json:"mcpServer,omitempty"`
-	ToolName      string          `json:"toolName,omitempty"`
-	Tool          mcp.Tool        `json:"tool,omitempty"`
-	Invocation    *types.ToolCall `json:"invocation,omitempty"`
-}
-
-func (s *Service) Start(ctx context.Context) {
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(5 * time.Second):
-				s.cond.L.Lock()
-				for _, req := range s.requests {
-					if req.RequestedTime.Add(Timeout).Before(time.Now()) {
-						delete(s.requests, req.ID)
-					}
-				}
-				// We always broadcast so that waiters have a chance to check their ctx.Done()
-				s.cond.Broadcast()
-				s.cond.L.Unlock()
-			}
-		}
-	}()
-}
-
-func (s *Service) Reply(id string, accepted bool) {
-	if s == nil {
-		return
-	}
-
-	s.cond.L.Lock()
-	defer s.cond.L.Unlock()
-
-	if req, ok := s.requests[id]; ok {
-		req.Accepted = &accepted
-		s.requests[id] = req
-	}
-	s.cond.Broadcast()
-}
-
-func (s *Service) Confirm(ctx context.Context, session *mcp.Session, target types.TargetMapping, funcCall *types.ToolCall) error {
-	if s == nil {
-		return nil
-	}
-
-	uid := uuid.String()
-	req := request{
-		ID:            uid,
-		RequestedTime: time.Now(),
-		MCPServer:     target.MCPServer,
-		ToolName:      target.TargetName,
-		Tool:          target.Target.(mcp.Tool),
-		Invocation:    funcCall,
-	}
-
-	s.cond.L.Lock()
-	s.requests[uid] = req
-	s.cond.L.Unlock()
-
+func (*Service) Confirm(ctx context.Context, session *mcp.Session, target types.TargetMapping, funcCall *types.ToolCall) (*types.CallResult, error) {
 	for session.Parent != nil {
 		session = session.Parent
 	}
 
-	err := session.SendPayload(ctx, "notifications/message", mcp.LoggingMessage{
-		Level: "info",
-		Data: map[string]any{
-			"type":    "nanobot/confirm",
-			"request": req,
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to send confirmation message: %w", err)
+	if session.ClientCapabilities == nil || session.ClientCapabilities.Elicitation == nil {
+		return nil, nil
 	}
 
-	return s.waitAccepted(ctx, uid)
-}
+	approvedCalls, _ := session.Get("approvedCalls").(map[string]any)
+	if approvedCalls == nil {
+		approvedCalls = make(map[string]any)
+		session.Set("approvedCalls", approvedCalls)
+	}
 
-func (s *Service) waitAccepted(ctx context.Context, id string) error {
-	s.cond.L.Lock()
-	defer s.cond.L.Unlock()
+	approveCallKey := fmt.Sprintf("%s/%s", target.MCPServer, target.TargetName)
+	if _, exists := approvedCalls[approveCallKey]; exists {
+		// If the call is already approved, we can skip confirmation
+		return nil, nil
+	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
+	req := types.ToolCallConfirm{
+		MCPServer:  target.MCPServer,
+		Tool:       target.Target.(mcp.Tool),
+		Invocation: funcCall,
+	}
+
+	meta, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal confirmation request: %w", err)
+	}
+
+	elicit := mcp.ElicitRequest{
+		Message: req.Message(),
+		RequestedSchema: mcp.PrimitiveSchema{
+			Type: "object",
+			Properties: map[string]mcp.PrimitiveProperty{
+				"answer": {
+					Type:      "enum",
+					Enum:      []string{"yes", "no", "always"},
+					EnumNames: []string{"Yes", "No", "Always"},
+				},
+			},
+		},
+		Meta: meta,
+	}
+
+	var elicitResponse mcp.ElicitResult
+
+	if err := session.Exchange(ctx, "elicitation/create", elicit, &elicitResponse); err != nil {
+		return nil, fmt.Errorf("failed to elicit confirmation: %w", err)
+	}
+
+	var answer string
+	switch elicitResponse.Action {
+	case "reject":
+		answer = "no"
+	case "cancel":
+		return nil, fmt.Errorf("user has cancelled call to tool %s on server %s", target.TargetName, target.MCPServer)
+	case "accept":
+		s, ok := elicitResponse.Content["answer"].(string)
+		if !ok {
+			return nil, fmt.Errorf("expected 'answer' field in elicit response content, got: %v", elicitResponse.Content["answer"])
 		}
+		answer = s
+	}
 
-		if req, ok := s.requests[id]; ok {
-			if req.Accepted != nil {
-				if *req.Accepted {
-					return nil
-				}
-				return fmt.Errorf("request %s was rejected", id)
-			}
-		} else {
-			return fmt.Errorf("confirmation %s timed out", id)
-		}
-		s.cond.Wait()
+	switch answer {
+	case "yes":
+		return nil, nil
+	case "always":
+		approvedCalls[approveCallKey] = true
+		return nil, nil
+	case "no":
+		return &types.CallResult{
+			IsError: true,
+			Content: []mcp.Content{
+				{
+					Type: "text",
+					Text: fmt.Sprintf("Tool call to %s on server %s was declined by the user.", target.TargetName, target.MCPServer),
+				},
+			},
+		}, nil
+	default:
+		return nil, fmt.Errorf("unexpected answer from user: %s", answer)
 	}
 }

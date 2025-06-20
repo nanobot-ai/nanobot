@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/chat"
-	"github.com/nanobot-ai/nanobot/pkg/confirm"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
@@ -131,9 +130,6 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		return r.runMCP(cmd.Context(), runtime, nil)
 	}
 
-	runtimeOpt.Confirmations = confirm.NewService()
-	runtimeOpt.Confirmations.Start(context.Background())
-
 	runtime, err := r.n.GetRuntime(cmd.Context(), args[0], runtimeOpt)
 	if err != nil {
 		return err
@@ -178,7 +174,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 	})
 	eg.Go(func() error {
 		defer cancel()
-		return chat.Chat(ctx, r.ListenAddress, runtimeOpt.Confirmations, r.AutoConfirm, prompt, r.Output,
+		return chat.Chat(ctx, r.ListenAddress, r.AutoConfirm, prompt, r.Output,
 			func(client *mcp.Client) error {
 				return r.reload(ctx, client, runtime, args[0], runtimeOpt)
 			})

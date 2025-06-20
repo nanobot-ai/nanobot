@@ -9,7 +9,6 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/agents"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/confirm"
 	"github.com/nanobot-ai/nanobot/pkg/llm"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
@@ -25,14 +24,12 @@ type Runtime struct {
 }
 
 type Options struct {
-	Confirmations  *confirm.Service
 	Roots          []mcp.Root
 	Profiles       []string
 	MaxConcurrency int
 }
 
 func (o Options) Merge(other Options) (result Options) {
-	result.Confirmations = complete.Last(o.Confirmations, other.Confirmations)
 	result.MaxConcurrency = complete.Last(o.MaxConcurrency, other.MaxConcurrency)
 	result.Profiles = append(o.Profiles, other.Profiles...)
 	result.Roots = append(o.Roots, other.Roots...)
@@ -46,7 +43,7 @@ func NewRuntime(cfg llm.Config, config types.Config, opts ...Options) *Runtime {
 		Roots:       opt.Roots,
 		Concurrency: opt.MaxConcurrency,
 	})
-	agents := agents.New(completer, registry, opt.Confirmations, config)
+	agents := agents.New(completer, registry, config)
 	sampler := sampling.NewSampler(config, agents)
 
 	// This is a circular dependency. Oh well, so much for good design.

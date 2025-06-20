@@ -11,6 +11,3 @@ dependencies = [
     "pytz>=2025.2",
     "requests>=2.32.4",
 ]
-
-[tool.uv.sources]
-mcp = { path = "../python-sdk" }
