@@ -9,38 +9,21 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 )
 
-func Answer(request mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {
+func Answer(request mcp.ElicitRequest) (mcp.ElicitResult, error) {
 	p := tea.NewProgram(initialModel(request))
 	m, err := p.Run()
 	if err != nil {
-		return result, err
+		return mcp.ElicitResult{}, err
 	}
 	if m, ok := m.(model); ok {
 		if m.err != nil {
-			return result, m.err
+			return mcp.ElicitResult{}, m.err
 		}
 
-		result.Action = m.action
-		if len(m.keys) == 0 {
-			if b, ok := m.form.GetFocusedField().GetValue().(bool); ok && !b && m.action == "accept" {
-				result.Action = "reject"
-			}
-		} else {
-			result.Content = make(map[string]any, len(m.keys))
-			for _, key := range m.keys {
-				prop := request.RequestedSchema.Properties[key]
-				if prop.Type == "boolean" {
-					result.Content[key] = m.form.GetBool(key)
-				} else {
-					v, err := validateFieldValue(prop, m.form.GetString(key))
-					if err != nil {
-						return nil, fmt.Errorf("invalid value for field %s: %w", key, err)
-					}
-					result.Content[key] = v
-				}
-			}
-		}
-		return result, nil
+		return mcp.ElicitResult{
+			Action:  m.GetAction(),
+			Content: m.Values(),
+		}, m.Err()
 	}
 
 	// This should not happen, but if it does, we return a cancel action.
@@ -54,10 +37,48 @@ type (
 )
 
 type model struct {
-	form   *huh.Form
-	action string
-	keys   []string
-	err    error
+	form    *huh.Form
+	action  string
+	keys    []string
+	request mcp.ElicitRequest
+	err     error
+}
+
+func (m model) GetAction() string {
+	if len(m.keys) == 0 {
+		if b, ok := m.form.GetFocusedField().GetValue().(bool); ok && !b && m.action == "accept" {
+			return "reject"
+		}
+	}
+	return m.action
+}
+
+func (m model) Err() error {
+	if m.err == nil {
+		// might set m.err if there are validation errors
+		_ = m.Values()
+	}
+	return m.err
+}
+
+func (m *model) Values() map[string]any {
+	if m.err != nil {
+		return nil
+	}
+	result := make(map[string]any, len(m.keys))
+	for _, key := range m.keys {
+		prop := m.request.RequestedSchema.Properties[key]
+		if prop.Type == "boolean" {
+			result[key] = m.form.GetBool(key)
+		} else {
+			v, err := validateFieldValue(prop, m.form.GetString(key))
+			if err != nil {
+				m.err = fmt.Errorf("invalid value for field %s: %w", key, err)
+			}
+			result[key] = v
+		}
+	}
+	return result
 }
 
 func validateFieldValue(prop mcp.PrimitiveProperty, value string) (any, error) {
