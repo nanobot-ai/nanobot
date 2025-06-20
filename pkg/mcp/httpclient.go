@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
@@ -28,6 +29,8 @@ type HTTPClient struct {
 	waiter      *waiter
 	sse         bool
 	initialized bool
+	sseLock     sync.RWMutex
+	needSSE     bool
 }
 
 func NewHTTPClient(serverName, baseURL string, headers map[string]string) *HTTPClient {
@@ -37,6 +40,7 @@ func NewHTTPClient(serverName, baseURL string, headers map[string]string) *HTTPC
 		serverName: serverName,
 		headers:    maps.Clone(headers),
 		waiter:     newWaiter(),
+		needSSE:    true,
 	}
 }
 
@@ -93,7 +97,24 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 	return req, nil
 }
 
-func (s *HTTPClient) startSSE(ctx context.Context, msg *Message, lastEventID any) error {
+func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID any) error {
+	s.sseLock.RLock()
+	if !s.needSSE {
+		s.sseLock.RUnlock()
+		return nil
+	}
+	s.sseLock.RUnlock()
+
+	// Hold the lock while we try to start the SSE endpoint.
+	// We need to make sure that the message URL is set before continuing.
+	s.sseLock.Lock()
+	defer s.sseLock.Unlock()
+
+	if !s.needSSE {
+		// Check again in case SSE was started while we were waiting for the lock.
+		return nil
+	}
+
 	gotResponse := make(chan error, 1)
 	// Start the SSE stream with the managed context.
 	req, err := s.newRequest(s.ctx, http.MethodGet, nil)
@@ -115,17 +136,23 @@ func (s *HTTPClient) startSSE(ctx context.Context, msg *Message, lastEventID any
 		// If msg is nil, then this is an SSE request for HTTP streaming.
 		// If the server doesn't support a separate SSE endpoint, then we can just return.
 		if msg == nil && resp.StatusCode == http.StatusMethodNotAllowed {
+			s.needSSE = false
 			return nil
 		}
 		return fmt.Errorf("failed to connect to SSE server: %s", resp.Status)
 	}
 
+	s.needSSE = false
+	s.sse = s.sse || msg != nil
+
 	go func() (err error, send bool) {
 		defer func() {
 			if err != nil {
+				s.sseLock.Lock()
+				s.needSSE = true
+				s.sseLock.Unlock()
+
 				// If we get an error, then we aren't reconnecting to the SSE endpoint.
-				// Therefore, close the waiter to indicate that we're done.
-				s.waiter.Close()
 				if send {
 					gotResponse <- err
 				}
@@ -136,8 +163,9 @@ func (s *HTTPClient) startSSE(ctx context.Context, msg *Message, lastEventID any
 
 		messages := newSSEStream(resp.Body)
 
-		if msg == nil {
+		if !s.sse {
 			s.messageURL = s.baseURL
+			msg = nil
 		} else {
 			data, ok := messages.readNextMessage()
 			if !ok {
@@ -157,7 +185,6 @@ func (s *HTTPClient) startSSE(ctx context.Context, msg *Message, lastEventID any
 			baseURL.Path = u.Path
 			baseURL.RawQuery = u.RawQuery
 			s.messageURL = baseURL.String()
-			s.sse = true
 
 			initReq, err := s.newRequest(ctx, http.MethodPost, msg)
 			if err != nil {
@@ -199,9 +226,14 @@ func (s *HTTPClient) startSSE(ctx context.Context, msg *Message, lastEventID any
 					if msg != nil {
 						msg.ID = uuid.String()
 					}
+					s.sseLock.Lock()
+					if !s.needSSE {
+						s.needSSE = true
+					}
+					s.sseLock.Unlock()
 				}
 
-				if err := s.startSSE(ctx, msg, lastEventID); err != nil {
+				if err := s.ensureSSE(ctx, msg, lastEventID); err != nil {
 					return fmt.Errorf("failed to reconnect to SSE server: %v", err), false
 				}
 
@@ -244,7 +276,7 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) (err error) {
 	if resp.StatusCode != http.StatusOK {
 		streamingErrorMessage, _ := io.ReadAll(resp.Body)
 		streamError := fmt.Errorf("failed to initialize HTTP Streaming client: %s: %s", resp.Status, streamingErrorMessage)
-		if err := s.startSSE(ctx, &msg, nil); err != nil {
+		if err := s.ensureSSE(ctx, &msg, nil); err != nil {
 			return errors.Join(streamError, err)
 		}
 
@@ -274,7 +306,7 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) (err error) {
 		}
 	}()
 
-	return s.startSSE(ctx, nil, nil)
+	return s.ensureSSE(ctx, nil, nil)
 }
 
 func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
@@ -287,6 +319,10 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 		}
 		s.initialized = true
 		return nil
+	}
+
+	if err := s.ensureSSE(ctx, &msg, nil); err != nil {
+		return fmt.Errorf("failed to restart SSE: %w", err)
 	}
 
 	req, err := s.newRequest(ctx, http.MethodPost, msg)
