@@ -304,7 +304,8 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 		return fmt.Errorf("failed to send message: %s", resp.Status)
 	}
 
-	if s.sse || resp.ContentLength == 0 {
+	// It is possible for the ContentLength here to be -1.
+	if s.sse || (resp.ContentLength <= 0 && resp.Header.Get("Content-Type") != "text/event-stream") {
 		return nil
 	}
 
