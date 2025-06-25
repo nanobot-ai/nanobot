@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/chat"
+	"github.com/nanobot-ai/nanobot/pkg/confirm"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
@@ -27,6 +28,7 @@ type Run struct {
 	AutoConfirm   bool     `usage:"Automatically confirm all tool calls" default:"false" short:"y"`
 	Output        string   `usage:"Output file for the result. Use - for stdout" default:"" short:"o"`
 	ListenAddress string   `usage:"Address to listen on (ex: localhost:8099) (implies -m)" default:"stdio" short:"a"`
+	Port          string   `usage:"Port to listen on for stdio" default:"8099"`
 	Roots         []string `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
 	Input         string   `usage:"Input file for the prompt" default:"" short:"f"`
 	Session       string   `usage:"Session ID to resume" default:"" short:"s"`
@@ -125,19 +127,31 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to read config file %q: %w", args[0], err)
 	}
 
+	oauthcallbackHandler := mcp.NewCallbackServer(confirm.New())
+
 	runtimeOpt.Roots = roots
 	runtimeOpt.MaxConcurrency = r.n.MaxConcurrency
+	runtimeOpt.CallbackHandler = oauthcallbackHandler
 
 	if r.MCP {
-		runtime, err := r.n.GetRuntime(runtimeOpt)
+		runtime, err := r.n.GetRuntime(runtimeOpt, runtime.Options{OAuthRedirectURL: "http://" + strings.Replace(r.ListenAddress, "127.0.0.1", "localhost", 1) + "/oauth/callback"})
 		if err != nil {
 			return err
 		}
 
-		return r.runMCP(cmd.Context(), *config, runtime, nil)
+		return r.runMCP(cmd.Context(), *config, runtime, oauthcallbackHandler, nil)
+	}
+	if r.Port == "" {
+		r.Port = "0"
 	}
 
-	runtime, err := r.n.GetRuntime(runtimeOpt)
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return fmt.Errorf("failed to pick a local port: %w", err)
+	}
+	r.ListenAddress = l.Addr().String()
+
+	runtime, err := r.n.GetRuntime(runtimeOpt, runtime.Options{OAuthRedirectURL: "http://" + strings.Replace(r.ListenAddress, "127.0.0.1", "localhost", 1) + "/oauth/callback"})
 	if err != nil {
 		return err
 	}
@@ -158,12 +172,6 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("there are no entrypoints defined in the config file, please add one to the publish section%s", example)
 		}
 	}
-
-	l, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		return fmt.Errorf("failed to pick a local port: %w", err)
-	}
-	r.ListenAddress = l.Addr().String()
 
 	prompt := strings.Join(args[1:], " ")
 	if r.Input != "" {
@@ -196,7 +204,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 	eg, ctx := errgroup.WithContext(cmd.Context())
 	ctx, cancel := context.WithCancel(ctx)
 	eg.Go(func() error {
-		return r.runMCP(ctx, *config, runtime, l)
+		return r.runMCP(ctx, *config, runtime, oauthcallbackHandler, l)
 	})
 	eg.Go(func() error {
 		defer cancel()
@@ -208,7 +216,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 	return eg.Wait()
 }
 
-func (r *Run) runMCP(ctx context.Context, config types.Config, runtime *runtime.Runtime, l net.Listener) error {
+func (r *Run) runMCP(ctx context.Context, config types.Config, runtime *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, l net.Listener) error {
 	env, err := r.n.loadEnv()
 	if err != nil {
 		return fmt.Errorf("failed to load environment: %w", err)
@@ -241,9 +249,15 @@ func (r *Run) runMCP(ctx context.Context, config types.Config, runtime *runtime.
 		SessionStore: sessionManager,
 	})
 
+	mux := http.NewServeMux()
+	mux.Handle("/", httpServer)
+	if oauthCallbackHandler != nil {
+		mux.Handle("/oauth/callback", oauthCallbackHandler)
+	}
+
 	s := &http.Server{
 		Addr:    address,
-		Handler: httpServer,
+		Handler: mux,
 	}
 
 	context.AfterFunc(ctx, func() {

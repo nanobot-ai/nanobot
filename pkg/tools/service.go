@@ -19,12 +19,14 @@ import (
 )
 
 type Service struct {
-	servers     map[string]map[string]*mcp.Client
-	roots       []mcp.Root
-	serverLock  sync.Mutex
-	sampler     Sampler
-	runner      mcp.Runner
-	concurrency int
+	servers          map[string]map[string]*mcp.Client
+	roots            []mcp.Root
+	serverLock       sync.Mutex
+	sampler          Sampler
+	runner           mcp.Runner
+	callbackHandler  mcp.CallbackHandler
+	oauthRedirectURL string
+	concurrency      int
 }
 
 type Sampler interface {
@@ -32,13 +34,17 @@ type Sampler interface {
 }
 
 type RegistryOptions struct {
-	Roots       []mcp.Root
-	Concurrency int
+	Roots            []mcp.Root
+	Concurrency      int
+	CallbackHandler  mcp.CallbackHandler
+	OAuthRedirectURL string
 }
 
 func (r RegistryOptions) Merge(other RegistryOptions) (result RegistryOptions) {
 	result.Roots = append(r.Roots, other.Roots...)
 	result.Concurrency = complete.Last(r.Concurrency, other.Concurrency)
+	result.CallbackHandler = complete.Last(r.CallbackHandler, other.CallbackHandler)
+	result.OAuthRedirectURL = complete.Last(r.OAuthRedirectURL, other.OAuthRedirectURL)
 	return result
 }
 
@@ -52,9 +58,11 @@ func (r RegistryOptions) Complete() RegistryOptions {
 func NewToolsService(opts ...RegistryOptions) *Service {
 	opt := complete.Complete(opts...)
 	return &Service{
-		servers:     make(map[string]map[string]*mcp.Client),
-		roots:       opt.Roots,
-		concurrency: opt.Concurrency,
+		servers:          make(map[string]map[string]*mcp.Client),
+		roots:            opt.Roots,
+		concurrency:      opt.Concurrency,
+		oauthRedirectURL: opt.OAuthRedirectURL,
+		callbackHandler:  opt.CallbackHandler,
 	}
 }
 
@@ -189,7 +197,9 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 				Params: data,
 			})
 		},
-		Runner: &s.runner,
+		Runner:           &s.runner,
+		CallbackHandler:  s.callbackHandler,
+		OAuthRedirectURL: s.oauthRedirectURL,
 	}
 	if session.InitializeRequest.Capabilities.Elicitation == nil {
 		clientOpts.OnElicit = func(ctx context.Context, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {

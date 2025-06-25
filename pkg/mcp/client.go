@@ -26,22 +26,32 @@ type SessionState struct {
 }
 
 type ClientOption struct {
-	Roots         []Root
-	OnSampling    func(ctx context.Context, sampling CreateMessageRequest) (CreateMessageResult, error)
-	OnElicit      func(ctx context.Context, req ElicitRequest) (ElicitResult, error)
-	OnRoots       func(ctx context.Context, msg Message) error
-	OnLogging     func(ctx context.Context, logMsg LoggingMessage) error
-	OnMessage     func(ctx context.Context, msg Message) error
-	OnNotify      func(ctx context.Context, msg Message) error
-	Env           map[string]string
-	ParentSession *Session
-	Session       *SessionState
-	Runner        *Runner
+	Roots            []Root
+	OnSampling       func(ctx context.Context, sampling CreateMessageRequest) (CreateMessageResult, error)
+	OnElicit         func(ctx context.Context, req ElicitRequest) (ElicitResult, error)
+	OnRoots          func(ctx context.Context, msg Message) error
+	OnLogging        func(ctx context.Context, logMsg LoggingMessage) error
+	OnMessage        func(ctx context.Context, msg Message) error
+	OnNotify         func(ctx context.Context, msg Message) error
+	Env              map[string]string
+	ParentSession    *Session
+	Session          *SessionState
+	Runner           *Runner
+	OAuthRedirectURL string
+	CallbackHandler  CallbackHandler
+	ClientCredLookup ClientCredLookup
+	TokenStorage     TokenStorage
 }
 
 func (c ClientOption) Complete() ClientOption {
 	if c.Runner == nil {
 		c.Runner = &Runner{}
+	}
+	if c.ClientCredLookup == nil {
+		c.ClientCredLookup = NewClientLookupFromEnv()
+	}
+	if c.TokenStorage == nil {
+		c.TokenStorage = NewDefaultLocalStorage()
 	}
 	return c
 }
@@ -71,6 +81,19 @@ func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
 	if other.OnElicit != nil {
 		result.OnElicit = other.OnElicit
 	}
+	result.CallbackHandler = c.CallbackHandler
+	if other.CallbackHandler != nil {
+		result.CallbackHandler = other.CallbackHandler
+	}
+	result.ClientCredLookup = c.ClientCredLookup
+	if other.ClientCredLookup != nil {
+		result.ClientCredLookup = other.ClientCredLookup
+	}
+	result.TokenStorage = c.TokenStorage
+	if other.TokenStorage != nil {
+		result.TokenStorage = other.TokenStorage
+	}
+	result.OAuthRedirectURL = complete.Last(c.OAuthRedirectURL, other.OAuthRedirectURL)
 	result.Env = complete.MergeMap(c.Env, other.Env)
 	result.Session = complete.Last(c.Session, other.Session)
 	result.ParentSession = complete.Last(c.ParentSession, other.ParentSession)
@@ -219,6 +242,10 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 	if config.Command == "" && config.BaseURL == "" {
 		return nil, fmt.Errorf("no command or base URL provided")
 	} else if config.BaseURL != "" {
+		if (opt.CallbackHandler != nil) != (opt.OAuthRedirectURL != "") {
+			return nil, fmt.Errorf("must specify both or neither callback server and OAuth redirect URL")
+		}
+
 		if config.Command != "" {
 			var err error
 			config, err = opt.Runner.Run(ctx, opt.Roots, opt.Env, serverName, config)
@@ -236,7 +263,7 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 			}
 			header["Mcp-Session-Id"] = opt.Session.ID
 		}
-		wire = NewHTTPClient(serverName, config.BaseURL, header)
+		wire = NewHTTPClient(ctx, serverName, config.BaseURL, opt.OAuthRedirectURL, opt.CallbackHandler, opt.ClientCredLookup, opt.TokenStorage, envvar.ReplaceMap(opt.Env, config.Headers))
 	} else {
 		wire, err = newStdioClient(ctx, opt.Roots, opt.Env, serverName, config, opt.Runner)
 		if err != nil {
