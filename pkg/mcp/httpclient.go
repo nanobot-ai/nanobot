@@ -245,7 +245,11 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 				continue
 			}
 
-			lastEventID = msg.ID
+			if msg.ID == nil {
+				msg.ID = uuid.String()
+			} else {
+				lastEventID = msg.ID
+			}
 
 			log.Messages(ctx, s.serverName, false, []byte(message))
 			s.handler(msg)
