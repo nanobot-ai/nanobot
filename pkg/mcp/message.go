@@ -102,7 +102,7 @@ func (r *Message) SendError(ctx context.Context, err error) {
 	if rpcError := (JSONRPCError)(nil); errors.As(err, &rpcError) {
 		data = *rpcError.RPCError()
 	} else {
-		data.Code = 500
+		data.Code = -32602
 		data.Message = err.Error()
 	}
 
