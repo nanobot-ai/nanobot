@@ -150,7 +150,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				JSONRPC: msg.JSONRPC,
 				ID:      msg.ID,
 				Error: &RPCError{
-					Code:    http.StatusInternalServerError,
+					Code:    -32603,
 					Message: err.Error(),
 				},
 			}

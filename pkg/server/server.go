@@ -386,7 +386,7 @@ func reconcileEnv(session *mcp.Session, c types.Config) error {
 		missingEnv = append(missingEnv, values)
 	}
 	return &mcp.RPCError{
-		Code:    401,
+		Code:    -32602,
 		Message: fmt.Sprintf("missing required environment variables: %v", missing),
 		DataObject: map[string]any{
 			"missingEnv": missingEnv,
