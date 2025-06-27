@@ -1,14 +1,12 @@
 package responses
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/log"
@@ -90,38 +88,12 @@ func (c *Client) complete(ctx context.Context, req Request, opts ...types.Comple
 		return nil, fmt.Errorf("failed to get response: %s %q", httpResp.Status, string(body))
 	}
 
-	lines := bufio.NewScanner(httpResp.Body)
-	for lines.Scan() {
-		line := lines.Text()
-
-		header, body, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		switch strings.TrimSpace(header) {
-		case "data":
-			event := struct {
-				Type     string   `json:"type"`
-				Response Response `json:"response"`
-			}{}
-			body = strings.TrimSpace(body)
-			data := []byte(body)
-			if err := json.Unmarshal(data, &event); err != nil {
-				log.Errorf(ctx, "failed to decode event: %v: %s", err, body)
-				continue
-			}
-			if opt.Progress != nil {
-				opt.Progress <- []byte(body)
-			}
-			if event.Type == "response.completed" || event.Type == "response.failed" || event.Type == "response.incomplete" {
-				log.Messages(ctx, "responses-api", false, data)
-				response = event.Response
-			}
-		}
-	}
-
-	if err := lines.Err(); err != nil {
+	response, ok, err := progressResponse(ctx, httpResp, opt.ProgressToken)
+	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	if !ok {
+		return nil, fmt.Errorf("failed to get response from stream")
 	}
 
 	// Check for errors in the response

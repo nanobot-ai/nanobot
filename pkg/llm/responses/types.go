@@ -1315,12 +1315,17 @@ func (r Response) MarshalJSON() ([]byte, error) {
 }
 
 type Progress struct {
-	Type  string       `json:"type,omitempty"`
-	Delta string       `json:"delta,omitempty"`
-	Item  ProgressItem `json:"item,omitempty"`
+	Type     string       `json:"type,omitempty"`
+	Delta    string       `json:"delta,omitempty"`
+	Item     ProgressItem `json:"item,omitempty"`
+	Response Response     `json:"response"`
 }
 
 type ProgressItem struct {
-	Type string `json:"type,omitempty"`
-	Name string `json:"name,omitempty"`
+	ID        string `json:"id,omitempty"`
+	CallID    string `json:"call_id,omitempty"`
+	Type      string `json:"type,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
+	Role      string `json:"role,omitempty"`
 }

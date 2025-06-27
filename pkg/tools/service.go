@@ -12,7 +12,6 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/envvar"
 	"github.com/nanobot-ai/nanobot/pkg/expr"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -253,6 +252,7 @@ type CallOptions struct {
 	ReturnInput   bool
 	ReturnOutput  bool
 	Target        any
+	ToolCall      *types.ToolCall
 }
 
 func (o CallOptions) Merge(other CallOptions) (result CallOptions) {
@@ -262,6 +262,7 @@ func (o CallOptions) Merge(other CallOptions) (result CallOptions) {
 	result.ReturnInput = o.ReturnInput || other.ReturnInput
 	result.ReturnOutput = o.ReturnOutput || other.ReturnOutput
 	result.Target = complete.Last(o.Target, other.Target)
+	result.ToolCall = complete.Last(o.ToolCall, other.ToolCall)
 	return
 }
 
@@ -388,45 +389,66 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 	}
 
 	if session != nil && opt.ProgressToken != nil {
-		callID := uuid.String()
-		_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
-			ProgressToken: opt.ProgressToken,
-			Data: map[string]any{
-				"type":       "nanobot/call",
-				"id":         callID,
-				"target":     target,
-				"targetType": targetType,
-				"input":      args,
-				"data":       opt.LogData,
-			},
-		})
+		var tc types.ToolCall
+		if opt.ToolCall != nil {
+			tc = *opt.ToolCall
+		} else {
+			tc.CallID = uuid.String()
+			argsData, _ := json.Marshal(args)
+			tc.Arguments = string(argsData)
+			tc.Name, _ = opt.LogData["mcpToolName"].(string)
+			if tc.Name == "" {
+				tc.Name = target
+			}
+		}
+		tc.Target = target
+		tc.TargetType = targetType
+
+		if opt.ToolCall == nil {
+			_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
+				ProgressToken: opt.ProgressToken,
+				Meta: map[string]any{
+					types.CompletionProgressMetaKey: types.CompletionProgress{
+						HasMore: true,
+						Item: types.CompletionItem{
+							ID:       tc.CallID,
+							ToolCall: &tc,
+						},
+					},
+				},
+			})
+		}
 
 		defer func() {
-			if err == nil {
-				_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
-					ProgressToken: opt.ProgressToken,
-					Data: map[string]any{
-						"type":       "nanobot/call/complete",
-						"id":         callID,
-						"target":     target,
-						"targetType": targetType,
-						"output":     ret,
-						"data":       opt.LogData,
-					},
-				})
-			} else {
-				_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
-					ProgressToken: opt.ProgressToken,
-					Data: map[string]any{
-						"type":       "nanobot/toolcall/error",
-						"id":         callID,
-						"target":     target,
-						"targetType": targetType,
-						"error":      err.Error(),
-						"data":       opt.LogData,
-					},
-				})
+			tcResult := types.ToolCallResult{
+				CallID: tc.CallID,
 			}
+			if ret != nil {
+				tcResult.Output = *ret
+			}
+			if err != nil {
+				tcResult.Output = types.CallResult{
+					IsError: true,
+					Content: []mcp.Content{
+						{
+							Type: "text",
+							Text: err.Error(),
+						},
+					},
+				}
+			}
+			_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
+				ProgressToken: opt.ProgressToken,
+				Meta: map[string]any{
+					types.CompletionProgressMetaKey: types.CompletionProgress{
+						Item: types.CompletionItem{
+							ID:             tc.CallID,
+							ToolCall:       &tc,
+							ToolCallResult: &tcResult,
+						},
+					},
+				},
+			})
 		}()
 	}
 
@@ -760,41 +782,6 @@ func (s *Service) convertToSampleRequest(agent string, args any) (*mcp.CreateMes
 	}
 
 	return &sampleRequest, nil
-}
-
-func setupProgress(ctx context.Context, progressToken any) (chan json.RawMessage, func()) {
-	session := mcp.SessionFromContext(ctx)
-	for session.Parent != nil {
-		session = session.Parent
-	}
-	c := make(chan json.RawMessage, 1)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		var counter int
-		for payload := range c {
-			counter++
-			data, err := json.Marshal(mcp.NotificationProgressRequest{
-				ProgressToken: progressToken,
-				Progress:      json.Number(fmt.Sprint(counter)),
-				Data:          payload,
-			})
-			if err != nil {
-				continue
-			}
-			err = session.Send(ctx, mcp.Message{
-				Method: "notifications/progress",
-				Params: data,
-			})
-			if err != nil {
-				log.Errorf(ctx, "failed to send progress notification: %v", err)
-			}
-		}
-	}()
-	return c, func() {
-		close(c)
-		<-done
-	}
 }
 
 type SampleCallOptions struct {

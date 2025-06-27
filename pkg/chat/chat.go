@@ -10,7 +10,6 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/chat/elicit"
 	"github.com/nanobot-ai/nanobot/pkg/chat/prompter"
-	"github.com/nanobot-ai/nanobot/pkg/llm"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/printer"
@@ -36,10 +35,7 @@ func Chat(ctx context.Context, listenAddress string,
 			return elicit.Answer(elicitation, autoConfirm)
 		},
 		OnNotify: func(ctx context.Context, msg mcp.Message) error {
-			if llm.PrintProgress(msg.Params) {
-				return nil
-			}
-			printToolCall(msg.Params, promptDoneCancel)
+			printCompletionProgress(msg.Params, promptDoneCancel)
 			return nil
 		},
 	})...)
@@ -117,42 +113,48 @@ func Chat(ctx context.Context, listenAddress string,
 	}
 }
 
-func printToolCall(params json.RawMessage, seenAgentOut func()) {
-	var toolCall struct {
-		Data struct {
-			ID         string              `json:"id"`
-			Type       string              `json:"type"`
-			Input      any                 `json:"input,omitempty"`
-			Error      string              `json:"error,omitempty"`
-			Target     string              `json:"target"`
-			TargetType string              `json:"targetType"`
-			Output     *mcp.CallToolResult `json:"output,omitempty"`
-			Data       struct {
-				MCPToolName string `json:"mcpToolName"`
+func printCompletionProgress(params json.RawMessage, seenAgentOut func()) {
+	var (
+		notification mcp.NotificationProgressRequest
+		progress     types.CompletionProgress
+	)
+	if err := json.Unmarshal(params, &notification); err != nil {
+		return
+	}
+
+	data, ok := notification.Meta[types.CompletionProgressMetaKey]
+	if !ok || data == nil {
+		return
+	}
+
+	err := types.JSONCoerce(notification.Meta[types.CompletionProgressMetaKey], &progress)
+	if err != nil {
+		log.Errorf(context.Background(), "failed to parse completion progress: %v", err)
+		return
+	}
+
+	if progress.Item.Message != nil && progress.Model != "" && progress.Item.Message.Content.Text != "" {
+		printer.Prefix(fmt.Sprintf("<-(%s)", progress.Model), progress.Item.Message.Content.Text)
+	}
+
+	if progress.Item.ToolCall != nil &&
+		(progress.Item.ToolCall.TargetType == "" || progress.Item.ToolCall.TargetType == "tool") {
+		target := progress.Item.ToolCall.Target
+		if target == "" {
+			target = progress.Item.ToolCall.Name
+		}
+		if progress.Item.ToolCallResult == nil {
+			printer.Prefix(fmt.Sprintf("->(%s)", target), progress.Item.ToolCall.Arguments)
+		} else {
+			for _, content := range progress.Item.ToolCallResult.Output.Content {
+				printer.Prefix(fmt.Sprintf("<-(%s)", target), content.Text)
 			}
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(params, &toolCall); err != nil || !strings.HasPrefix(toolCall.Data.Type, "nanobot/call") {
-		return
-	}
-	if toolCall.Data.TargetType != "tool" {
-		return
-	}
-	server, tool, _ := strings.Cut(toolCall.Data.Target, "/")
-	if server == tool {
-		toolCall.Data.Target = server
-	}
-	if toolCall.Data.Input != nil {
-		var text string
-		_ = types.JSONCoerce(toolCall.Data.Input, &text)
-		printer.Prefix(fmt.Sprintf("->(%s)", toolCall.Data.Target), text)
-	}
-	if toolCall.Data.Output != nil && toolCall.Data.Data.MCPToolName != types.AgentTool {
-		for _, content := range toolCall.Data.Output.Content {
-			printer.Prefix(fmt.Sprintf("<-(%s)", toolCall.Data.Target), content.Text)
 		}
 	}
-	if toolCall.Data.Output != nil && toolCall.Data.Data.MCPToolName == types.AgentTool {
+
+	if progress.Item.ToolCallResult != nil &&
+		progress.Item.ToolCall != nil &&
+		progress.Item.ToolCall.Name == types.AgentTool {
 		seenAgentOut()
 	}
 }

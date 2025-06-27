@@ -250,24 +250,6 @@ func (s *Service) runStepEach(ctx flowContext, step types.Step, forEachData iter
 	}, nil
 }
 
-func (s *Service) logFlowState(ctx flowContext) {
-	if ctx.opt.ProgressToken == nil {
-		return
-	}
-	session := mcp.SessionFromContext(ctx.ctx)
-	if session == nil {
-		return
-	}
-
-	_ = session.SendPayload(ctx.ctx, "notifications/progress", mcp.NotificationProgressRequest{
-		ProgressToken: ctx.opt.ProgressToken,
-		Data: map[string]any{
-			"type": "nanobot/flow/state",
-			"flow": ctx.data,
-		},
-	})
-}
-
 func getCall(step types.Step) string {
 	if step.Agent.Name != "" {
 		return step.Agent.Name
@@ -404,7 +386,6 @@ func (s *Service) runStep(ctx flowContext, step types.Step) (ret *types.CallResu
 	defer func() {
 		ctx.data[step.ID] = toOutput(ret)
 		ctx.data["previous"] = ctx.data[step.ID]
-		s.logFlowState(ctx)
 	}()
 
 	if step.ID == "" {

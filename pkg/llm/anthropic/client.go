@@ -12,6 +12,7 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/log"
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -65,6 +66,23 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 
 }
 
+func send(ctx context.Context, progress *types.CompletionProgress, progressToken any) {
+	if progressToken == "" || progressToken == nil {
+		return
+	}
+	session := mcp.SessionFromContext(ctx)
+	if session == nil {
+		return
+	}
+
+	_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
+		ProgressToken: progressToken,
+		Meta: map[string]any{
+			types.CompletionProgressMetaKey: progress,
+		},
+	})
+}
+
 func (c *Client) complete(ctx context.Context, req Request, opts ...types.CompletionOptions) (*Response, error) {
 	var (
 		opt = complete.Complete(opts...)
@@ -112,9 +130,6 @@ func (c *Client) complete(ctx context.Context, req Request, opts ...types.Comple
 			log.Errorf(ctx, "failed to decode event: %v: %s", err, body)
 			continue
 		}
-		if opt.Progress != nil {
-			opt.Progress <- []byte(body)
-		}
 		contentIndex := len(resp.Content) - 1
 		switch delta.Type {
 		case "message_start":
@@ -127,9 +142,39 @@ func (c *Client) complete(ctx context.Context, req Request, opts ...types.Comple
 			case "text_delta":
 				if contentIndex >= 0 {
 					*resp.Content[contentIndex].Text += delta.Delta.Text
+					send(ctx, &types.CompletionProgress{
+						Model:   resp.Model,
+						Partial: true,
+						HasMore: true,
+						Item: types.CompletionItem{
+							ID: fmt.Sprintf("%s-%d", resp.ID, contentIndex),
+							Message: &mcp.SamplingMessage{
+								Role: "assistant",
+								Content: mcp.Content{
+									Type: "text",
+									Text: delta.Delta.Text,
+								},
+							},
+						},
+					}, opt.ProgressToken)
 				}
 			case "input_json_delta":
 				partialJSON += delta.Delta.PartialJSON
+				if contentIndex >= 0 && partialJSON != "" {
+					send(ctx, &types.CompletionProgress{
+						Partial: true,
+						HasMore: true,
+						Item: types.CompletionItem{
+							ID: resp.Content[contentIndex].ID,
+							ToolCall: &types.ToolCall{
+								CallID:    resp.Content[contentIndex].ID,
+								Name:      resp.Content[contentIndex].Name,
+								Arguments: delta.Delta.PartialJSON,
+								ID:        resp.Content[contentIndex].ID,
+							},
+						},
+					}, opt.ProgressToken)
+				}
 			}
 		case "content_block_stop":
 			if contentIndex >= 0 && partialJSON != "" {
@@ -138,6 +183,14 @@ func (c *Client) complete(ctx context.Context, req Request, opts ...types.Comple
 					return nil, fmt.Errorf("failed to unmarshal function call arguments: %w", err)
 				}
 				resp.Content[contentIndex].Input = args
+			}
+			if contentIndex >= 0 {
+				send(ctx, &types.CompletionProgress{
+					Partial: true,
+					Item: types.CompletionItem{
+						ID: fmt.Sprintf("%s-%d", resp.ID, contentIndex),
+					},
+				}, opt.ProgressToken)
 			}
 		case "message_delta":
 			err := json.Unmarshal([]byte(body), &struct {

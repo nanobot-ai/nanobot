@@ -14,20 +14,11 @@ type Completer interface {
 
 type CompletionOptions struct {
 	ProgressToken any
-	Progress      chan<- json.RawMessage
 	Chat          *bool
 }
 
 func (c CompletionOptions) Merge(other CompletionOptions) (result CompletionOptions) {
 	result.ProgressToken = complete.Last(c.ProgressToken, other.ProgressToken)
-	if c.Progress != nil {
-		if other.Progress != nil {
-			panic("multiple progress channels provided")
-		}
-		result.Progress = c.Progress
-	} else {
-		result.Progress = other.Progress
-	}
 	result.Chat = complete.Last(c.Chat, other.Chat)
 	return
 }
@@ -65,13 +56,21 @@ type ToolUseDefinition struct {
 	Attributes  map[string]any  `json:"-"`
 }
 
+type CompletionProgress struct {
+	Model   string         `json:"model,omitempty"`
+	Partial bool           `json:"partial,omitempty"`
+	HasMore bool           `json:"hasMore,omitempty"`
+	Item    CompletionItem `json:"item,omitempty"`
+}
+
+const CompletionProgressMetaKey = "ai.nanobot.progress/completion"
+
 type CompletionItem struct {
+	ID             string               `json:"id,omitempty"`
 	Message        *mcp.SamplingMessage `json:"message,omitempty"`
 	ToolCall       *ToolCall            `json:"toolCall,omitempty"`
 	ToolCallResult *ToolCallResult      `json:"toolCallResult,omitempty"`
 	Reasoning      *Reasoning           `json:"reasoning,omitempty"`
-	ID             string               `json:"id,omitempty"`
-	HasMore        bool                 `json:"hasMore,omitempty"`
 }
 
 type Reasoning struct {
@@ -97,10 +96,12 @@ type ToolCallResult struct {
 }
 
 type ToolCall struct {
-	Arguments string `json:"arguments,omitempty"`
-	CallID    string `json:"call_id,omitempty"`
-	Name      string `json:"name,omitempty"`
-	ID        string `json:"id,omitempty"`
+	Arguments  string `json:"arguments,omitempty"`
+	CallID     string `json:"call_id,omitempty"`
+	Name       string `json:"name,omitempty"`
+	ID         string `json:"id,omitempty"`
+	Target     string `json:"target,omitempty"`
+	TargetType string `json:"targetType,omitempty"`
 }
 
 type CallResult struct {

@@ -37,20 +37,6 @@ func (a *Agents) toolCalls(ctx context.Context, run *run, opts []types.Completio
 			run.ToolOutputs = make(map[string]toolCall)
 		}
 
-		for _, opt := range opts {
-			if opt.Progress != nil {
-				data, err := json.Marshal(map[string]any{
-					"type":     "nanobot/toolcall/output",
-					"target":   targetServer,
-					"toolCall": functionCall,
-					"output":   callOutput,
-				})
-				if err == nil {
-					opt.Progress <- data
-				}
-			}
-		}
-
 		run.ToolOutputs[functionCall.CallID] = toolCall{
 			Output: callOutput,
 			Done:   true,
@@ -100,6 +86,7 @@ func (a *Agents) invoke(ctx context.Context, target types.TargetMapping, funcCal
 	if response == nil {
 		response, err = a.registry.Call(ctx, target.MCPServer, target.TargetName, data, tools.CallOptions{
 			ProgressToken: complete.Complete(opts...).ProgressToken,
+			ToolCall:      funcCall,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to invoke tool %s on mcp server %s: %w", target.TargetName, target.MCPServer, err)

@@ -137,29 +137,28 @@ func (s *Session) Get(key string, out any) bool {
 	}
 
 	switch v := v.(type) {
+	case float64:
+		if outNum, ok := out.(*float64); ok {
+			*outNum = v
+			return true
+		}
 	case string:
 		if outStr, ok := out.(*string); ok {
 			*outStr = v
 			return true
 		}
-		if err := json.Unmarshal([]byte(v), out); err != nil {
-			delete(s.attributes, key)
-			return false
-		}
-		s.attributes[key] = out
-	default:
-		data, err := json.Marshal(v)
-		if err != nil {
-			delete(s.attributes, key)
-			return false
-		}
-		if err := json.Unmarshal(data, out); err != nil {
-			delete(s.attributes, key)
-			return false
-		}
-		s.attributes[key] = out
 	}
 
+	data, err := json.Marshal(v)
+	if err != nil {
+		delete(s.attributes, key)
+		return false
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		delete(s.attributes, key)
+		return false
+	}
+	s.attributes[key] = out
 	return true
 }
 
@@ -215,13 +214,17 @@ func (s *Session) normalizeProgress(progress *NotificationProgressRequest) {
 			newProgress = lastProgress + 0.01
 		}
 	}
-	progress.Progress = json.Number(fmt.Sprintf("%f", newProgress))
+	data, err := json.Marshal(newProgress)
+	if err == nil {
+		progress.Progress = json.Number(data)
+	}
 	s.Set(progressKey, newProgress)
 }
 
 func (s *Session) SendPayload(ctx context.Context, method string, payload any) error {
 	if progress, ok := payload.(NotificationProgressRequest); ok {
 		s.normalizeProgress(&progress)
+		payload = progress
 	}
 
 	data, err := json.Marshal(payload)

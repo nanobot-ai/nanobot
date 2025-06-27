@@ -2,14 +2,12 @@ package sampling
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
 	"sort"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
@@ -138,14 +136,8 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 	}
 
 	completeOptions := types.CompletionOptions{
-		Chat: opt.AgentOverride.Chat,
-	}
-
-	if opt.ProgressToken != nil {
-		var cancel func()
-		completeOptions.Progress, cancel = setupProgress(ctx, opt.ProgressToken)
-		completeOptions.ProgressToken = opt.ProgressToken
-		defer cancel()
+		Chat:          opt.AgentOverride.Chat,
+		ProgressToken: opt.ProgressToken,
 	}
 
 	resp, err := s.completer.Complete(ctx, request, completeOptions)
@@ -180,29 +172,4 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 	}
 
 	return result, nil
-}
-
-func setupProgress(ctx context.Context, progressToken any) (chan json.RawMessage, func()) {
-	session := mcp.SessionFromContext(ctx)
-	for session.Parent != nil {
-		session = session.Parent
-	}
-	c := make(chan json.RawMessage, 1)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for payload := range c {
-			err := session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
-				ProgressToken: progressToken,
-				Data:          payload,
-			})
-			if err != nil {
-				log.Errorf(ctx, "failed to send progress notification: %v", err)
-			}
-		}
-	}()
-	return c, func() {
-		close(c)
-		<-done
-	}
 }

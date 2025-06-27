@@ -1,41 +1,115 @@
 package responses
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
-	"fmt"
+	"net/http"
+	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/printer"
+	"github.com/nanobot-ai/nanobot/pkg/log"
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func PrintProgress(msg json.RawMessage) bool {
-	var delta Progress
-	if err := json.Unmarshal(msg, &struct {
-		Data *Progress
-	}{
-		Data: &delta,
-	}); err != nil {
-		return false
+func send(ctx context.Context, progress *types.CompletionProgress, progressToken any) {
+	if progressToken == "" || progressToken == nil {
+		return
+	}
+	session := mcp.SessionFromContext(ctx)
+	if session == nil {
+		return
 	}
 
-	switch delta.Type {
-	case "response.created":
-	case "response.output_item.added":
-		if delta.Item.Type == "function_call" {
-			printer.Prefix("<-(llm)", fmt.Sprintf("Preparing to call (%s) with args: ", delta.Item.Name))
+	_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
+		ProgressToken: progressToken,
+		Meta: map[string]any{
+			types.CompletionProgressMetaKey: progress,
+		},
+	})
+}
+
+func progressResponse(ctx context.Context, resp *http.Response, progressToken any) (response Response, seen bool, err error) {
+	lines := bufio.NewScanner(resp.Body)
+	defer resp.Body.Close()
+
+	progress := types.CompletionProgress{
+		Partial: true,
+		HasMore: true,
+	}
+
+	for lines.Scan() {
+		line := lines.Text()
+
+		header, body, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
 		}
-	case "response.function_call_arguments.delta":
-		printer.Prefix("<-(llm)", delta.Delta)
-	case "response.output_item.done":
-		printer.Prefix("<-(llm)", "\n")
-	case "response.content_part.added":
-	case "response.output_text.delta":
-		printer.Prefix("<-(llm)", delta.Delta)
-	case "response.content_part.done":
-	case "message_delta":
-	case "message_stop":
-	default:
-		return false
+		switch strings.TrimSpace(header) {
+		case "data":
+			var event Progress
+			body = strings.TrimSpace(body)
+			data := []byte(body)
+			if err := json.Unmarshal(data, &event); err != nil {
+				log.Errorf(ctx, "failed to decode event: %v: %s", err, body)
+				continue
+			}
+
+			switch event.Type {
+			case "response.created":
+				progress.Model = event.Response.Model
+			case "response.output_item.added":
+				if event.Item.Type == "function_call" {
+					progress.HasMore = true
+					progress.Item = types.CompletionItem{
+						ID:      event.Item.CallID,
+						Message: nil,
+						ToolCall: &types.ToolCall{
+							CallID: event.Item.CallID,
+							Name:   event.Item.Name,
+							ID:     event.Item.ID,
+						},
+					}
+					//printer.Prefix("<-(llm)", fmt.Sprintf("Preparing to call (%s) with args: ", delta.Item.Name))
+				} else if event.Item.Type == "message" {
+					progress.HasMore = true
+					progress.Item = types.CompletionItem{
+						ID: event.Item.ID,
+						Message: &mcp.SamplingMessage{
+							Role: event.Item.Role,
+							Content: mcp.Content{
+								Type: "text",
+							},
+						},
+					}
+				}
+			case "response.function_call_arguments.delta":
+				progress.Item.ToolCall.Arguments = event.Delta
+				send(ctx, &progress, progressToken)
+			case "response.output_item.done":
+				if progress.Item.ID != "" {
+					progress.HasMore = false
+					progress.Item = types.CompletionItem{
+						ID: progress.Item.ID,
+					}
+					send(ctx, &progress, progressToken)
+				}
+				progress.Item = types.CompletionItem{}
+			case "response.output_text.delta":
+				if progress.Item.Message != nil {
+					progress.Item.Message.Content.Text = event.Delta
+					send(ctx, &progress, progressToken)
+				}
+			}
+
+			if event.Type == "response.completed" || event.Type == "response.failed" || event.Type == "response.incomplete" {
+				log.Messages(ctx, "responses-api", false, data)
+				response = event.Response
+				seen = true
+			}
+		}
 	}
 
-	return true
+	err = lines.Err()
+	return
 }

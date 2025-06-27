@@ -329,9 +329,9 @@ type Notification struct {
 }
 
 type NotificationProgressRequest struct {
-	ProgressToken any          `json:"progressToken"`
-	Progress      json.Number  `json:"progress"`
-	Total         *json.Number `json:"total,omitempty"`
-	Message       string       `json:"message,omitempty"`
-	Data          any          `json:"data,omitzero"`
+	ProgressToken any            `json:"progressToken"`
+	Progress      json.Number    `json:"progress"`
+	Total         *json.Number   `json:"total,omitempty"`
+	Message       string         `json:"message,omitempty"`
+	Meta          map[string]any `json:"_meta,omitzero"`
 }
