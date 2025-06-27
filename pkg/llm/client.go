@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/llm/anthropic"
+	"github.com/nanobot-ai/nanobot/pkg/llm/ollama"
 	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -16,6 +17,7 @@ type Config struct {
 	DefaultModel string
 	Responses    responses.Config
 	Anthropic    anthropic.Config
+	Ollama       ollama.Config
 }
 
 func NewClient(cfg Config) *Client {
@@ -23,6 +25,7 @@ func NewClient(cfg Config) *Client {
 		defaultModel: cfg.DefaultModel,
 		responses:    responses.NewClient(cfg.Responses),
 		anthropic:    anthropic.NewClient(cfg.Anthropic),
+		ollama:       ollama.NewClient(cfg.Ollama),
 	}
 }
 
@@ -30,6 +33,7 @@ type Client struct {
 	defaultModel string
 	responses    *responses.Client
 	anthropic    *anthropic.Client
+	ollama       *ollama.Client
 }
 
 func (c *Client) handleAssistantRolesFromTools(req types.CompletionRequest) (_ types.CompletionRequest, resp *types.CompletionResponse) {
@@ -85,5 +89,19 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 	if strings.HasPrefix(req.Model, "claude") {
 		return c.anthropic.Complete(ctx, req, opts...)
 	}
+
+	// Route to Ollama for common Ollama model patterns
+	if strings.Contains(req.Model, "llama") ||
+		strings.Contains(req.Model, "mistral") ||
+		strings.Contains(req.Model, "gemma") ||
+		strings.Contains(req.Model, "phi") ||
+		strings.Contains(req.Model, "qwen") ||
+		strings.Contains(req.Model, "codellama") ||
+		strings.HasPrefix(req.Model, "ollama:") {
+		// Remove ollama: prefix if present
+		req.Model = strings.TrimPrefix(req.Model, "ollama:")
+		return c.ollama.Complete(ctx, req, opts...)
+	}
+
 	return c.responses.Complete(ctx, req, opts...)
 }
