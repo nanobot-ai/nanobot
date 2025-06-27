@@ -13,13 +13,11 @@ import (
 )
 
 type Sampler struct {
-	config    types.Config
 	completer types.Completer
 }
 
-func NewSampler(config types.Config, completer types.Completer) *Sampler {
+func NewSampler(completer types.Completer) *Sampler {
 	return &Sampler{
-		config:    config,
 		completer: completer,
 	}
 }
@@ -29,11 +27,11 @@ type scored struct {
 	model string
 }
 
-func (s *Sampler) sortModels(preferences mcp.ModelPreferences) []string {
+func (s *Sampler) sortModels(config types.Config, preferences mcp.ModelPreferences) []string {
 	var scoredModels []scored
 
-	for _, modelKey := range slices.Sorted(maps.Keys(s.config.Agents)) {
-		model := s.config.Agents[modelKey]
+	for _, modelKey := range slices.Sorted(maps.Keys(config.Agents)) {
+		model := config.Agents[modelKey]
 		cost := model.Cost
 		if preferences.CostPriority != nil {
 			cost *= *preferences.CostPriority
@@ -63,24 +61,24 @@ func (s *Sampler) sortModels(preferences mcp.ModelPreferences) []string {
 	return models
 }
 
-func (s *Sampler) getMatchingModel(req *mcp.CreateMessageRequest) (string, bool) {
+func (s *Sampler) getMatchingModel(config types.Config, req *mcp.CreateMessageRequest) (string, bool) {
 	// Agent by name
 	for _, model := range req.ModelPreferences.Hints {
-		if _, ok := s.config.Agents[model.Name]; ok {
+		if _, ok := config.Agents[model.Name]; ok {
 			return model.Name, true
 		}
 	}
 
 	// Model by alias
 	for _, model := range req.ModelPreferences.Hints {
-		for _, modelKey := range slices.Sorted(maps.Keys(s.config.Agents)) {
-			if slices.Contains(s.config.Agents[modelKey].Aliases, model.Name) {
+		for _, modelKey := range slices.Sorted(maps.Keys(config.Agents)) {
+			if slices.Contains(config.Agents[modelKey].Aliases, model.Name) {
 				return modelKey, true
 			}
 		}
 	}
 
-	models := s.sortModels(req.ModelPreferences)
+	models := s.sortModels(config, req.ModelPreferences)
 	if len(models) == 0 {
 		return "", false
 	}
@@ -103,8 +101,9 @@ func (s SamplerOptions) Merge(other SamplerOptions) (result SamplerOptions) {
 
 func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts ...SamplerOptions) (result *types.CallResult, _ error) {
 	opt := complete.Complete(opts...)
+	config := types.ConfigFromContext(ctx)
 
-	model, ok := s.getMatchingModel(&req)
+	model, ok := s.getMatchingModel(config, &req)
 	if !ok {
 		return nil, fmt.Errorf("no matching model found")
 	}
@@ -150,7 +149,7 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 		ChatResponse: resp.ChatResponse,
 	}
 
-	if _, ok := s.config.Agents[request.Model]; ok {
+	if _, ok := config.Agents[request.Model]; ok {
 		result.Agent = request.Model
 	}
 

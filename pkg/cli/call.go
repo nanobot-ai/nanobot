@@ -38,14 +38,18 @@ func (e *Call) Customize(cmd *cobra.Command) {
 }
 
 func (e *Call) Run(cmd *cobra.Command, args []string) error {
-	runtime, err := e.n.GetRuntime(cmd.Context(), args[0], runtime.Options{
+	cfg, err := e.n.ReadConfig(cmd.Context(), args[0])
+	if err != nil {
+		return err
+	}
+	runtime, err := e.n.GetRuntime(runtime.Options{
 		MaxConcurrency: e.n.MaxConcurrency,
 	})
 	if err != nil {
 		return err
 	}
 
-	ctx := runtime.WithTempSession(cmd.Context())
+	ctx := runtime.WithTempSession(cmd.Context(), cfg)
 
 	result, err := runtime.CallFromCLI(ctx, args[1], args[2:]...)
 	if err != nil {

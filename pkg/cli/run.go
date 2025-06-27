@@ -17,6 +17,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
 	"github.com/nanobot-ai/nanobot/pkg/server"
 	"github.com/nanobot-ai/nanobot/pkg/session"
+	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 )
@@ -96,13 +97,12 @@ func (r *Run) getRoots() ([]mcp.Root, error) {
 	return roots, nil
 }
 
-func (r *Run) reload(ctx context.Context, client *mcp.Client, runtime *runtime.Runtime, cfgPath string, runtimeOpt runtime.Options) error {
-	newCfg, err := r.n.ReadConfig(ctx, cfgPath, runtimeOpt)
+func (r *Run) reload(ctx context.Context, client *mcp.Client, cfgPath string, runtimeOpt runtime.Options) error {
+	_, err := r.n.ReadConfig(ctx, cfgPath, runtimeOpt)
 	if err != nil {
 		return fmt.Errorf("failed to reload config: %w", err)
 	}
 
-	runtime.Reload(*newCfg)
 	return client.Session.Exchange(ctx, "initialize", mcp.InitializeRequest{}, &mcp.InitializeResult{})
 }
 
@@ -120,30 +120,35 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	config, err := r.n.ReadConfig(cmd.Context(), args[0], runtimeOpt)
+	if err != nil {
+		return fmt.Errorf("failed to read config file %q: %w", args[0], err)
+	}
+
 	runtimeOpt.Roots = roots
 	runtimeOpt.MaxConcurrency = r.n.MaxConcurrency
 
 	if r.MCP {
-		runtime, err := r.n.GetRuntime(cmd.Context(), args[0], runtimeOpt)
+		runtime, err := r.n.GetRuntime(runtimeOpt)
 		if err != nil {
 			return err
 		}
 
-		return r.runMCP(cmd.Context(), runtime, nil)
+		return r.runMCP(cmd.Context(), *config, runtime, nil)
 	}
 
-	runtime, err := r.n.GetRuntime(cmd.Context(), args[0], runtimeOpt)
+	runtime, err := r.n.GetRuntime(runtimeOpt)
 	if err != nil {
 		return err
 	}
 
-	if c := runtime.GetConfig(); c.Publish.Entrypoint == "" {
-		if _, ok := c.Agents["main"]; !ok {
+	if config.Publish.Entrypoint == "" {
+		if _, ok := config.Agents["main"]; !ok {
 			var (
 				agentName string
 				example   string
 			)
-			for name := range c.Agents {
+			for name := range config.Agents {
 				agentName = name
 				break
 			}
@@ -191,19 +196,19 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 	eg, ctx := errgroup.WithContext(cmd.Context())
 	ctx, cancel := context.WithCancel(ctx)
 	eg.Go(func() error {
-		return r.runMCP(ctx, runtime, l)
+		return r.runMCP(ctx, *config, runtime, l)
 	})
 	eg.Go(func() error {
 		defer cancel()
 		return chat.Chat(ctx, r.ListenAddress, r.AutoConfirm, prompt, r.Output,
 			func(client *mcp.Client) error {
-				return r.reload(ctx, client, runtime, args[0], runtimeOpt)
+				return r.reload(ctx, client, args[0], runtimeOpt)
 			}, clientOpt)
 	})
 	return eg.Wait()
 }
 
-func (r *Run) runMCP(ctx context.Context, runtime *runtime.Runtime, l net.Listener) error {
+func (r *Run) runMCP(ctx context.Context, config types.Config, runtime *runtime.Runtime, l net.Listener) error {
 	env, err := r.n.loadEnv()
 	if err != nil {
 		return fmt.Errorf("failed to load environment: %w", err)
@@ -227,7 +232,7 @@ func (r *Run) runMCP(ctx context.Context, runtime *runtime.Runtime, l net.Listen
 		return nil
 	}
 
-	sessionManager, err := session.NewManager(mcpServer, r.n.DSN())
+	sessionManager, err := session.NewManager(mcpServer, r.n.DSN(), config)
 	if err != nil {
 		return err
 	}

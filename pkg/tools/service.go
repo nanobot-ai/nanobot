@@ -21,7 +21,6 @@ import (
 type Service struct {
 	servers     map[string]map[string]*mcp.Client
 	roots       []mcp.Root
-	config      types.Config
 	serverLock  sync.Mutex
 	sampler     Sampler
 	runner      mcp.Runner
@@ -50,11 +49,10 @@ func (r RegistryOptions) Complete() RegistryOptions {
 	return r
 }
 
-func NewToolsService(config types.Config, opts ...RegistryOptions) *Service {
+func NewToolsService(opts ...RegistryOptions) *Service {
 	opt := complete.Complete(opts...)
 	return &Service{
 		servers:     make(map[string]map[string]*mcp.Client),
-		config:      config,
 		roots:       opt.Roots,
 		concurrency: opt.Concurrency,
 	}
@@ -91,7 +89,9 @@ func (s *Service) GetPrompt(ctx context.Context, target, prompt string, args map
 		target = prompt
 	}
 
-	if inline, ok := s.config.Prompts[target]; ok && target == prompt {
+	config := types.ConfigFromContext(ctx)
+
+	if inline, ok := config.Prompts[target]; ok && target == prompt {
 		vals := map[string]any{}
 		for k, v := range args {
 			vals[k] = v
@@ -130,6 +130,8 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 		return nil, fmt.Errorf("session not found in context")
 	}
 
+	config := types.ConfigFromContext(ctx)
+
 	servers, ok := s.servers[strings.Split(session.ID(), "/")[0]]
 	if !ok {
 		servers = make(map[string]*mcp.Client)
@@ -149,7 +151,7 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 		}
 	}
 
-	mcpConfig, ok := s.config.MCPServers[name]
+	mcpConfig, ok := config.MCPServers[name]
 	if !ok {
 		return nil, fmt.Errorf("MCP server %s not found in config", name)
 	}
@@ -232,7 +234,8 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 }
 
 func (s *Service) SampleCall(ctx context.Context, agent string, args any, opts ...SampleCallOptions) (*types.CallResult, error) {
-	createMessageRequest, err := s.convertToSampleRequest(agent, args)
+	config := types.ConfigFromContext(ctx)
+	createMessageRequest, err := s.convertToSampleRequest(config, agent, args)
 	if err != nil {
 		return nil, err
 	}
@@ -266,10 +269,10 @@ func (o CallOptions) Merge(other CallOptions) (result CallOptions) {
 	return
 }
 
-func (s *Service) getTarget(ctx context.Context, server, tool string) (any, error) {
-	if a, ok := s.config.Agents[server]; ok {
+func (s *Service) getTarget(ctx context.Context, config types.Config, server, tool string) (any, error) {
+	if a, ok := config.Agents[server]; ok {
 		return a, nil
-	} else if f, ok := s.config.Flows[server]; ok {
+	} else if f, ok := config.Flows[server]; ok {
 		return f, nil
 	}
 	tools, err := s.ListTools(ctx, ListToolsOptions{
@@ -285,15 +288,15 @@ func (s *Service) getTarget(ctx context.Context, server, tool string) (any, erro
 	return nil, fmt.Errorf("unknown target %s/%s", server, tool)
 }
 
-func (s *Service) runAfter(ctx context.Context, target, server, tool string, ret *types.CallResult, opt CallOptions) (*types.CallResult, error) {
+func (s *Service) runAfter(ctx context.Context, config types.Config, target, server, tool string, ret *types.CallResult, opt CallOptions) (*types.CallResult, error) {
 	var err error
-	for _, flowName := range slices.Sorted(maps.Keys(s.config.Flows)) {
-		if slices.Contains(s.config.Flows[flowName].After, target) ||
-			slices.Contains(s.config.Flows[flowName].After, server) {
+	for _, flowName := range slices.Sorted(maps.Keys(config.Flows)) {
+		if slices.Contains(config.Flows[flowName].After, target) ||
+			slices.Contains(config.Flows[flowName].After, server) {
 			newOpts := opt
 			newOpts.ReturnOutput = true
 			newOpts.ReturnInput = false
-			newOpts.Target, err = s.getTarget(ctx, server, tool)
+			newOpts.Target, err = s.getTarget(ctx, config, server, tool)
 			if err != nil {
 				return nil, err
 			}
@@ -325,16 +328,16 @@ func (s *Service) runAfter(ctx context.Context, target, server, tool string, ret
 	return ret, nil
 }
 
-func (s *Service) runBefore(ctx context.Context, target, server, tool string, args any, opt CallOptions) (any, *types.CallResult, error) {
+func (s *Service) runBefore(ctx context.Context, config types.Config, target, server, tool string, args any, opt CallOptions) (any, *types.CallResult, error) {
 	var err error
 
-	for _, flowName := range slices.Sorted(maps.Keys(s.config.Flows)) {
-		if slices.Contains(s.config.Flows[flowName].Before, target) ||
-			slices.Contains(s.config.Flows[flowName].Before, server) {
+	for _, flowName := range slices.Sorted(maps.Keys(config.Flows)) {
+		if slices.Contains(config.Flows[flowName].Before, target) ||
+			slices.Contains(config.Flows[flowName].Before, server) {
 			newOpts := opt
 			newOpts.ReturnInput = true
 			newOpts.ReturnOutput = false
-			newOpts.Target, err = s.getTarget(ctx, server, tool)
+			newOpts.Target, err = s.getTarget(ctx, config, server, tool)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -369,6 +372,7 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 
 	opt := complete.Complete(opts...)
 	session := mcp.SessionFromContext(ctx)
+	config := types.ConfigFromContext(ctx)
 
 	target := server
 	if tool != "" {
@@ -377,14 +381,14 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 
 	defer func() {
 		if err == nil {
-			ret, err = s.runAfter(ctx, target, server, tool, ret, opt)
+			ret, err = s.runAfter(ctx, config, target, server, tool, ret, opt)
 		}
 	}()
 
 	targetType := "tool"
-	if _, ok := s.config.Agents[server]; ok {
+	if _, ok := config.Agents[server]; ok {
 		targetType = "agent"
-	} else if _, ok := s.config.Flows[server]; ok {
+	} else if _, ok := config.Flows[server]; ok {
 		targetType = "flow"
 	}
 
@@ -452,20 +456,20 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 		}()
 	}
 
-	args, ret, err = s.runBefore(ctx, target, server, tool, args, opt)
+	args, ret, err = s.runBefore(ctx, config, target, server, tool, args, opt)
 	if err != nil || ret != nil {
 		return ret, err
 	}
 
-	if _, ok := s.config.Agents[server]; ok {
+	if _, ok := config.Agents[server]; ok {
 		return s.SampleCall(ctx, server, args, SampleCallOptions{
 			ProgressToken: opt.ProgressToken,
 			AgentOverride: opt.AgentOverride,
 		})
 	}
 
-	if _, ok := s.config.Flows[server]; ok {
-		return s.startFlow(ctx, server, args, opt)
+	if _, ok := config.Flows[server]; ok {
+		return s.startFlow(ctx, config, server, args, opt)
 	}
 
 	c, err := s.GetClient(ctx, server)
@@ -496,7 +500,10 @@ type ListToolsResult struct {
 }
 
 func (s *Service) ListTools(ctx context.Context, opts ...ListToolsOptions) (result []ListToolsResult, _ error) {
-	var opt ListToolsOptions
+	var (
+		opt    ListToolsOptions
+		config = types.ConfigFromContext(ctx)
+	)
 	for _, o := range opts {
 		for _, server := range o.Servers {
 			if server != "" {
@@ -510,9 +517,9 @@ func (s *Service) ListTools(ctx context.Context, opts ...ListToolsOptions) (resu
 		}
 	}
 
-	serverList := slices.Sorted(maps.Keys(s.config.MCPServers))
-	agentsList := slices.Sorted(maps.Keys(s.config.Agents))
-	flowsList := slices.Sorted(maps.Keys(s.config.Flows))
+	serverList := slices.Sorted(maps.Keys(config.MCPServers))
+	agentsList := slices.Sorted(maps.Keys(config.Agents))
+	flowsList := slices.Sorted(maps.Keys(config.Flows))
 	if len(opt.Servers) == 0 {
 		opt.Servers = append(serverList, agentsList...)
 		opt.Servers = append(opt.Servers, flowsList...)
@@ -546,7 +553,7 @@ func (s *Service) ListTools(ctx context.Context, opts ...ListToolsOptions) (resu
 	}
 
 	for _, agentName := range opt.Servers {
-		agent, ok := s.config.Agents[agentName]
+		agent, ok := config.Agents[agentName]
 		if !ok {
 			continue
 		}
@@ -572,7 +579,7 @@ func (s *Service) ListTools(ctx context.Context, opts ...ListToolsOptions) (resu
 	}
 
 	for _, flowName := range opt.Servers {
-		flow, ok := s.config.Flows[flowName]
+		flow, ok := config.Flows[flowName]
 		if !ok {
 			continue
 		}
@@ -644,7 +651,9 @@ func (s *Service) GetEntryPoint(ctx context.Context, existingTools types.ToolMap
 		return tm, nil
 	}
 
-	entrypoint := s.config.Publish.Entrypoint
+	config := types.ConfigFromContext(ctx)
+
+	entrypoint := config.Publish.Entrypoint
 	if entrypoint == "" {
 		return types.TargetMapping{}, fmt.Errorf("no entrypoint specified")
 	}
@@ -708,8 +717,10 @@ func hasOnlySampleKeys(args map[string]any) bool {
 	return true
 }
 
-func (s *Service) convertToSampleRequest(agent string, args any) (*mcp.CreateMessageRequest, error) {
-	var sampleArgs types.SampleCallRequest
+func (s *Service) convertToSampleRequest(config types.Config, agent string, args any) (*mcp.CreateMessageRequest, error) {
+	var (
+		sampleArgs types.SampleCallRequest
+	)
 	switch args := args.(type) {
 	case string:
 		sampleArgs.Prompt = args
@@ -736,7 +747,7 @@ func (s *Service) convertToSampleRequest(agent string, args any) (*mcp.CreateMes
 	}
 
 	var sampleRequest = mcp.CreateMessageRequest{
-		MaxTokens: s.config.Agents[agent].MaxTokens,
+		MaxTokens: config.Agents[agent].MaxTokens,
 		ModelPreferences: mcp.ModelPreferences{
 			Hints: []mcp.ModelHint{
 				{Name: agent},

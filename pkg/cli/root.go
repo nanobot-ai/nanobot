@@ -188,13 +188,8 @@ func (n *Nanobot) ReadConfig(ctx context.Context, cfgPath string, opts ...runtim
 	return cfg, err
 }
 
-func (n *Nanobot) GetRuntime(ctx context.Context, cfgPath string, opts ...runtime.Options) (*runtime.Runtime, error) {
-	cfg, err := n.ReadConfig(ctx, cfgPath, opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	return runtime.NewRuntime(n.llmConfig(), *cfg, opts...), nil
+func (n *Nanobot) GetRuntime(opts ...runtime.Options) (*runtime.Runtime, error) {
+	return runtime.NewRuntime(n.llmConfig(), opts...), nil
 }
 
 func (n *Nanobot) Run(cmd *cobra.Command, _ []string) error {

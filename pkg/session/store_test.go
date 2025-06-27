@@ -14,9 +14,11 @@ func TestStore_CreateAndList(t *testing.T) {
 		Type:     "test",
 		ParentID: "parent123",
 		Config:   ConfigWrapper{},
-		State: MetadataWrapper{
-			"key1": "value1",
-			"key2": 123,
+		State: State{
+			Attributes: map[string]any{
+				"key1": "value1",
+				"key2": 123,
+			},
 		},
 	}
 
@@ -48,8 +50,8 @@ func TestStore_CreateAndList(t *testing.T) {
 	if len(session.Config.Agents) != 0 {
 		t.Errorf("Expected empty config agents, got %v", session.Config.Agents)
 	}
-	if session.State["key1"] != "value1" {
-		t.Errorf("Expected metadata key1 'value1', got '%v'", session.State["key1"])
+	if session.State.Attributes["key1"] != "value1" {
+		t.Errorf("Expected metadata key1 'value1', got '%v'", session.State.Attributes["key1"])
 	}
 }
 

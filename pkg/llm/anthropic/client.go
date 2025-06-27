@@ -18,7 +18,6 @@ import (
 
 type Client struct {
 	Config
-	config types.Config
 }
 
 type Config struct {
@@ -28,7 +27,7 @@ type Config struct {
 }
 
 // NewClient creates a new OpenAI client with the provided API key and base URL.
-func NewClient(cfg Config, config types.Config) *Client {
+func NewClient(cfg Config) *Client {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.anthropic.com/v1"
 	}
@@ -47,7 +46,6 @@ func NewClient(cfg Config, config types.Config) *Client {
 
 	return &Client{
 		Config: cfg,
-		config: config,
 	}
 }
 

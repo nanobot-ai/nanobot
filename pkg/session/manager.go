@@ -7,13 +7,12 @@ import (
 	"os"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/runtime"
 	"github.com/nanobot-ai/nanobot/pkg/server"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"gorm.io/gorm"
 )
 
-func NewManager(server *server.Server, dsn string) (*Manager, error) {
+func NewManager(server *server.Server, dsn string, config types.Config) (*Manager, error) {
 	store, err := NewStoreFromDSN(dsn)
 	if err != nil {
 		return nil, err
@@ -23,7 +22,7 @@ func NewManager(server *server.Server, dsn string) (*Manager, error) {
 		server: server,
 		store:  store,
 		root: &Session{
-			Config: ConfigWrapper(server.DefaultRuntime.GetConfig()),
+			Config: ConfigWrapper(config),
 		},
 		inMemory: mcp.NewInMemorySessionStore(),
 	}, nil
@@ -51,15 +50,12 @@ func (m *Manager) newRecord(parent *Session, id string) *Session {
 }
 
 func (m *Manager) Store(_ *http.Request, id string, session *mcp.ServerSession) error {
-	var setRuntime bool
-
 	if id == "" {
 		return nil
 	}
 
 	stored, err := m.store.Get(id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		setRuntime = true
 		stored = m.newRecord(m.root, id)
 		err = m.store.Create(stored)
 		if err != nil {
@@ -72,24 +68,15 @@ func (m *Manager) Store(_ *http.Request, id string, session *mcp.ServerSession) 
 	stored.Env, _ = state.Attributes[mcp.SessionEnvMapKey].(map[string]string)
 
 	delete(stored.State.Attributes, mcp.SessionEnvMapKey)
-	delete(stored.State.Attributes, runtime.SessionKey)
+	delete(stored.State.Attributes, types.ConfigSessionKey)
 
 	if err := m.store.Update(stored); err != nil {
 		return err
 	}
 
-	if setRuntime {
-		newRuntime := m.newRuntime(m.server.DefaultRuntime.GetConfig())
-		session.GetSession().Set(runtime.SessionKey, newRuntime)
-	}
-
+	config := (types.Config)(stored.Config)
+	session.GetSession().Set(types.ConfigSessionKey, &config)
 	return m.inMemory.Store(nil, id, session)
-}
-
-func (m *Manager) newRuntime(cfg types.Config) *runtime.Runtime {
-	newRuntime := *m.server.DefaultRuntime
-	newRuntime.Reload(cfg)
-	return &newRuntime
 }
 
 func (m *Manager) Load(req *http.Request, id string) (*mcp.ServerSession, bool, error) {
@@ -118,7 +105,8 @@ func (m *Manager) Load(req *http.Request, id string) (*mcp.ServerSession, bool, 
 		return nil, false, err
 	}
 
-	serverSession.GetSession().Set(runtime.SessionKey, m.newRuntime(types.Config(storedSession.Config)))
+	config := (types.Config)(storedSession.Config)
+	serverSession.GetSession().Set(types.ConfigSessionKey, &config)
 	err = m.inMemory.Store(nil, id, serverSession)
 	return serverSession, true, err
 }

@@ -16,11 +16,8 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-const SessionKey = "runtime"
-
 type Runtime struct {
 	*tools.Service
-	config    types.Config
 	llmConfig llm.Config
 	opt       Options
 }
@@ -38,49 +35,40 @@ func (o Options) Merge(other Options) (result Options) {
 	return
 }
 
-func NewRuntime(cfg llm.Config, config types.Config, opts ...Options) *Runtime {
+func NewRuntime(cfg llm.Config, opts ...Options) *Runtime {
 	opt := complete.Complete(opts...)
-	completer := llm.NewClient(cfg, config)
-	registry := tools.NewToolsService(config, tools.RegistryOptions{
+	completer := llm.NewClient(cfg)
+	registry := tools.NewToolsService(tools.RegistryOptions{
 		Roots:       opt.Roots,
 		Concurrency: opt.MaxConcurrency,
 	})
-	agents := agents.New(completer, registry, config)
-	sampler := sampling.NewSampler(config, agents)
+	agents := agents.New(completer, registry)
+	sampler := sampling.NewSampler(agents)
 
 	// This is a circular dependency. Oh well, so much for good design.
 	registry.SetSampler(sampler)
 
 	return &Runtime{
-		config:    config,
 		Service:   registry,
 		llmConfig: cfg,
 		opt:       opt,
 	}
 }
 
-func (r *Runtime) Reload(cfg types.Config) {
-	newRuntime := NewRuntime(r.llmConfig, cfg, r.opt)
-	r.config = cfg
-	r.Service = newRuntime.Service
+func (r *Runtime) WithTempSession(ctx context.Context, config *types.Config) context.Context {
+	session := mcp.NewEmptySession(ctx)
+	session.Set(types.ConfigSessionKey, config)
+	return mcp.WithSession(ctx, session)
 }
 
-func (r *Runtime) GetConfig() types.Config {
-	return r.config
-}
-
-func (r *Runtime) WithTempSession(ctx context.Context) context.Context {
-	return mcp.WithSession(ctx, mcp.NewEmptySession(ctx))
-}
-
-func (r *Runtime) getToolFromRef(ctx context.Context, serverRef string) (*tools.ListToolsResult, error) {
+func (r *Runtime) getToolFromRef(ctx context.Context, config types.Config, serverRef string) (*tools.ListToolsResult, error) {
 	var (
 		server, tool string
 	)
 
 	toolRef := strings.Split(serverRef, "/")
 	if len(toolRef) == 1 {
-		_, ok := r.config.Agents[toolRef[0]]
+		_, ok := config.Agents[toolRef[0]]
 		if ok {
 			server, tool = toolRef[0], toolRef[0]
 		} else {
@@ -114,9 +102,10 @@ func (r *Runtime) CallFromCLI(ctx context.Context, serverRef string, args ...str
 	var (
 		argValue any
 		argMap   = map[string]string{}
+		config   = types.ConfigFromContext(ctx)
 	)
 
-	tools, err := r.getToolFromRef(ctx, serverRef)
+	tools, err := r.getToolFromRef(ctx, config, serverRef)
 	if err != nil {
 		return nil, err
 	}

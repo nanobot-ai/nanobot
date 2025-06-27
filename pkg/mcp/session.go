@@ -114,10 +114,16 @@ func (s *Session) Set(key string, value any) {
 	s.attributes[key] = value
 }
 
-func (s *Session) Get(key string, out any) bool {
+func (s *Session) Get(key string, out any) (ret bool) {
 	if s == nil {
 		return false
 	}
+	defer func() {
+		if !ret && s != nil && s.Parent != nil {
+			ret = s.Parent.Get(key, out)
+		}
+	}()
+
 	s.lock.Lock()
 	defer s.lock.Unlock()
 

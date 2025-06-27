@@ -69,8 +69,8 @@ func (s *Service) callFromScript(ctx context.Context, target string, args any, o
 	return toOutput(ret), nil
 }
 
-func (s *Service) startFlow(ctx context.Context, flowName string, args any, opt CallOptions) (*types.CallResult, error) {
-	flow, ok := s.config.Flows[flowName]
+func (s *Service) startFlow(ctx context.Context, config types.Config, flowName string, args any, opt CallOptions) (*types.CallResult, error) {
+	flow, ok := config.Flows[flowName]
 	if !ok {
 		return nil, fmt.Errorf("failed to find flow %s in config", flowName)
 	}

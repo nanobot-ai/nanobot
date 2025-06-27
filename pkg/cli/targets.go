@@ -10,14 +10,14 @@ import (
 )
 
 type Targets struct {
-	Nanobot   *Nanobot
+	n         *Nanobot
 	MCPServer []string `usage:"Specific MCP server name to query (default: all)" short:"s" name:"mcp-server"`
 	Output    string   `usage:"Output format (json, yaml, table)" short:"o" default:"table"`
 }
 
 func NewTargets(n *Nanobot) *Targets {
 	return &Targets{
-		Nanobot: n,
+		n: n,
 	}
 }
 
@@ -34,12 +34,17 @@ func (t *Targets) Customize(cmd *cobra.Command) {
 
 func (t *Targets) Run(cmd *cobra.Command, args []string) error {
 	log.EnableMessages = false
-	r, err := t.Nanobot.GetRuntime(cmd.Context(), args[0])
+	r, err := t.n.GetRuntime()
 	if err != nil {
 		return err
 	}
 
-	tools, err := r.ListTools(r.WithTempSession(cmd.Context()), tools.ListToolsOptions{
+	c, err := t.n.ReadConfig(cmd.Context(), args[0])
+	if err != nil {
+		return err
+	}
+
+	tools, err := r.ListTools(r.WithTempSession(cmd.Context(), c), tools.ListToolsOptions{
 		Servers: t.MCPServer,
 	})
 	if err != nil {
@@ -56,7 +61,6 @@ func (t *Targets) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	c := r.GetConfig()
 	for _, tool := range tools {
 		for _, t := range tool.Tools {
 			target := tool.Server

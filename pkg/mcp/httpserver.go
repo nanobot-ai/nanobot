@@ -213,14 +213,16 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	maps.Copy(session.session.EnvMap(), h.getEnv(req))
+	if err := h.sessions.Store(req, session.ID(), session); err != nil {
+		http.Error(rw, "Failed to store session: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	resp, err := session.Exchange(req.Context(), msg)
 	if err != nil {
 		http.Error(rw, "Failed to handle message: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	h.sessions.Store(req, session.ID(), session)
 
 	rw.Header().Set("Mcp-Session-Id", session.ID())
 	rw.Header().Set("Content-Type", "application/json")

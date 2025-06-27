@@ -11,7 +11,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func (a *Agents) toolCalls(ctx context.Context, run *run, opts []types.CompletionOptions) error {
+func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *run, opts []types.CompletionOptions) error {
 	for _, output := range run.Response.Output {
 		functionCall := output.ToolCall
 
@@ -28,7 +28,7 @@ func (a *Agents) toolCalls(ctx context.Context, run *run, opts []types.Completio
 			return fmt.Errorf("can not map tool %s to a MCP server", functionCall.Name)
 		}
 
-		callOutput, err := a.invoke(ctx, targetServer, functionCall, opts)
+		callOutput, err := a.invoke(ctx, config, targetServer, functionCall, opts)
 		if err != nil {
 			return fmt.Errorf("failed to invoke tool %s on MCP server %s: %w", functionCall.Name, targetServer.MCPServer, err)
 		}
@@ -50,12 +50,12 @@ func (a *Agents) toolCalls(ctx context.Context, run *run, opts []types.Completio
 	return nil
 }
 
-func (a *Agents) confirm(ctx context.Context, target types.TargetMapping, funcCall *types.ToolCall) (*types.CallResult, error) {
-	if _, ok := a.config.Agents[target.MCPServer]; ok {
+func (a *Agents) confirm(ctx context.Context, config types.Config, target types.TargetMapping, funcCall *types.ToolCall) (*types.CallResult, error) {
+	if _, ok := config.Agents[target.MCPServer]; ok {
 		// Don't require confirmations to talk to another agent
 		return nil, nil
 	}
-	if _, ok := a.config.Flows[target.MCPServer]; ok {
+	if _, ok := config.Flows[target.MCPServer]; ok {
 		// Don't require confirmations to talk to a flow
 		return nil, nil
 	}
@@ -66,7 +66,7 @@ func (a *Agents) confirm(ctx context.Context, target types.TargetMapping, funcCa
 	return a.confirmations.Confirm(ctx, session, target, funcCall)
 }
 
-func (a *Agents) invoke(ctx context.Context, target types.TargetMapping, funcCall *types.ToolCall, opts []types.CompletionOptions) ([]types.CompletionItem, error) {
+func (a *Agents) invoke(ctx context.Context, config types.Config, target types.TargetMapping, funcCall *types.ToolCall, opts []types.CompletionOptions) ([]types.CompletionItem, error) {
 	var (
 		data map[string]any
 	)
@@ -78,7 +78,7 @@ func (a *Agents) invoke(ctx context.Context, target types.TargetMapping, funcCal
 		}
 	}
 
-	response, err := a.confirm(ctx, target, funcCall)
+	response, err := a.confirm(ctx, config, target, funcCall)
 	if err != nil {
 		return nil, fmt.Errorf("failed to confirm tool call: %w", err)
 	}
@@ -97,7 +97,7 @@ func (a *Agents) invoke(ctx context.Context, target types.TargetMapping, funcCal
 			ToolCallResult: &types.ToolCallResult{
 				CallID:     funcCall.CallID,
 				Output:     *response,
-				OutputRole: a.config.Flows[target.MCPServer].OutputRole,
+				OutputRole: config.Flows[target.MCPServer].OutputRole,
 			},
 		},
 	}, nil

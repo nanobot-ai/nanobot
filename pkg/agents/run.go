@@ -18,7 +18,6 @@ import (
 )
 
 type Agents struct {
-	config        types.Config
 	completer     types.Completer
 	registry      *tools.Service
 	confirmations *confirm.Service
@@ -29,9 +28,8 @@ type ToolListOptions struct {
 	Names    []string
 }
 
-func New(completer types.Completer, registry *tools.Service, config types.Config) *Agents {
+func New(completer types.Completer, registry *tools.Service) *Agents {
 	return &Agents{
-		config:        config,
 		completer:     completer,
 		registry:      registry,
 		confirmations: confirm.New(),
@@ -87,7 +85,7 @@ func populateToolCallResult(previousRun *run, req *types.CompletionRequest, call
 	req.Input = nil
 }
 
-func (a *Agents) populateRequest(ctx context.Context, run *run, previousRun *run) (types.CompletionRequest, types.ToolMappings, error) {
+func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *run, previousRun *run) (types.CompletionRequest, types.ToolMappings, error) {
 	req := run.Request
 
 	if previousRun != nil {
@@ -118,7 +116,7 @@ func (a *Agents) populateRequest(ctx context.Context, run *run, previousRun *run
 		req.Input = input
 	}
 
-	agent, ok := a.config.Agents[req.Model]
+	agent, ok := config.Agents[req.Model]
 	if !ok {
 		return req, nil, nil
 	}
@@ -207,13 +205,14 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 		isChat         = session != nil
 		previousRun    *run
 		currentRun     = &run{}
+		config         = types.ConfigFromContext(ctx)
 	)
 
 	if req.ThreadName != "" {
 		previousRunKey = fmt.Sprintf("%s/%s", previousRunKey, req.ThreadName)
 	}
 
-	if isChat && a.config.Agents[req.Model].Chat != nil && !*a.config.Agents[req.Model].Chat {
+	if isChat && config.Agents[req.Model].Chat != nil && !*config.Agents[req.Model].Chat {
 		isChat = false
 	}
 
@@ -248,7 +247,7 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 	}
 
 	for {
-		if err := a.run(ctx, currentRun, previousRun, opts); err != nil {
+		if err := a.run(ctx, config, currentRun, previousRun, opts); err != nil {
 			return nil, err
 		}
 
@@ -256,7 +255,7 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 			session.Set(previousRunKey, currentRun)
 		}
 
-		if err := a.toolCalls(ctx, currentRun, opts); err != nil {
+		if err := a.toolCalls(ctx, config, currentRun, opts); err != nil {
 			return nil, err
 		}
 
@@ -291,8 +290,8 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 	}
 }
 
-func (a *Agents) run(ctx context.Context, run *run, prev *run, opts []types.CompletionOptions) error {
-	completionRequest, toolMapping, err := a.populateRequest(ctx, run, prev)
+func (a *Agents) run(ctx context.Context, config types.Config, run *run, prev *run, opts []types.CompletionOptions) error {
+	completionRequest, toolMapping, err := a.populateRequest(ctx, config, run, prev)
 	if err != nil {
 		return err
 	}

@@ -59,6 +59,7 @@ type Session struct {
 	SessionID   string        `json:"sessionID" gorm:"uniqueIndex;not null"`
 	Description string        `json:"description,omitempty"`
 	ParentID    string        `json:"parentID"`
+	Account     string        `json:"account,omitempty"`
 	Config      ConfigWrapper `json:"config" gorm:"type:json"`
 	State       State         `json:"state" gorm:"type:json"`
 	Env         Env           `json:"env,omitempty" gorm:"type:json"`

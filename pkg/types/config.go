@@ -1,6 +1,7 @@
 package types
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,13 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 )
+
+const ConfigSessionKey = "config"
+
+func ConfigFromContext(ctx context.Context) (result Config) {
+	mcp.SessionFromContext(ctx).Get(ConfigSessionKey, &result)
+	return
+}
 
 type Config struct {
 	Extends    string                `json:"extends,omitempty"`

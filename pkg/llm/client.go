@@ -18,11 +18,11 @@ type Config struct {
 	Anthropic    anthropic.Config
 }
 
-func NewClient(cfg Config, config types.Config) *Client {
+func NewClient(cfg Config) *Client {
 	return &Client{
 		defaultModel: cfg.DefaultModel,
-		responses:    responses.NewClient(cfg.Responses, config),
-		anthropic:    anthropic.NewClient(cfg.Anthropic, config),
+		responses:    responses.NewClient(cfg.Responses),
+		anthropic:    anthropic.NewClient(cfg.Anthropic),
 	}
 }
 
