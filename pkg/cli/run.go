@@ -16,6 +16,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
 	"github.com/nanobot-ai/nanobot/pkg/server"
+	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 )
@@ -27,6 +28,7 @@ type Run struct {
 	ListenAddress string   `usage:"Address to listen on (ex: localhost:8099) (implies -m)" default:"stdio" short:"a"`
 	Roots         []string `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
 	Input         string   `usage:"Input file for the prompt" default:"" short:"f"`
+	Session       string   `usage:"Session ID to resume" default:"" short:"s"`
 	n             *Nanobot
 }
 
@@ -167,6 +169,25 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		prompt = strings.TrimSpace(string(input))
 	}
 
+	var clientOpt mcp.ClientOption
+
+	if r.Session != "" {
+		store, err := session.NewStoreFromDSN(r.n.DSN())
+		if err != nil {
+			return fmt.Errorf("failed to open session store: %w", err)
+		}
+		sessions, err := store.FindByPrefix(r.Session)
+		if err != nil {
+			return fmt.Errorf("failed to find session: %w", err)
+		} else if len(sessions) > 1 {
+			return fmt.Errorf("multiple sessions found with prefix %q, please specify a full session ID", r.Session)
+		} else if len(sessions) == 0 {
+			return fmt.Errorf("no sessions found with prefix %q", r.Session)
+		}
+		clientOpt.Session = (*mcp.SessionState)(&sessions[0].State)
+		clientOpt.Session.ID = sessions[0].SessionID
+	}
+
 	eg, ctx := errgroup.WithContext(cmd.Context())
 	ctx, cancel := context.WithCancel(ctx)
 	eg.Go(func() error {
@@ -177,7 +198,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		return chat.Chat(ctx, r.ListenAddress, r.AutoConfirm, prompt, r.Output,
 			func(client *mcp.Client) error {
 				return r.reload(ctx, client, runtime, args[0], runtimeOpt)
-			})
+			}, clientOpt)
 	})
 	return eg.Wait()
 }
@@ -196,7 +217,6 @@ func (r *Run) runMCP(ctx context.Context, runtime *runtime.Runtime, l net.Listen
 	}
 
 	mcpServer := server.NewServer(runtime)
-
 	if address == "stdio" {
 		stdio := mcp.NewStdioServer(env, mcpServer)
 		if err := stdio.Start(ctx, os.Stdin, os.Stdout); err != nil {
@@ -207,7 +227,14 @@ func (r *Run) runMCP(ctx context.Context, runtime *runtime.Runtime, l net.Listen
 		return nil
 	}
 
-	httpServer := mcp.NewHTTPServer(env, mcpServer)
+	sessionManager, err := session.NewManager(mcpServer, r.n.DSN())
+	if err != nil {
+		return err
+	}
+
+	httpServer := mcp.NewHTTPServer(env, mcpServer, mcp.HTTPServerOptions{
+		SessionStore: sessionManager,
+	})
 
 	s := &http.Server{
 		Addr:    address,

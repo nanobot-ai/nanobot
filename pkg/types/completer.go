@@ -33,10 +33,10 @@ func (c CompletionOptions) Merge(other CompletionOptions) (result CompletionOpti
 }
 
 type CompletionRequest struct {
-	Model             string
+	Model             string               `json:"model,omitempty"`
 	ThreadName        string               `json:"threadName,omitempty"`
 	NewThread         bool                 `json:"newThread,omitempty"`
-	Input             []CompletionInput    `json:"input,omitzero"`
+	Input             []CompletionItem     `json:"input,omitzero"`
 	ModelPreferences  mcp.ModelPreferences `json:"modelPreferences,omitzero"`
 	SystemPrompt      string               `json:"systemPrompt,omitzero"`
 	IncludeContext    string               `json:"includeContext,omitempty"`
@@ -65,18 +65,13 @@ type ToolUseDefinition struct {
 	Attributes  map[string]any  `json:"-"`
 }
 
-type CompletionInput struct {
+type CompletionItem struct {
 	Message        *mcp.SamplingMessage `json:"message,omitempty"`
 	ToolCall       *ToolCall            `json:"toolCall,omitempty"`
-	ToolCallResult *ToolCallResult      `json:"toolCallResul,omitempty"`
+	ToolCallResult *ToolCallResult      `json:"toolCallResult,omitempty"`
 	Reasoning      *Reasoning           `json:"reasoning,omitempty"`
-}
-
-type CompletionOutput struct {
-	CallResult *CallResult          `json:"callResult,omitempty"`
-	Message    *mcp.SamplingMessage `json:"message,omitempty"`
-	ToolCall   *ToolCall            `json:"toolCall,omitempty"`
-	Reasoning  *Reasoning           `json:"reasoning,omitempty"`
+	ID             string               `json:"id,omitempty"`
+	HasMore        bool                 `json:"hasMore,omitempty"`
 }
 
 type Reasoning struct {
@@ -89,18 +84,10 @@ type SummaryText struct {
 	Text string `json:"text,omitempty"`
 }
 
-func (c *CompletionOutput) ToInput() CompletionInput {
-	return CompletionInput{
-		Message:   c.Message,
-		ToolCall:  c.ToolCall,
-		Reasoning: c.Reasoning,
-	}
-}
-
 type CompletionResponse struct {
-	Output       []CompletionOutput `json:"output,omitempty"`
-	ChatResponse bool               `json:"chatResponse,omitempty"`
-	Model        string             `json:"model,omitempty"`
+	Output       []CompletionItem `json:"output,omitempty"`
+	ChatResponse bool             `json:"chatResponse,omitempty"`
+	Model        string           `json:"model,omitempty"`
 }
 
 type ToolCallResult struct {

@@ -16,7 +16,7 @@ func toResponse(resp *Response) (*types.CompletionResponse, error) {
 	for _, content := range resp.Content {
 		if content.Type == "tool_use" {
 			args, _ := json.Marshal(content.Input)
-			result.Output = append(result.Output, types.CompletionOutput{
+			result.Output = append(result.Output, types.CompletionItem{
 				ToolCall: &types.ToolCall{
 					CallID:    content.ID,
 					Name:      content.Name,
@@ -24,7 +24,7 @@ func toResponse(resp *Response) (*types.CompletionResponse, error) {
 				},
 			})
 		} else if content.Type == "text" && content.Text != nil {
-			result.Output = append(result.Output, types.CompletionOutput{
+			result.Output = append(result.Output, types.CompletionItem{
 				Message: &mcp.SamplingMessage{
 					Role: "assistant",
 					Content: mcp.Content{
@@ -34,7 +34,7 @@ func toResponse(resp *Response) (*types.CompletionResponse, error) {
 				},
 			})
 		} else if content.Type == "image" {
-			result.Output = append(result.Output, types.CompletionOutput{
+			result.Output = append(result.Output, types.CompletionItem{
 				Message: &mcp.SamplingMessage{
 					Role: "assistant",
 					Content: mcp.Content{

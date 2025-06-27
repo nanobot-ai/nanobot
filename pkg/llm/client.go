@@ -41,7 +41,7 @@ func (c *Client) handleAssistantRolesFromTools(req types.CompletionRequest) (_ t
 				Model: req.Model,
 			}
 			for _, content := range last.ToolCallResult.Output.Content {
-				resp.Output = append(resp.Output, types.CompletionOutput{
+				resp.Output = append(resp.Output, types.CompletionItem{
 					Message: &mcp.SamplingMessage{
 						Role:    "assistant",
 						Content: content,
@@ -52,12 +52,12 @@ func (c *Client) handleAssistantRolesFromTools(req types.CompletionRequest) (_ t
 		}
 	}
 
-	newInput := make([]types.CompletionInput, 0, len(req.Input))
+	newInput := make([]types.CompletionItem, 0, len(req.Input))
 	for _, input := range req.Input {
 		if input.ToolCallResult != nil && input.ToolCallResult.OutputRole == "assistant" &&
 			len(input.ToolCallResult.Output.Content) > 0 {
 			// elide the tool call result if it is an assistant response
-			input = types.CompletionInput{
+			input = types.CompletionItem{
 				ToolCallResult: &types.ToolCallResult{
 					CallID: input.ToolCallResult.CallID,
 					Output: types.CallResult{

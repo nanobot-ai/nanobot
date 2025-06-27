@@ -16,6 +16,8 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
+const SessionKey = "runtime"
+
 type Runtime struct {
 	*tools.Service
 	config    types.Config
@@ -68,7 +70,7 @@ func (r *Runtime) GetConfig() types.Config {
 }
 
 func (r *Runtime) WithTempSession(ctx context.Context) context.Context {
-	return mcp.WithSession(ctx, mcp.NewEmptySession(ctx, "temp"))
+	return mcp.WithSession(ctx, mcp.NewEmptySession(ctx))
 }
 
 func (r *Runtime) getToolFromRef(ctx context.Context, serverRef string) (*tools.ListToolsResult, error) {

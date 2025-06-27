@@ -19,7 +19,7 @@ func toResponse(req *types.CompletionRequest, resp *Response) (*types.Completion
 			for _, tool := range req.Tools {
 				if tool.Attributes["type"] == "computer_use_preview" {
 					args, _ := json.Marshal(output.ComputerCall.Action)
-					result.Output = append(result.Output, types.CompletionOutput{
+					result.Output = append(result.Output, types.CompletionItem{
 						ToolCall: &types.ToolCall{
 							Name:      tool.Name,
 							Arguments: string(args),
@@ -31,7 +31,7 @@ func toResponse(req *types.CompletionRequest, resp *Response) (*types.Completion
 				}
 			}
 		} else if output.FunctionCall != nil {
-			result.Output = append(result.Output, types.CompletionOutput{
+			result.Output = append(result.Output, types.CompletionItem{
 				ToolCall: &types.ToolCall{
 					Name:      output.FunctionCall.Name,
 					Arguments: output.FunctionCall.Arguments,
@@ -42,7 +42,7 @@ func toResponse(req *types.CompletionRequest, resp *Response) (*types.Completion
 		} else if output.Message != nil {
 			result.Output = append(result.Output, toSamplingMessageFromOutputMessage(output.Message)...)
 		} else if output.Reasoning != nil && output.Reasoning.EncryptedContent != nil {
-			result.Output = append(result.Output, types.CompletionOutput{
+			result.Output = append(result.Output, types.CompletionItem{
 				Reasoning: &types.Reasoning{
 					ID:               output.Reasoning.ID,
 					EncryptedContent: *output.Reasoning.EncryptedContent,
@@ -55,10 +55,10 @@ func toResponse(req *types.CompletionRequest, resp *Response) (*types.Completion
 	return result, nil
 }
 
-func toSamplingMessageFromOutputMessage(output *Message) (result []types.CompletionOutput) {
+func toSamplingMessageFromOutputMessage(output *Message) (result []types.CompletionItem) {
 	for _, content := range output.Content {
 		if content.OutputText != nil {
-			result = append(result, types.CompletionOutput{
+			result = append(result, types.CompletionItem{
 				Message: &mcp.SamplingMessage{
 					Role: output.Role,
 					Content: mcp.Content{
@@ -68,7 +68,7 @@ func toSamplingMessageFromOutputMessage(output *Message) (result []types.Complet
 				},
 			})
 		} else if content.Refusal != nil {
-			result = append(result, types.CompletionOutput{
+			result = append(result, types.CompletionItem{
 				Message: &mcp.SamplingMessage{
 					Role: output.Role,
 					Content: mcp.Content{

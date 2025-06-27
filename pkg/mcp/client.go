@@ -18,6 +18,13 @@ type Client struct {
 	Session *Session
 }
 
+type SessionState struct {
+	ID                string            `json:"id,omitempty"`
+	InitializeResult  InitializeResult  `json:"initializeResult,omitempty"`
+	InitializeRequest InitializeRequest `json:"initializeRequest,omitempty"`
+	Attributes        map[string]any    `json:"attributes,omitempty"`
+}
+
 type ClientOption struct {
 	Roots         []Root
 	OnSampling    func(ctx context.Context, sampling CreateMessageRequest) (CreateMessageResult, error)
@@ -28,7 +35,7 @@ type ClientOption struct {
 	OnNotify      func(ctx context.Context, msg Message) error
 	Env           map[string]string
 	ParentSession *Session
-	SessionID     string
+	Session       *SessionState
 	Runner        *Runner
 }
 
@@ -65,7 +72,7 @@ func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
 		result.OnElicit = other.OnElicit
 	}
 	result.Env = complete.MergeMap(c.Env, other.Env)
-	result.SessionID = complete.Last(c.SessionID, other.SessionID)
+	result.Session = complete.Last(c.Session, other.Session)
 	result.ParentSession = complete.Last(c.ParentSession, other.ParentSession)
 	result.Runner = complete.Last(c.Runner, other.Runner)
 	result.Roots = append(c.Roots, other.Roots...)
@@ -222,7 +229,14 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 				return nil, err
 			}
 		}
-		wire = NewHTTPClient(serverName, config.BaseURL, envvar.ReplaceMap(opt.Env, config.Headers))
+		header := envvar.ReplaceMap(opt.Env, config.Headers)
+		if opt.Session != nil && opt.Session.ID != "" {
+			if header == nil {
+				header = make(map[string]string)
+			}
+			header["Mcp-Session-Id"] = opt.Session.ID
+		}
+		wire = NewHTTPClient(serverName, config.BaseURL, header)
 	} else {
 		wire, err = newStdioClient(ctx, opt.Roots, opt.Env, serverName, config, opt.Runner)
 		if err != nil {
@@ -230,7 +244,7 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 		}
 	}
 
-	session, err := newSession(ctx, wire, toHandler(opt), opt.SessionID, nil)
+	session, err := newSession(ctx, wire, toHandler(opt), opt.Session, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -266,19 +280,23 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 	if opt.OnElicit != nil {
 		elicitations = &struct{}{}
 	}
-	_, err = c.Initialize(ctx, InitializeRequest{
-		ProtocolVersion: "2025-03-26",
-		Capabilities: ClientCapabilities{
-			Sampling:    sampling,
-			Roots:       roots,
-			Elicitation: elicitations,
-		},
-		ClientInfo: ClientInfo{
-			Name:    "nanobot",
-			Version: version.Get().String(),
-		},
-	})
-	return c, err
+	if opt.Session == nil {
+		_, err = c.Initialize(ctx, InitializeRequest{
+			ProtocolVersion: "2025-03-26",
+			Capabilities: ClientCapabilities{
+				Sampling:    sampling,
+				Roots:       roots,
+				Elicitation: elicitations,
+			},
+			ClientInfo: ClientInfo{
+				Name:    "nanobot",
+				Version: version.Get().String(),
+			},
+		})
+		return c, err
+	}
+
+	return c, nil
 }
 
 func (c *Client) Initialize(ctx context.Context, param InitializeRequest) (result InitializeResult, err error) {
@@ -288,7 +306,6 @@ func (c *Client) Initialize(ctx context.Context, param InitializeRequest) (resul
 			Method: "notifications/initialized",
 		})
 	}
-	c.Session.InitializeResult = &result
 	return
 }
 
@@ -302,7 +319,7 @@ func (c *Client) ReadResource(ctx context.Context, uri string) (*ReadResourceRes
 
 func (c *Client) ListResourceTemplates(ctx context.Context) (*ListResourceTemplatesResult, error) {
 	var result ListResourceTemplatesResult
-	if c.Session.InitializeResult == nil || c.Session.InitializeResult.Capabilities.Resources == nil {
+	if c.Session.InitializeResult.Capabilities.Resources == nil {
 		return &result, nil
 	}
 	err := c.Session.Exchange(ctx, "resources/templates/list", struct{}{}, &result)
@@ -311,7 +328,7 @@ func (c *Client) ListResourceTemplates(ctx context.Context) (*ListResourceTempla
 
 func (c *Client) ListResources(ctx context.Context) (*ListResourcesResult, error) {
 	var result ListResourcesResult
-	if c.Session.InitializeResult == nil || c.Session.InitializeResult.Capabilities.Resources == nil {
+	if c.Session.InitializeResult.Capabilities.Resources == nil {
 		return &result, nil
 	}
 	err := c.Session.Exchange(ctx, "resources/list", struct{}{}, &result)
@@ -320,7 +337,7 @@ func (c *Client) ListResources(ctx context.Context) (*ListResourcesResult, error
 
 func (c *Client) ListPrompts(ctx context.Context) (*ListPromptsResult, error) {
 	var prompts ListPromptsResult
-	if c.Session.InitializeResult == nil || c.Session.InitializeResult.Capabilities.Prompts == nil {
+	if c.Session.InitializeResult.Capabilities.Prompts == nil {
 		return &prompts, nil
 	}
 	err := c.Session.Exchange(ctx, "prompts/list", struct{}{}, &prompts)

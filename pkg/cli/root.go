@@ -29,6 +29,7 @@ func New() *cobra.Command {
 	root := cmd.Command(n,
 		NewCall(n),
 		NewTargets(n),
+		NewSessions(n),
 		NewRun(n))
 	return root
 }
@@ -47,15 +48,29 @@ type Nanobot struct {
 	AnthropicHeaders map[string]string `usage:"Anthropic API headers" env:"ANTHROPIC_HEADERS" name:"anthropic-headers"`
 	MaxConcurrency   int               `usage:"The maximum number of concurrent tasks in a parallel loop" default:"10"`
 	Chdir            string            `usage:"Change directory to this path before running the nanobot" default:"." short:"C"`
+	State            string            `usage:"Path to the state file" default:"${XDG_CONFIG_HOME}/nanobot/state.db"`
 
 	env map[string]string
+}
+
+func (n *Nanobot) DSN() string {
+	return os.Expand(n.State, func(s string) string {
+		if s == "XDG_CONFIG_HOME" {
+			config, err := os.UserConfigDir()
+			if err != nil {
+				log.Fatalf(context.Background(), "Failed to get user config directory: %v", err)
+			}
+			return config
+		}
+		return os.Getenv(s)
+	})
 }
 
 func (n *Nanobot) Customize(cmd *cobra.Command) {
 	cmd.Short = "Nanobot: Build, Run, Share AI Agents"
 	cmd.Example = `
-  # Run the Welcome bot
-  nanobot run nanobot-ai/welcome
+	# Run the Welcome bot
+	nanobot run nanobot-ai/welcome
 `
 	cmd.CompletionOptions.HiddenDefaultCmd = true
 	cmd.Version = version.Get().String()

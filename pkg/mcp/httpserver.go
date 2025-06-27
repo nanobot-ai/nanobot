@@ -62,7 +62,11 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	session, ok := h.sessions.Load(id)
+	session, ok, err := h.sessions.Load(req, id)
+	if err != nil {
+		http.Error(rw, "Failed to load session: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if !ok {
 		http.Error(rw, "Session not found", http.StatusNotFound)
 		return
@@ -103,7 +107,11 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	sseID := req.URL.Query().Get("id")
 
 	if streamingID != "" && req.Method == http.MethodDelete {
-		sseSession, ok := h.sessions.LoadAndDelete(streamingID)
+		sseSession, ok, err := h.sessions.LoadAndDelete(req, streamingID)
+		if err != nil {
+			http.Error(rw, "Failed to delete session: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 		if !ok {
 			http.Error(rw, "Session not found", http.StatusNotFound)
 			return
@@ -126,7 +134,11 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	if streamingID != "" {
-		sseSession, ok := h.sessions.Load(streamingID)
+		streamingSession, ok, err := h.sessions.Load(req, streamingID)
+		if err != nil {
+			http.Error(rw, "Failed to load session: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 		if !ok {
 			http.Error(rw, "Session not found", http.StatusNotFound)
 			return
@@ -138,7 +150,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			setID = true
 		}
 
-		response, err := sseSession.Exchange(req.Context(), msg)
+		response, err := streamingSession.Exchange(req.Context(), msg)
 		if setID {
 			response.ID = nil
 		}
@@ -166,9 +178,15 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		if err := json.NewEncoder(rw).Encode(response); err != nil {
 			http.Error(rw, "Failed to encode response: "+err.Error(), http.StatusInternalServerError)
 		}
+
+		_ = h.sessions.Store(req, streamingSession.ID(), streamingSession)
 		return
 	} else if sseID != "" {
-		sseSession, ok := h.sessions.Load(sseID)
+		sseSession, ok, err := h.sessions.Load(req, sseID)
+		if err != nil {
+			http.Error(rw, "Failed to load session: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 		if !ok {
 			http.Error(rw, "Session not found", http.StatusNotFound)
 			return
@@ -202,9 +220,9 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	h.sessions.Store(session.session.sessionID, session)
+	h.sessions.Store(req, session.ID(), session)
 
-	rw.Header().Set("Mcp-Session-Id", session.session.sessionID)
+	rw.Header().Set("Mcp-Session-Id", session.ID())
 	rw.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(rw).Encode(resp); err != nil {
 		http.Error(rw, "Failed to encode response: "+err.Error(), http.StatusInternalServerError)

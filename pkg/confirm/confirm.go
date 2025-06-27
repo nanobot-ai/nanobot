@@ -24,13 +24,12 @@ func (*Service) Confirm(ctx context.Context, session *mcp.Session, target types.
 		session = session.Parent
 	}
 
-	if session.ClientCapabilities == nil || session.ClientCapabilities.Elicitation == nil {
+	if session.InitializeRequest.Capabilities.Elicitation == nil {
 		return nil, nil
 	}
 
-	approvedCalls, _ := session.Get("approvedCalls").(map[string]any)
-	if approvedCalls == nil {
-		approvedCalls = make(map[string]any)
+	approvedCalls := make(map[string]any)
+	if !session.Get("approvedCalls", &approvedCalls) {
 		session.Set("approvedCalls", approvedCalls)
 	}
 

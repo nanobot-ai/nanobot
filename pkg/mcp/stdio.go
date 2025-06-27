@@ -62,6 +62,11 @@ func (s *Stdio) Send(ctx context.Context, req Message) error {
 	return err
 }
 
+func (s *Stdio) SessionID() string {
+	// Stdio does not have a session ID, return an empty string
+	return ""
+}
+
 func (s *Stdio) Wait() {
 	s.waiter.Wait()
 }

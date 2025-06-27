@@ -19,7 +19,7 @@ import (
 )
 
 func Chat(ctx context.Context, listenAddress string,
-	autoConfirm bool, prompt, output string, reload func(*mcp.Client) error) error {
+	autoConfirm bool, prompt, output string, reload func(*mcp.Client) error, opts ...mcp.ClientOption) error {
 	progressToken := uuid.String()
 
 	promptDone, promptDoneCancel := context.WithCancel(ctx)
@@ -28,7 +28,7 @@ func Chat(ctx context.Context, listenAddress string,
 	c, err := mcp.NewClient(ctx, "nanobot", mcp.Server{
 		BaseURL: "http://" + listenAddress,
 		Headers: nil,
-	}, mcp.ClientOption{
+	}, append(opts, mcp.ClientOption{
 		OnLogging: func(ctx context.Context, logMsg mcp.LoggingMessage) error {
 			return handleLog(logMsg)
 		},
@@ -42,7 +42,7 @@ func Chat(ctx context.Context, listenAddress string,
 			printToolCall(msg.Params, promptDoneCancel)
 			return nil
 		},
-	})
+	})...)
 	if err != nil {
 		return fmt.Errorf("failed to create chat client: %w", err)
 	}
@@ -120,18 +120,22 @@ func Chat(ctx context.Context, listenAddress string,
 func printToolCall(params json.RawMessage, seenAgentOut func()) {
 	var toolCall struct {
 		Data struct {
-			ID     string              `json:"id"`
-			Type   string              `json:"type"`
-			Input  any                 `json:"input,omitempty"`
-			Error  string              `json:"error,omitempty"`
-			Target string              `json:"target"`
-			Output *mcp.CallToolResult `json:"output,omitempty"`
-			Data   struct {
+			ID         string              `json:"id"`
+			Type       string              `json:"type"`
+			Input      any                 `json:"input,omitempty"`
+			Error      string              `json:"error,omitempty"`
+			Target     string              `json:"target"`
+			TargetType string              `json:"targetType"`
+			Output     *mcp.CallToolResult `json:"output,omitempty"`
+			Data       struct {
 				MCPToolName string `json:"mcpToolName"`
 			}
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(params, &toolCall); err != nil || !strings.HasPrefix(toolCall.Data.Type, "nanobot/call") {
+		return
+	}
+	if toolCall.Data.TargetType != "tool" {
 		return
 	}
 	server, tool, _ := strings.Cut(toolCall.Data.Target, "/")

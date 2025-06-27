@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"reflect"
 	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -26,6 +27,7 @@ type wire interface {
 	Wait()
 	Start(ctx context.Context, handler wireHandler) error
 	Send(ctx context.Context, req Message) error
+	SessionID() string
 }
 
 type wireHandler func(msg Message)
@@ -51,22 +53,39 @@ func WithSession(ctx context.Context, s *Session) context.Context {
 }
 
 type Session struct {
-	ctx                context.Context
-	cancel             context.CancelFunc
-	wire               wire
-	handler            MessageHandler
-	pendingRequest     PendingRequests
-	ClientCapabilities *ClientCapabilities
-	InitializeResult   *InitializeResult
-	recorder           *recorder
-	sessionID          string
-	Parent             *Session
-	attributes         map[string]any
-	lock               sync.Mutex
+	ctx               context.Context
+	cancel            context.CancelFunc
+	wire              wire
+	handler           MessageHandler
+	pendingRequest    PendingRequests
+	InitializeResult  InitializeResult
+	InitializeRequest InitializeRequest
+	recorder          *recorder
+	Parent            *Session
+	attributes        map[string]any
+	lock              sync.Mutex
 }
 
 const SessionEnvMapKey = "env"
 
+func (s *Session) ID() string {
+	if s == nil || s.wire == nil {
+		return ""
+	}
+	return s.wire.SessionID()
+}
+
+func (s *Session) State() *SessionState {
+	if s == nil {
+		return nil
+	}
+	return &SessionState{
+		ID:                s.wire.SessionID(),
+		InitializeResult:  s.InitializeResult,
+		InitializeRequest: s.InitializeRequest,
+		Attributes:        s.Attributes(),
+	}
+}
 func (s *Session) EnvMap() map[string]string {
 	if s == nil {
 		return map[string]string{}
@@ -95,13 +114,53 @@ func (s *Session) Set(key string, value any) {
 	s.attributes[key] = value
 }
 
-func (s *Session) Get(key string) any {
+func (s *Session) Get(key string, out any) bool {
 	if s == nil {
-		return nil
+		return false
 	}
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	return s.attributes[key]
+
+	v, ok := s.attributes[key]
+	if !ok {
+		return false
+	}
+	if out == nil {
+		return true
+	}
+
+	dstVal := reflect.ValueOf(out)
+	srcVal := reflect.ValueOf(v)
+	if srcVal.Type().AssignableTo(dstVal.Type()) {
+		reflect.Indirect(dstVal).Set(reflect.Indirect(srcVal))
+		return true
+	}
+
+	switch v := v.(type) {
+	case string:
+		if outStr, ok := out.(*string); ok {
+			*outStr = v
+			return true
+		}
+		if err := json.Unmarshal([]byte(v), out); err != nil {
+			delete(s.attributes, key)
+			return false
+		}
+		s.attributes[key] = out
+	default:
+		data, err := json.Marshal(v)
+		if err != nil {
+			delete(s.attributes, key)
+			return false
+		}
+		if err := json.Unmarshal(data, out); err != nil {
+			delete(s.attributes, key)
+			return false
+		}
+		s.attributes[key] = out
+	}
+
+	return true
 }
 
 func (s *Session) Attributes() map[string]any {
@@ -113,13 +172,6 @@ func (s *Session) Attributes() map[string]any {
 	defer s.lock.Unlock()
 
 	return maps.Clone(s.attributes)
-}
-
-func (s *Session) ID() string {
-	if s == nil {
-		return ""
-	}
-	return s.sessionID
 }
 
 func (s *Session) Close() {
@@ -139,10 +191,13 @@ func (s *Session) Wait() {
 
 func (s *Session) normalizeProgress(progress *NotificationProgressRequest) {
 	var (
-		progressKey     = fmt.Sprintf("progress-token:%v", progress.ProgressToken)
-		lastProgress, _ = s.Get(progressKey).(float64)
-		newProgress     float64
+		progressKey               = fmt.Sprintf("progress-token:%v", progress.ProgressToken)
+		lastProgress, newProgress float64
 	)
+
+	if ok := s.Get(progressKey, &lastProgress); !ok {
+		lastProgress = 0
+	}
 
 	if progress.Progress != "" {
 		newF, err := progress.Progress.Float64()
@@ -185,14 +240,7 @@ func (s *Session) Send(ctx context.Context, req Message) error {
 	}
 
 	req.JSONRPC = "2.0"
-	if req.Method == "initialize" {
-		var init InitializeRequest
-		if err := json.Unmarshal(req.Params, &init); err != nil {
-			return fmt.Errorf("failed to unmarshal initialize request: %w", err)
-		}
-		s.ClientCapabilities = &init.Capabilities
-	}
-	s.recorder.save(ctx, s.sessionID, true, req)
+	s.recorder.save(ctx, s.wire.SessionID(), true, req)
 	return s.wire.Send(ctx, req)
 }
 
@@ -203,6 +251,28 @@ type ExchangeOption struct {
 func (e ExchangeOption) Merge(other ExchangeOption) (result ExchangeOption) {
 	result.ProgressToken = complete.Last(e.ProgressToken, other.ProgressToken)
 	return
+}
+
+func (s *Session) preInit(msg *Message) (bool, error) {
+	if msg.Method == "initialize" {
+		var init InitializeRequest
+		if err := json.Unmarshal(msg.Params, &init); err != nil {
+			return false, fmt.Errorf("failed to unmarshal initialize request: %w", err)
+		}
+		s.InitializeRequest = init
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (s *Session) postInit(msg *Message) error {
+	var init InitializeResult
+	if err := json.Unmarshal(msg.Result, &init); err != nil {
+		return fmt.Errorf("failed to unmarshal initialize result: %w", err)
+	}
+	s.InitializeResult = init
+	return nil
 }
 
 func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts ...ExchangeOption) error {
@@ -231,6 +301,11 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 	ch := s.pendingRequest.WaitFor(req.ID)
 	defer s.pendingRequest.Done(req.ID)
 
+	isInit, err := s.preInit(req)
+	if err != nil {
+		return err
+	}
+
 	if err := s.Send(ctx, *req); err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
@@ -241,6 +316,10 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 	case m := <-ch:
 		if mOut, ok := out.(*Message); ok {
 			*mOut = m
+
+			if isInit {
+				return s.postInit(mOut)
+			}
 			return nil
 		}
 		if m.Error != nil {
@@ -257,7 +336,7 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 }
 
 func (s *Session) onWire(message Message) {
-	s.recorder.save(s.ctx, s.sessionID, false, message)
+	s.recorder.save(s.ctx, s.wire.SessionID(), false, message)
 	message.Session = s
 	if s.pendingRequest.Notify(message) {
 		return
@@ -265,20 +344,21 @@ func (s *Session) onWire(message Message) {
 	s.handler.OnMessage(s.ctx, message)
 }
 
-func NewEmptySession(ctx context.Context, sessionID string) *Session {
-	s := &Session{
-		sessionID: sessionID,
-	}
+func NewEmptySession(ctx context.Context) *Session {
+	s := &Session{}
 	s.ctx, s.cancel = context.WithCancel(WithSession(ctx, s))
 	return s
 }
 
-func newSession(ctx context.Context, wire wire, handler MessageHandler, sessionID string, r *recorder) (*Session, error) {
+func newSession(ctx context.Context, wire wire, handler MessageHandler, session *SessionState, r *recorder) (*Session, error) {
 	s := &Session{
-		wire:      wire,
-		handler:   handler,
-		sessionID: sessionID,
-		recorder:  r,
+		wire:     wire,
+		handler:  handler,
+		recorder: r,
+	}
+	if session != nil {
+		s.InitializeRequest = session.InitializeRequest
+		s.InitializeResult = session.InitializeResult
 	}
 	s.ctx, s.cancel = context.WithCancel(WithSession(ctx, s))
 	return s, wire.Start(s.ctx, s.onWire)

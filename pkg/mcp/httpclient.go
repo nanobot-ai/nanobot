@@ -18,30 +18,40 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
+const SessionIDHeader = "Mcp-Session-Id"
+
 type HTTPClient struct {
-	ctx         context.Context
-	cancel      context.CancelFunc
-	handler     wireHandler
-	baseURL     string
-	messageURL  string
-	serverName  string
-	headers     map[string]string
-	waiter      *waiter
-	sse         bool
-	initialized bool
-	sseLock     sync.RWMutex
-	needSSE     bool
+	ctx           context.Context
+	cancel        context.CancelFunc
+	handler       wireHandler
+	baseURL       string
+	messageURL    string
+	serverName    string
+	headers       map[string]string
+	waiter        *waiter
+	sse           bool
+	initialized   bool
+	sessionID     string
+	sseLock       sync.RWMutex
+	needReconnect bool
 }
 
 func NewHTTPClient(serverName, baseURL string, headers map[string]string) *HTTPClient {
+	_, initialized := headers[SessionIDHeader]
 	return &HTTPClient{
-		baseURL:    baseURL,
-		messageURL: baseURL,
-		serverName: serverName,
-		headers:    maps.Clone(headers),
-		waiter:     newWaiter(),
-		needSSE:    true,
+		baseURL:       baseURL,
+		messageURL:    baseURL,
+		serverName:    serverName,
+		headers:       maps.Clone(headers),
+		waiter:        newWaiter(),
+		needReconnect: true,
+		sessionID:     headers[SessionIDHeader],
+		initialized:   initialized,
 	}
+}
+
+func (s *HTTPClient) SessionID() string {
+	return s.sessionID
 }
 
 func (s *HTTPClient) Close() {
@@ -85,6 +95,9 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 	for k, v := range s.headers {
 		req.Header.Set(k, v)
 	}
+	if s.sessionID != "" {
+		req.Header.Set(SessionIDHeader, s.sessionID)
+	}
 	req.Header.Set("Accept", "text/event-stream")
 	if method != http.MethodGet {
 		// Don't add because some *cough* CloudFront *cough* proxies don't like it
@@ -99,7 +112,7 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 
 func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID any) error {
 	s.sseLock.RLock()
-	if !s.needSSE {
+	if !s.needReconnect {
 		s.sseLock.RUnlock()
 		return nil
 	}
@@ -110,7 +123,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 	s.sseLock.Lock()
 	defer s.sseLock.Unlock()
 
-	if !s.needSSE {
+	if !s.needReconnect {
 		// Check again in case SSE was started while we were waiting for the lock.
 		return nil
 	}
@@ -136,20 +149,19 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 		// If msg is nil, then this is an SSE request for HTTP streaming.
 		// If the server doesn't support a separate SSE endpoint, then we can just return.
 		if msg == nil && resp.StatusCode == http.StatusMethodNotAllowed {
-			s.needSSE = false
+			s.needReconnect = false
 			return nil
 		}
 		return fmt.Errorf("failed to connect to SSE server: %s", resp.Status)
 	}
 
-	s.needSSE = false
-	s.sse = s.sse || msg != nil
+	s.needReconnect = false
 
 	go func() (err error, send bool) {
 		defer func() {
 			if err != nil {
 				s.sseLock.Lock()
-				s.needSSE = true
+				s.needReconnect = true
 				s.sseLock.Unlock()
 
 				// If we get an error, then we aren't reconnecting to the SSE endpoint.
@@ -166,7 +178,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 		if !s.sse {
 			s.messageURL = s.baseURL
 			msg = nil
-		} else {
+		} else if msg.Method == "initialize" {
 			data, ok := messages.readNextMessage()
 			if !ok {
 				return fmt.Errorf("failed to read SSE message: %w", messages.err()), true
@@ -227,8 +239,8 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 						msg.ID = uuid.String()
 					}
 					s.sseLock.Lock()
-					if !s.needSSE {
-						s.needSSE = true
+					if !s.needReconnect {
+						s.needReconnect = true
 					}
 					s.sseLock.Unlock()
 				}
@@ -284,24 +296,23 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) (err error) {
 			return errors.Join(streamError, err)
 		}
 
+		s.sse = true
 		return nil
 	}
 
-	sessionID := resp.Header.Get("Mcp-Session-Id")
+	sessionID := resp.Header.Get(SessionIDHeader)
 	if sessionID != "" {
 		if s.headers == nil {
 			s.headers = make(map[string]string)
 		}
-		s.headers["Mcp-Session-Id"] = sessionID
+		s.headers[SessionIDHeader] = sessionID
 	}
 
-	initResp, err := readResponse(resp)
+	seen, err := s.readResponse(resp)
 	if err != nil {
 		return fmt.Errorf("failed to decode mcp initialize response: %w", err)
-	}
-
-	if initResp != nil {
-		s.handler(*initResp)
+	} else if !seen {
+		return fmt.Errorf("no response from server, expected an initialize response")
 	}
 
 	defer func() {
@@ -344,47 +355,59 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 		return fmt.Errorf("failed to send message: %s", resp.Status)
 	}
 
-	// It is possible for the ContentLength here to be -1.
-	if s.sse || (resp.ContentLength <= 0 && resp.Header.Get("Content-Type") != "text/event-stream") {
+	if s.sse {
 		return nil
 	}
 
-	result, err := readResponse(resp)
-	if err != nil {
-		return fmt.Errorf("failed to decode mcp send message response: %w", err)
-	}
-
-	if result != nil {
-		log.Messages(ctx, s.serverName, false, result.Result)
-		go s.handler(*result)
-	}
-
-	return nil
+	_, err = s.readResponse(resp)
+	return err
 }
 
-func readResponse(resp *http.Response) (*Message, error) {
-	if resp.ContentLength == 0 {
-		return nil, nil
+func (s *HTTPClient) readResponse(resp *http.Response) (bool, error) {
+	var seen bool
+	handle := func(message *Message) {
+		seen = true
+		log.Messages(s.ctx, s.serverName, false, message.Result)
+		go s.handler(*message)
 	}
-	var init io.Reader
-	if resp.Header.Get("Content-Type") == "application/json" {
-		init = resp.Body
-	} else {
-		stream := newSSEStream(resp.Body)
-		initEvent, ok := stream.readNextMessage()
-		if !ok {
-			return nil, fmt.Errorf("failed to read stream response: %w", stream.err())
-		}
 
-		init = strings.NewReader(initEvent)
+	if resp.Header.Get("Content-Type") == "text/event-stream" {
+		stream := newSSEStream(resp.Body)
+		for {
+			data, ok := stream.readNextMessage()
+			if !ok {
+				return seen, nil
+			}
+
+			var message Message
+			if err := json.Unmarshal([]byte(data), &message); err != nil {
+				return seen, fmt.Errorf("failed to decode response: %w", err)
+			}
+
+			handle(&message)
+		}
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return seen, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if len(data) == 0 {
+		return false, nil
+	}
+
+	if data[0] != '{' {
+		return false, fmt.Errorf("invalid response format, expected JSON object, got: %s", data)
 	}
 
 	var message Message
-	if err := json.NewDecoder(init).Decode(&message); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	if err := json.Unmarshal(data, &message); err != nil {
+		return false, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	return &message, nil
+	handle(&message)
+	return seen, nil
 }
 
 type SSEStream struct {

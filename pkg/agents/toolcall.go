@@ -80,7 +80,7 @@ func (a *Agents) confirm(ctx context.Context, target types.TargetMapping, funcCa
 	return a.confirmations.Confirm(ctx, session, target, funcCall)
 }
 
-func (a *Agents) invoke(ctx context.Context, target types.TargetMapping, funcCall *types.ToolCall, opts []types.CompletionOptions) ([]types.CompletionInput, error) {
+func (a *Agents) invoke(ctx context.Context, target types.TargetMapping, funcCall *types.ToolCall, opts []types.CompletionOptions) ([]types.CompletionItem, error) {
 	var (
 		data map[string]any
 	)
@@ -105,7 +105,7 @@ func (a *Agents) invoke(ctx context.Context, target types.TargetMapping, funcCal
 			return nil, fmt.Errorf("failed to invoke tool %s on mcp server %s: %w", target.TargetName, target.MCPServer, err)
 		}
 	}
-	return []types.CompletionInput{
+	return []types.CompletionItem{
 		{
 			ToolCallResult: &types.ToolCallResult{
 				CallID:     funcCall.CallID,

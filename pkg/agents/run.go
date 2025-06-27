@@ -71,7 +71,7 @@ func populateToolCallResult(previousRun *run, req *types.CompletionRequest, call
 	}
 
 	previousRun.ToolOutputs[callID] = toolCall{
-		Output: []types.CompletionInput{
+		Output: []types.CompletionItem{
 			{
 				ToolCallResult: &types.ToolCallResult{
 					CallID: callID,
@@ -94,7 +94,7 @@ func (a *Agents) populateRequest(ctx context.Context, run *run, previousRun *run
 		input := previousRun.PopulatedRequest.Input
 
 		for _, output := range previousRun.Response.Output {
-			prevInput := output.ToInput()
+			prevInput := output
 			if prevInput.ToolCall != nil {
 				if _, exists := previousRun.ToolOutputs[prevInput.ToolCall.CallID]; !exists {
 					if req.InputAsToolResult != nil && *req.InputAsToolResult {
@@ -229,9 +229,14 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 	currentRun.Request = req
 
 	if isChat {
-		fallBack, _ := session.Get(previousRunKey).(*run)
-		if req.NewThread && fallBack != nil {
-			session.Set(previousRunKey+"/"+time.Now().Format(time.RFC3339), fallBack)
+		var fallBack *run
+		if lookup := (run{}); session.Get(previousRunKey, &lookup) {
+			fallBack = &lookup
+			previousRun = &lookup
+		}
+
+		if req.NewThread && previousRun != nil {
+			session.Set(previousRunKey+"/"+time.Now().Format(time.RFC3339), previousRun)
 			session.Set(previousRunKey, nil)
 		}
 
@@ -240,7 +245,6 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 				session.Set(previousRunKey, fallBack)
 			}
 		}()
-		previousRun, _ = session.Get(previousRunKey).(*run)
 	}
 
 	for {
@@ -261,14 +265,13 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 				for _, output := range toolOutput.Output {
 					if output.ToolCallResult != nil && output.ToolCallResult.Output.ChatResponse {
 						return &types.CompletionResponse{
-							Output: []types.CompletionOutput{
+							Output: []types.CompletionItem{
 								{
-									CallResult: &output.ToolCallResult.Output,
+									ToolCallResult: output.ToolCallResult,
 								},
 							},
 						}, nil
 					}
-
 				}
 			}
 		}

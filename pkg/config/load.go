@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -50,7 +51,7 @@ func loadResource(ctx context.Context, configResource *resource, profiles ...str
 			return nil, "", fmt.Errorf("error loading parent config %s: %w", parentResource.url, err)
 		}
 
-		last, err = merge(parent, last)
+		last, err = Merge(parent, last)
 		if err != nil {
 			return nil, "", fmt.Errorf("error merging %s: %w", last.Extends, err)
 		}
@@ -65,7 +66,7 @@ func loadResource(ctx context.Context, configResource *resource, profiles ...str
 			continue
 		}
 		var err error
-		last, err = merge(last, profileConfig)
+		last, err = Merge(last, profileConfig)
 		if err != nil {
 			return nil, "", fmt.Errorf("error merging profile %s: %w", profileName, err)
 		}
@@ -120,10 +121,15 @@ func mergeObject(base, overlay any) any {
 			return newMap
 		}
 	}
+	if baseArray, ok := base.([]any); ok {
+		if overlayArray, ok := overlay.([]any); ok {
+			return slices.Concat(baseArray, overlayArray)
+		}
+	}
 	return overlay
 }
 
-func merge(base, overlay types.Config) (types.Config, error) {
+func Merge(base, overlay types.Config) (types.Config, error) {
 	baseMap, err := toMap(base)
 	if err != nil {
 		return types.Config{}, err

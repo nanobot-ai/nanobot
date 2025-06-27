@@ -143,7 +143,7 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 	}
 
 	var roots mcp.ListRootsResult
-	if session.ClientCapabilities != nil && session.ClientCapabilities.Roots != nil {
+	if session.InitializeRequest.Capabilities.Roots != nil {
 		err := session.Exchange(ctx, "roots/list", mcp.ListRootsRequest{}, &roots)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list roots: %w", err)
@@ -163,7 +163,6 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 		Roots:         roots.Roots,
 		Env:           session.EnvMap(),
 		ParentSession: session,
-		SessionID:     session.ID() + "/" + uuid.String(),
 		OnRoots: func(ctx context.Context, msg mcp.Message) error {
 			return msg.Reply(ctx, mcp.ListRootsResult{
 				Roots: roots.Roots,
@@ -191,7 +190,7 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 		},
 		Runner: &s.runner,
 	}
-	if session.ClientCapabilities == nil || session.ClientCapabilities.Elicitation == nil {
+	if session.InitializeRequest.Capabilities.Elicitation == nil {
 		clientOpts.OnElicit = func(ctx context.Context, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {
 			return mcp.ElicitResult{
 				Action: "cancel",
@@ -381,16 +380,24 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 		}
 	}()
 
+	targetType := "tool"
+	if _, ok := s.config.Agents[server]; ok {
+		targetType = "agent"
+	} else if _, ok := s.config.Flows[server]; ok {
+		targetType = "flow"
+	}
+
 	if session != nil && opt.ProgressToken != nil {
 		callID := uuid.String()
 		_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
 			ProgressToken: opt.ProgressToken,
 			Data: map[string]any{
-				"type":   "nanobot/call",
-				"id":     callID,
-				"target": target,
-				"input":  args,
-				"data":   opt.LogData,
+				"type":       "nanobot/call",
+				"id":         callID,
+				"target":     target,
+				"targetType": targetType,
+				"input":      args,
+				"data":       opt.LogData,
 			},
 		})
 
@@ -399,22 +406,24 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 				_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
 					ProgressToken: opt.ProgressToken,
 					Data: map[string]any{
-						"type":   "nanobot/call/complete",
-						"id":     callID,
-						"target": target,
-						"output": ret,
-						"data":   opt.LogData,
+						"type":       "nanobot/call/complete",
+						"id":         callID,
+						"target":     target,
+						"targetType": targetType,
+						"output":     ret,
+						"data":       opt.LogData,
 					},
 				})
 			} else {
 				_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
 					ProgressToken: opt.ProgressToken,
 					Data: map[string]any{
-						"type":   "nanobot/toolcall/error",
-						"id":     callID,
-						"target": target,
-						"error":  err.Error(),
-						"data":   opt.LogData,
+						"type":       "nanobot/toolcall/error",
+						"id":         callID,
+						"target":     target,
+						"targetType": targetType,
+						"error":      err.Error(),
+						"data":       opt.LogData,
 					},
 				})
 			}

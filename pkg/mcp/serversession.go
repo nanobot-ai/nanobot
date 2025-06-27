@@ -10,16 +10,23 @@ import (
 var _ wire = (*serverWire)(nil)
 
 func NewServerSession(ctx context.Context, handler MessageHandler) (*ServerSession, error) {
-	return NewServerSessionWithID(ctx, uuid.String(), handler)
+	return NewExistingServerSession(ctx,
+		SessionState{
+			ID: uuid.String(),
+		}, handler)
 }
 
-func NewServerSessionWithID(ctx context.Context, id string, handler MessageHandler) (*ServerSession, error) {
+func NewExistingServerSession(ctx context.Context, state SessionState, handler MessageHandler) (*ServerSession, error) {
 	s := &serverWire{
-		read: make(chan Message),
+		read:      make(chan Message),
+		sessionID: state.ID,
 	}
-	session, err := newSession(ctx, s, handler, id, nil)
+	session, err := newSession(ctx, s, handler, &state, nil)
 	if err != nil {
 		return nil, err
+	}
+	for k, v := range state.Attributes {
+		session.Set(k, v)
 	}
 	return &ServerSession{
 		session: session,
@@ -32,10 +39,35 @@ type ServerSession struct {
 	wire    *serverWire
 }
 
+func (s *ServerSession) ID() string {
+	id := s.session.ID()
+	if id == "" {
+		return s.wire.SessionID()
+	}
+	return id
+}
+
 var ErrNoResponse = errors.New("no response")
 
+func (s *ServerSession) GetSession() *Session {
+	return s.session
+}
+
 func (s *ServerSession) Exchange(ctx context.Context, msg Message) (Message, error) {
-	return s.wire.exchange(ctx, msg)
+	isInit, err := s.session.preInit(&msg)
+	if err != nil {
+		return Message{}, err
+	}
+	resp, err := s.wire.exchange(ctx, msg)
+	if err != nil {
+		return Message{}, err
+	}
+	if isInit {
+		if err := s.session.postInit(&resp); err != nil {
+			return Message{}, err
+		}
+	}
+	return resp, nil
 }
 
 func (s *ServerSession) Read(ctx context.Context) (Message, bool) {
@@ -59,11 +91,16 @@ func (s *ServerSession) Close() {
 }
 
 type serverWire struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	pending PendingRequests
-	read    chan Message
-	handler wireHandler
+	ctx       context.Context
+	cancel    context.CancelFunc
+	pending   PendingRequests
+	read      chan Message
+	handler   wireHandler
+	sessionID string
+}
+
+func (s *serverWire) SessionID() string {
+	return s.sessionID
 }
 
 func (s *serverWire) exchange(ctx context.Context, msg Message) (Message, error) {

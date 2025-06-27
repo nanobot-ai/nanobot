@@ -14,6 +14,6 @@ type run struct {
 }
 
 type toolCall struct {
-	Output []types.CompletionInput `json:"output,omitempty"`
-	Done   bool                    `json:"done,omitempty"`
+	Output []types.CompletionItem `json:"output,omitempty"`
+	Done   bool                   `json:"done,omitempty"`
 }

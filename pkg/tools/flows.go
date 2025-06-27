@@ -47,10 +47,10 @@ func (s *Service) getPrompt(ctx context.Context, prompt string, args map[string]
 func (s *Service) newGlobals(ctx context.Context, vars map[string]any, opt ...CallOptions) map[string]any {
 	session := mcp.SessionFromContext(ctx)
 	data := map[string]any{}
-	maps.Copy(data, session.Attributes())
 	data["prompt"] = func(target string, args map[string]string) (string, error) {
 		return s.getPrompt(ctx, target, args)
 	}
+	data["nanobot"] = session.Attributes()
 	data["call"] = func(target string, args map[string]any) (map[string]any, error) {
 		return s.callFromScript(ctx, target, args, CallOptions{
 			ProgressToken: complete.Complete(opt...).ProgressToken,
@@ -469,6 +469,11 @@ func (s *Service) runStep(ctx flowContext, step types.Step) (ret *types.CallResu
 	}
 
 	if step.Evaluate != nil {
+		evalStr, ok := step.Evaluate.(string)
+		if ok {
+			step.Evaluate = fmt.Sprintf("(function(){\n%s\n)()", evalStr)
+		}
+
 		val, err := expr.EvalAny(ctx.ctx, ctx.env, ctx.data, step.Evaluate)
 		if err != nil {
 			return nil, fmt.Errorf("failed to evaluate expression for step %s: %w", step.ID, err)

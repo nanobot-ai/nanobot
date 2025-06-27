@@ -550,7 +550,7 @@ func BuildSimpleSchema(name, description string, args map[string]Field) map[stri
 			}
 			if len(field.Fields) > 0 {
 				jsonschema["properties"].(map[string]any)[name].(map[string]any)["items"] =
-					BuildSimpleSchema("", field.Description, field.Fields)
+					BuildSimpleSchema("", "", field.Fields)
 			}
 		} else if strings.HasSuffix(name, "(int)") || strings.HasSuffix(name, "(integer)") {
 			name = strings.Split(name, "(")[0]
@@ -573,22 +573,15 @@ func BuildSimpleSchema(name, description string, args map[string]Field) map[stri
 		} else if enumSyntaxRegexp.MatchString(name) {
 			name, args, _ := strings.Cut(name, "(")
 			var (
-				enum      []string
-				enumNames []string
+				enum []string
 			)
 			for _, arg := range strings.Split(strings.TrimSuffix(args, ")"), ",") {
-				val, valName, ok := strings.Cut(arg, "=")
-				if !ok {
-					valName = val
-				}
-				enum = append(enum, strings.TrimSpace(val))
-				enumNames = append(enumNames, strings.TrimSpace(valName))
+				enum = append(enum, strings.TrimSpace(arg))
 			}
 			jsonschema["properties"].(map[string]any)[name] = map[string]any{
-				"type":        "enum",
+				"type":        "string",
 				"description": field.Description,
 				"enum":        enum,
-				"enumNames":   enumNames,
 			}
 		} else if len(field.Fields) > 0 {
 			jsonschema["properties"].(map[string]any)[name] = BuildSimpleSchema("", field.Description, field.Fields)

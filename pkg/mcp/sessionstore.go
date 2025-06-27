@@ -1,13 +1,14 @@
 package mcp
 
 import (
+	"net/http"
 	"sync"
 )
 
 type SessionStore interface {
-	Store(string, *ServerSession)
-	Load(string) (*ServerSession, bool)
-	LoadAndDelete(string) (*ServerSession, bool)
+	Store(*http.Request, string, *ServerSession) error
+	Load(*http.Request, string) (*ServerSession, bool, error)
+	LoadAndDelete(*http.Request, string) (*ServerSession, bool, error)
 }
 
 type inMemory struct {
@@ -18,20 +19,21 @@ func NewInMemorySessionStore() SessionStore {
 	return &inMemory{}
 }
 
-func (s *inMemory) Store(sessionID string, session *ServerSession) {
+func (s *inMemory) Store(_ *http.Request, sessionID string, session *ServerSession) error {
 	s.sessions.Store(sessionID, session)
+	return nil
 }
 
-func (s *inMemory) Load(sessionID string) (*ServerSession, bool) {
+func (s *inMemory) Load(_ *http.Request, sessionID string) (*ServerSession, bool, error) {
 	if v, ok := s.sessions.Load(sessionID); ok {
-		return v.(*ServerSession), true
+		return v.(*ServerSession), true, nil
 	}
-	return nil, false
+	return nil, false, nil
 }
 
-func (s *inMemory) LoadAndDelete(sessionID string) (*ServerSession, bool) {
+func (s *inMemory) LoadAndDelete(_ *http.Request, sessionID string) (*ServerSession, bool, error) {
 	if v, ok := s.sessions.LoadAndDelete(sessionID); ok {
-		return v.(*ServerSession), true
+		return v.(*ServerSession), true, nil
 	}
-	return nil, false
+	return nil, false, nil
 }
