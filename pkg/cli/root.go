@@ -14,6 +14,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/config"
 	"github.com/nanobot-ai/nanobot/pkg/llm"
 	"github.com/nanobot-ai/nanobot/pkg/llm/anthropic"
+	"github.com/nanobot-ai/nanobot/pkg/llm/completions"
 	"github.com/nanobot-ai/nanobot/pkg/llm/ollama"
 	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
 	"github.com/nanobot-ai/nanobot/pkg/log"
@@ -44,6 +45,7 @@ type Nanobot struct {
 	OpenAIAPIKey     string            `usage:"OpenAI API key" env:"OPENAI_API_KEY" name:"openai-api-key"`
 	OpenAIBaseURL    string            `usage:"OpenAI API URL" env:"OPENAI_BASE_URL" name:"openai-base-url"`
 	OpenAIHeaders    map[string]string `usage:"OpenAI API headers" env:"OPENAI_HEADERS" name:"openai-headers"`
+	Completions      bool              `usage:"Use OpenAI-compatible completions backend instead of responses backend" name:"completions"`
 	AnthropicAPIKey  string            `usage:"Anthropic API key" env:"ANTHROPIC_API_KEY" name:"anthropic-api-key"`
 	AnthropicBaseURL string            `usage:"Anthropic API URL" env:"ANTHROPIC_BASE_URL" name:"anthropic-base-url"`
 	AnthropicHeaders map[string]string `usage:"Anthropic API headers" env:"ANTHROPIC_HEADERS" name:"anthropic-headers"`
@@ -123,7 +125,8 @@ func display(obj any, format string) bool {
 
 func (n *Nanobot) llmConfig() llm.Config {
 	return llm.Config{
-		DefaultModel: n.DefaultModel,
+		DefaultModel:   n.DefaultModel,
+		UseCompletions: n.Completions,
 		Responses: responses.Config{
 			APIKey:  n.OpenAIAPIKey,
 			BaseURL: n.OpenAIBaseURL,
@@ -137,6 +140,11 @@ func (n *Nanobot) llmConfig() llm.Config {
 		Ollama: ollama.Config{
 			BaseURL: n.OllamaBaseURL,
 			Headers: n.OllamaHeaders,
+		},
+		Completions: completions.Config{
+			APIKey:  n.OpenAIAPIKey,
+			BaseURL: n.OpenAIBaseURL,
+			Headers: n.OpenAIHeaders,
 		},
 	}
 }
