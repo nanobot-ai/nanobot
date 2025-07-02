@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -116,7 +115,7 @@ func (c *Client) complete(ctx context.Context, req *ChatCompletionRequest, opts 
 	}
 
 	// Check for errors in the response
-	if response.Choices == nil || len(response.Choices) == 0 {
+	if len(response.Choices) == 0 {
 		return nil, fmt.Errorf("no choices in response")
 	}
 
@@ -224,29 +223,6 @@ func progressResponse(ctx context.Context, resp *http.Response, progressToken an
 		return nil, false, err
 	}
 
-	// Post-process the response to handle tool calls in content
-	if response != nil && len(response.Choices) > 0 {
-		choice := &response.Choices[0]
-		if choice.Message.Content != nil {
-			if contentStr, ok := choice.Message.Content.(string); ok {
-				toolCalls, cleanedContent, err := parseToolCallsFromContent(contentStr)
-				if err == nil && len(toolCalls) > 0 {
-					// Add tool calls to the message
-					choice.Message.ToolCalls = append(choice.Message.ToolCalls, toolCalls...)
-
-					// Update content to remove tool call tags
-					// MLX_LM requires 'content' field to always be present, even for tool call messages
-					// Set to empty string if no meaningful content remains after removing tool calls
-					if strings.TrimSpace(cleanedContent) == "" {
-						choice.Message.Content = ""
-					} else {
-						choice.Message.Content = cleanedContent
-					}
-				}
-			}
-		}
-	}
-
 	return response, response != nil, nil
 }
 
@@ -255,60 +231,4 @@ func generateToolCallID() string {
 	bytes := make([]byte, 16)
 	rand.Read(bytes)
 	return "call_" + hex.EncodeToString(bytes)
-}
-
-// parseToolCallsFromContent extracts <tool_call> tags from content and converts them to tool calls
-func parseToolCallsFromContent(content string) ([]ToolCall, string, error) {
-	// Handle both closed and unclosed tool_call tags
-	// The regex captures everything between <tool_call> and </tool_call> or end of string
-	toolCallRegex := regexp.MustCompile(`<tool_call>\s*(\{.*?\})\s*(?:</tool_call>|$)`)
-	matches := toolCallRegex.FindAllStringSubmatch(content, -1)
-
-	if len(matches) == 0 {
-		return nil, content, nil
-	}
-
-	var toolCalls []ToolCall
-	cleanedContent := content
-
-	for _, match := range matches {
-		if len(match) < 2 {
-			continue
-		}
-
-		toolCallJSON := match[1]
-		var toolCallData struct {
-			Name      string          `json:"name"`
-			Arguments json.RawMessage `json:"arguments"`
-		}
-
-		if err := json.Unmarshal([]byte(toolCallJSON), &toolCallData); err != nil {
-			continue // Skip malformed tool calls
-		}
-
-		// Convert arguments to string
-		argsStr := "{}"
-		if len(toolCallData.Arguments) > 0 {
-			argsStr = string(toolCallData.Arguments)
-		}
-
-		toolCall := ToolCall{
-			ID:   generateToolCallID(),
-			Type: "function",
-			Function: FunctionCall{
-				Name:      toolCallData.Name,
-				Arguments: argsStr,
-			},
-		}
-
-		toolCalls = append(toolCalls, toolCall)
-
-		// Remove the tool call from content
-		cleanedContent = strings.Replace(cleanedContent, match[0], "", 1)
-	}
-
-	// Clean up any extra whitespace
-	cleanedContent = strings.TrimSpace(cleanedContent)
-
-	return toolCalls, cleanedContent, nil
 }

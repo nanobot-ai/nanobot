@@ -145,6 +145,28 @@ func toRequest(req *types.CompletionRequest) (Request, error) {
 		}
 	}
 
+	// Convert output schema to format parameter for structured output
+	if req.OutputSchema != nil {
+		// Use the schema if available, otherwise use fields to build schema
+		if len(req.OutputSchema.Schema) > 0 {
+			var schema interface{}
+			if err := json.Unmarshal(req.OutputSchema.Schema, &schema); err != nil {
+				return Request{}, fmt.Errorf("failed to parse output schema: %w", err)
+			}
+			result.Format = schema
+		} else {
+			// Use ToSchema() method to build schema from fields
+			schemaData := req.OutputSchema.ToSchema()
+			if len(schemaData) > 0 {
+				var schema interface{}
+				if err := json.Unmarshal(schemaData, &schema); err != nil {
+					return Request{}, fmt.Errorf("failed to build output schema: %w", err)
+				}
+				result.Format = schema
+			}
+		}
+	}
+
 	// Ensure we have at least one message
 	if len(result.Messages) == 0 {
 		result.Messages = append(result.Messages, Message{

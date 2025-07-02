@@ -2,21 +2,22 @@ package completions
 
 // ChatCompletionRequest represents the request structure for OpenAI chat completions API
 type ChatCompletionRequest struct {
-	Model             string         `json:"model"`
-	Messages          []ChatMessage  `json:"messages"`
-	MaxTokens         *int           `json:"max_tokens,omitempty"`
-	Temperature       *float64       `json:"temperature,omitempty"`
-	TopP              *float64       `json:"top_p,omitempty"`
-	N                 *int           `json:"n,omitempty"`
-	Stream            bool           `json:"stream,omitempty"`
-	Stop              interface{}    `json:"stop,omitempty"`
-	PresencePenalty   *float64       `json:"presence_penalty,omitempty"`
-	FrequencyPenalty  *float64       `json:"frequency_penalty,omitempty"`
-	LogitBias         map[string]int `json:"logit_bias,omitempty"`
-	User              string         `json:"user,omitempty"`
-	Tools             []Tool         `json:"tools,omitempty"`
-	ToolChoice        interface{}    `json:"tool_choice,omitempty"`
-	ParallelToolCalls *bool          `json:"parallel_tool_calls,omitempty"`
+	Model             string          `json:"model"`
+	Messages          []ChatMessage   `json:"messages"`
+	MaxTokens         *int            `json:"max_tokens,omitempty"`
+	Temperature       *float64        `json:"temperature,omitempty"`
+	TopP              *float64        `json:"top_p,omitempty"`
+	N                 *int            `json:"n,omitempty"`
+	Stream            bool            `json:"stream,omitempty"`
+	Stop              interface{}     `json:"stop,omitempty"`
+	PresencePenalty   *float64        `json:"presence_penalty,omitempty"`
+	FrequencyPenalty  *float64        `json:"frequency_penalty,omitempty"`
+	LogitBias         map[string]int  `json:"logit_bias,omitempty"`
+	User              string          `json:"user,omitempty"`
+	Tools             []Tool          `json:"tools,omitempty"`
+	ToolChoice        interface{}     `json:"tool_choice,omitempty"`
+	ParallelToolCalls *bool           `json:"parallel_tool_calls,omitempty"`
+	ResponseFormat    *ResponseFormat `json:"response_format,omitempty"`
 }
 
 // ChatMessage represents a single message in the conversation
@@ -107,4 +108,18 @@ type ContentPart struct {
 		URL    string `json:"url"`
 		Detail string `json:"detail,omitempty"`
 	} `json:"image_url,omitempty"`
+}
+
+// ResponseFormat represents the response format for structured outputs
+type ResponseFormat struct {
+	Type       string                 `json:"type"`
+	JSONSchema *ResponseFormatSchema  `json:"json_schema,omitempty"`
+}
+
+// ResponseFormatSchema represents a JSON schema for structured outputs
+type ResponseFormatSchema struct {
+	Name        string      `json:"name"`
+	Description string      `json:"description,omitempty"`
+	Schema      interface{} `json:"schema"`
+	Strict      bool        `json:"strict,omitempty"`
 }

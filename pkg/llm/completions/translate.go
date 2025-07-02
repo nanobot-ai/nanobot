@@ -44,7 +44,7 @@ func toRequest(req *types.CompletionRequest) (*ChatCompletionRequest, error) {
 
 			toolMsg := ChatMessage{
 				Role:      "assistant",
-				Content:   "", // MLX_LM requires content field to be present, even for tool calls
+				Content:   "", // Content field required even for tool calls
 				ToolCalls: []ToolCall{toolCall},
 			}
 			messages = append(messages, toolMsg)
@@ -92,6 +92,39 @@ func toRequest(req *types.CompletionRequest) (*ChatCompletionRequest, error) {
 			return nil, fmt.Errorf("invalid top_p: %w", err)
 		}
 		openaiReq.TopP = &topP
+	}
+
+	// Convert OutputSchema to ResponseFormat for structured output
+	if req.OutputSchema != nil {
+		responseFormat := &ResponseFormat{
+			Type: "json_schema",
+			JSONSchema: &ResponseFormatSchema{
+				Name:        req.OutputSchema.Name,
+				Description: req.OutputSchema.Description,
+				Strict:      req.OutputSchema.Strict,
+			},
+		}
+
+		// Use the schema if available, otherwise use fields to build schema
+		if len(req.OutputSchema.Schema) > 0 {
+			var schema interface{}
+			if err := json.Unmarshal(req.OutputSchema.Schema, &schema); err != nil {
+				return nil, fmt.Errorf("failed to parse output schema: %w", err)
+			}
+			responseFormat.JSONSchema.Schema = schema
+		} else {
+			// Use ToSchema() method to build schema from fields
+			schemaData := req.OutputSchema.ToSchema()
+			if len(schemaData) > 0 {
+				var schema interface{}
+				if err := json.Unmarshal(schemaData, &schema); err != nil {
+					return nil, fmt.Errorf("failed to build output schema: %w", err)
+				}
+				responseFormat.JSONSchema.Schema = schema
+			}
+		}
+
+		openaiReq.ResponseFormat = responseFormat
 	}
 
 	return openaiReq, nil

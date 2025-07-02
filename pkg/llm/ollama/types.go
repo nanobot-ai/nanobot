@@ -1,11 +1,12 @@
 package ollama
 
 type Request struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-	Stream   bool      `json:"stream,omitempty"`
-	Tools    []Tool    `json:"tools,omitempty"`
-	Options  *Options  `json:"options,omitempty"`
+	Model    string      `json:"model"`
+	Messages []Message   `json:"messages"`
+	Stream   bool        `json:"stream,omitempty"`
+	Tools    []Tool      `json:"tools,omitempty"`
+	Options  *Options    `json:"options,omitempty"`
+	Format   interface{} `json:"format,omitempty"`
 }
 
 type Options struct {
