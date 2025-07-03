@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/pkg/browser"
 )
 
 const Timeout = 15 * time.Minute
@@ -103,5 +105,67 @@ func (*Service) Confirm(ctx context.Context, session *mcp.Session, target types.
 		}, nil
 	default:
 		return nil, fmt.Errorf("unexpected answer from user: %s", answer)
+	}
+}
+
+func (*Service) HandleAuthURL(ctx context.Context, mcpServerName, url string) (bool, error) {
+	session := mcp.SessionFromContext(ctx)
+	if session == nil {
+		return false, fmt.Errorf("no session found in context")
+	}
+
+	for session.Parent != nil {
+		session = session.Parent
+	}
+
+	if session.InitializeRequest.Capabilities.Elicitation == nil {
+		return false, nil
+	}
+
+	elicit := mcp.ElicitRequest{
+		Message: fmt.Sprintf("MCP server %s requires authoriziation, please visit the following URL to continue: %s", mcpServerName, url),
+		RequestedSchema: mcp.PrimitiveSchema{
+			Type: "object",
+			Properties: map[string]mcp.PrimitiveProperty{
+				"answer": {
+					Type:      "enum",
+					Enum:      []string{"open", "user", "no"},
+					EnumNames: []string{"Open for me", "I'll open it myself", "Decline"},
+				},
+			},
+		},
+	}
+
+	var elicitResponse mcp.ElicitResult
+
+	if err := session.Exchange(ctx, "elicitation/create", elicit, &elicitResponse); err != nil {
+		return false, fmt.Errorf("failed to elicit confirmation: %w", err)
+	}
+
+	var answer string
+	switch elicitResponse.Action {
+	case "reject":
+		answer = "no"
+	case "cancel":
+		return false, fmt.Errorf("user has declined authorization for server %s", mcpServerName)
+	case "accept":
+		s, ok := elicitResponse.Content["answer"].(string)
+		if !ok {
+			return false, fmt.Errorf("expected 'answer' field in elicit response content, got: %v", elicitResponse.Content["answer"])
+		}
+		answer = s
+	}
+
+	switch answer {
+	case "open":
+		_, _ = fmt.Fprintf(os.Stderr, "Opening browser to %s. If there is an issue paste this link into a browser manually\n", url)
+		return true, browser.OpenURL(url)
+	case "user":
+		_, _ = fmt.Fprintf(os.Stderr, "Naviate to %s.\n", url)
+		return true, nil
+	case "no":
+		return false, fmt.Errorf("user has declined authorization for server %s", mcpServerName)
+	default:
+		return false, fmt.Errorf("unexpected answer from user: %s", answer)
 	}
 }

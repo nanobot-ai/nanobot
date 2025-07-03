@@ -98,7 +98,7 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request) {
 }
 
 func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	if req.Method == "GET" {
+	if req.Method == http.MethodGet {
 		h.streamEvents(rw, req)
 		return
 	}
