@@ -133,8 +133,12 @@ func printCompletionProgress(params json.RawMessage, seenAgentOut func()) {
 		return
 	}
 
-	if progress.Item.Message != nil && progress.Model != "" && progress.Item.Message.Content.Text != "" {
-		printer.Prefix(fmt.Sprintf("<-(%s)", progress.Model), progress.Item.Message.Content.Text)
+	if progress.Model != "" {
+		if progress.Item.Message != nil && progress.Item.Message.Content.Text != "" {
+			printer.Prefix(fmt.Sprintf("<-(%s)", progress.Model), progress.Item.Message.Content.Text)
+		} else if !progress.HasMore {
+			printer.Prefix(fmt.Sprintf("<-(%s)", progress.Model), "\n")
+		}
 	}
 
 	if progress.Item.ToolCall != nil &&
