@@ -11,8 +11,9 @@ import (
 // toRequest converts a nanobot CompletionRequest to an OpenAI ChatCompletionRequest
 func toRequest(req *types.CompletionRequest) (*ChatCompletionRequest, error) {
 	openaiReq := &ChatCompletionRequest{
-		Model:  req.Model,
-		Stream: true, // Always use streaming for consistency with other backends
+		Model:             req.Model,
+		Stream:            true, // Always use streaming for consistency with other backends
+		ParallelToolCalls: &[]bool{false}[0], // Disable parallel tool calls for sequential execution
 	}
 
 	// Convert messages
@@ -30,7 +31,7 @@ func toRequest(req *types.CompletionRequest) (*ChatCompletionRequest, error) {
 			// Convert tool call to assistant message with tool_calls
 			args := input.ToolCall.Arguments
 			if args == "" {
-				args = "{}"
+				args = "{}" // OpenAI requires at least empty JSON object
 			}
 
 			toolCall := ToolCall{
@@ -214,12 +215,14 @@ func toResponse(resp *ChatCompletionResponse) (*types.CompletionResponse, error)
 			})
 		}
 
-		// Handle tool calls
+		// Handle tool calls - FORCE SEQUENTIAL EXECUTION by returning only the first tool call
+		// This ensures tool calls are processed one at a time, preventing parallel execution
 		for _, toolCall := range choice.Message.ToolCalls {
 			if toolCall.Function.Name == "" {
 				// Skip tool calls with empty names to avoid errors
 				continue
 			}
+			// Only add the first valid tool call to force sequential processing
 			nanobotResp.Output = append(nanobotResp.Output, types.CompletionItem{
 				ToolCall: &types.ToolCall{
 					CallID:    toolCall.ID,
@@ -227,6 +230,8 @@ func toResponse(resp *ChatCompletionResponse) (*types.CompletionResponse, error)
 					Arguments: toolCall.Function.Arguments,
 				},
 			})
+			// Break after first tool call to ensure sequential execution
+			break
 		}
 	}
 

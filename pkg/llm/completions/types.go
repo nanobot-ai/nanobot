@@ -47,6 +47,7 @@ type ToolCall struct {
 	ID       string       `json:"id"`
 	Type     string       `json:"type"`
 	Function FunctionCall `json:"function"`
+	Index    *int         `json:"index,omitempty"` // Used in streaming responses
 }
 
 // FunctionCall represents a function call
@@ -112,8 +113,8 @@ type ContentPart struct {
 
 // ResponseFormat represents the response format for structured outputs
 type ResponseFormat struct {
-	Type       string                 `json:"type"`
-	JSONSchema *ResponseFormatSchema  `json:"json_schema,omitempty"`
+	Type       string                `json:"type"`
+	JSONSchema *ResponseFormatSchema `json:"json_schema,omitempty"`
 }
 
 // ResponseFormatSchema represents a JSON schema for structured outputs

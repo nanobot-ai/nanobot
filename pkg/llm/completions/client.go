@@ -124,7 +124,12 @@ func (c *Client) complete(ctx context.Context, req *ChatCompletionRequest, opts 
 
 func progressResponse(ctx context.Context, resp *http.Response, progressToken any) (*ChatCompletionResponse, bool, error) {
 	scanner := bufio.NewScanner(resp.Body)
-	var response *ChatCompletionResponse
+	var (
+		response           *ChatCompletionResponse
+		activeToolCalls    = make(map[string]string) // call_id -> partial_args
+		completedToolCalls = make(map[string]bool)   // call_id -> completed
+		toolCallOrder      []string                  // track order of tool calls
+	)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -160,16 +165,17 @@ func progressResponse(ctx context.Context, resp *http.Response, progressToken an
 			}
 		}
 
-		// Accumulate content from delta and send progress updates
+		// Process deltas and accumulate content
 		for i, choice := range streamResp.Choices {
 			if i >= len(response.Choices) {
 				continue
 			}
 
 			if choice.Delta != nil {
+				// Handle text content - send deltas immediately like Anthropic
 				if choice.Delta.Content != nil {
-					// Handle content accumulation
 					if deltaContent, ok := choice.Delta.Content.(string); ok && deltaContent != "" {
+						// Accumulate content
 						currentContent := ""
 						if response.Choices[i].Message.Content != nil {
 							if current, ok := response.Choices[i].Message.Content.(string); ok {
@@ -178,18 +184,19 @@ func progressResponse(ctx context.Context, resp *http.Response, progressToken an
 						}
 						response.Choices[i].Message.Content = currentContent + deltaContent
 
-						// Send progress update with only the delta content
+						// Send text delta immediately
 						if progressToken != nil {
 							progress := &types.CompletionProgress{
 								Model:   response.Model,
 								Partial: true,
 								HasMore: true,
 								Item: types.CompletionItem{
+									ID: fmt.Sprintf("%s-text-%d", response.ID, i),
 									Message: &mcp.SamplingMessage{
 										Role: "assistant",
 										Content: mcp.Content{
 											Type: "text",
-											Text: deltaContent, // Send only the delta, not accumulated content
+											Text: deltaContent,
 										},
 									},
 								},
@@ -199,26 +206,146 @@ func progressResponse(ctx context.Context, resp *http.Response, progressToken an
 					}
 				}
 
-				// Handle tool calls
+				// Handle tool calls - accumulate and send on completion
 				if choice.Delta.ToolCalls != nil {
-					// Append tool calls rather than replace them, as OpenAI may send them in multiple chunks
+					// Initialize tool calls slice if needed
 					if response.Choices[i].Message.ToolCalls == nil {
 						response.Choices[i].Message.ToolCalls = []ToolCall{}
 					}
-					for _, toolCall := range choice.Delta.ToolCalls {
-						// Only add tool calls with valid names to avoid empty tool calls
-						if toolCall.Function.Name != "" {
-							response.Choices[i].Message.ToolCalls = append(response.Choices[i].Message.ToolCalls, toolCall)
+
+					for _, deltaToolCall := range choice.Delta.ToolCalls {
+						// Find existing tool call by index or create new one
+						toolCallIndex := deltaToolCall.Index
+						if toolCallIndex == nil {
+							idx := len(response.Choices[i].Message.ToolCalls)
+							toolCallIndex = &idx
+						}
+
+						// Ensure we have enough tool calls in the slice
+						for len(response.Choices[i].Message.ToolCalls) <= *toolCallIndex {
+							response.Choices[i].Message.ToolCalls = append(response.Choices[i].Message.ToolCalls, ToolCall{
+								Type:     "function",
+								Function: FunctionCall{},
+							})
+						}
+
+						existingToolCall := &response.Choices[i].Message.ToolCalls[*toolCallIndex]
+
+						// Handle tool call ID and type
+						if deltaToolCall.ID != "" {
+							existingToolCall.ID = deltaToolCall.ID
+							// Track order of tool calls as they appear
+							if existingToolCall.ID != "" {
+								found := false
+								for _, id := range toolCallOrder {
+									if id == existingToolCall.ID {
+										found = true
+										break
+									}
+								}
+								if !found {
+									toolCallOrder = append(toolCallOrder, existingToolCall.ID)
+								}
+							}
+						}
+						if deltaToolCall.Type != "" {
+							existingToolCall.Type = deltaToolCall.Type
+						}
+
+						// Handle function name - send "tool call added" event once
+						if deltaToolCall.Function.Name != "" && existingToolCall.ID != "" {
+							if existingToolCall.Function.Name == "" {
+								existingToolCall.Function.Name = deltaToolCall.Function.Name
+
+								log.Messages(ctx, "openai-api", true, []byte(fmt.Sprintf("Tool call started: %s(%s)", deltaToolCall.Function.Name, existingToolCall.ID)))
+
+								if progressToken != nil {
+									progress := &types.CompletionProgress{
+										Model:   response.Model,
+										Partial: true,
+										HasMore: true,
+										Item: types.CompletionItem{
+											ID: existingToolCall.ID,
+											ToolCall: &types.ToolCall{
+												CallID: existingToolCall.ID,
+												Name:   existingToolCall.Function.Name,
+											},
+										},
+									}
+									send(ctx, progress, progressToken)
+								}
+							} else {
+								existingToolCall.Function.Name = deltaToolCall.Function.Name
+							}
+						}
+
+						// Handle function arguments - send deltas like responses API
+						if deltaToolCall.Function.Arguments != "" && existingToolCall.ID != "" {
+							existingToolCall.Function.Arguments += deltaToolCall.Function.Arguments
+							if _, exists := activeToolCalls[existingToolCall.ID]; !exists {
+								activeToolCalls[existingToolCall.ID] = ""
+							}
+							activeToolCalls[existingToolCall.ID] += deltaToolCall.Function.Arguments
+
+							// Send argument delta immediately like we were doing before
+							if progressToken != nil && existingToolCall.Function.Name != "" {
+								progress := &types.CompletionProgress{
+									Model:   response.Model,
+									Partial: true,
+									HasMore: true,
+									Item: types.CompletionItem{
+										ID: existingToolCall.ID,
+										ToolCall: &types.ToolCall{
+											CallID:    existingToolCall.ID,
+											Name:      existingToolCall.Function.Name,
+											Arguments: deltaToolCall.Function.Arguments, // Send just the delta
+										},
+									},
+								}
+								send(ctx, progress, progressToken)
+							}
 						}
 					}
 				}
 			}
 
+			// Handle completion - send tool call completion events
 			if choice.FinishReason != nil {
 				response.Choices[i].FinishReason = choice.FinishReason
+
+				// Send completion events for all tool calls when done, in order
+				if len(response.Choices[i].Message.ToolCalls) > 0 && *choice.FinishReason == "tool_calls" {
+					// Process tool calls in the order they were received
+					for _, toolCallID := range toolCallOrder {
+						// Find the tool call by ID
+						for _, toolCall := range response.Choices[i].Message.ToolCalls {
+							if toolCall.ID == toolCallID && !completedToolCalls[toolCall.ID] {
+								log.Messages(ctx, "openai-api", true, []byte(fmt.Sprintf("Tool call completed: %s(%s)", toolCall.Function.Name, toolCall.ID)))
+
+								if progressToken != nil {
+									progress := &types.CompletionProgress{
+										Model:   response.Model,
+										Partial: false,
+										HasMore: false,
+										Item: types.CompletionItem{
+											ID: toolCall.ID,
+											ToolCall: &types.ToolCall{
+												CallID: toolCall.ID,
+											},
+										},
+									}
+									send(ctx, progress, progressToken)
+								}
+								completedToolCalls[toolCall.ID] = true
+								break
+							}
+						}
+					}
+				}
 			}
 		}
 	}
+
 	if err := scanner.Err(); err != nil {
 		return nil, false, err
 	}
