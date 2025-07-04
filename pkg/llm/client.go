@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/llm/anthropic"
+	"github.com/nanobot-ai/nanobot/pkg/llm/completions"
+	"github.com/nanobot-ai/nanobot/pkg/llm/ollama"
 	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -13,23 +15,32 @@ import (
 var _ types.Completer = (*Client)(nil)
 
 type Config struct {
-	DefaultModel string
-	Responses    responses.Config
-	Anthropic    anthropic.Config
+	DefaultModel   string
+	UseCompletions bool // Use completions backend instead of responses
+	Responses      responses.Config
+	Anthropic      anthropic.Config
+	Ollama         ollama.Config
+	Completions    completions.Config
 }
 
 func NewClient(cfg Config) *Client {
 	return &Client{
-		defaultModel: cfg.DefaultModel,
-		responses:    responses.NewClient(cfg.Responses),
-		anthropic:    anthropic.NewClient(cfg.Anthropic),
+		defaultModel:   cfg.DefaultModel,
+		useCompletions: cfg.UseCompletions,
+		responses:      responses.NewClient(cfg.Responses),
+		anthropic:      anthropic.NewClient(cfg.Anthropic),
+		ollama:         ollama.NewClient(cfg.Ollama),
+		completions:    completions.NewClient(cfg.Completions),
 	}
 }
 
 type Client struct {
-	defaultModel string
-	responses    *responses.Client
-	anthropic    *anthropic.Client
+	defaultModel   string
+	useCompletions bool
+	responses      *responses.Client
+	anthropic      *anthropic.Client
+	ollama         *ollama.Client
+	completions    *completions.Client
 }
 
 func (c *Client) handleAssistantRolesFromTools(req types.CompletionRequest) (_ types.CompletionRequest, resp *types.CompletionResponse) {
@@ -85,5 +96,25 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 	if strings.HasPrefix(req.Model, "claude") {
 		return c.anthropic.Complete(ctx, req, opts...)
 	}
+
+	// Route to Ollama for common Ollama model patterns
+	if strings.HasPrefix(req.Model, "ollama:") {
+		// Remove ollama: prefix if present
+		req.Model = strings.TrimPrefix(req.Model, "ollama:")
+		return c.ollama.Complete(ctx, req, opts...)
+	}
+
+	// Route to OpenAI for common OpenAI model patterns or openai: prefix
+	if strings.HasPrefix(req.Model, "completions:") {
+		// Remove openai: prefix if present
+		req.Model = strings.TrimPrefix(req.Model, "completions:")
+		return c.completions.Complete(ctx, req, opts...)
+	}
+
+	// Use completions backend if flag is set, otherwise use responses backend
+	if c.useCompletions {
+		return c.completions.Complete(ctx, req, opts...)
+	}
+
 	return c.responses.Complete(ctx, req, opts...)
 }
