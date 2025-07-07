@@ -19,15 +19,16 @@ import (
 var resourceMetadataRegex = regexp.MustCompile(`resource_metadata="([^"]*)"`)
 
 type oauth struct {
-	redirectURL     string
-	metadataClient  *http.Client
-	callbackHandler CallbackHandler
-	clientLookup    ClientCredLookup
-	tokenStorage    TokenStorage
+	redirectURL, clientName string
+	metadataClient          *http.Client
+	callbackHandler         CallbackHandler
+	clientLookup            ClientCredLookup
+	tokenStorage            TokenStorage
 }
 
-func newOAuth(callbackHandler CallbackHandler, clientLookup ClientCredLookup, tokenStorage TokenStorage, redirectURL string) *oauth {
+func newOAuth(callbackHandler CallbackHandler, clientLookup ClientCredLookup, tokenStorage TokenStorage, clientName, redirectURL string) *oauth {
 	return &oauth{
+		clientName:      clientName,
 		redirectURL:     redirectURL,
 		callbackHandler: callbackHandler,
 		metadataClient: &http.Client{
@@ -94,7 +95,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	if protectedResourceResp.StatusCode != http.StatusOK && protectedResourceResp.StatusCode != http.StatusNotFound {
 		body, _ := io.ReadAll(protectedResourceResp.Body)
 		return nil, fmt.Errorf("unexpeted status getting protected resource metadata (%d): %s", protectedResourceResp.StatusCode, string(body))
-	} else {
+	} else if protectedResourceResp.StatusCode == http.StatusOK {
 		protectedResourceMetadata, err = parseProtectedResourceMetadata(protectedResourceResp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse protected resource metadata: %w", err)
@@ -112,6 +113,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 
 	clientMetadata := authServerMetadataToClientRegistration(authorizationServerMetadata)
 	clientMetadata.RedirectURIs = []string{o.redirectURL}
+	clientMetadata.ClientName = o.clientName
 
 	b, err := json.Marshal(clientMetadata)
 	if err != nil {
@@ -608,12 +610,6 @@ func parseClientRegistrationResponse(reader io.Reader) (clientRegistrationRespon
 	// Validate required fields
 	if response.ClientID == "" {
 		return response, fmt.Errorf("client_id is required but not provided")
-	}
-
-	// Validate conditional requirements
-	// client_secret_expires_at is REQUIRED if client_secret is issued
-	if response.ClientSecret != "" && response.ClientSecretExpiresAt == nil {
-		return response, fmt.Errorf("client_secret_expires_at is required when client_secret is issued")
 	}
 
 	return response, nil

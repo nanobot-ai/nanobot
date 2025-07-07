@@ -39,11 +39,11 @@ type HTTPClient struct {
 	needReconnect bool
 }
 
-func NewHTTPClient(ctx context.Context, serverName, baseURL, oauthRedirectURL string, callbackHandler CallbackHandler, clientCredLookup ClientCredLookup, tokenStorage TokenStorage, headers map[string]string) *HTTPClient {
+func NewHTTPClient(ctx context.Context, serverName, baseURL, oauthClientName, oauthRedirectURL string, callbackHandler CallbackHandler, clientCredLookup ClientCredLookup, tokenStorage TokenStorage, headers map[string]string) *HTTPClient {
 	_, initialized := headers[SessionIDHeader]
 	h := &HTTPClient{
 		httpClient:    http.DefaultClient,
-		oauthHandler:  newOAuth(callbackHandler, clientCredLookup, tokenStorage, oauthRedirectURL),
+		oauthHandler:  newOAuth(callbackHandler, clientCredLookup, tokenStorage, oauthClientName, oauthRedirectURL),
 		baseURL:       baseURL,
 		messageURL:    baseURL,
 		serverName:    serverName,

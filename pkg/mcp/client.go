@@ -37,6 +37,7 @@ type ClientOption struct {
 	ParentSession    *Session
 	Session          *SessionState
 	Runner           *Runner
+	OAuthClientName  string
 	OAuthRedirectURL string
 	CallbackHandler  CallbackHandler
 	ClientCredLookup ClientCredLookup
@@ -52,6 +53,9 @@ func (c ClientOption) Complete() ClientOption {
 	}
 	if c.TokenStorage == nil {
 		c.TokenStorage = NewDefaultLocalStorage()
+	}
+	if c.OAuthClientName == "" {
+		c.OAuthClientName = "Nanobot MCP Client"
 	}
 	return c
 }
@@ -94,6 +98,7 @@ func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
 		result.TokenStorage = other.TokenStorage
 	}
 	result.OAuthRedirectURL = complete.Last(c.OAuthRedirectURL, other.OAuthRedirectURL)
+	result.OAuthClientName = complete.Last(c.OAuthClientName, other.OAuthClientName)
 	result.Env = complete.MergeMap(c.Env, other.Env)
 	result.Session = complete.Last(c.Session, other.Session)
 	result.ParentSession = complete.Last(c.ParentSession, other.ParentSession)
@@ -263,7 +268,7 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 			}
 			header["Mcp-Session-Id"] = opt.Session.ID
 		}
-		wire = NewHTTPClient(ctx, serverName, config.BaseURL, opt.OAuthRedirectURL, opt.CallbackHandler, opt.ClientCredLookup, opt.TokenStorage, envvar.ReplaceMap(opt.Env, config.Headers))
+		wire = NewHTTPClient(ctx, serverName, config.BaseURL, opt.OAuthClientName, opt.OAuthRedirectURL, opt.CallbackHandler, opt.ClientCredLookup, opt.TokenStorage, envvar.ReplaceMap(opt.Env, config.Headers))
 	} else {
 		wire, err = newStdioClient(ctx, opt.Roots, opt.Env, serverName, config, opt.Runner)
 		if err != nil {
