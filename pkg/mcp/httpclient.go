@@ -204,10 +204,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 
 		messages := newSSEStream(resp.Body)
 
-		if msg == nil {
-			s.messageURL = s.baseURL
-			msg = nil
-		} else if msg.Method == "initialize" {
+		if msg != nil && msg.Method == "initialize" {
 			data, ok := messages.readNextMessage()
 			if !ok {
 				return fmt.Errorf("failed to read SSE message: %w", messages.err()), true
