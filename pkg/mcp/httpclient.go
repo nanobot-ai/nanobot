@@ -204,7 +204,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 
 		messages := newSSEStream(resp.Body)
 
-		if !s.sse {
+		if msg == nil {
 			s.messageURL = s.baseURL
 			msg = nil
 		} else if msg.Method == "initialize" {
