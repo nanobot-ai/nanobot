@@ -323,12 +323,13 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 	case <-ctx.Done():
 		return ctx.Err()
 	case m := <-ch:
+		if isInit {
+			if err := s.postInit(&m); err != nil {
+				return err
+			}
+		}
 		if mOut, ok := out.(*Message); ok {
 			*mOut = m
-
-			if isInit {
-				return s.postInit(mOut)
-			}
 			return nil
 		}
 		if m.Error != nil {
