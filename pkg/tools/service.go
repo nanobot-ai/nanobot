@@ -151,28 +151,22 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 		return c, nil
 	}
 
-	var roots mcp.ListRootsResult
-	if session.InitializeRequest.Capabilities.Roots != nil {
-		err := session.Exchange(ctx, "roots/list", mcp.ListRootsRequest{}, &roots)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list roots: %w", err)
-		}
-	}
-
 	mcpConfig, ok := config.MCPServers[name]
 	if !ok {
 		return nil, fmt.Errorf("MCP server %s not found in config", name)
 	}
 
-	if len(s.roots) > 0 {
-		roots.Roots = append(roots.Roots, s.roots...)
-	}
-
 	clientOpts := mcp.ClientOption{
-		Roots:         roots.Roots,
 		Env:           session.EnvMap(),
 		ParentSession: session,
 		OnRoots: func(ctx context.Context, msg mcp.Message) error {
+			var roots mcp.ListRootsResult
+			if session.InitializeRequest.Capabilities.Roots != nil {
+				err := session.Exchange(ctx, "roots/list", mcp.ListRootsRequest{}, &roots)
+				if err != nil {
+					return fmt.Errorf("failed to list roots: %w", err)
+				}
+			}
 			return msg.Reply(ctx, mcp.ListRootsResult{
 				Roots: roots.Roots,
 			})

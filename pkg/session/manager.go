@@ -112,5 +112,27 @@ func (m *Manager) Load(req *http.Request, id string) (*mcp.ServerSession, bool, 
 }
 
 func (m *Manager) LoadAndDelete(request *http.Request, id string) (*mcp.ServerSession, bool, error) {
-	return nil, true, nil
+	session, ok, err := m.inMemory.LoadAndDelete(request, id)
+	if err != nil {
+		return nil, false, err
+	} else if ok {
+		return session, true, nil
+	}
+
+	storedSession, err := m.store.Get(id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return session, ok, nil
+	} else if err != nil {
+		return nil, false, err
+	}
+
+	serverSession, err := mcp.NewExistingServerSession(context.Background(), mcp.SessionState(storedSession.State), m.server)
+	if err != nil {
+		return nil, false, err
+	}
+
+	config := (types.Config)(storedSession.Config)
+	serverSession.GetSession().Set(types.ConfigSessionKey, &config)
+
+	return serverSession, true, nil
 }

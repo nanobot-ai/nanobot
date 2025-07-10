@@ -140,6 +140,9 @@ func (s *Session) Get(key string, out any) (ret bool) {
 	if srcVal.Type().AssignableTo(dstVal.Type()) {
 		reflect.Indirect(dstVal).Set(reflect.Indirect(srcVal))
 		return true
+	} else if dstVal.Kind() == reflect.Ptr && dstVal.Elem().Type().AssignableTo(srcVal.Type()) {
+		reflect.Indirect(dstVal).Set(reflect.Indirect(srcVal))
+		return true
 	}
 
 	switch v := v.(type) {

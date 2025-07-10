@@ -208,12 +208,13 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 }
 
 func (s *Server) handleListTools(ctx context.Context, msg mcp.Message, _ mcp.ListToolsRequest) error {
+	var toolMappings types.ToolMappings
+	msg.Session.Get(toolMappingKey, &toolMappings)
+
 	result := mcp.ListToolsResult{
-		Tools: []mcp.Tool{},
+		Tools: make([]mcp.Tool, 0, len(toolMappings)),
 	}
 
-	toolMappings := types.ToolMappings{}
-	msg.Session.Get(toolMappingKey, &toolMappings)
 	for _, k := range slices.Sorted(maps.Keys(toolMappings)) {
 		if k == types.AgentTool {
 			// entrypoint is essentially hidden
