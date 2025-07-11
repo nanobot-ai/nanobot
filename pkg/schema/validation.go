@@ -42,16 +42,13 @@ func ValidateAndFixToolSchema(schema json.RawMessage) json.RawMessage {
 func ValidateToolMappings(toolMappings types.ToolMappings) types.ToolMappings {
 	validated := make(types.ToolMappings)
 	for k, mapping := range toolMappings {
-		if tool, ok := mapping.Target.(mcp.Tool); ok {
-			// Create a copy of the tool with validated schema
-			validatedTool := mcp.Tool{
-				Name:        tool.Name,
-				Description: tool.Description,
-				InputSchema: ValidateAndFixToolSchema(tool.InputSchema),
-				Annotations: tool.Annotations,
-			}
-			mapping.Target = validatedTool
+		validatedTool := mcp.Tool{
+			Name:        mapping.Target.Name,
+			Description: mapping.Target.Description,
+			InputSchema: ValidateAndFixToolSchema(mapping.Target.InputSchema),
+			Annotations: mapping.Target.Annotations,
 		}
+		mapping.Target = validatedTool
 		validated[k] = mapping
 	}
 	return validated

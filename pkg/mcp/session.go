@@ -22,15 +22,15 @@ func (f MessageHandlerFunc) OnMessage(ctx context.Context, msg Message) {
 	f(ctx, msg)
 }
 
-type wire interface {
+type Wire interface {
 	Close()
 	Wait()
-	Start(ctx context.Context, handler wireHandler) error
+	Start(ctx context.Context, handler WireHandler) error
 	Send(ctx context.Context, req Message) error
 	SessionID() string
 }
 
-type wireHandler func(msg Message)
+type WireHandler func(ctx context.Context, msg Message)
 
 var sessionKey = struct{}{}
 
@@ -55,7 +55,7 @@ func WithSession(ctx context.Context, s *Session) context.Context {
 type Session struct {
 	ctx               context.Context
 	cancel            context.CancelFunc
-	wire              wire
+	wire              Wire
 	handler           MessageHandler
 	pendingRequest    PendingRequests
 	InitializeResult  InitializeResult
@@ -68,6 +68,10 @@ type Session struct {
 
 const SessionEnvMapKey = "env"
 
+func (s *Session) Context() context.Context {
+	return s.ctx
+}
+
 func (s *Session) ID() string {
 	if s == nil || s.wire == nil {
 		return ""
@@ -75,16 +79,30 @@ func (s *Session) ID() string {
 	return s.wire.SessionID()
 }
 
-func (s *Session) State() *SessionState {
+func (s *Session) State() (*SessionState, error) {
 	if s == nil {
-		return nil
+		return nil, nil
 	}
+
+	attr := make(map[string]any, len(s.attributes))
+	for k, v := range s.attributes {
+		if serializable, ok := v.(Serializable); ok {
+			data, err := serializable.Serialize()
+			if err != nil {
+				return nil, fmt.Errorf("failed to serialize attribute %s: %w", k, err)
+			}
+			if data != nil {
+				attr[k] = data
+			}
+		}
+	}
+
 	return &SessionState{
 		ID:                s.wire.SessionID(),
 		InitializeResult:  s.InitializeResult,
 		InitializeRequest: s.InitializeRequest,
-		Attributes:        s.Attributes(),
-	}
+		Attributes:        attr,
+	}, nil
 }
 func (s *Session) EnvMap() map[string]string {
 	if s == nil {
@@ -102,6 +120,18 @@ func (s *Session) EnvMap() map[string]string {
 	return env
 }
 
+func (s *Session) Delete(key string) {
+	if s == nil {
+		return
+	}
+	if s.Parent != nil {
+		defer s.Parent.Delete(key)
+	}
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	delete(s.attributes, key)
+}
+
 func (s *Session) Set(key string, value any) {
 	if s == nil {
 		return
@@ -112,6 +142,35 @@ func (s *Session) Set(key string, value any) {
 		s.attributes = make(map[string]any)
 	}
 	s.attributes[key] = value
+}
+
+func (s *Session) copyInto(out, in any) bool {
+	dstVal := reflect.ValueOf(out)
+	srcVal := reflect.ValueOf(in)
+	if srcVal.Type().AssignableTo(dstVal.Type()) {
+		reflect.Indirect(dstVal).Set(reflect.Indirect(srcVal))
+		return true
+	}
+
+	switch v := in.(type) {
+	case float64:
+		if outNum, ok := out.(*float64); ok {
+			*outNum = v
+			return true
+		}
+	case SavedString:
+		if outStr, ok := out.(*string); ok {
+			*outStr = string(v)
+			return true
+		}
+	case string:
+		if outStr, ok := out.(*string); ok {
+			*outStr = v
+			return true
+		}
+	}
+
+	return false
 }
 
 func (s *Session) Get(key string, out any) (ret bool) {
@@ -125,47 +184,40 @@ func (s *Session) Get(key string, out any) (ret bool) {
 	}()
 
 	s.lock.Lock()
-	defer s.lock.Unlock()
-
 	v, ok := s.attributes[key]
 	if !ok {
+		s.lock.Unlock()
 		return false
 	}
+	s.lock.Unlock()
+
+	if v == nil {
+		return false
+	}
+
 	if out == nil {
 		return true
 	}
 
-	dstVal := reflect.ValueOf(out)
-	srcVal := reflect.ValueOf(v)
-	if srcVal.Type().AssignableTo(dstVal.Type()) {
-		reflect.Indirect(dstVal).Set(reflect.Indirect(srcVal))
+	if s.copyInto(out, v) {
 		return true
 	}
 
-	switch v := v.(type) {
-	case float64:
-		if outNum, ok := out.(*float64); ok {
-			*outNum = v
-			return true
+	if deserializable, ok := out.(Deserializable); ok {
+		newOut, err := deserializable.Deserialize(v)
+		if err != nil {
+			s.lock.Lock()
+			delete(s.attributes, key)
+			s.lock.Unlock()
+			return false
 		}
-	case string:
-		if outStr, ok := out.(*string); ok {
-			*outStr = v
-			return true
-		}
+		s.lock.Lock()
+		s.attributes[key] = newOut
+		s.lock.Unlock()
+		return true
 	}
 
-	data, err := json.Marshal(v)
-	if err != nil {
-		delete(s.attributes, key)
-		return false
-	}
-	if err := json.Unmarshal(data, out); err != nil {
-		delete(s.attributes, key)
-		return false
-	}
-	s.attributes[key] = out
-	return true
+	panic(fmt.Sprintf("can not marshal %T to type: %T", v, out))
 }
 
 func (s *Session) Attributes() map[string]any {
@@ -276,6 +328,9 @@ func (s *Session) preInit(msg *Message) (bool, error) {
 }
 
 func (s *Session) postInit(msg *Message) error {
+	if len(msg.Result) == 0 {
+		return nil
+	}
 	var init InitializeResult
 	if err := json.Unmarshal(msg.Result, &init); err != nil {
 		return fmt.Errorf("failed to unmarshal initialize result: %w", err)
@@ -284,13 +339,29 @@ func (s *Session) postInit(msg *Message) error {
 	return nil
 }
 
-func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts ...ExchangeOption) error {
-	opt := complete.Complete(opts...)
+func (s *Session) marshalResponse(m Message, out any) error {
+	if mOut, ok := out.(*Message); ok {
+		*mOut = m
+		return nil
+	}
+	if m.Error != nil {
+		return fmt.Errorf("error from server: %s", m.Error.Message)
+	}
+	if m.Result == nil {
+		return fmt.Errorf("no result in response")
+	}
+	if err := json.Unmarshal(m.Result, out); err != nil {
+		return fmt.Errorf("failed to unmarshal result: %w", err)
+	}
+	return nil
+}
+
+func (s *Session) toRequest(method string, in any, opt ExchangeOption) (*Message, error) {
 	req, ok := in.(*Message)
 	if !ok {
 		data, err := json.Marshal(in)
 		if err != nil {
-			return fmt.Errorf("failed to marshal request: %w", err)
+			return nil, fmt.Errorf("failed to marshal request: %w", err)
 		}
 		req = &Message{
 			Method: method,
@@ -303,8 +374,18 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 	}
 	if opt.ProgressToken != nil {
 		if err := req.SetProgressToken(opt.ProgressToken); err != nil {
-			return fmt.Errorf("failed to set progress token: %w", err)
+			return nil, fmt.Errorf("failed to set progress token: %w", err)
 		}
+	}
+
+	return req, nil
+}
+
+func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts ...ExchangeOption) error {
+	opt := complete.Complete(opts...)
+	req, err := s.toRequest(method, in, opt)
+	if err != nil {
+		return err
 	}
 
 	ch := s.pendingRequest.WaitFor(req.ID)
@@ -325,33 +406,20 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 	case m := <-ch:
 		if isInit {
 			if err := s.postInit(&m); err != nil {
-				return err
+				return fmt.Errorf("failed to post init: %w", err)
 			}
 		}
-		if mOut, ok := out.(*Message); ok {
-			*mOut = m
-			return nil
-		}
-		if m.Error != nil {
-			return fmt.Errorf("error from server: %s", m.Error.Message)
-		}
-		if m.Result == nil {
-			return fmt.Errorf("no result in response")
-		}
-		if err := json.Unmarshal(m.Result, out); err != nil {
-			return fmt.Errorf("failed to unmarshal result: %w", err)
-		}
-		return nil
+		return s.marshalResponse(m, out)
 	}
 }
 
-func (s *Session) onWire(message Message) {
+func (s *Session) onWire(ctx context.Context, message Message) {
 	s.recorder.save(s.ctx, s.wire.SessionID(), false, message)
 	message.Session = s
 	if s.pendingRequest.Notify(message) {
 		return
 	}
-	s.handler.OnMessage(s.ctx, message)
+	s.handler.OnMessage(WithSession(ctx, s), message)
 }
 
 func NewEmptySession(ctx context.Context) *Session {
@@ -360,7 +428,7 @@ func NewEmptySession(ctx context.Context) *Session {
 	return s
 }
 
-func newSession(ctx context.Context, wire wire, handler MessageHandler, session *SessionState, r *recorder) (*Session, error) {
+func newSession(ctx context.Context, wire Wire, handler MessageHandler, session *SessionState, r *recorder) (*Session, error) {
 	s := &Session{
 		wire:     wire,
 		handler:  handler,
@@ -370,7 +438,8 @@ func newSession(ctx context.Context, wire wire, handler MessageHandler, session 
 		s.InitializeRequest = session.InitializeRequest
 		s.InitializeResult = session.InitializeResult
 	}
-	s.ctx, s.cancel = context.WithCancel(WithSession(ctx, s))
+	withSession := WithSession(ctx, s)
+	s.ctx, s.cancel = context.WithCancel(withSession)
 	return s, wire.Start(s.ctx, s.onWire)
 }
 
@@ -378,4 +447,22 @@ type recorder struct {
 }
 
 func (r *recorder) save(ctx context.Context, sessionID string, send bool, msg Message) {
+}
+
+type Serializable interface {
+	Serialize() (any, error)
+}
+
+type Deserializable interface {
+	Deserialize(v any) (any, error)
+}
+
+type Closer interface {
+	Close() error
+}
+
+type SavedString string
+
+func (s SavedString) Serialize() (any, error) {
+	return s, nil
 }

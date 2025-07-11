@@ -25,7 +25,7 @@ type HTTPClient struct {
 	cancel        context.CancelFunc
 	clientLock    sync.RWMutex
 	httpClient    *http.Client
-	handler       wireHandler
+	handler       WireHandler
 	oauthHandler  *oauth
 	baseURL       string
 	messageURL    string
@@ -39,7 +39,7 @@ type HTTPClient struct {
 	needReconnect bool
 }
 
-func NewHTTPClient(ctx context.Context, serverName, baseURL, oauthClientName, oauthRedirectURL string, callbackHandler CallbackHandler, clientCredLookup ClientCredLookup, tokenStorage TokenStorage, headers map[string]string) *HTTPClient {
+func newHTTPClient(ctx context.Context, serverName, baseURL, oauthClientName, oauthRedirectURL string, callbackHandler CallbackHandler, clientCredLookup ClientCredLookup, tokenStorage TokenStorage, headers map[string]string) *HTTPClient {
 	_, initialized := headers[SessionIDHeader]
 	h := &HTTPClient{
 		httpClient:    http.DefaultClient,
@@ -290,14 +290,14 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 			}
 
 			log.Messages(ctx, s.serverName, false, []byte(message))
-			go s.handler(msg)
+			s.handler(s.ctx, msg)
 		}
 	}()
 
 	return <-gotResponse
 }
 
-func (s *HTTPClient) Start(ctx context.Context, handler wireHandler) error {
+func (s *HTTPClient) Start(ctx context.Context, handler WireHandler) error {
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	s.handler = handler
 	return nil
@@ -448,7 +448,7 @@ func (s *HTTPClient) readResponse(resp *http.Response) (bool, error) {
 	handle := func(message *Message) {
 		seen = true
 		log.Messages(s.ctx, s.serverName, false, message.Result)
-		go s.handler(*message)
+		go s.handler(s.ctx, *message)
 	}
 
 	if resp.Header.Get("Content-Type") == "text/event-stream" {

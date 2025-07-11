@@ -47,7 +47,7 @@ func UnmarshalMeta[T any](data []byte, out *T) error {
 		raw    map[string]any
 		result = make(map[string]any)
 	)
-	if err := JSONCoerce(data, &raw); err != nil {
+	if err := mcp.JSONCoerce(data, &raw); err != nil {
 		return err
 	}
 
@@ -72,12 +72,12 @@ func UnmarshalMeta[T any](data []byte, out *T) error {
 		result[strings.TrimPrefix(k, MetaPrefix)] = v
 	}
 
-	return JSONCoerce(result, out)
+	return mcp.JSONCoerce(result, out)
 }
 
 func MarshalMeta(obj any) ([]byte, error) {
 	data := map[string]any{}
-	if err := JSONCoerce(obj, &data); err != nil {
+	if err := mcp.JSONCoerce(obj, &data); err != nil {
 		return nil, err
 	}
 	for k, v := range data {
@@ -93,7 +93,7 @@ func MarshalMeta(obj any) ([]byte, error) {
 		case string:
 			toString = v
 		default:
-			if err := JSONCoerce(v, &toString); err != nil {
+			if err := mcp.JSONCoerce(v, &toString); err != nil {
 				return nil, err
 			}
 			if toString == "null" {

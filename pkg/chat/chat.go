@@ -74,9 +74,12 @@ func Chat(ctx context.Context, listenAddress string,
 	}
 
 	_, _ = fmt.Fprintln(os.Stderr)
-	intro, _ := c.Session.InitializeResult.Capabilities.Experimental["nanobot/intro"].(string)
-	if intro != "" {
-		printer.Prefix("INTRO", intro+"\n")
+	state, err := c.Session.State()
+	if err == nil {
+		intro, _ := state.InitializeResult.Capabilities.Experimental["nanobot/intro"].(string)
+		if intro != "" {
+			printer.Prefix("INTRO", intro+"\n")
+		}
 	}
 
 	context.AfterFunc(ctx, func() {
@@ -127,17 +130,20 @@ func printCompletionProgress(params json.RawMessage, seenAgentOut func()) {
 		return
 	}
 
-	err := types.JSONCoerce(notification.Meta[types.CompletionProgressMetaKey], &progress)
+	err := mcp.JSONCoerce(notification.Meta[types.CompletionProgressMetaKey], &progress)
 	if err != nil {
 		log.Errorf(context.Background(), "failed to parse completion progress: %v", err)
 		return
 	}
 
-	if progress.Model != "" {
-		if progress.Item.Message != nil && progress.Item.Message.Content.Text != "" {
-			printer.Prefix(fmt.Sprintf("<-(%s)", progress.Model), progress.Item.Message.Content.Text)
+	if model := progress.Model; model != "" {
+		if progress.Agent != "" {
+			model = fmt.Sprintf("%s:%s", progress.Agent, model)
+		}
+		if progress.Item.Content != nil && progress.Item.Content.Text != "" {
+			printer.Prefix(fmt.Sprintf("<-(%s)", model), progress.Item.Content.Text)
 		} else if !progress.HasMore {
-			printer.Prefix(fmt.Sprintf("<-(%s)", progress.Model), "\n")
+			printer.Prefix(fmt.Sprintf("<-(%s)", model), "\n")
 		}
 	}
 

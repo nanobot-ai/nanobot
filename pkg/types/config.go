@@ -30,6 +30,14 @@ type Config struct {
 	Prompts    map[string]Prompt     `json:"prompts,omitempty"`
 }
 
+func (c *Config) Serialize() (any, error) {
+	return c, nil
+}
+
+func (c *Config) Deserialize(data any) (any, error) {
+	return c, mcp.JSONCoerce(data, c)
+}
+
 func (c Config) Validate(allowLocal bool) error {
 	var (
 		errs      []error
@@ -297,19 +305,90 @@ func ParseToolRef(ref string) ToolRef {
 	}
 }
 
-type ResourceMappings map[string]TargetMapping
+type ResourceMappings map[string]TargetMapping[mcp.Resource]
 
-type ResourceTemplateMappings map[string]TargetMapping
-
-type PromptMappings map[string]TargetMapping
-
-type TargetMapping struct {
-	MCPServer  string `json:"mcpServer,omitempty"`
-	TargetName string `json:"targetName,omitempty"`
-	Target     any    `json:"target,omitempty"`
+func (r ResourceMappings) Serialize() (any, error) {
+	return r, nil
 }
 
-type ToolMappings map[string]TargetMapping
+func (r ResourceMappings) Deserialize(data any) (any, error) {
+	return r, mcp.JSONCoerce(data, &r)
+}
+
+type ResourceTemplateMappings map[string]TargetMapping[TemplateMatch]
+
+func (r ResourceTemplateMappings) Serialize() (any, error) {
+	return r, nil
+}
+
+func (r ResourceTemplateMappings) Deserialize(data any) (any, error) {
+	return r, mcp.JSONCoerce(data, &r)
+}
+
+type TemplateMatch struct {
+	Regexp           *regexp.Regexp
+	ResourceTemplate mcp.ResourceTemplate
+}
+
+func (t *TemplateMatch) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Regexp           string               `json:"regexp"`
+		ResourceTemplate mcp.ResourceTemplate `json:"resourceTemplate"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	if raw.Regexp != "" {
+		regexp, err := regexp.Compile(raw.Regexp)
+		if err != nil {
+			return fmt.Errorf("failed to compile regexp %q: %w", raw.Regexp, err)
+		}
+		t.Regexp = regexp
+	} else {
+		t.Regexp = nil
+	}
+
+	t.ResourceTemplate = raw.ResourceTemplate
+	return nil
+}
+
+func (t TemplateMatch) MarshalJSON() ([]byte, error) {
+	var regexp string
+	if t.Regexp != nil {
+		regexp = t.Regexp.String()
+	}
+	return json.Marshal(map[string]any{
+		"regexp":           regexp,
+		"resourceTemplate": t.ResourceTemplate,
+	})
+}
+
+type PromptMappings map[string]TargetMapping[mcp.Prompt]
+
+func (p PromptMappings) Serialize() (any, error) {
+	return p, nil
+}
+
+func (p PromptMappings) Deserialize(data any) (any, error) {
+	return p, mcp.JSONCoerce(data, &p)
+}
+
+type TargetMapping[T any] struct {
+	MCPServer  string `json:"mcpServer,omitempty"`
+	TargetName string `json:"targetName,omitempty"`
+	Target     T      `json:"target,omitempty"`
+}
+
+type ToolMappings map[string]TargetMapping[mcp.Tool]
+
+func (t ToolMappings) Serialize() (any, error) {
+	return t, nil
+}
+
+func (t *ToolMappings) Deserialize(data any) (any, error) {
+	return t, mcp.JSONCoerce(data, &t)
+}
 
 type StringList []string
 
@@ -330,7 +409,17 @@ func (s *StringList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type Agents map[string]AgentDisplay
+
+type AgentDisplay struct {
+	Name        string `json:"name,omitempty"`
+	ShortName   string `json:"shortName,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
 type Agent struct {
+	Name           string                    `json:"name,omitempty"`
+	ShortName      string                    `json:"shortName,omitempty"`
 	Description    string                    `json:"description,omitempty"`
 	Instructions   DynamicInstructions       `json:"instructions,omitempty"`
 	Model          string                    `json:"model,omitempty"`
@@ -353,6 +442,14 @@ type Agent struct {
 	Cost         float64  `json:"cost,omitempty"`
 	Speed        float64  `json:"speed,omitempty"`
 	Intelligence float64  `json:"intelligence,omitempty"`
+}
+
+func (a Agent) ToDisplay() AgentDisplay {
+	return AgentDisplay{
+		Name:        a.Name,
+		ShortName:   a.ShortName,
+		Description: a.Description,
+	}
 }
 
 const mcpServerName = "MCP Server"

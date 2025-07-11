@@ -7,21 +7,20 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/envvar"
 	"github.com/nanobot-ai/nanobot/pkg/expr"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/meta"
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
+	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
 type Service struct {
-	servers          map[string]map[string]*mcp.Client
 	roots            []mcp.Root
-	serverLock       sync.Mutex
 	sampler          Sampler
 	runner           mcp.Runner
 	callbackHandler  mcp.CallbackHandler
@@ -58,7 +57,6 @@ func (r RegistryOptions) Complete() RegistryOptions {
 func NewToolsService(opts ...RegistryOptions) *Service {
 	opt := complete.Complete(opts...)
 	return &Service{
-		servers:          make(map[string]map[string]*mcp.Client),
 		roots:            opt.Roots,
 		concurrency:      opt.Concurrency,
 		oauthRedirectURL: opt.OAuthRedirectURL,
@@ -129,52 +127,130 @@ func (s *Service) GetPrompt(ctx context.Context, target, prompt string, args map
 	return c.GetPrompt(ctx, prompt, args)
 }
 
-func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, error) {
-	s.serverLock.Lock()
-	defer s.serverLock.Unlock()
+type clientFactory struct {
+	client *mcp.Client
+	new    func(client *mcp.SessionState) (*mcp.Client, error)
+}
 
+func (c *clientFactory) init() (err error) {
+	c.client, err = c.new(nil)
+	return err
+}
+
+func (c *clientFactory) Serialize() (any, error) {
+	if c.client.Session.ID() == "" {
+		return nil, nil
+	}
+	return c.client.Session.State()
+}
+
+func (c *clientFactory) Deserialize(data any) (_ any, err error) {
+	if data == nil {
+		c.client, err = c.new(nil)
+		return c, err
+	}
+
+	var (
+		state mcp.SessionState
+	)
+	if err := mcp.JSONCoerce(data, &state); err != nil {
+		return nil, fmt.Errorf("failed to coerce session state data: %w", err)
+	}
+
+	c.client, err = c.new(&state)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client from state: %w", err)
+	}
+
+	return c, nil
+}
+
+func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, error) {
 	session := mcp.SessionFromContext(ctx)
 	if session == nil {
 		return nil, fmt.Errorf("session not found in context")
 	}
 
+	sessionKey := "clients/" + name
+	factory := clientFactory{
+		new: func(state *mcp.SessionState) (*mcp.Client, error) {
+			return s.newClient(ctx, name, state)
+		},
+	}
+
+	if session.Get(sessionKey, &factory) {
+		return factory.client, nil
+	}
+
+	if err := factory.init(); err != nil {
+		return nil, fmt.Errorf("failed to initialize client factory: %w", err)
+	}
+
+	session.Set(sessionKey, &factory)
+	return factory.client, nil
+}
+
+func (s *Service) newClient(ctx context.Context, name string, state *mcp.SessionState) (*mcp.Client, error) {
+	session := mcp.SessionFromContext(ctx)
+	if session == nil {
+		return nil, fmt.Errorf("session not found in context")
+	}
+
+	abortCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		select {
+		case <-abortCtx.Done():
+		case <-ctx.Done():
+			// Abort the session if the ctx closes while creating the clients
+			session.Close()
+		}
+	}()
+
 	config := types.ConfigFromContext(ctx)
 
-	servers, ok := s.servers[strings.Split(session.ID(), "/")[0]]
-	if !ok {
-		servers = make(map[string]*mcp.Client)
-		s.servers[session.ID()] = servers
-	}
-
-	c, ok := servers[name]
-	if ok {
-		return c, nil
-	}
-
-	var roots mcp.ListRootsResult
-	if session.InitializeRequest.Capabilities.Roots != nil {
-		err := session.Exchange(ctx, "roots/list", mcp.ListRootsRequest{}, &roots)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list roots: %w", err)
-		}
-	}
+	var wire mcp.Wire
 
 	mcpConfig, ok := config.MCPServers[name]
 	if !ok {
 		return nil, fmt.Errorf("MCP server %s not found in config", name)
 	}
 
-	if len(s.roots) > 0 {
-		roots.Roots = append(roots.Roots, s.roots...)
+	if name == "__meta" {
+		serverSession, err := mcp.NewExistingServerSession(session.Context(), mcp.SessionState{}, meta.NewServer(sessiondata.NewData(s)))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create meta server session: %w", err)
+		}
+		wire = serverSession
+	}
+
+	roots := func(ctx context.Context) ([]mcp.Root, error) {
+		var roots mcp.ListRootsResult
+		if session.InitializeRequest.Capabilities.Roots != nil {
+			err := session.Exchange(ctx, "roots/list", mcp.ListRootsRequest{}, &roots)
+			if err != nil {
+				return nil, fmt.Errorf("failed to list roots: %w", err)
+			}
+		}
+
+		if len(s.roots) > 0 {
+			roots.Roots = append(roots.Roots, s.roots...)
+		}
+
+		return roots.Roots, nil
 	}
 
 	clientOpts := mcp.ClientOption{
-		Roots:         roots.Roots,
+		Roots:         roots,
 		Env:           session.EnvMap(),
 		ParentSession: session,
 		OnRoots: func(ctx context.Context, msg mcp.Message) error {
+			roots, err := roots(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to get roots: %w", err)
+			}
 			return msg.Reply(ctx, mcp.ListRootsResult{
-				Roots: roots.Roots,
+				Roots: roots,
 			})
 		},
 		OnLogging: func(ctx context.Context, logMsg mcp.LoggingMessage) error {
@@ -200,7 +276,10 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 		Runner:           &s.runner,
 		CallbackHandler:  s.callbackHandler,
 		OAuthRedirectURL: s.oauthRedirectURL,
+		Wire:             wire,
+		SessionState:     state,
 	}
+
 	if session.InitializeRequest.Capabilities.Elicitation == nil {
 		clientOpts.OnElicit = func(ctx context.Context, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {
 			return mcp.ElicitResult{
@@ -233,14 +312,7 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 		}
 	}
 
-	c, err := mcp.NewClient(ctx, name, mcpConfig, clientOpts)
-	if err != nil {
-		return nil, err
-	}
-
-	servers[name] = c
-	s.servers[session.ID()] = servers
-	return c, nil
+	return mcp.NewClient(session.Context(), name, mcpConfig, clientOpts)
 }
 
 func (s *Service) SampleCall(ctx context.Context, agent string, args any, opts ...SampleCallOptions) (*types.CallResult, error) {
@@ -259,13 +331,19 @@ func (s *Service) SampleCall(ctx context.Context, agent string, args any, opts .
 }
 
 type CallOptions struct {
-	ProgressToken any
-	AgentOverride types.AgentCall
-	LogData       map[string]any
-	ReturnInput   bool
-	ReturnOutput  bool
-	Target        any
-	ToolCall      *types.ToolCall
+	ProgressToken      any
+	AgentOverride      types.AgentCall
+	LogData            map[string]any
+	ReturnInput        bool
+	ReturnOutput       bool
+	Target             any
+	ToolCallInvocation *ToolCallInvocation
+}
+
+type ToolCallInvocation struct {
+	MessageID string         `json:"messageID,omitempty"`
+	ItemID    string         `json:"itemID,omitempty"`
+	ToolCall  types.ToolCall `json:"toolCall,omitempty"`
 }
 
 func (o CallOptions) Merge(other CallOptions) (result CallOptions) {
@@ -275,7 +353,7 @@ func (o CallOptions) Merge(other CallOptions) (result CallOptions) {
 	result.ReturnInput = o.ReturnInput || other.ReturnInput
 	result.ReturnOutput = o.ReturnOutput || other.ReturnOutput
 	result.Target = complete.Last(o.Target, other.Target)
-	result.ToolCall = complete.Last(o.ToolCall, other.ToolCall)
+	result.ToolCallInvocation = complete.Last(o.ToolCallInvocation, other.ToolCallInvocation)
 	return
 }
 
@@ -306,6 +384,8 @@ func (s *Service) runAfter(ctx context.Context, config types.Config, target, ser
 			newOpts := opt
 			newOpts.ReturnOutput = true
 			newOpts.ReturnInput = false
+			newOpts.LogData = maps.Clone(opt.LogData)
+			delete(newOpts.LogData, "mcpToolName")
 			newOpts.Target, err = s.getTarget(ctx, config, server, tool)
 			if err != nil {
 				return nil, err
@@ -347,6 +427,8 @@ func (s *Service) runBefore(ctx context.Context, config types.Config, target, se
 			newOpts := opt
 			newOpts.ReturnInput = true
 			newOpts.ReturnOutput = false
+			newOpts.LogData = maps.Clone(opt.LogData)
+			delete(newOpts.LogData, "mcpToolName")
 			newOpts.Target, err = s.getTarget(ctx, config, server, tool)
 			if err != nil {
 				return nil, nil, err
@@ -380,9 +462,13 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 		}
 	}()
 
-	opt := complete.Complete(opts...)
-	session := mcp.SessionFromContext(ctx)
-	config := types.ConfigFromContext(ctx)
+	var (
+		opt              = complete.Complete(opts...)
+		session          = mcp.SessionFromContext(ctx)
+		config           = types.ConfigFromContext(ctx)
+		logProgressStart = false
+		logProgressDone  = true
+	)
 
 	target := server
 	if tool != "" {
@@ -403,29 +489,40 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 	}
 
 	if session != nil && opt.ProgressToken != nil {
-		var tc types.ToolCall
-		if opt.ToolCall != nil {
-			tc = *opt.ToolCall
+		var (
+			tc        types.ToolCall
+			messageID string
+			itemID    string
+		)
+		if opt.ToolCallInvocation != nil {
+			tc = opt.ToolCallInvocation.ToolCall
+			messageID = opt.ToolCallInvocation.MessageID
+			itemID = opt.ToolCallInvocation.ItemID
 		} else {
+			logProgressStart = true
 			tc.CallID = uuid.String()
 			argsData, _ := json.Marshal(args)
 			tc.Arguments = string(argsData)
 			tc.Name, _ = opt.LogData["mcpToolName"].(string)
 			if tc.Name == "" {
 				tc.Name = target
+			} else {
+				logProgressStart = false
+				logProgressDone = false
 			}
 		}
 		tc.Target = target
 		tc.TargetType = targetType
 
-		if opt.ToolCall == nil {
+		if logProgressStart {
 			_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
 				ProgressToken: opt.ProgressToken,
 				Meta: map[string]any{
 					types.CompletionProgressMetaKey: types.CompletionProgress{
-						HasMore: true,
+						HasMore:   true,
+						MessageID: messageID,
 						Item: types.CompletionItem{
-							ID:       tc.CallID,
+							ID:       itemID,
 							ToolCall: &tc,
 						},
 					},
@@ -433,37 +530,40 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 			})
 		}
 
-		defer func() {
-			tcResult := types.ToolCallResult{
-				CallID: tc.CallID,
-			}
-			if ret != nil {
-				tcResult.Output = *ret
-			}
-			if err != nil {
-				tcResult.Output = types.CallResult{
-					IsError: true,
-					Content: []mcp.Content{
-						{
-							Type: "text",
-							Text: err.Error(),
-						},
-					},
+		if logProgressDone {
+			defer func() {
+				tcResult := types.ToolCallResult{
+					CallID: tc.CallID,
 				}
-			}
-			_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
-				ProgressToken: opt.ProgressToken,
-				Meta: map[string]any{
-					types.CompletionProgressMetaKey: types.CompletionProgress{
-						Item: types.CompletionItem{
-							ID:             tc.CallID,
-							ToolCall:       &tc,
-							ToolCallResult: &tcResult,
+				if ret != nil {
+					tcResult.Output = *ret
+				}
+				if err != nil {
+					tcResult.Output = types.CallResult{
+						IsError: true,
+						Content: []mcp.Content{
+							{
+								Type: "text",
+								Text: err.Error(),
+							},
+						},
+					}
+				}
+				_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
+					ProgressToken: opt.ProgressToken,
+					Meta: map[string]any{
+						types.CompletionProgressMetaKey: types.CompletionProgress{
+							MessageID: messageID,
+							Item: types.CompletionItem{
+								ID:             itemID,
+								ToolCall:       &tc,
+								ToolCallResult: &tcResult,
+							},
 						},
 					},
-				},
-			})
-		}()
+				})
+			}()
+		}
 	}
 
 	args, ret, err = s.runBefore(ctx, config, target, server, tool, args, opt)
@@ -644,7 +744,7 @@ func (s *Service) getMatches(ref string, tools []ListToolsResult) types.ToolMapp
 				if toolRef.As != "" {
 					tool.Name = toolRef.As
 				}
-				result[tool.Name] = types.TargetMapping{
+				result[tool.Name] = types.TargetMapping[mcp.Tool]{
 					MCPServer:  toolRef.Server,
 					TargetName: originalName,
 					Target:     tool,
@@ -656,29 +756,26 @@ func (s *Service) getMatches(ref string, tools []ListToolsResult) types.ToolMapp
 	return result
 }
 
-func (s *Service) GetEntryPoint(ctx context.Context, existingTools types.ToolMappings) (types.TargetMapping, error) {
+func (s *Service) GetEntryPoint(ctx context.Context, existingTools types.ToolMappings, entrypoint string) (types.TargetMapping[mcp.Tool], error) {
 	if tm, ok := existingTools[types.AgentTool]; ok {
 		return tm, nil
 	}
 
-	config := types.ConfigFromContext(ctx)
-
-	entrypoint := config.Publish.Entrypoint
 	if entrypoint == "" {
-		return types.TargetMapping{}, fmt.Errorf("no entrypoint specified")
+		return types.TargetMapping[mcp.Tool]{}, fmt.Errorf("no entrypoint specified")
 	}
 
 	tools, err := s.listToolsForReferences(ctx, []string{entrypoint})
 	if err != nil {
-		return types.TargetMapping{}, err
+		return types.TargetMapping[mcp.Tool]{}, err
 	}
 
 	agents := s.getMatches(entrypoint, tools)
 	if len(agents) != 1 {
-		return types.TargetMapping{}, fmt.Errorf("expected one agent for entrypoint %s, got %d", entrypoint, len(agents))
+		return types.TargetMapping[mcp.Tool]{}, fmt.Errorf("expected one agent for entrypoint %s, got %d", entrypoint, len(agents))
 	}
 	for _, v := range agents {
-		target := v.Target.(mcp.Tool)
+		target := v.Target
 		target.Name = types.AgentTool
 		v.Target = target
 		return v, nil
@@ -736,22 +833,22 @@ func (s *Service) convertToSampleRequest(config types.Config, agent string, args
 		sampleArgs.Prompt = args
 	case map[string]any:
 		if hasOnlySampleKeys(args) {
-			if err := types.JSONCoerce(args, &sampleArgs); err != nil {
+			if err := mcp.JSONCoerce(args, &sampleArgs); err != nil {
 				return nil, fmt.Errorf("failed to marshal args: %w", err)
 			}
 		} else {
-			if err := types.JSONCoerce(args, &sampleArgs.Prompt); err != nil {
+			if err := mcp.JSONCoerce(args, &sampleArgs.Prompt); err != nil {
 				return nil, fmt.Errorf("failed to marshal args to prompt: %w", err)
 			}
 		}
 	case *types.SampleCallRequest:
 		if args != nil {
-			if err := types.JSONCoerce(*args, &sampleArgs); err != nil {
+			if err := mcp.JSONCoerce(*args, &sampleArgs); err != nil {
 				return nil, fmt.Errorf("failed to marshal args to prompt: %w", err)
 			}
 		}
 	default:
-		if err := types.JSONCoerce(args, &sampleArgs); err != nil {
+		if err := mcp.JSONCoerce(args, &sampleArgs); err != nil {
 			return nil, fmt.Errorf("failed to marshal args to prompt: %w", err)
 		}
 	}
@@ -776,7 +873,7 @@ func (s *Service) convertToSampleRequest(config types.Config, agent string, args
 	}
 
 	for _, attachment := range sampleArgs.Attachments {
-		if !strings.HasPrefix(attachment.URL, "data:") {
+		if strings.HasPrefix(attachment.URL, "data:") {
 			return nil, fmt.Errorf("invalid attachment URL: %s, only data URI are supported", attachment.URL)
 		}
 		parts := strings.Split(strings.TrimPrefix(attachment.URL, "data:"), ",")
@@ -784,8 +881,8 @@ func (s *Service) convertToSampleRequest(config types.Config, agent string, args
 			return nil, fmt.Errorf("invalid attachment URL: %s, only data URI are supported", attachment.URL)
 		}
 		mimeType := parts[0]
-		if mimeType != "" {
-			attachment.MimeType = mimeType
+		if mimeType == "" {
+			mimeType = attachment.MimeType
 		}
 		data := parts[1]
 		data, ok := strings.CutPrefix(data, "base64,")
@@ -797,7 +894,7 @@ func (s *Service) convertToSampleRequest(config types.Config, agent string, args
 			Content: mcp.Content{
 				Type:     "image",
 				Data:     data,
-				MIMEType: attachment.MimeType,
+				MIMEType: mimeType,
 			},
 		})
 	}

@@ -11,8 +11,8 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *run, opts []types.CompletionOptions) error {
-	for _, output := range run.Response.Output {
+func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.Execution, opts []types.CompletionOptions) error {
+	for _, output := range run.Response.Output.Items {
 		functionCall := output.ToolCall
 
 		if functionCall == nil {
@@ -28,17 +28,21 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *run, o
 			return fmt.Errorf("can not map tool %s to a MCP server", functionCall.Name)
 		}
 
-		callOutput, err := a.invoke(ctx, config, targetServer, functionCall, opts)
+		callOutput, err := a.invoke(ctx, config, targetServer, tools.ToolCallInvocation{
+			MessageID: run.Response.Output.ID,
+			ItemID:    output.ID,
+			ToolCall:  *functionCall,
+		}, opts)
 		if err != nil {
 			return fmt.Errorf("failed to invoke tool %s on MCP server %s: %w", functionCall.Name, targetServer.MCPServer, err)
 		}
 
 		if run.ToolOutputs == nil {
-			run.ToolOutputs = make(map[string]toolCall)
+			run.ToolOutputs = make(map[string]types.ToolOutput)
 		}
 
-		run.ToolOutputs[functionCall.CallID] = toolCall{
-			Output: callOutput,
+		run.ToolOutputs[functionCall.CallID] = types.ToolOutput{
+			Output: *callOutput,
 			Done:   true,
 		}
 	}
@@ -50,7 +54,7 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *run, o
 	return nil
 }
 
-func (a *Agents) confirm(ctx context.Context, config types.Config, target types.TargetMapping, funcCall *types.ToolCall) (*types.CallResult, error) {
+func (a *Agents) confirm(ctx context.Context, config types.Config, target types.TargetMapping[mcp.Tool], funcCall *types.ToolCall) (*types.CallResult, error) {
 	if _, ok := config.Agents[target.MCPServer]; ok {
 		// Don't require confirmations to talk to another agent
 		return nil, nil
@@ -66,38 +70,41 @@ func (a *Agents) confirm(ctx context.Context, config types.Config, target types.
 	return a.confirmations.Confirm(ctx, session, target, funcCall)
 }
 
-func (a *Agents) invoke(ctx context.Context, config types.Config, target types.TargetMapping, funcCall *types.ToolCall, opts []types.CompletionOptions) ([]types.CompletionItem, error) {
+func (a *Agents) invoke(ctx context.Context, config types.Config, target types.TargetMapping[mcp.Tool], funcCall tools.ToolCallInvocation, opts []types.CompletionOptions) (*types.Message, error) {
 	var (
 		data map[string]any
 	)
 
-	if funcCall.Arguments != "" {
+	if funcCall.ToolCall.Arguments != "" {
 		data = make(map[string]any)
-		if err := json.Unmarshal([]byte(funcCall.Arguments), &data); err != nil {
+		if err := json.Unmarshal([]byte(funcCall.ToolCall.Arguments), &data); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal function call arguments: %w", err)
 		}
 	}
 
-	response, err := a.confirm(ctx, config, target, funcCall)
+	response, err := a.confirm(ctx, config, target, &funcCall.ToolCall)
 	if err != nil {
 		return nil, fmt.Errorf("failed to confirm tool call: %w", err)
 	}
 
 	if response == nil {
 		response, err = a.registry.Call(ctx, target.MCPServer, target.TargetName, data, tools.CallOptions{
-			ProgressToken: complete.Complete(opts...).ProgressToken,
-			ToolCall:      funcCall,
+			ProgressToken:      complete.Complete(opts...).ProgressToken,
+			ToolCallInvocation: &funcCall,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to invoke tool %s on mcp server %s: %w", target.TargetName, target.MCPServer, err)
 		}
 	}
-	return []types.CompletionItem{
-		{
-			ToolCallResult: &types.ToolCallResult{
-				CallID:     funcCall.CallID,
-				Output:     *response,
-				OutputRole: config.Flows[target.MCPServer].OutputRole,
+	return &types.Message{
+		Role: "user",
+		Items: []types.CompletionItem{
+			{
+				ToolCallResult: &types.ToolCallResult{
+					CallID:     funcCall.ToolCall.CallID,
+					Output:     *response,
+					OutputRole: config.Flows[target.MCPServer].OutputRole,
+				},
 			},
 		},
 	}, nil

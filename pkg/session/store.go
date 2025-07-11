@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +14,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+const StoreSessionKey = "sessionStore"
 
 type Store struct {
 	db *gorm.DB
@@ -57,40 +60,54 @@ func NewStoreFromDSN(dsn string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-func (s *Store) Create(session *Session) error {
-	return s.db.Create(session).Error
+func (s *Store) Create(ctx context.Context, session *Session) error {
+	return s.db.WithContext(ctx).Create(session).Error
 }
 
-func (s *Store) Update(session *Session) error {
-	return s.db.Save(session).Error
+func (s *Store) Update(ctx context.Context, session *Session) error {
+	return s.db.WithContext(ctx).Save(session).Error
 }
 
-func (s *Store) FindByPrefix(sessionIDPrefix string) ([]Session, error) {
+func (s *Store) FindByPrefix(ctx context.Context, sessionIDPrefix string) ([]Session, error) {
 	var sessions []Session
-	err := s.db.Where("session_id LIKE ?", sessionIDPrefix+"%").Find(&sessions).Error
+	if sessionIDPrefix == "last" {
+		err := s.db.WithContext(ctx).Order("updated_at desc").First(&sessions).Error
+		return sessions, err
+	}
+	err := s.db.WithContext(ctx).Where("session_id LIKE ?", sessionIDPrefix+"%").Find(&sessions).Error
 	if err != nil {
 		return nil, err
 	}
 	return sessions, nil
 }
 
-func (s *Store) Get(id string) (*Session, error) {
+func (s *Store) Get(ctx context.Context, id string) (*Session, error) {
 	var session Session
-	err := s.db.Where("session_id = ?", id).First(&session).Error
+	err := s.db.WithContext(ctx).Where("session_id = ?", id).First(&session).Error
 	return &session, err
 }
 
-func (s *Store) FindByTypeAndParentID(sessionType, parentID string) ([]Session, error) {
+func (s *Store) FindByAccount(ctx context.Context, accountID string) ([]Session, error) {
 	var sessions []Session
-	err := s.db.Where("type = ? AND parent_id = ?", sessionType, parentID).Find(&sessions).Error
+	err := s.db.WithContext(ctx).Where("account_id = ?", accountID).
+		Select("id", "created_at", "session_id", "account_id").Find(&sessions).Error
 	if err != nil {
 		return nil, err
 	}
 	return sessions, nil
 }
 
-func (s *Store) List() ([]Session, error) {
+func (s *Store) FindByTypeAndParentID(ctx context.Context, sessionType, parentID string) ([]Session, error) {
 	var sessions []Session
-	err := s.db.Order("updated_at desc").Find(&sessions).Error
+	err := s.db.WithContext(ctx).Where("type = ? AND parent_id = ?", sessionType, parentID).Find(&sessions).Error
+	if err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}
+
+func (s *Store) List(ctx context.Context) ([]Session, error) {
+	var sessions []Session
+	err := s.db.WithContext(ctx).Order("updated_at desc").Find(&sessions).Error
 	return sessions, err
 }

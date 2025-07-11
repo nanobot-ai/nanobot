@@ -60,7 +60,6 @@ func (r *Run) Customize(cmd *cobra.Command) {
   # Run the nanobot as a MCP Server
   nanobot run --mcp
 `
-	cmd.Args = cobra.MinimumNArgs(1)
 }
 
 func (r *Run) getRoots() ([]mcp.Root, error) {
@@ -122,9 +121,17 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	config, err := r.n.ReadConfig(cmd.Context(), args[0], runtimeOpt)
-	if err != nil {
-		return fmt.Errorf("failed to read config file %q: %w", args[0], err)
+	config := &types.Config{
+		Agents: map[string]types.Agent{
+			"main": {},
+		},
+	}
+
+	if len(args) > 0 {
+		config, err = r.n.ReadConfig(cmd.Context(), args[0], runtimeOpt)
+		if err != nil {
+			return fmt.Errorf("failed to read config file %q: %w", args[0], err)
+		}
 	}
 
 	oauthcallbackHandler := mcp.NewCallbackServer(confirm.New())
@@ -173,7 +180,10 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	prompt := strings.Join(args[1:], " ")
+	var prompt string
+	if len(args) > 0 {
+		prompt = strings.Join(args[1:], " ")
+	}
 	if r.Input != "" {
 		input, err := os.ReadFile(r.Input)
 		if err != nil {
@@ -189,7 +199,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to open session store: %w", err)
 		}
-		sessions, err := store.FindByPrefix(r.Session)
+		sessions, err := store.FindByPrefix(cmd.Context(), r.Session)
 		if err != nil {
 			return fmt.Errorf("failed to find session: %w", err)
 		} else if len(sessions) > 1 {
@@ -197,8 +207,8 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		} else if len(sessions) == 0 {
 			return fmt.Errorf("no sessions found with prefix %q", r.Session)
 		}
-		clientOpt.Session = (*mcp.SessionState)(&sessions[0].State)
-		clientOpt.Session.ID = sessions[0].SessionID
+		clientOpt.SessionState = (*mcp.SessionState)(&sessions[0].State)
+		clientOpt.SessionState.ID = sessions[0].SessionID
 	}
 
 	eg, ctx := errgroup.WithContext(cmd.Context())
@@ -229,7 +239,8 @@ func (r *Run) runMCP(ctx context.Context, config types.Config, runtime *runtime.
 		return fmt.Errorf("https:// is not supported, use http:// instead")
 	}
 
-	mcpServer := server.NewServer(runtime)
+	var mcpServer mcp.MessageHandler = server.NewServer(runtime)
+
 	if address == "stdio" {
 		stdio := mcp.NewStdioServer(env, mcpServer)
 		if err := stdio.Start(ctx, os.Stdin, os.Stdout); err != nil {

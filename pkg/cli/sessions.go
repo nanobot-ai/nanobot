@@ -35,7 +35,7 @@ func (t *Sessions) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	sessions, err := store.List()
+	sessions, err := store.List(cmd.Context())
 	if err != nil {
 		return err
 	}

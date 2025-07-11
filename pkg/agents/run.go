@@ -45,36 +45,41 @@ func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, age
 	for _, key := range slices.Sorted(maps.Keys(toolMappings)) {
 		toolMapping := toolMappings[key]
 
-		tool := toolMapping.Target.(mcp.Tool)
+		tool := toolMapping.Target
 		req.Tools = append(req.Tools, types.ToolUseDefinition{
 			Name:        key,
 			Parameters:  schema.ValidateAndFixToolSchema(tool.InputSchema),
 			Description: tool.Description,
-			Attributes:  agent.ToolExtensions[key],
+			Attributes:  agent.ToolExtensions[toolMapping.Target.Name],
 		})
 	}
 
 	return toolMappings, nil
 }
 
-func populateToolCallResult(previousRun *run, req *types.CompletionRequest, callID string) {
+func populateToolCallResult(previousRun *types.Execution, req *types.CompletionRequest, callID string) {
 	if previousRun.ToolOutputs == nil {
-		previousRun.ToolOutputs = make(map[string]toolCall)
+		previousRun.ToolOutputs = make(map[string]types.ToolOutput)
 	}
 	var newContent []mcp.Content
 	for _, input := range req.Input {
-		if input.Message != nil {
-			newContent = append(newContent, input.Message.Content)
+		for _, item := range input.Items {
+			if item.Content != nil {
+				newContent = append(newContent, *item.Content)
+			}
 		}
 	}
 
-	previousRun.ToolOutputs[callID] = toolCall{
-		Output: []types.CompletionItem{
-			{
-				ToolCallResult: &types.ToolCallResult{
-					CallID: callID,
-					Output: types.CallResult{
-						Content: newContent,
+	previousRun.ToolOutputs[callID] = types.ToolOutput{
+		Output: types.Message{
+			Role: "user",
+			Items: []types.CompletionItem{
+				{
+					ToolCallResult: &types.ToolCallResult{
+						CallID: callID,
+						Output: types.CallResult{
+							Content: newContent,
+						},
 					},
 				},
 			},
@@ -85,13 +90,15 @@ func populateToolCallResult(previousRun *run, req *types.CompletionRequest, call
 	req.Input = nil
 }
 
-func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *run, previousRun *run) (types.CompletionRequest, types.ToolMappings, error) {
+func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *types.Execution, previousRun *types.Execution) (types.CompletionRequest, types.ToolMappings, error) {
 	req := run.Request
 
 	if previousRun != nil {
 		input := previousRun.PopulatedRequest.Input
 
-		for _, output := range previousRun.Response.Output {
+		outputMessage := previousRun.Response.Output
+		newItems := make([]types.CompletionItem, 0, len(outputMessage.Items))
+		for _, output := range outputMessage.Items {
 			prevInput := output
 			if prevInput.ToolCall != nil {
 				if _, exists := previousRun.ToolOutputs[prevInput.ToolCall.CallID]; !exists {
@@ -102,13 +109,18 @@ func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *
 					}
 				}
 			}
-			input = append(input, prevInput)
+			newItems = append(newItems, prevInput)
+		}
+
+		if len(newItems) > 0 {
+			outputMessage.Items = newItems
+			input = append(input, outputMessage)
 		}
 
 		for _, callID := range slices.Sorted(maps.Keys(previousRun.ToolOutputs)) {
 			toolCall := previousRun.ToolOutputs[callID]
 			if toolCall.Done {
-				input = append(input, toolCall.Output...)
+				input = append(input, toolCall.Output)
 			}
 		}
 
@@ -116,10 +128,17 @@ func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *
 		req.Input = input
 	}
 
-	agent, ok := config.Agents[req.Model]
+	agentName := req.Agent
+	if agentName == "" {
+		agentName = req.Model
+	}
+
+	agent, ok := config.Agents[agentName]
 	if !ok {
 		return req, nil, nil
 	}
+
+	req.Agent = agentName
 
 	if req.SystemPrompt != "" {
 		var agentInstructions types.DynamicInstructions
@@ -196,20 +215,18 @@ func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *
 	return req, toolMapping, nil
 }
 
-const previousRunKey = "thread"
-
 func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts ...types.CompletionOptions) (_ *types.CompletionResponse, err error) {
 	var (
-		previousRunKey = previousRunKey
-		session        = mcp.SessionFromContext(ctx)
-		isChat         = session != nil
-		previousRun    *run
-		currentRun     = &run{}
-		config         = types.ConfigFromContext(ctx)
+		previousExecutionKey = types.PreviousExecutionKey
+		session              = mcp.SessionFromContext(ctx)
+		isChat               = session != nil
+		previousRun          *types.Execution
+		currentRun           = &types.Execution{}
+		config               = types.ConfigFromContext(ctx)
 	)
 
 	if req.ThreadName != "" {
-		previousRunKey = fmt.Sprintf("%s/%s", previousRunKey, req.ThreadName)
+		previousExecutionKey = fmt.Sprintf("%s/%s", previousExecutionKey, req.ThreadName)
 	}
 
 	if isChat && config.Agents[req.Model].Chat != nil && !*config.Agents[req.Model].Chat {
@@ -224,24 +241,24 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 		req.InputAsToolResult = &isChat
 	}
 
-	// Save the original request to the run status
+	// Save the original request to the Execution status
 	currentRun.Request = req
 
 	if isChat {
-		var fallBack *run
-		if lookup := (run{}); session.Get(previousRunKey, &lookup) {
+		var fallBack *types.Execution
+		if lookup := (types.Execution{}); session.Get(previousExecutionKey, &lookup) {
 			fallBack = &lookup
 			previousRun = &lookup
 		}
 
 		if req.NewThread && previousRun != nil {
-			session.Set(previousRunKey+"/"+time.Now().Format(time.RFC3339), previousRun)
-			session.Set(previousRunKey, nil)
+			session.Set(previousExecutionKey+"/"+time.Now().Format(time.RFC3339), previousRun)
+			session.Set(previousExecutionKey, nil)
 		}
 
 		defer func() {
 			if err != nil && fallBack != nil {
-				session.Set(previousRunKey, fallBack)
+				session.Set(previousExecutionKey, fallBack)
 			}
 		}()
 	}
@@ -252,7 +269,7 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 		}
 
 		if isChat {
-			session.Set(previousRunKey, currentRun)
+			session.Set(previousExecutionKey, currentRun)
 		}
 
 		if err := a.toolCalls(ctx, config, currentRun, opts); err != nil {
@@ -261,12 +278,14 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 
 		if isChat {
 			for _, toolOutput := range currentRun.ToolOutputs {
-				for _, output := range toolOutput.Output {
+				for _, output := range toolOutput.Output.Items {
 					if output.ToolCallResult != nil && output.ToolCallResult.Output.ChatResponse {
 						return &types.CompletionResponse{
-							Output: []types.CompletionItem{
-								{
-									ToolCallResult: output.ToolCallResult,
+							Output: types.Message{
+								Items: []types.CompletionItem{
+									{
+										ToolCallResult: output.ToolCallResult,
+									},
 								},
 							},
 						}, nil
@@ -278,27 +297,35 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 		if currentRun.Done {
 			if isChat {
 				currentRun.Response.ChatResponse = true
-				session.Set(previousRunKey, currentRun)
+				session.Set(previousExecutionKey, currentRun)
 			}
 			return currentRun.Response, nil
 		}
 
 		previousRun = currentRun
-		currentRun = &run{
+		currentRun = &types.Execution{
 			Request: req.Reset(),
 		}
 	}
 }
 
-func (a *Agents) run(ctx context.Context, config types.Config, run *run, prev *run, opts []types.CompletionOptions) error {
+func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execution, prev *types.Execution, opts []types.CompletionOptions) error {
 	completionRequest, toolMapping, err := a.populateRequest(ctx, config, run, prev)
 	if err != nil {
 		return err
 	}
 
-	// Save the populated request to the run status
+	// Don't forget about old tools that might not be in use anymore. If the old name mapped to a
+	// different tool we will have a problem but, oh well?
+	allToolMappings := types.ToolMappings{}
+	if prev != nil {
+		maps.Copy(allToolMappings, prev.ToolToMCPServer)
+	}
+	maps.Copy(allToolMappings, toolMapping)
+
+	// Save the populated request to the Execution status
 	run.PopulatedRequest = &completionRequest
-	run.ToolToMCPServer = toolMapping
+	run.ToolToMCPServer = allToolMappings
 
 	resp, err := a.completer.Complete(ctx, completionRequest, opts...)
 	if err != nil {

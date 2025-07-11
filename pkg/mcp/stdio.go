@@ -76,7 +76,7 @@ func (s *Stdio) Close() {
 	s.waiter.Close()
 }
 
-func (s *Stdio) Start(ctx context.Context, handler wireHandler) error {
+func (s *Stdio) Start(ctx context.Context, handler WireHandler) error {
 	context.AfterFunc(ctx, func() {
 		s.Close()
 	})
@@ -90,7 +90,7 @@ func (s *Stdio) Start(ctx context.Context, handler wireHandler) error {
 	return nil
 }
 
-func (s *Stdio) start(ctx context.Context, handler wireHandler) error {
+func (s *Stdio) start(ctx context.Context, handler WireHandler) error {
 	buf := bufio.NewScanner(s.stdout)
 	buf.Buffer(make([]byte, 0, 1024), 10*1024*1024)
 	for buf.Scan() {
@@ -101,12 +101,12 @@ func (s *Stdio) start(ctx context.Context, handler wireHandler) error {
 			log.Errorf(ctx, "failed to unmarshal message: %v", err)
 			continue
 		}
-		go handler(msg)
+		go handler(ctx, msg)
 	}
 	return buf.Err()
 }
 
-func newStdioClient(ctx context.Context, roots []Root, env map[string]string, serverName string, config Server, r *Runner) (*Stdio, error) {
+func newStdioClient(ctx context.Context, roots func(context.Context) ([]Root, error), env map[string]string, serverName string, config Server, r *Runner) (*Stdio, error) {
 	result, err := r.Stream(ctx, roots, env, serverName, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create stream: %w", err)

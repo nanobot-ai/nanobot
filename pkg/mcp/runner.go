@@ -29,7 +29,7 @@ type streamResult struct {
 	Close  func()
 }
 
-func (r *Runner) newCommand(ctx context.Context, currentEnv map[string]string, root []Root, config Server) (Server, *sandbox.Cmd, error) {
+func (r *Runner) newCommand(ctx context.Context, currentEnv map[string]string, root func(context.Context) ([]Root, error), config Server) (Server, *sandbox.Cmd, error) {
 	var publishPorts []string
 	ports := config.Ports
 	if len(ports) == 0 {
@@ -75,8 +75,20 @@ func (r *Runner) newCommand(ctx context.Context, currentEnv map[string]string, r
 		}, nil
 	}
 
-	var rootPaths []sandbox.Root
-	for _, root := range root {
+	var (
+		rootPaths []sandbox.Root
+		roots     []Root
+		err       error
+	)
+
+	if root != nil {
+		roots, err = root(ctx)
+		if err != nil {
+			return config, nil, fmt.Errorf("failed to get roots: %w", err)
+		}
+	}
+
+	for _, root := range roots {
 		if strings.HasPrefix(root.URI, "file://") {
 			rootPaths = append(rootPaths, sandbox.Root{
 				Name: root.Name,
@@ -207,7 +219,7 @@ func (r *Runner) doStream(ctx context.Context, serverName string, cmd *sandbox.C
 	}, nil
 }
 
-func (r *Runner) Run(ctx context.Context, roots []Root, env map[string]string, serverName string, config Server) (Server, error) {
+func (r *Runner) Run(ctx context.Context, roots func(ctx context.Context) ([]Root, error), env map[string]string, serverName string, config Server) (Server, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -223,7 +235,7 @@ func (r *Runner) Run(ctx context.Context, roots []Root, env map[string]string, s
 	return r.doRun(ctx, serverName, newConfig, cmd)
 }
 
-func (r *Runner) Stream(ctx context.Context, roots []Root, env map[string]string, serverName string, config Server) (*streamResult, error) {
+func (r *Runner) Stream(ctx context.Context, roots func(context.Context) ([]Root, error), env map[string]string, serverName string, config Server) (*streamResult, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	_, cmd, err := r.newCommand(ctx, env, roots, config)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 )
 
 type SessionStore interface {
+	ExtractID(*http.Request) string
 	Store(*http.Request, string, *ServerSession) error
 	Load(*http.Request, string) (*ServerSession, bool, error)
 	LoadAndDelete(*http.Request, string) (*ServerSession, bool, error)
@@ -17,6 +18,10 @@ type inMemory struct {
 
 func NewInMemorySessionStore() SessionStore {
 	return &inMemory{}
+}
+
+func (s *inMemory) ExtractID(req *http.Request) string {
+	return req.Header.Get("Mcp-Session-Id")
 }
 
 func (s *inMemory) Store(_ *http.Request, sessionID string, session *ServerSession) error {

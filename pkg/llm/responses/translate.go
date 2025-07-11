@@ -4,14 +4,25 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
 func toResponse(req *types.CompletionRequest, resp *Response) (*types.CompletionResponse, error) {
+	var created *time.Time
+	if i, err := resp.CreatedAt.Int64(); err == nil {
+		t := time.Unix(i, 0)
+		created = &t
+	}
 	result := &types.CompletionResponse{
 		Model: resp.Model,
+		Output: types.Message{
+			ID:      resp.ID,
+			Created: created,
+			Role:    "assistant",
+		},
 	}
 
 	for _, output := range resp.Output {
@@ -19,32 +30,33 @@ func toResponse(req *types.CompletionRequest, resp *Response) (*types.Completion
 			for _, tool := range req.Tools {
 				if tool.Attributes["type"] == "computer_use_preview" {
 					args, _ := json.Marshal(output.ComputerCall.Action)
-					result.Output = append(result.Output, types.CompletionItem{
+					result.Output.Items = append(result.Output.Items, types.CompletionItem{
+						ID: output.ComputerCall.ID,
 						ToolCall: &types.ToolCall{
 							Name:      tool.Name,
 							Arguments: string(args),
 							CallID:    output.ComputerCall.CallID,
-							ID:        output.ComputerCall.ID,
 						},
 					})
 					break
 				}
 			}
 		} else if output.FunctionCall != nil {
-			result.Output = append(result.Output, types.CompletionItem{
+			result.Output.Items = append(result.Output.Items, types.CompletionItem{
+				ID: output.FunctionCall.ID,
 				ToolCall: &types.ToolCall{
 					Name:      output.FunctionCall.Name,
 					Arguments: output.FunctionCall.Arguments,
 					CallID:    output.FunctionCall.CallID,
-					ID:        output.FunctionCall.ID,
 				},
 			})
 		} else if output.Message != nil {
-			result.Output = append(result.Output, toSamplingMessageFromOutputMessage(output.Message)...)
+			result.Output.Items = append(result.Output.Items, toSamplingMessageFromOutputMessage(output.Message)...)
+			result.Output.Role = output.Message.Role
 		} else if output.Reasoning != nil && output.Reasoning.EncryptedContent != nil {
-			result.Output = append(result.Output, types.CompletionItem{
+			result.Output.Items = append(result.Output.Items, types.CompletionItem{
+				ID: output.Reasoning.ID,
 				Reasoning: &types.Reasoning{
-					ID:               output.Reasoning.ID,
 					EncryptedContent: *output.Reasoning.EncryptedContent,
 					Summary:          output.Reasoning.GetSummary(),
 				},
@@ -59,22 +71,18 @@ func toSamplingMessageFromOutputMessage(output *Message) (result []types.Complet
 	for _, content := range output.Content {
 		if content.OutputText != nil {
 			result = append(result, types.CompletionItem{
-				Message: &mcp.SamplingMessage{
-					Role: output.Role,
-					Content: mcp.Content{
-						Type: "text",
-						Text: content.OutputText.Text,
-					},
+				ID: output.ID,
+				Content: &mcp.Content{
+					Type: "text",
+					Text: content.OutputText.Text,
 				},
 			})
 		} else if content.Refusal != nil {
 			result = append(result, types.CompletionItem{
-				Message: &mcp.SamplingMessage{
-					Role: output.Role,
-					Content: mcp.Content{
-						Type: "text",
-						Text: content.Refusal.Refusal,
-					},
+				ID: output.ID,
+				Content: &mcp.Content{
+					Type: "text",
+					Text: "REFUSAL: " + content.Refusal.Refusal,
 				},
 			})
 		}
@@ -167,41 +175,43 @@ func toRequest(completion *types.CompletionRequest) (req Request, _ error) {
 		})
 	}
 
-	for _, input := range completion.Input {
-		if input.Message != nil {
-			inputItem, ok := messageToInputItem(input.Message)
-			if ok {
+	for _, msg := range completion.Input {
+		for _, input := range msg.Items {
+			if input.Content != nil {
+				inputItem, ok := messageToInputItem(msg.Role, *input.Content)
+				if ok {
+					req.Input.Items = append(req.Input.Items, inputItem)
+				}
+			}
+			if input.ToolCall != nil {
+				inputItem, err := toolCallToInputItem(completion, input.ID, input.ToolCall)
+				if err != nil {
+					return req, err
+				}
 				req.Input.Items = append(req.Input.Items, inputItem)
 			}
-		}
-		if input.ToolCall != nil {
-			inputItem, err := toolCallToInputItem(completion, input.ToolCall)
-			if err != nil {
-				return req, err
+			if input.ToolCallResult != nil {
+				req.Input.Items = append(req.Input.Items, toolCallResultToInputItems(completion, input.ToolCallResult)...)
 			}
-			req.Input.Items = append(req.Input.Items, inputItem)
-		}
-		if input.ToolCallResult != nil {
-			req.Input.Items = append(req.Input.Items, toolCallResultToInputItems(completion, input.ToolCallResult)...)
-		}
-		if input.Reasoning != nil && input.Reasoning.EncryptedContent != "" {
-			// summary must not be nil
-			summary := make([]SummaryText, 0)
-			for _, s := range input.Reasoning.Summary {
-				summary = append(summary, SummaryText{
-					Text: s.Text,
+			if input.Reasoning != nil && input.Reasoning.EncryptedContent != "" {
+				// summary must not be nil
+				summary := make([]SummaryText, 0)
+				for _, s := range input.Reasoning.Summary {
+					summary = append(summary, SummaryText{
+						Text: s.Text,
+					})
+				}
+
+				req.Input.Items = append(req.Input.Items, InputItem{
+					Item: &Item{
+						Reasoning: &Reasoning{
+							ID:               input.ID,
+							EncryptedContent: &input.Reasoning.EncryptedContent,
+							Summary:          summary,
+						},
+					},
 				})
 			}
-
-			req.Input.Items = append(req.Input.Items, InputItem{
-				Item: &Item{
-					Reasoning: &Reasoning{
-						ID:               input.Reasoning.ID,
-						EncryptedContent: &input.Reasoning.EncryptedContent,
-						Summary:          summary,
-					},
-				},
-			})
 		}
 	}
 
@@ -218,9 +228,11 @@ func isComputerUse(completion *types.CompletionRequest, name string) bool {
 }
 
 func getToolCall(completion *types.CompletionRequest, callID string) types.ToolCall {
-	for _, input := range completion.Input {
-		if input.ToolCall != nil && input.ToolCall.CallID == callID {
-			return *input.ToolCall
+	for _, msg := range completion.Input {
+		for _, input := range msg.Items {
+			if input.ToolCall != nil && input.ToolCall.CallID == callID {
+				return *input.ToolCall
+			}
 		}
 	}
 	return types.ToolCall{}
@@ -337,7 +349,7 @@ func toolCallResultToInputItems(completion *types.CompletionRequest, toolCallRes
 	return result
 }
 
-func toolCallToInputItem(completion *types.CompletionRequest, toolCall *types.ToolCall) (InputItem, error) {
+func toolCallToInputItem(completion *types.CompletionRequest, id string, toolCall *types.ToolCall) (InputItem, error) {
 	if isComputerUse(completion, toolCall.Name) {
 		var args ComputerCallAction
 		if toolCall.Arguments != "" {
@@ -348,7 +360,7 @@ func toolCallToInputItem(completion *types.CompletionRequest, toolCall *types.To
 		return InputItem{
 			Item: &Item{
 				ComputerCall: &ComputerCall{
-					ID:     toolCall.ID,
+					ID:     id,
 					CallID: toolCall.CallID,
 					Action: args,
 				},
@@ -362,31 +374,31 @@ func toolCallToInputItem(completion *types.CompletionRequest, toolCall *types.To
 				Arguments: toolCall.Arguments,
 				CallID:    toolCall.CallID,
 				Name:      toolCall.Name,
-				ID:        toolCall.ID,
+				ID:        id,
 			},
 		},
 	}, nil
 }
 
-func messageToInputItem(msg *mcp.SamplingMessage) (InputItem, bool) {
-	if msg.Role == "assistant" && msg.Content.Type == "text" {
+func messageToInputItem(role string, content mcp.Content) (InputItem, bool) {
+	if role == "assistant" && content.Type == "text" {
 		return InputItem{
 			Item: &Item{
 				Message: &Message{
 					Content: []MessageContent{
 						{
 							OutputText: &OutputText{
-								Text: msg.Content.Text,
+								Text: content.Text,
 							},
 						},
 					},
-					Role: msg.Role,
+					Role: role,
 				},
 			},
 		}, true
 	}
 
-	inputItemContent, ok := contentToInputItem(msg.Content)
+	inputItemContent, ok := contentToInputItem(content)
 	if !ok {
 		return InputItem{}, false
 	}
@@ -399,7 +411,7 @@ func messageToInputItem(msg *mcp.SamplingMessage) (InputItem, bool) {
 						inputItemContent,
 					},
 				},
-				Role: msg.Role,
+				Role: role,
 			},
 		},
 	}, true

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/log"
@@ -55,12 +56,13 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 		return nil, err
 	}
 
-	resp, err := c.complete(ctx, req, opts...)
+	ts := time.Now()
+	resp, err := c.complete(ctx, completionRequest.Agent, req, opts...)
 	if err != nil {
 		return nil, err
 	}
 
-	return toResponse(resp)
+	return toResponse(resp, ts)
 
 }
 
@@ -81,7 +83,7 @@ func send(ctx context.Context, progress *types.CompletionProgress, progressToken
 	})
 }
 
-func (c *Client) complete(ctx context.Context, req Request, opts ...types.CompletionOptions) (*Response, error) {
+func (c *Client) complete(ctx context.Context, agentName string, req Request, opts ...types.CompletionOptions) (*Response, error) {
 	var (
 		opt = complete.Complete(opts...)
 	)
@@ -141,17 +143,16 @@ func (c *Client) complete(ctx context.Context, req Request, opts ...types.Comple
 				if contentIndex >= 0 {
 					*resp.Content[contentIndex].Text += delta.Delta.Text
 					send(ctx, &types.CompletionProgress{
-						Model:   resp.Model,
-						Partial: true,
-						HasMore: true,
+						Model:     resp.Model,
+						Agent:     agentName,
+						Partial:   true,
+						HasMore:   true,
+						MessageID: resp.ID,
 						Item: types.CompletionItem{
 							ID: fmt.Sprintf("%s-%d", resp.ID, contentIndex),
-							Message: &mcp.SamplingMessage{
-								Role: "assistant",
-								Content: mcp.Content{
-									Type: "text",
-									Text: delta.Delta.Text,
-								},
+							Content: &mcp.Content{
+								Type: "text",
+								Text: delta.Delta.Text,
 							},
 						},
 					}, opt.ProgressToken)
@@ -160,15 +161,17 @@ func (c *Client) complete(ctx context.Context, req Request, opts ...types.Comple
 				partialJSON += delta.Delta.PartialJSON
 				if contentIndex >= 0 && partialJSON != "" {
 					send(ctx, &types.CompletionProgress{
-						Partial: true,
-						HasMore: true,
+						Model:     resp.Model,
+						Agent:     agentName,
+						Partial:   true,
+						HasMore:   true,
+						MessageID: resp.ID,
 						Item: types.CompletionItem{
-							ID: resp.Content[contentIndex].ID,
+							ID: fmt.Sprintf("%s-%d", resp.ID, contentIndex),
 							ToolCall: &types.ToolCall{
 								CallID:    resp.Content[contentIndex].ID,
 								Name:      resp.Content[contentIndex].Name,
 								Arguments: delta.Delta.PartialJSON,
-								ID:        resp.Content[contentIndex].ID,
 							},
 						},
 					}, opt.ProgressToken)
@@ -184,7 +187,10 @@ func (c *Client) complete(ctx context.Context, req Request, opts ...types.Comple
 			}
 			if contentIndex >= 0 {
 				send(ctx, &types.CompletionProgress{
-					Partial: true,
+					Model:     resp.Model,
+					Agent:     agentName,
+					Partial:   true,
+					MessageID: resp.ID,
 					Item: types.CompletionItem{
 						ID: fmt.Sprintf("%s-%d", resp.ID, contentIndex),
 					},

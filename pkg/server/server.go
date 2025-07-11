@@ -12,7 +12,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/expr"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
-	"github.com/nanobot-ai/nanobot/pkg/schema"
+	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
 	"github.com/nanobot-ai/nanobot/pkg/tools"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
@@ -20,19 +20,13 @@ import (
 type Server struct {
 	handlers []handler
 	runtime  *runtime.Runtime
+	data     *sessiondata.Data
 }
-
-const (
-	toolMappingKey             = "toolMapping"
-	currentAgentKey            = "currentAgent"
-	promptMappingKey           = "promptMapping"
-	resourceMappingKey         = "resourceMapping"
-	resourceTemplateMappingKey = "resourceTemplateMapping"
-)
 
 func NewServer(runtime *runtime.Runtime) *Server {
 	s := &Server{
 		runtime: runtime,
+		data:    sessiondata.NewData(runtime),
 	}
 	s.init()
 	return s
@@ -58,6 +52,7 @@ func handle[T any](method string, handler func(ctx context.Context, req mcp.Mess
 func (s *Server) init() {
 	s.handlers = []handler{
 		handle[mcp.InitializeRequest]("initialize", s.handleInitialize),
+		handle[mcp.Notification]("notifications/initialized", s.handleInitialized),
 		handle[mcp.PingRequest]("ping", s.handlePing),
 		handle[mcp.ListToolsRequest]("tools/list", s.handleListTools),
 		handle[mcp.CallToolRequest]("tools/call", s.handleCallTool),
@@ -70,41 +65,50 @@ func (s *Server) init() {
 }
 
 func (s *Server) handleListResourceTemplates(ctx context.Context, msg mcp.Message, _ mcp.ListResourceTemplatesRequest) error {
-	resourceTemplateMappings := types.ResourceTemplateMappings{}
-	msg.Session.Get(resourceTemplateMappingKey, &resourceTemplateMappings)
+	resourceTemplateMappings, err := s.data.ResourceTemplateMappings(ctx)
+	if err != nil {
+		return err
+	}
+
 	result := mcp.ListResourceTemplatesResult{
 		ResourceTemplates: []mcp.ResourceTemplate{},
 	}
 
 	for _, k := range slices.Sorted(maps.Keys(resourceTemplateMappings)) {
-		match := resourceTemplateMappings[k].Target.(templateMatch)
-		result.ResourceTemplates = append(result.ResourceTemplates, match.resource)
+		match := resourceTemplateMappings[k].Target
+		result.ResourceTemplates = append(result.ResourceTemplates, match.ResourceTemplate)
 	}
 
 	return msg.Reply(ctx, result)
 }
 
-func (s *Server) matchResourceURITemplate(resourceTemplateMappings types.ResourceTemplateMappings, uri string) (types.TargetMapping, bool) {
+func (s *Server) matchResourceURITemplate(resourceTemplateMappings types.ResourceTemplateMappings, uri string) (string, bool) {
 	keys := slices.Sorted(maps.Keys(resourceTemplateMappings))
 	for _, key := range keys {
 		mapping := resourceTemplateMappings[key]
-		match := mapping.Target.(templateMatch)
-		if match.regexp.MatchString(uri) {
-			mapping.TargetName = uri
-			return mapping, true
+		match := mapping.Target
+		if match.Regexp.MatchString(uri) {
+			return uri, true
 		}
 	}
-	return types.TargetMapping{}, false
+	return "", false
 }
 
 func (s *Server) handleReadResource(ctx context.Context, msg mcp.Message, payload mcp.ReadResourceRequest) error {
-	resourceMappings := types.ResourceMappings{}
-	msg.Session.Get(resourceMappingKey, &resourceMappings)
+	resourceMappings, err := s.data.ResourceMappings(ctx)
+	if err != nil {
+		return err
+	}
+
+	var resourceName string
 	resourceMapping, ok := resourceMappings[payload.URI]
 	if !ok {
-		resourceTemplateMappings := types.ResourceTemplateMappings{}
-		msg.Session.Get(resourceTemplateMappingKey, &resourceTemplateMappings)
-		resourceMapping, ok = s.matchResourceURITemplate(resourceTemplateMappings, payload.URI)
+		resourceTemplateMappings, err := s.data.ResourceTemplateMappings(ctx)
+		if err != nil {
+			return err
+		}
+
+		resourceName, ok = s.matchResourceURITemplate(resourceTemplateMappings, payload.URI)
 		if !ok {
 			return fmt.Errorf("resource %s not found", payload.URI)
 		}
@@ -115,7 +119,7 @@ func (s *Server) handleReadResource(ctx context.Context, msg mcp.Message, payloa
 		return fmt.Errorf("failed to get client for server %s: %w", resourceMapping.MCPServer, err)
 	}
 
-	result, err := c.ReadResource(ctx, resourceMapping.TargetName)
+	result, err := c.ReadResource(ctx, resourceName)
 	if err != nil {
 		return err
 	}
@@ -124,8 +128,11 @@ func (s *Server) handleReadResource(ctx context.Context, msg mcp.Message, payloa
 }
 
 func (s *Server) handleGetPrompt(ctx context.Context, msg mcp.Message, payload mcp.GetPromptRequest) error {
-	promptMappings := types.PromptMappings{}
-	msg.Session.Get(promptMappingKey, &promptMappings)
+	promptMappings, err := s.data.PromptMappings(ctx)
+	if err != nil {
+		return err
+	}
+
 	promptMapping, ok := promptMappings[payload.Name]
 	if !ok {
 		return fmt.Errorf("prompt %s not found", payload.Name)
@@ -140,36 +147,44 @@ func (s *Server) handleGetPrompt(ctx context.Context, msg mcp.Message, payload m
 }
 
 func (s *Server) handleListResources(ctx context.Context, msg mcp.Message, _ mcp.ListResourcesRequest) error {
-	resourceMappings := types.ResourceMappings{}
-	msg.Session.Get(resourceMappingKey, &resourceMappings)
+	resourceMappings, err := s.data.ResourceMappings(ctx)
+	if err != nil {
+		return err
+	}
+
 	result := mcp.ListResourcesResult{
 		Resources: []mcp.Resource{},
 	}
 
 	for _, k := range slices.Sorted(maps.Keys(resourceMappings)) {
-		result.Resources = append(result.Resources, resourceMappings[k].Target.(mcp.Resource))
+		result.Resources = append(result.Resources, resourceMappings[k].Target)
 	}
 
 	return msg.Reply(ctx, result)
 }
 
 func (s *Server) handleListPrompts(ctx context.Context, msg mcp.Message, _ mcp.ListPromptsRequest) error {
-	promptMappings := types.PromptMappings{}
-	msg.Session.Get(promptMappingKey, &promptMappings)
+	promptMappings, err := s.data.PromptMappings(ctx)
+	if err != nil {
+		return err
+	}
+
 	result := mcp.ListPromptsResult{
 		Prompts: []mcp.Prompt{},
 	}
 
 	for _, k := range slices.Sorted(maps.Keys(promptMappings)) {
-		result.Prompts = append(result.Prompts, promptMappings[k].Target.(mcp.Prompt))
+		result.Prompts = append(result.Prompts, promptMappings[k].Target)
 	}
 
 	return msg.Reply(ctx, result)
 }
 
 func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mcp.CallToolRequest) error {
-	toolMappings := types.ToolMappings{}
-	msg.Session.Get(toolMappingKey, &toolMappings)
+	toolMappings, err := s.data.ToolMapping(ctx)
+	if err != nil {
+		return err
+	}
 
 	toolMapping, ok := toolMappings[payload.Name]
 	if !ok {
@@ -177,11 +192,10 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 	}
 
 	if payload.Name == types.AgentTool {
-		if currentAgent := ""; msg.Session.Get(currentAgentKey, &currentAgent) && currentAgent != "" {
-			toolMapping = types.TargetMapping{
-				MCPServer:  currentAgent,
-				TargetName: currentAgent,
-			}
+		currentAgent := s.data.CurrentAgent(ctx)
+		toolMapping = types.TargetMapping[mcp.Tool]{
+			MCPServer:  currentAgent,
+			TargetName: currentAgent,
 		}
 	}
 
@@ -196,7 +210,7 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 	}
 
 	if payload.Name == types.AgentTool && result.ChatResponse && result.Agent != "" {
-		msg.Session.Set(currentAgentKey, result.Agent)
+		s.data.SetCurrentAgent(ctx, result.Agent)
 	}
 
 	mcpResult := mcp.CallToolResult{
@@ -212,14 +226,13 @@ func (s *Server) handleListTools(ctx context.Context, msg mcp.Message, _ mcp.Lis
 		Tools: []mcp.Tool{},
 	}
 
-	toolMappings := types.ToolMappings{}
-	msg.Session.Get(toolMappingKey, &toolMappings)
+	toolMappings, err := s.data.ToolMapping(ctx)
+	if err != nil {
+		return err
+	}
+
 	for _, k := range slices.Sorted(maps.Keys(toolMappings)) {
-		if k == types.AgentTool {
-			// entrypoint is essentially hidden
-			continue
-		}
-		result.Tools = append(result.Tools, toolMappings[k].Target.(mcp.Tool))
+		result.Tools = append(result.Tools, toolMappings[k].Target)
 	}
 
 	return msg.Reply(ctx, result)
@@ -229,124 +242,9 @@ func (s *Server) handlePing(ctx context.Context, msg mcp.Message, _ mcp.PingRequ
 	return msg.Reply(ctx, mcp.PingResult{})
 }
 
-func (s *Server) buildResourceMappings(ctx context.Context, config types.Config) (types.ResourceMappings, error) {
-	resourceMappings := types.ResourceMappings{}
-	for _, ref := range append(config.Publish.Resources, config.Publish.MCPServers...) {
-		toolRef := types.ParseToolRef(ref)
-		if toolRef.Server == "" {
-			continue
-		}
-
-		c, err := s.runtime.GetClient(ctx, toolRef.Server)
-		if err != nil {
-			return nil, err
-		}
-		resources, err := c.ListResources(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get resources for server %s: %w", toolRef, err)
-		}
-
-		for _, resource := range resources.Resources {
-			resourceMappings[toolRef.PublishedName(resource.URI)] = types.TargetMapping{
-				MCPServer:  toolRef.Server,
-				TargetName: resource.URI,
-				Target:     resource,
-			}
-		}
-	}
-
-	return resourceMappings, nil
-}
-
-func (s *Server) buildResourceTemplateMappings(ctx context.Context, config types.Config) (types.ResourceTemplateMappings, error) {
-	resourceTemplateMappings := types.ResourceTemplateMappings{}
-	for _, ref := range append(config.Publish.ResourceTemplates, config.Publish.MCPServers...) {
-		toolRef := types.ParseToolRef(ref)
-		if toolRef.Server == "" {
-			continue
-		}
-
-		c, err := s.runtime.GetClient(ctx, toolRef.Server)
-		if err != nil {
-			return nil, err
-		}
-		resources, err := c.ListResourceTemplates(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get resources for server %s: %w", toolRef, err)
-		}
-
-		for _, resource := range resources.ResourceTemplates {
-			re, err := uriToRegexp(resource.URITemplate)
-			if err != nil {
-				return nil, fmt.Errorf("failed to convert uri to regexp: %w", err)
-			}
-			resourceTemplateMappings[toolRef.PublishedName(resource.URITemplate)] = types.TargetMapping{
-				MCPServer:  toolRef.Server,
-				TargetName: resource.URITemplate,
-				Target: templateMatch{
-					regexp:   re,
-					resource: resource,
-				},
-			}
-		}
-	}
-
-	return resourceTemplateMappings, nil
-}
-
 type templateMatch struct {
 	regexp   *regexp.Regexp
 	resource mcp.ResourceTemplate
-}
-
-func (s *Server) buildPromptMappings(ctx context.Context) (types.PromptMappings, error) {
-	var (
-		serverPrompts = map[string]*mcp.ListPromptsResult{}
-		result        = types.PromptMappings{}
-		c             = types.ConfigFromContext(ctx)
-	)
-
-	for _, ref := range append(c.Publish.Prompts, c.Publish.MCPServers...) {
-		toolRef := types.ParseToolRef(ref)
-		if toolRef.Server == "" {
-			continue
-		}
-
-		if inlinePrompt, ok := c.Prompts[toolRef.Server]; ok && toolRef.Tool == "" {
-			result[toolRef.PublishedName(toolRef.Server)] = types.TargetMapping{
-				MCPServer:  toolRef.Server,
-				TargetName: toolRef.Server,
-				Target:     inlinePrompt.ToPrompt(toolRef.PublishedName(toolRef.Server)),
-			}
-			continue
-		}
-
-		prompts, ok := serverPrompts[toolRef.Server]
-		if !ok {
-			c, err := s.runtime.GetClient(ctx, toolRef.Server)
-			if err != nil {
-				return nil, err
-			}
-			prompts, err = c.ListPrompts(ctx)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get prompts for server %s: %w", toolRef, err)
-			}
-			serverPrompts[toolRef.Server] = prompts
-		}
-
-		for _, prompt := range prompts.Prompts {
-			if prompt.Name == toolRef.Tool || toolRef.Tool == "" {
-				prompt.Name = toolRef.PublishedName(prompt.Name)
-				result[toolRef.PublishedName(prompt.Name)] = types.TargetMapping{
-					MCPServer:  toolRef.Server,
-					TargetName: prompt.Name,
-					Target:     prompt,
-				}
-			}
-		}
-	}
-
-	return result, nil
 }
 
 func getEnvVal(envMap map[string]string, envKey string, envDef types.EnvDef) string {
@@ -406,6 +304,10 @@ func reconcileEnv(session *mcp.Session, c types.Config) error {
 	}
 }
 
+func (s *Server) handleInitialized(ctx context.Context, msg mcp.Message, payload mcp.Notification) error {
+	return nil
+}
+
 func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload mcp.InitializeRequest) error {
 	session := mcp.SessionFromContext(ctx)
 	c := types.ConfigFromContext(ctx)
@@ -414,43 +316,7 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 		return err
 	}
 
-	toolMappings, err := s.runtime.BuildToolMappings(ctx, append(c.Publish.Tools, c.Publish.MCPServers...))
-	if err != nil {
-		return err
-	}
-	if c.Publish.Entrypoint != "" {
-		toolMappings[types.AgentTool], err = s.runtime.GetEntryPoint(ctx, toolMappings)
-		if err != nil {
-			return err
-		}
-	} else if agent, ok := c.Agents["main"]; ok {
-		toolMappings[types.AgentTool] = types.TargetMapping{
-			MCPServer:  "main",
-			TargetName: "main",
-			Target:     agent,
-		}
-	}
-
-	toolMappings = schema.ValidateToolMappings(toolMappings)
-	msg.Session.Set(toolMappingKey, toolMappings)
-
-	promptMappings, err := s.buildPromptMappings(ctx)
-	if err != nil {
-		return err
-	}
-	msg.Session.Set(promptMappingKey, promptMappings)
-
-	resourceMappings, err := s.buildResourceMappings(ctx, c)
-	if err != nil {
-		return err
-	}
-	msg.Session.Set(resourceMappingKey, resourceMappings)
-
-	resourceTemplateMappings, err := s.buildResourceTemplateMappings(ctx, c)
-	if err != nil {
-		return err
-	}
-	msg.Session.Set(resourceTemplateMappingKey, resourceTemplateMappings)
+	s.data.Refresh(ctx)
 
 	var experimental map[string]any
 	if c.Publish.Introduction.IsSet() {
@@ -485,13 +351,11 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 		ok, err := h(ctx, msg)
 		if err != nil {
 			msg.SendError(ctx, err)
+			return
 		} else if ok {
 			return
 		}
 	}
 
-	msg.SendError(ctx, &mcp.RPCError{
-		Code:    -32601,
-		Message: fmt.Sprintf("method %q not allowed", msg.Method),
-	})
+	msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage(msg.Method))
 }

@@ -26,7 +26,7 @@ type SessionState struct {
 }
 
 type ClientOption struct {
-	Roots            []Root
+	Roots            func(ctx context.Context) ([]Root, error)
 	OnSampling       func(ctx context.Context, sampling CreateMessageRequest) (CreateMessageResult, error)
 	OnElicit         func(ctx context.Context, req ElicitRequest) (ElicitResult, error)
 	OnRoots          func(ctx context.Context, msg Message) error
@@ -35,13 +35,14 @@ type ClientOption struct {
 	OnNotify         func(ctx context.Context, msg Message) error
 	Env              map[string]string
 	ParentSession    *Session
-	Session          *SessionState
+	SessionState     *SessionState
 	Runner           *Runner
 	OAuthClientName  string
 	OAuthRedirectURL string
 	CallbackHandler  CallbackHandler
 	ClientCredLookup ClientCredLookup
 	TokenStorage     TokenStorage
+	Wire             Wire
 }
 
 func (c ClientOption) Complete() ClientOption {
@@ -100,10 +101,14 @@ func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
 	result.OAuthRedirectURL = complete.Last(c.OAuthRedirectURL, other.OAuthRedirectURL)
 	result.OAuthClientName = complete.Last(c.OAuthClientName, other.OAuthClientName)
 	result.Env = complete.MergeMap(c.Env, other.Env)
-	result.Session = complete.Last(c.Session, other.Session)
+	result.SessionState = complete.Last(c.SessionState, other.SessionState)
 	result.ParentSession = complete.Last(c.ParentSession, other.ParentSession)
 	result.Runner = complete.Last(c.Runner, other.Runner)
-	result.Roots = append(c.Roots, other.Roots...)
+	result.Wire = complete.Last(c.Wire, other.Wire)
+	result.Roots = c.Roots
+	if other.Roots != nil {
+		result.Roots = other.Roots
+	}
 	return result
 }
 
@@ -239,12 +244,14 @@ func waitForURL(ctx context.Context, serverName, baseURL string) error {
 
 func NewSession(ctx context.Context, serverName string, config Server, opts ...ClientOption) (*Session, error) {
 	var (
-		wire wire
+		wire Wire
 		err  error
 		opt  = complete.Complete(opts...)
 	)
 
-	if config.Command == "" && config.BaseURL == "" {
+	if opt.Wire != nil {
+		wire = opt.Wire
+	} else if config.Command == "" && config.BaseURL == "" {
 		return nil, fmt.Errorf("no command or base URL provided")
 	} else if config.BaseURL != "" {
 		if (opt.CallbackHandler != nil) != (opt.OAuthRedirectURL != "") {
@@ -262,13 +269,13 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 			}
 		}
 		header := envvar.ReplaceMap(opt.Env, config.Headers)
-		if opt.Session != nil && opt.Session.ID != "" {
+		if opt.SessionState != nil && opt.SessionState.ID != "" {
 			if header == nil {
 				header = make(map[string]string)
 			}
-			header["Mcp-Session-Id"] = opt.Session.ID
+			header["Mcp-Session-Id"] = opt.SessionState.ID
 		}
-		wire = NewHTTPClient(ctx, serverName, config.BaseURL, opt.OAuthClientName, opt.OAuthRedirectURL, opt.CallbackHandler, opt.ClientCredLookup, opt.TokenStorage, envvar.ReplaceMap(opt.Env, config.Headers))
+		wire = newHTTPClient(ctx, serverName, config.BaseURL, opt.OAuthClientName, opt.OAuthRedirectURL, opt.CallbackHandler, opt.ClientCredLookup, opt.TokenStorage, envvar.ReplaceMap(opt.Env, config.Headers))
 	} else {
 		wire, err = newStdioClient(ctx, opt.Roots, opt.Env, serverName, config, opt.Runner)
 		if err != nil {
@@ -276,7 +283,7 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 		}
 	}
 
-	session, err := newSession(ctx, wire, toHandler(opt), opt.Session, nil)
+	session, err := newSession(ctx, wire, toHandler(opt), opt.SessionState, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -286,10 +293,12 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 
 func NewClient(ctx context.Context, serverName string, config Server, opts ...ClientOption) (*Client, error) {
 	var (
-		opt = complete.Complete(opts...)
+		opt     = complete.Complete(opts...)
+		session *Session
+		err     error
 	)
 
-	session, err := NewSession(context.Background(), serverName, config, opts...)
+	session, err = NewSession(ctx, serverName, config, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +321,7 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 	if opt.OnElicit != nil {
 		elicitations = &struct{}{}
 	}
-	if opt.Session == nil {
+	if opt.SessionState == nil {
 		_, err = c.Initialize(ctx, InitializeRequest{
 			ProtocolVersion: "2025-03-26",
 			Capabilities: ClientCapabilities{

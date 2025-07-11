@@ -61,7 +61,7 @@ func (r *resource) Load(ctx context.Context) (result types.Config, _ error) {
 		return result, fmt.Errorf("error validating resource %s: %w", r.url, err)
 	}
 
-	if err := types.JSONCoerce(obj, &result); err != nil {
+	if err := mcp.JSONCoerce(obj, &result); err != nil {
 		return result, fmt.Errorf("error marshalling resource %s: %w", r.url, err)
 	}
 	return

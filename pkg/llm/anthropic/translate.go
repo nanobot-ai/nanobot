@@ -3,20 +3,27 @@ package anthropic
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func toResponse(resp *Response) (*types.CompletionResponse, error) {
+func toResponse(resp *Response, created time.Time) (*types.CompletionResponse, error) {
 	result := &types.CompletionResponse{
 		Model: resp.Model,
+		Output: types.Message{
+			ID:      resp.ID,
+			Created: &created,
+			Role:    "assistant",
+		},
 	}
 
-	for _, content := range resp.Content {
+	for contentIndex, content := range resp.Content {
 		if content.Type == "tool_use" {
 			args, _ := json.Marshal(content.Input)
-			result.Output = append(result.Output, types.CompletionItem{
+			result.Output.Items = append(result.Output.Items, types.CompletionItem{
+				ID: fmt.Sprintf("%s-%d", resp.ID, contentIndex),
 				ToolCall: &types.ToolCall{
 					CallID:    content.ID,
 					Name:      content.Name,
@@ -24,24 +31,20 @@ func toResponse(resp *Response) (*types.CompletionResponse, error) {
 				},
 			})
 		} else if content.Type == "text" && content.Text != nil {
-			result.Output = append(result.Output, types.CompletionItem{
-				Message: &mcp.SamplingMessage{
-					Role: "assistant",
-					Content: mcp.Content{
-						Type: "text",
-						Text: *content.Text,
-					},
+			result.Output.Items = append(result.Output.Items, types.CompletionItem{
+				ID: fmt.Sprintf("%s-%d", resp.ID, contentIndex),
+				Content: &mcp.Content{
+					Type: "text",
+					Text: *content.Text,
 				},
 			})
 		} else if content.Type == "image" {
-			result.Output = append(result.Output, types.CompletionItem{
-				Message: &mcp.SamplingMessage{
-					Role: "assistant",
-					Content: mcp.Content{
-						Type:     "image",
-						MIMEType: content.Source.MediaType,
-						Data:     content.Source.Data,
-					},
+			result.Output.Items = append(result.Output.Items, types.CompletionItem{
+				ID: fmt.Sprintf("%s-%d", resp.ID, contentIndex),
+				Content: &mcp.Content{
+					Type:     "image",
+					MIMEType: content.Source.MediaType,
+					Data:     content.Source.Data,
 				},
 			})
 		}
@@ -93,42 +96,44 @@ func toRequest(req *types.CompletionRequest) (Request, error) {
 		}
 	}
 
-	for _, input := range req.Input {
-		if input.Message != nil {
-			result.Messages = append(result.Messages, Message{
-				Content: contentToContent([]mcp.Content{input.Message.Content}),
-				Role:    input.Message.Role,
-			})
-		}
-		if input.ToolCall != nil {
-			args := map[string]any{}
-			if err := json.Unmarshal([]byte(input.ToolCall.Arguments), &args); err != nil {
-				return Request{}, fmt.Errorf("failed to unmarshal tool call arguments: %w", err)
+	for _, msg := range req.Input {
+		for _, input := range msg.Items {
+			if input.Content != nil {
+				result.Messages = append(result.Messages, Message{
+					Content: contentToContent([]mcp.Content{*input.Content}),
+					Role:    msg.Role,
+				})
 			}
-			result.Messages = append(result.Messages, Message{
-				Content: []Content{
-					{
-						Type:  "tool_use",
-						ID:    input.ToolCall.CallID,
-						Input: args,
-						Name:  input.ToolCall.Name,
+			if input.ToolCall != nil {
+				args := map[string]any{}
+				if err := json.Unmarshal([]byte(input.ToolCall.Arguments), &args); err != nil {
+					return Request{}, fmt.Errorf("failed to unmarshal tool call arguments: %w", err)
+				}
+				result.Messages = append(result.Messages, Message{
+					Content: []Content{
+						{
+							Type:  "tool_use",
+							ID:    input.ToolCall.CallID,
+							Input: args,
+							Name:  input.ToolCall.Name,
+						},
 					},
-				},
-				Role: "assistant",
-			})
-		}
-		if input.ToolCallResult != nil {
-			result.Messages = append(result.Messages, Message{
-				Content: []Content{
-					{
-						Type:      "tool_result",
-						ToolUseID: input.ToolCallResult.CallID,
-						Content:   contentToContent(input.ToolCallResult.Output.Content),
-						IsError:   input.ToolCallResult.Output.IsError,
+					Role: "assistant",
+				})
+			}
+			if input.ToolCallResult != nil {
+				result.Messages = append(result.Messages, Message{
+					Content: []Content{
+						{
+							Type:      "tool_result",
+							ToolUseID: input.ToolCallResult.CallID,
+							Content:   contentToContent(input.ToolCallResult.Output.Content),
+							IsError:   input.ToolCallResult.Output.IsError,
+						},
 					},
-				},
-				Role: "user",
-			})
+					Role: "user",
+				})
+			}
 		}
 	}
 

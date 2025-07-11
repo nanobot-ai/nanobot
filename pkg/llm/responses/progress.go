@@ -29,11 +29,13 @@ func send(ctx context.Context, progress *types.CompletionProgress, progressToken
 	})
 }
 
-func progressResponse(ctx context.Context, resp *http.Response, progressToken any) (response Response, seen bool, err error) {
+func progressResponse(ctx context.Context, agentName, modelName string, resp *http.Response, progressToken any) (response Response, seen bool, err error) {
 	lines := bufio.NewScanner(resp.Body)
 	defer resp.Body.Close()
 
 	progress := types.CompletionProgress{
+		Agent:   agentName,
+		Model:   modelName,
 		Partial: true,
 		HasMore: true,
 	}
@@ -58,28 +60,23 @@ func progressResponse(ctx context.Context, resp *http.Response, progressToken an
 			switch event.Type {
 			case "response.created":
 				progress.Model = event.Response.Model
+				progress.MessageID = event.Response.ID
 			case "response.output_item.added":
 				if event.Item.Type == "function_call" {
 					progress.HasMore = true
 					progress.Item = types.CompletionItem{
-						ID:      event.Item.CallID,
-						Message: nil,
+						ID: event.Item.ID,
 						ToolCall: &types.ToolCall{
 							CallID: event.Item.CallID,
 							Name:   event.Item.Name,
-							ID:     event.Item.ID,
 						},
 					}
-					//printer.Prefix("<-(llm)", fmt.Sprintf("Preparing to call (%s) with args: ", delta.Item.Name))
 				} else if event.Item.Type == "message" {
 					progress.HasMore = true
 					progress.Item = types.CompletionItem{
 						ID: event.Item.ID,
-						Message: &mcp.SamplingMessage{
-							Role: event.Item.Role,
-							Content: mcp.Content{
-								Type: "text",
-							},
+						Content: &mcp.Content{
+							Type: "text",
 						},
 					}
 				}
@@ -96,8 +93,8 @@ func progressResponse(ctx context.Context, resp *http.Response, progressToken an
 				}
 				progress.Item = types.CompletionItem{}
 			case "response.output_text.delta":
-				if progress.Item.Message != nil {
-					progress.Item.Message.Content.Text = event.Delta
+				if progress.Item.Content != nil {
+					progress.Item.Content.Text = event.Delta
 					send(ctx, &progress, progressToken)
 				}
 			}

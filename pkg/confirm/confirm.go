@@ -21,7 +21,7 @@ func New() *Service {
 	return &Service{}
 }
 
-func (*Service) Confirm(ctx context.Context, session *mcp.Session, target types.TargetMapping, funcCall *types.ToolCall) (*types.CallResult, error) {
+func (*Service) Confirm(ctx context.Context, session *mcp.Session, target types.TargetMapping[mcp.Tool], funcCall *types.ToolCall) (*types.CallResult, error) {
 	for session.Parent != nil {
 		session = session.Parent
 	}
@@ -43,7 +43,7 @@ func (*Service) Confirm(ctx context.Context, session *mcp.Session, target types.
 
 	req := types.ToolCallConfirm{
 		MCPServer:  target.MCPServer,
-		Tool:       target.Target.(mcp.Tool),
+		Tool:       target.Target,
 		Invocation: funcCall,
 	}
 

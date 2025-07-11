@@ -7,7 +7,10 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
-var _ wire = (*serverWire)(nil)
+var (
+	_ Wire = (*serverWire)(nil)
+	_ Wire = (*ServerSession)(nil)
+)
 
 func NewServerSession(ctx context.Context, handler MessageHandler) (*ServerSession, error) {
 	return NewExistingServerSession(ctx,
@@ -28,6 +31,7 @@ func NewExistingServerSession(ctx context.Context, state SessionState, handler M
 	for k, v := range state.Attributes {
 		session.Set(k, v)
 	}
+	session.Parent = SessionFromContext(ctx)
 	return &ServerSession{
 		session: session,
 		wire:    s,
@@ -37,6 +41,34 @@ func NewExistingServerSession(ctx context.Context, state SessionState, handler M
 type ServerSession struct {
 	session *Session
 	wire    *serverWire
+}
+
+func (s *ServerSession) Wait() {
+	if s.session == nil {
+		return
+	}
+	s.session.Wait()
+}
+
+func (s *ServerSession) Start(ctx context.Context, handler WireHandler) error {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-s.wire.read:
+				if !ok {
+					return
+				}
+				handler(ctx, msg)
+			}
+		}
+	}()
+	return nil
+}
+
+func (s *ServerSession) SessionID() string {
+	return s.ID()
 }
 
 func (s *ServerSession) ID() string {
@@ -83,10 +115,15 @@ func (s *ServerSession) Read(ctx context.Context) (Message, bool) {
 }
 
 func (s *ServerSession) Send(ctx context.Context, req Message) error {
-	return s.wire.Send(ctx, req)
+	req.Session = s.session
+	go s.session.handler.OnMessage(WithSession(ctx, s.session), req)
+	return nil
 }
 
 func (s *ServerSession) Close() {
+	if s == nil || s.session == nil {
+		return
+	}
 	s.session.Close()
 }
 
@@ -95,7 +132,7 @@ type serverWire struct {
 	cancel    context.CancelFunc
 	pending   PendingRequests
 	read      chan Message
-	handler   wireHandler
+	handler   WireHandler
 	sessionID string
 }
 
@@ -108,7 +145,7 @@ func (s *serverWire) exchange(ctx context.Context, msg Message) (Message, error)
 	defer s.pending.Done(msg.ID)
 
 	go func() {
-		s.handler(msg)
+		s.handler(ctx, msg)
 		close(ch)
 	}()
 
@@ -133,7 +170,7 @@ func (s *serverWire) Wait() {
 	<-s.ctx.Done()
 }
 
-func (s *serverWire) Start(ctx context.Context, handler wireHandler) error {
+func (s *serverWire) Start(ctx context.Context, handler WireHandler) error {
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	s.handler = handler
 	return nil

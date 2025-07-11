@@ -129,8 +129,13 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 	}
 
 	for _, content := range req.Messages {
-		request.Input = append(request.Input, types.CompletionItem{
-			Message: &content,
+		request.Input = append(request.Input, types.Message{
+			Role: content.Role,
+			Items: []types.CompletionItem{
+				{
+					Content: &content.Content,
+				},
+			},
 		})
 	}
 
@@ -153,14 +158,14 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 		result.Agent = request.Model
 	}
 
-	for _, output := range resp.Output {
+	for _, output := range resp.Output.Items {
 		if output.ToolCallResult != nil {
 			return &output.ToolCallResult.Output, nil
 		}
-		if output.Message == nil {
+		if output.Content == nil {
 			continue
 		}
-		result.Content = append(result.Content, output.Message.Content)
+		result.Content = append(result.Content, *output.Content)
 	}
 
 	if len(result.Content) == 0 {

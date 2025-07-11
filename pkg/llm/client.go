@@ -8,6 +8,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
 var _ types.Completer = (*Client)(nil)
@@ -34,41 +35,53 @@ type Client struct {
 
 func (c *Client) handleAssistantRolesFromTools(req types.CompletionRequest) (_ types.CompletionRequest, resp *types.CompletionResponse) {
 	if len(req.Input) > 0 {
-		if last := req.Input[len(req.Input)-1]; last.ToolCallResult != nil &&
-			last.ToolCallResult.OutputRole == "assistant" &&
-			len(last.ToolCallResult.Output.Content) > 0 {
-			resp = &types.CompletionResponse{
-				Model: req.Model,
-			}
-			for _, content := range last.ToolCallResult.Output.Content {
-				resp.Output = append(resp.Output, types.CompletionItem{
-					Message: &mcp.SamplingMessage{
-						Role:    "assistant",
-						Content: content,
+		lastMsg := req.Input[len(req.Input)-1]
+		if len(lastMsg.Items) > 0 {
+			if last := lastMsg.Items[len(lastMsg.Items)-1]; last.ToolCallResult != nil &&
+				last.ToolCallResult.OutputRole == "assistant" &&
+				len(last.ToolCallResult.Output.Content) > 0 {
+				resp = &types.CompletionResponse{
+					Model: req.Model,
+					Output: types.Message{
+						ID:   uuid.String(),
+						Role: "assistant",
 					},
-				})
+				}
+				for _, content := range last.ToolCallResult.Output.Content {
+					resp.Output.Items = append(resp.Output.Items, types.CompletionItem{
+						ID:      uuid.String(),
+						Content: &content,
+					})
+				}
+				return req, resp
 			}
-			return req, resp
 		}
 	}
 
-	newInput := make([]types.CompletionItem, 0, len(req.Input))
-	for _, input := range req.Input {
-		if input.ToolCallResult != nil && input.ToolCallResult.OutputRole == "assistant" &&
-			len(input.ToolCallResult.Output.Content) > 0 {
-			// elide the tool call result if it is an assistant response
-			input = types.CompletionItem{
-				ToolCallResult: &types.ToolCallResult{
-					CallID: input.ToolCallResult.CallID,
-					Output: types.CallResult{
-						Content: []mcp.Content{{Text: "complete"}},
+	newMsgs := make([]types.Message, 0, len(req.Input))
+	for _, msg := range req.Input {
+		newItems := make([]types.CompletionItem, 0, len(msg.Items))
+		for _, input := range msg.Items {
+			if input.ToolCallResult != nil && input.ToolCallResult.OutputRole == "assistant" &&
+				len(input.ToolCallResult.Output.Content) > 0 {
+				// elide the tool call result if it is an assistant response
+				input = types.CompletionItem{
+					ID: input.ID,
+					ToolCallResult: &types.ToolCallResult{
+						CallID: input.ToolCallResult.CallID,
+						Output: types.CallResult{
+							Content: []mcp.Content{{Text: "completed"}},
+						},
 					},
-				},
+				}
 			}
+			newItems = append(newItems, input)
 		}
-		newInput = append(newInput, input)
+		newMsg := msg
+		newMsg.Items = newItems
+		newMsgs = append(newMsgs, newMsg)
 	}
-	req.Input = newInput
+	req.Input = newMsgs
 	return req, nil
 }
 

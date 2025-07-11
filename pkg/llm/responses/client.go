@@ -49,7 +49,7 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 		return nil, err
 	}
 
-	resp, err := c.complete(ctx, req, opts...)
+	resp, err := c.complete(ctx, completionRequest.Agent, req, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 	return toResponse(&completionRequest, resp)
 }
 
-func (c *Client) complete(ctx context.Context, req Request, opts ...types.CompletionOptions) (*Response, error) {
+func (c *Client) complete(ctx context.Context, agentName string, req Request, opts ...types.CompletionOptions) (*Response, error) {
 	var (
 		response Response
 		opt      = complete.Complete(opts...)
@@ -86,7 +86,7 @@ func (c *Client) complete(ctx context.Context, req Request, opts ...types.Comple
 		return nil, fmt.Errorf("failed to get response: %s %q", httpResp.Status, string(body))
 	}
 
-	response, ok, err := progressResponse(ctx, httpResp, opt.ProgressToken)
+	response, ok, err := progressResponse(ctx, agentName, req.Model, httpResp, opt.ProgressToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}

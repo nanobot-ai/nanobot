@@ -1,14 +1,14 @@
 package types
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
-var AgentTool = "__agent"
+var AgentTool = "chat"
 
 var ChatInputSchema = []byte(`{
   "type": "object",
-  "required": [
-    "prompt"
-  ],
+  "required": ["prompt"],
   "properties": {
     "prompt": {
   	  "description": "The input prompt",
@@ -24,47 +24,16 @@ var ChatInputSchema = []byte(`{
 	      "url": {
 	        "description": "The URL of the attachment or data URI",
 	        "type": "string"
+	      },
+	      "mimeType": {
+	        "description": "The mime type of the content reference by the URL",
+	        "type": "string"
 	      }
 	    }
 	  }
     }
   }
 }`)
-
-func JSONCoerce[T any](in any, out *T) error {
-	switch s := any(out).(type) {
-	case *string:
-		if inStr, ok := in.(string); ok {
-			*s = inStr
-			return nil
-		}
-		data, err := json.Marshal(in)
-		if err != nil {
-			return err
-		}
-		*s = string(data)
-		return nil
-	}
-
-	if v, ok := in.(T); ok {
-		*out = v
-		return nil
-	}
-
-	var data []byte
-	if inBytes, ok := in.([]byte); ok {
-		data = inBytes
-	} else if inStr, ok := in.(string); ok {
-		data = []byte(inStr)
-	} else {
-		var err error
-		data, err = json.Marshal(in)
-		if err != nil {
-			return err
-		}
-	}
-	return json.Unmarshal(data, out)
-}
 
 type SampleCallRequest struct {
 	Prompt      string       `json:"prompt"`
@@ -79,4 +48,17 @@ type SampleConfirmRequest struct {
 type Attachment struct {
 	URL      string `json:"url"`
 	MimeType string `json:"mimeType,omitempty"`
+}
+
+func (a *Attachment) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '"' {
+		var url string
+		if err := json.Unmarshal(data, &url); err != nil {
+			return err
+		}
+		a.URL = url
+		return nil
+	}
+	type Alias Attachment
+	return json.Unmarshal(data, (*Alias)(a))
 }

@@ -233,6 +233,8 @@ type CallToolRequest struct {
 	Arguments map[string]any `json:"arguments,omitempty"`
 }
 
+var EmptyObjectSchema = json.RawMessage(`{"type": "object", "properties": {}, "additionalProperties": false, "required": []}`)
+
 type ListToolsRequest struct {
 }
 

@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
@@ -52,7 +53,7 @@ func NewHTTPServer(env map[string]string, handler MessageHandler, opts ...HTTPSe
 }
 
 func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request) {
-	id := req.Header.Get("Mcp-Session-Id")
+	id := h.sessions.ExtractID(req)
 	if id == "" {
 		id = req.URL.Query().Get("id")
 	}
@@ -103,7 +104,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	streamingID := req.Header.Get("Mcp-Session-Id")
+	streamingID := h.sessions.ExtractID(req)
 	sseID := req.URL.Query().Get("id")
 
 	if streamingID != "" && req.Method == http.MethodDelete {
@@ -150,7 +151,9 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			setID = true
 		}
 
-		response, err := streamingSession.Exchange(req.Context(), msg)
+		ctx, cancel := context.WithTimeout(req.Context(), 10*time.Second)
+		defer cancel()
+		response, err := streamingSession.Exchange(ctx, msg)
 		if setID {
 			response.ID = nil
 		}
@@ -161,10 +164,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			response = Message{
 				JSONRPC: msg.JSONRPC,
 				ID:      msg.ID,
-				Error: &RPCError{
-					Code:    -32603,
-					Message: err.Error(),
-				},
+				Error:   ErrRPCInternal.WithMessage(err.Error()),
 			}
 		}
 
@@ -202,7 +202,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	if msg.Method != "initialize" {
-		http.Error(rw, fmt.Sprintf("Method %s not allowed", msg.Method), http.StatusMethodNotAllowed)
+		http.Error(rw, fmt.Sprintf("Method %q not allowed", msg.Method), http.StatusMethodNotAllowed)
 		return
 	}
 

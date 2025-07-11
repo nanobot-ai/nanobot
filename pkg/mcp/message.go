@@ -98,18 +98,17 @@ func (r *Message) SendError(ctx context.Context, err error) {
 	if r.Session == nil {
 		return
 	}
-	var data RPCError
+	var data *RPCError
 	if rpcError := (JSONRPCError)(nil); errors.As(err, &rpcError) {
-		data = *rpcError.RPCError()
+		data = rpcError.RPCError()
 	} else {
-		data.Code = -32602
-		data.Message = err.Error()
+		data = ErrRPCInternal.WithMessage(err.Error())
 	}
 
 	resp := Message{
 		JSONRPC: r.JSONRPC,
 		ID:      r.ID,
-		Error:   &data,
+		Error:   data,
 	}
 
 	if err := r.Session.Send(ctx, resp); err != nil {
@@ -133,11 +132,32 @@ type JSONRPCError interface {
 	RPCError() *RPCError
 }
 
+var (
+	ErrRPCParse          = NewRPCError(-32700, "JSON RPC parse error")
+	ErrRPCInvalidRequest = NewRPCError(-32600, "JSON RPC invalid request")
+	ErrRPCMethodNotFound = NewRPCError(-32601, "JSON RPC method not found")
+	ErrRPCInvalidParams  = NewRPCError(-32602, "JSON RPC invalid params")
+	ErrRPCInternal       = NewRPCError(-32603, "JSON RPC internal error")
+)
+
 type RPCError struct {
 	Code       int             `json:"code,omitempty"`
 	Message    string          `json:"message,omitempty"`
 	Data       json.RawMessage `json:"data,omitempty"`
 	DataObject any             `json:"-"`
+}
+
+func NewRPCError(code int, message string) *RPCError {
+	return &RPCError{
+		Code:    code,
+		Message: message,
+	}
+}
+
+func (e *RPCError) WithMessage(fmtStr string, args ...any) *RPCError {
+	cp := *e
+	cp.Message += ": " + fmt.Sprintf(fmtStr, args...)
+	return &cp
 }
 
 func (e *RPCError) RPCError() *RPCError {

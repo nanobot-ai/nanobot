@@ -55,13 +55,11 @@ func scan(value interface{}, obj any) error {
 
 type Session struct {
 	gorm.Model
-	Type        string        `json:"type"`
-	SessionID   string        `json:"sessionID" gorm:"uniqueIndex;not null"`
-	Description string        `json:"description,omitempty"`
-	ParentID    string        `json:"parentID"`
-	Account     string        `json:"account,omitempty"`
-	Config      ConfigWrapper `json:"config" gorm:"type:json"`
-	State       State         `json:"state" gorm:"type:json"`
-	Env         Env           `json:"env,omitempty" gorm:"type:json"`
-	Cwd         string        `json:"cwd,omitempty"`
+	Type        string `json:"type"`
+	SessionID   string `json:"sessionID" gorm:"uniqueIndex;not null"`
+	Description string `json:"description,omitempty"`
+	ParentID    string `json:"parentID"`
+	AccountID   string `json:"accountID,omitempty"`
+	State       State  `json:"state" gorm:"type:json"`
+	Cwd         string `json:"cwd,omitempty"`
 }

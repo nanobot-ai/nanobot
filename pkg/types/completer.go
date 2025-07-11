@@ -3,9 +3,12 @@ package types
 import (
 	"context"
 	"encoding/json"
+	"slices"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
 type Completer interface {
@@ -25,9 +28,10 @@ func (c CompletionOptions) Merge(other CompletionOptions) (result CompletionOpti
 
 type CompletionRequest struct {
 	Model             string               `json:"model,omitempty"`
+	Agent             string               `json:"agent,omitempty"`
 	ThreadName        string               `json:"threadName,omitempty"`
 	NewThread         bool                 `json:"newThread,omitempty"`
-	Input             []CompletionItem     `json:"input,omitzero"`
+	Input             []Message            `json:"input,omitzero"`
 	ModelPreferences  mcp.ModelPreferences `json:"modelPreferences,omitzero"`
 	SystemPrompt      string               `json:"systemPrompt,omitzero"`
 	IncludeContext    string               `json:"includeContext,omitempty"`
@@ -57,24 +61,158 @@ type ToolUseDefinition struct {
 }
 
 type CompletionProgress struct {
-	Model   string         `json:"model,omitempty"`
-	Partial bool           `json:"partial,omitempty"`
-	HasMore bool           `json:"hasMore,omitempty"`
-	Item    CompletionItem `json:"item,omitempty"`
+	Model     string         `json:"model,omitempty"`
+	Agent     string         `json:"agent,omitempty"`
+	Partial   bool           `json:"partial,omitempty"`
+	HasMore   bool           `json:"hasMore,omitempty"`
+	MessageID string         `json:"messageID,omitempty"`
+	Item      CompletionItem `json:"item,omitempty"`
 }
 
 const CompletionProgressMetaKey = "ai.nanobot.progress/completion"
 
+type Message struct {
+	ID      string           `json:"id,omitempty"`
+	Created *time.Time       `json:"created,omitempty"`
+	Role    string           `json:"role,omitempty"`
+	Items   []CompletionItem `json:"items,omitempty"`
+}
+
 type CompletionItem struct {
-	ID             string               `json:"id,omitempty"`
-	Message        *mcp.SamplingMessage `json:"message,omitempty"`
-	ToolCall       *ToolCall            `json:"toolCall,omitempty"`
-	ToolCallResult *ToolCallResult      `json:"toolCallResult,omitempty"`
-	Reasoning      *Reasoning           `json:"reasoning,omitempty"`
+	ID             string          `json:"id,omitempty"`
+	Content        *mcp.Content    `json:"content,omitempty"`
+	ToolCall       *ToolCall       `json:"toolCall,omitempty"`
+	ToolCallResult *ToolCallResult `json:"toolCallResult,omitempty"`
+	Reasoning      *Reasoning      `json:"reasoning,omitempty"`
+}
+
+func (c *CompletionItem) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	c.ID = ""
+	if id, ok := raw["id"]; ok {
+		if err := json.Unmarshal(id, &c.ID); err != nil {
+			return err
+		}
+	}
+
+	var typeField string
+	if t, ok := raw["type"]; ok {
+		if err := json.Unmarshal(t, &typeField); err != nil {
+			return err
+		}
+	}
+
+	switch typeField {
+	case "text", "image", "audio", "resource":
+		c.Content = &mcp.Content{}
+		if err := json.Unmarshal(data, c.Content); err != nil {
+			return err
+		}
+		err := json.Unmarshal(data, &struct {
+			ID *string `json:"id,omitempty"`
+		}{
+			ID: &c.ID,
+		})
+		if err != nil {
+			return err
+		}
+	case "tool":
+		if _, ok := raw["name"]; ok {
+			c.ToolCall = &ToolCall{}
+			if err := json.Unmarshal(data, c.ToolCall); err != nil {
+				return err
+			}
+		}
+		if _, ok := raw["output"]; ok {
+			c.ToolCallResult = &ToolCallResult{}
+			if err := json.Unmarshal(data, c.ToolCallResult); err != nil {
+				return err
+			}
+		}
+	case "reasoning":
+		c.Reasoning = &Reasoning{}
+		return json.Unmarshal(data, c.Reasoning)
+	}
+
+	return nil
+}
+
+func (c CompletionItem) MarshalJSON() ([]byte, error) {
+	if c.ID == "" {
+		c.ID = uuid.String()
+	}
+
+	if c.Content != nil {
+		// mcp.Content has a custom MarshalJSON method that messes up things, so this is
+		// a workaround to ensure we get the correct JSON structure.
+		content, err := json.Marshal(c.Content)
+		if err != nil {
+			return nil, err
+		}
+
+		header, err := json.Marshal(map[string]any{
+			"id": c.ID,
+		})
+
+		// length 2 means it is an empty object
+		if len(header) == 2 {
+			return content, nil
+		} else if len(content) == 2 {
+			return header, nil
+		}
+
+		return slices.Concat(header[:len(header)-1], []byte(","), content[1:]), nil
+	} else if c.ToolCallResult != nil || c.ToolCall != nil {
+		var (
+			tc         ToolCall
+			output     CallResult
+			outputRole string
+		)
+		if c.ToolCall != nil {
+			tc = *c.ToolCall
+		} else {
+			tc = ToolCall{
+				CallID: c.ToolCallResult.CallID,
+			}
+		}
+		if c.ToolCallResult != nil {
+			output = c.ToolCallResult.Output
+			outputRole = c.ToolCallResult.OutputRole
+		}
+		return json.Marshal(struct {
+			ID         string     `json:"id,omitempty"`
+			Type       string     `json:"type,omitempty"`
+			Output     CallResult `json:"output,omitzero"`
+			OutputRole string     `json:"outputRole,omitzero"`
+			ToolCall
+		}{
+			ID:         c.ID,
+			Type:       "tool",
+			ToolCall:   tc,
+			Output:     output,
+			OutputRole: outputRole,
+		})
+	} else if c.Reasoning != nil {
+		return json.Marshal(struct {
+			ID   string `json:"id,omitempty"`
+			Type string `json:"type,omitempty"`
+			*Reasoning
+		}{
+			ID:        c.ID,
+			Type:      "reasoning",
+			Reasoning: c.Reasoning,
+		})
+	}
+	return json.Marshal(map[string]any{
+		"id": c.ID,
+	})
 }
 
 type Reasoning struct {
-	ID               string        `json:"id,omitempty"`
 	EncryptedContent string        `json:"encryptedContent,omitempty"`
 	Summary          []SummaryText `json:"summary,omitempty"`
 }
@@ -84,31 +222,32 @@ type SummaryText struct {
 }
 
 type CompletionResponse struct {
-	Output       []CompletionItem `json:"output,omitempty"`
-	ChatResponse bool             `json:"chatResponse,omitempty"`
-	Model        string           `json:"model,omitempty"`
+	Output       Message `json:"output,omitempty"`
+	ChatResponse bool    `json:"chatResponse,omitempty"`
+	Model        string  `json:"model,omitempty"`
 }
 
 type ToolCallResult struct {
 	OutputRole string     `json:"outputRole,omitempty"`
-	CallID     string     `json:"call_id,omitempty"`
-	Output     CallResult `json:"output,omitempty"`
+	CallID     string     `json:"callID,omitempty"`
+	Output     CallResult `json:"output,omitzero"`
+	// NOTE: If you add fields here, make sure to update the CompletionItem.MarshalJSON method, it
+	//has special handling for ToolCallResult.
 }
 
 type ToolCall struct {
 	Arguments  string `json:"arguments,omitempty"`
-	CallID     string `json:"call_id,omitempty"`
+	CallID     string `json:"callID,omitempty"`
 	Name       string `json:"name,omitempty"`
-	ID         string `json:"id,omitempty"`
 	Target     string `json:"target,omitempty"`
 	TargetType string `json:"targetType,omitempty"`
 }
 
 type CallResult struct {
-	Content      []mcp.Content
-	IsError      bool   `json:"isError,omitempty"`
-	ChatResponse bool   `json:"chatResponse,omitempty"`
-	Agent        string `json:"agent,omitempty"`
-	Model        string `json:"model,omitempty"`
-	StopReason   string `json:"stopReason,omitempty"`
+	Content      []mcp.Content `json:"content,omitempty"`
+	IsError      bool          `json:"isError,omitempty"`
+	ChatResponse bool          `json:"chatResponse,omitempty"`
+	Agent        string        `json:"agent,omitempty"`
+	Model        string        `json:"model,omitempty"`
+	StopReason   string        `json:"stopReason,omitempty"`
 }

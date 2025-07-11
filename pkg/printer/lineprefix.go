@@ -121,7 +121,7 @@ func Prefix(prefix, content string) {
 		prefix += strings.Repeat(" ", longestPrefix-len(prefix))
 	}
 
-	prefix = formatPrefix(prefix + "|")
+	prefix = formatPrefix(prefix + "│")
 
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
