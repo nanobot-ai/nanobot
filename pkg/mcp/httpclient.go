@@ -290,7 +290,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 			}
 
 			log.Messages(ctx, s.serverName, false, []byte(message))
-			s.handler(msg)
+			go s.handler(msg)
 		}
 	}()
 
@@ -465,6 +465,7 @@ func (s *HTTPClient) readResponse(resp *http.Response) (bool, error) {
 			}
 
 			handle(&message)
+			return seen, nil
 		}
 	}
 
