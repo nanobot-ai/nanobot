@@ -105,9 +105,7 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 	if err != nil {
 		return nil, err
 	}
-	if in != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
+
 	for k, v := range s.headers {
 		req.Header.Set(k, v)
 	}
@@ -119,10 +117,10 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 		// Don't add because some *cough* CloudFront *cough* proxies don't like it
 		req.Header.Set("Accept", "application/json, text/event-stream")
 	}
-
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+
 	return req, nil
 }
 
@@ -465,7 +463,6 @@ func (s *HTTPClient) readResponse(resp *http.Response) (bool, error) {
 			}
 
 			handle(&message)
-			return seen, nil
 		}
 	}
 
