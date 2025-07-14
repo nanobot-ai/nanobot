@@ -152,6 +152,11 @@ func (s *Session) copyInto(out, in any) bool {
 		return true
 	}
 
+	if dstVal.Type().Kind() == reflect.Ptr && srcVal.Type().AssignableTo(dstVal.Type().Elem()) {
+		dstVal.Elem().Set(srcVal)
+		return true
+	}
+
 	switch v := in.(type) {
 	case float64:
 		if outNum, ok := out.(*float64); ok {
