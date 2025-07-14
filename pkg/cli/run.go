@@ -29,6 +29,7 @@ type Run struct {
 	Output        string   `usage:"Output file for the result. Use - for stdout" default:"" short:"o"`
 	ListenAddress string   `usage:"Address to listen on (ex: localhost:8099) (implies -m)" default:"stdio" short:"a"`
 	Port          string   `usage:"Port to listen on for stdio" default:"8099"`
+	HealthzPath   string   `usage:"Path to serve healthz on"`
 	Roots         []string `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
 	Input         string   `usage:"Input file for the prompt" default:"" short:"f"`
 	Session       string   `usage:"Session ID to resume" default:"" short:"s"`
@@ -146,7 +147,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		return r.runMCP(cmd.Context(), *config, runtime, oauthcallbackHandler, nil)
+		return r.runMCP(cmd.Context(), *config, runtime, oauthcallbackHandler, nil, r.HealthzPath)
 	}
 	if r.Port == "" {
 		r.Port = "0"
@@ -214,7 +215,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 	eg, ctx := errgroup.WithContext(cmd.Context())
 	ctx, cancel := context.WithCancel(ctx)
 	eg.Go(func() error {
-		return r.runMCP(ctx, *config, runtime, oauthcallbackHandler, l)
+		return r.runMCP(ctx, *config, runtime, oauthcallbackHandler, l, r.HealthzPath)
 	})
 	eg.Go(func() error {
 		defer cancel()
@@ -226,7 +227,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 	return eg.Wait()
 }
 
-func (r *Run) runMCP(ctx context.Context, config types.Config, runtime *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, l net.Listener) error {
+func (r *Run) runMCP(ctx context.Context, config types.Config, runtime *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, l net.Listener, healthzPath string) error {
 	env, err := r.n.loadEnv()
 	if err != nil {
 		return fmt.Errorf("failed to load environment: %w", err)
@@ -258,6 +259,7 @@ func (r *Run) runMCP(ctx context.Context, config types.Config, runtime *runtime.
 
 	httpServer := mcp.NewHTTPServer(env, mcpServer, mcp.HTTPServerOptions{
 		SessionStore: sessionManager,
+		HealthzPath:  healthzPath,
 	})
 
 	mux := http.NewServeMux()

@@ -18,11 +18,13 @@ type HTTPServer struct {
 	MessageHandler MessageHandler
 	sessions       SessionStore
 	ctx            context.Context
+	healthzPath    string
 }
 
 type HTTPServerOptions struct {
 	SessionStore SessionStore
 	BaseContext  context.Context
+	HealthzPath  string
 }
 
 func (h HTTPServerOptions) Complete() HTTPServerOptions {
@@ -38,6 +40,7 @@ func (h HTTPServerOptions) Complete() HTTPServerOptions {
 func (h HTTPServerOptions) Merge(other HTTPServerOptions) (result HTTPServerOptions) {
 	h.SessionStore = complete.Last(h.SessionStore, other.SessionStore)
 	h.BaseContext = complete.Last(h.BaseContext, other.BaseContext)
+	h.HealthzPath = complete.Last(h.HealthzPath, other.HealthzPath)
 	return h
 }
 
@@ -48,6 +51,7 @@ func NewHTTPServer(env map[string]string, handler MessageHandler, opts ...HTTPSe
 		env:            env,
 		sessions:       o.SessionStore,
 		ctx:            o.BaseContext,
+		healthzPath:    o.HealthzPath,
 	}
 }
 
@@ -99,6 +103,11 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request) {
 
 func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodGet {
+		if h.healthzPath != "" && req.URL.Path == h.healthzPath {
+			rw.WriteHeader(http.StatusOK)
+			return
+		}
+
 		h.streamEvents(rw, req)
 		return
 	}
