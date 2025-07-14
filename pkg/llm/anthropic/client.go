@@ -145,11 +145,11 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 					send(ctx, &types.CompletionProgress{
 						Model:     resp.Model,
 						Agent:     agentName,
-						Partial:   true,
-						HasMore:   true,
 						MessageID: resp.ID,
 						Item: types.CompletionItem{
-							ID: fmt.Sprintf("%s-%d", resp.ID, contentIndex),
+							ID:      fmt.Sprintf("%s-%d", resp.ID, contentIndex),
+							Partial: true,
+							HasMore: true,
 							Content: &mcp.Content{
 								Type: "text",
 								Text: delta.Delta.Text,
@@ -163,11 +163,11 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 					send(ctx, &types.CompletionProgress{
 						Model:     resp.Model,
 						Agent:     agentName,
-						Partial:   true,
-						HasMore:   true,
 						MessageID: resp.ID,
 						Item: types.CompletionItem{
-							ID: fmt.Sprintf("%s-%d", resp.ID, contentIndex),
+							ID:      fmt.Sprintf("%s-%d", resp.ID, contentIndex),
+							Partial: true,
+							HasMore: true,
 							ToolCall: &types.ToolCall{
 								CallID:    resp.Content[contentIndex].ID,
 								Name:      resp.Content[contentIndex].Name,
@@ -189,10 +189,10 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 				send(ctx, &types.CompletionProgress{
 					Model:     resp.Model,
 					Agent:     agentName,
-					Partial:   true,
 					MessageID: resp.ID,
 					Item: types.CompletionItem{
-						ID: fmt.Sprintf("%s-%d", resp.ID, contentIndex),
+						Partial: true,
+						ID:      fmt.Sprintf("%s-%d", resp.ID, contentIndex),
 					},
 				}, opt.ProgressToken)
 			}

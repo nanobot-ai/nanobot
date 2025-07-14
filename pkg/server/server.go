@@ -195,7 +195,7 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 		currentAgent := s.data.CurrentAgent(ctx)
 		toolMapping = types.TargetMapping[mcp.Tool]{
 			MCPServer:  currentAgent,
-			TargetName: currentAgent,
+			TargetName: types.AgentTool,
 		}
 	}
 

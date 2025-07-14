@@ -63,8 +63,6 @@ type ToolUseDefinition struct {
 type CompletionProgress struct {
 	Model     string         `json:"model,omitempty"`
 	Agent     string         `json:"agent,omitempty"`
-	Partial   bool           `json:"partial,omitempty"`
-	HasMore   bool           `json:"hasMore,omitempty"`
 	MessageID string         `json:"messageID,omitempty"`
 	Item      CompletionItem `json:"item,omitempty"`
 }
@@ -80,6 +78,8 @@ type Message struct {
 
 type CompletionItem struct {
 	ID             string          `json:"id,omitempty"`
+	Partial        bool            `json:"partial,omitempty"`
+	HasMore        bool            `json:"hasMore,omitempty"`
 	Content        *mcp.Content    `json:"content,omitempty"`
 	ToolCall       *ToolCall       `json:"toolCall,omitempty"`
 	ToolCallResult *ToolCallResult `json:"toolCallResult,omitempty"`
@@ -95,6 +95,18 @@ func (c *CompletionItem) UnmarshalJSON(data []byte) error {
 	c.ID = ""
 	if id, ok := raw["id"]; ok {
 		if err := json.Unmarshal(id, &c.ID); err != nil {
+			return err
+		}
+	}
+
+	if hasMore, ok := raw["hasMore"]; ok {
+		if err := json.Unmarshal(hasMore, &c.HasMore); err != nil {
+			return err
+		}
+	}
+
+	if partial, ok := raw["partial"]; ok {
+		if err := json.Unmarshal(partial, &c.Partial); err != nil {
 			return err
 		}
 	}
@@ -155,7 +167,9 @@ func (c CompletionItem) MarshalJSON() ([]byte, error) {
 		}
 
 		header, err := json.Marshal(map[string]any{
-			"id": c.ID,
+			"id":      c.ID,
+			"hasMore": c.HasMore,
+			"partial": c.Partial,
 		})
 
 		// length 2 means it is an empty object
@@ -185,6 +199,8 @@ func (c CompletionItem) MarshalJSON() ([]byte, error) {
 		}
 		return json.Marshal(struct {
 			ID         string     `json:"id,omitempty"`
+			HasMore    bool       `json:"hasMore,omitempty"`
+			Partial    bool       `json:"partial,omitempty"`
 			Type       string     `json:"type,omitempty"`
 			Output     CallResult `json:"output,omitzero"`
 			OutputRole string     `json:"outputRole,omitzero"`
@@ -192,18 +208,24 @@ func (c CompletionItem) MarshalJSON() ([]byte, error) {
 		}{
 			ID:         c.ID,
 			Type:       "tool",
+			HasMore:    c.HasMore,
+			Partial:    c.Partial,
 			ToolCall:   tc,
 			Output:     output,
 			OutputRole: outputRole,
 		})
 	} else if c.Reasoning != nil {
 		return json.Marshal(struct {
-			ID   string `json:"id,omitempty"`
-			Type string `json:"type,omitempty"`
+			ID      string `json:"id,omitempty"`
+			Type    string `json:"type,omitempty"`
+			HasMore bool   `json:"hasMore,omitempty"`
+			Partial bool   `json:"partial,omitempty"`
 			*Reasoning
 		}{
 			ID:        c.ID,
 			Type:      "reasoning",
+			HasMore:   c.HasMore,
+			Partial:   c.Partial,
 			Reasoning: c.Reasoning,
 		})
 	}
@@ -222,9 +244,11 @@ type SummaryText struct {
 }
 
 type CompletionResponse struct {
-	Output       Message `json:"output,omitempty"`
-	ChatResponse bool    `json:"chatResponse,omitempty"`
-	Model        string  `json:"model,omitempty"`
+	Output           Message   `json:"output,omitempty"`
+	InternalMessages []Message `json:"internalMessages,omitempty"`
+	ChatResponse     bool      `json:"chatResponse,omitempty"`
+	Agent            string    `json:"agent,omitempty"`
+	Model            string    `json:"model,omitempty"`
 }
 
 type ToolCallResult struct {

@@ -15,6 +15,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/schema"
 	"github.com/nanobot-ai/nanobot/pkg/tools"
 	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
 type Agents struct {
@@ -96,25 +97,26 @@ func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *
 	if previousRun != nil {
 		input := previousRun.PopulatedRequest.Input
 
-		outputMessage := previousRun.Response.Output
-		newItems := make([]types.CompletionItem, 0, len(outputMessage.Items))
-		for _, output := range outputMessage.Items {
-			prevInput := output
-			if prevInput.ToolCall != nil {
-				if _, exists := previousRun.ToolOutputs[prevInput.ToolCall.CallID]; !exists {
-					if req.InputAsToolResult != nil && *req.InputAsToolResult {
-						populateToolCallResult(previousRun, &req, prevInput.ToolCall.CallID)
-					} else {
-						continue
+		for _, outputMessage := range append(previousRun.Response.InternalMessages, previousRun.Response.Output) {
+			newItems := make([]types.CompletionItem, 0, len(outputMessage.Items))
+			for _, output := range outputMessage.Items {
+				prevInput := output
+				if prevInput.ToolCall != nil {
+					if _, exists := previousRun.ToolOutputs[prevInput.ToolCall.CallID]; !exists {
+						if req.InputAsToolResult != nil && *req.InputAsToolResult {
+							populateToolCallResult(previousRun, &req, prevInput.ToolCall.CallID)
+						} else {
+							continue
+						}
 					}
 				}
+				newItems = append(newItems, prevInput)
 			}
-			newItems = append(newItems, prevInput)
-		}
 
-		if len(newItems) > 0 {
-			outputMessage.Items = newItems
-			input = append(input, outputMessage)
+			if len(newItems) > 0 {
+				outputMessage.Items = newItems
+				input = append(input, outputMessage)
+			}
 		}
 
 		for _, callID := range slices.Sorted(maps.Keys(previousRun.ToolOutputs)) {
@@ -223,7 +225,16 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 		previousRun          *types.Execution
 		currentRun           = &types.Execution{}
 		config               = types.ConfigFromContext(ctx)
+		startID              = ""
 	)
+
+	if len(req.Input) > 0 {
+		startID = req.Input[0].ID
+		if startID == "" {
+			startID = uuid.String()
+			req.Input[0].ID = startID
+		}
+	}
 
 	if req.ThreadName != "" {
 		previousExecutionKey = fmt.Sprintf("%s/%s", previousExecutionKey, req.ThreadName)
@@ -299,7 +310,19 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 				currentRun.Response.ChatResponse = true
 				session.Set(previousExecutionKey, currentRun)
 			}
-			return currentRun.Response, nil
+
+			finalResponse := currentRun.Response
+
+			if startID != "" && currentRun.PopulatedRequest != nil {
+				i := slices.IndexFunc(currentRun.PopulatedRequest.Input, func(msg types.Message) bool {
+					return msg.ID == startID
+				})
+				if i >= 0 {
+					finalResponse.InternalMessages = currentRun.PopulatedRequest.Input[i:]
+				}
+			}
+
+			return finalResponse, nil
 		}
 
 		previousRun = currentRun

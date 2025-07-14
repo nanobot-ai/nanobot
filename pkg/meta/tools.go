@@ -83,22 +83,34 @@ func (s *Server) getChat(ctx context.Context, _ struct{}) (*ChatData, error) {
 		allMessages = append(allMessages, run.Response.Output)
 	}
 
-	tools := map[string]int{}
+	tools := map[string]struct {
+		msgIndex  int
+		itemIndex int
+	}{}
 	for _, msg := range allMessages {
 		var processedItems []types.CompletionItem
 		for _, output := range msg.Items {
 			if output.ToolCallResult != nil && output.ToolCall == nil {
 				if i, ok := tools[output.ToolCallResult.CallID]; ok {
-					processedItems[i].ToolCallResult = output.ToolCallResult
+					targetMsg := msg
+					if len(processedMessages) > i.msgIndex {
+						targetMsg = processedMessages[i.msgIndex]
+					}
+					targetMsg.Items[i.itemIndex].ToolCallResult = output.ToolCallResult
 					continue
 				}
 			} else if output.ToolCall != nil && output.ToolCallResult == nil {
-				tools[output.ToolCall.CallID] = len(processedItems)
+				x := tools[output.ToolCall.CallID]
+				x.msgIndex = len(processedMessages)
+				x.itemIndex = len(processedItems)
+				tools[output.ToolCall.CallID] = x
 			}
 			processedItems = append(processedItems, output)
 		}
 		msg.Items = processedItems
-		processedMessages = append(processedMessages, msg)
+		if len(msg.Items) > 0 {
+			processedMessages = append(processedMessages, msg)
+		}
 	}
 
 	sessionID := session.ID()

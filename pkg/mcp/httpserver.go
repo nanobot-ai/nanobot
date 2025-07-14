@@ -8,7 +8,6 @@ import (
 	"maps"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
@@ -151,9 +150,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			setID = true
 		}
 
-		ctx, cancel := context.WithTimeout(req.Context(), 10*time.Second)
-		defer cancel()
-		response, err := streamingSession.Exchange(ctx, msg)
+		response, err := streamingSession.Exchange(req.Context(), msg)
 		if setID {
 			response.ID = nil
 		}

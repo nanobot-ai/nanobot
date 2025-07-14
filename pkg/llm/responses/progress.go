@@ -34,10 +34,8 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 	defer resp.Body.Close()
 
 	progress := types.CompletionProgress{
-		Agent:   agentName,
-		Model:   modelName,
-		Partial: true,
-		HasMore: true,
+		Agent: agentName,
+		Model: modelName,
 	}
 
 	for lines.Scan() {
@@ -63,18 +61,20 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 				progress.MessageID = event.Response.ID
 			case "response.output_item.added":
 				if event.Item.Type == "function_call" {
-					progress.HasMore = true
 					progress.Item = types.CompletionItem{
-						ID: event.Item.ID,
+						Partial: true,
+						HasMore: true,
+						ID:      event.Item.ID,
 						ToolCall: &types.ToolCall{
 							CallID: event.Item.CallID,
 							Name:   event.Item.Name,
 						},
 					}
 				} else if event.Item.Type == "message" {
-					progress.HasMore = true
 					progress.Item = types.CompletionItem{
-						ID: event.Item.ID,
+						Partial: true,
+						HasMore: true,
+						ID:      event.Item.ID,
 						Content: &mcp.Content{
 							Type: "text",
 						},
@@ -85,9 +85,9 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 				send(ctx, &progress, progressToken)
 			case "response.output_item.done":
 				if progress.Item.ID != "" {
-					progress.HasMore = false
 					progress.Item = types.CompletionItem{
-						ID: progress.Item.ID,
+						Partial: true,
+						ID:      progress.Item.ID,
 					}
 					send(ctx, &progress, progressToken)
 				}

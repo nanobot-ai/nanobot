@@ -100,6 +100,10 @@ func formatPrefix(prefix string) string {
 }
 
 func Prefix(prefix, content string) {
+	if content == "" {
+		return
+	}
+
 	if prettyPrint {
 		jsonData := map[string]any{}
 		if err := json.Unmarshal([]byte(content), &jsonData); err == nil {

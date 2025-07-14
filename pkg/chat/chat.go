@@ -142,8 +142,6 @@ func printCompletionProgress(params json.RawMessage, seenAgentOut func()) {
 		}
 		if progress.Item.Content != nil && progress.Item.Content.Text != "" {
 			printer.Prefix(fmt.Sprintf("<-(%s)", model), progress.Item.Content.Text)
-		} else if !progress.HasMore {
-			printer.Prefix(fmt.Sprintf("<-(%s)", model), "\n")
 		}
 	}
 

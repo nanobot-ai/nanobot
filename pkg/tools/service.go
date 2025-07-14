@@ -519,9 +519,9 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 				ProgressToken: opt.ProgressToken,
 				Meta: map[string]any{
 					types.CompletionProgressMetaKey: types.CompletionProgress{
-						HasMore:   true,
 						MessageID: messageID,
 						Item: types.CompletionItem{
+							HasMore:  true,
 							ID:       itemID,
 							ToolCall: &tc,
 						},

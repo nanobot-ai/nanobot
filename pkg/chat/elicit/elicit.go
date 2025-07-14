@@ -8,10 +8,21 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/printer"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func Answer(request mcp.ElicitRequest, autoApproveTool bool) (mcp.ElicitResult, error) {
+func Answer(request mcp.ElicitRequest, autoApproveTool bool) (ret mcp.ElicitResult, retErr error) {
+	defer func() {
+		if retErr == nil {
+			resp, err := json.Marshal(ret.Content)
+			if err == nil {
+				printer.Prefix("->(elicit:user)", request.Message)
+				printer.Prefix("<-(elicit:user)", string(resp))
+			}
+		}
+	}()
+
 	var tool types.ToolCallConfirm
 	if err := json.Unmarshal(request.Meta, &tool); err == nil && tool.Type == types.ToolCallConfirmType && autoApproveTool {
 		return mcp.ElicitResult{

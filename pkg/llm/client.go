@@ -85,7 +85,12 @@ func (c *Client) handleAssistantRolesFromTools(req types.CompletionRequest) (_ t
 	return req, nil
 }
 
-func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts ...types.CompletionOptions) (*types.CompletionResponse, error) {
+func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts ...types.CompletionOptions) (ret *types.CompletionResponse, _ error) {
+	defer func() {
+		if ret != nil && ret.Agent == "" {
+			ret.Agent = req.Agent
+		}
+	}()
 	if req.Model == "default" || req.Model == "" {
 		req.Model = c.defaultModel
 	}

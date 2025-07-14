@@ -2,6 +2,7 @@ package sampling
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -10,6 +11,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
 type Sampler struct {
@@ -128,14 +130,34 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 		request.Temperature = req.Temperature
 	}
 
+	var currentRole string
 	for _, content := range req.Messages {
-		request.Input = append(request.Input, types.Message{
-			Role: content.Role,
-			Items: []types.CompletionItem{
-				{
-					Content: &content.Content,
-				},
-			},
+		role := content.Role
+		if role == "" {
+			role = "user"
+		}
+
+		if role != currentRole {
+			var id string
+			if opt.ProgressToken != nil {
+				id = fmt.Sprint(opt.ProgressToken)
+			}
+			if id != "" && len(request.Input) > 0 {
+				id = fmt.Sprintf("%s-%d", id, len(request.Input))
+			}
+			if id == "" {
+				id = uuid.String()
+			}
+			request.Input = append(request.Input, types.Message{
+				ID:   id,
+				Role: role,
+			})
+			currentRole = role
+		}
+
+		request.Input[len(request.Input)-1].Items = append(request.Input[len(request.Input)-1].Items, types.CompletionItem{
+			ID:      uuid.String(),
+			Content: &content.Content,
 		})
 	}
 
@@ -172,6 +194,22 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 		result.Content = append(result.Content, mcp.Content{
 			Type: "text",
 			Text: "[NO CONTENT]",
+		})
+	}
+
+	for _, msg := range append(resp.InternalMessages, resp.Output) {
+		textData, err := json.Marshal(msg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal message: %w", err)
+		}
+
+		result.Content = append(result.Content, mcp.Content{
+			Type: "resource",
+			Resource: &mcp.EmbeddedResource{
+				URI:      "nanobot://message/" + msg.ID,
+				MIMEType: "application/vnd.nanobot.message",
+				Text:     string(textData),
+			},
 		})
 	}
 
