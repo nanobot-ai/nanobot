@@ -100,7 +100,7 @@ func (s *Server) handleReadResource(ctx context.Context, msg mcp.Message, payloa
 		return err
 	}
 
-	var resourceName string
+	resourceName := payload.URI
 	resourceMapping, ok := resourceMappings[payload.URI]
 	if !ok {
 		resourceTemplateMappings, err := s.data.ResourceTemplateMappings(ctx)

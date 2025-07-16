@@ -119,6 +119,26 @@ func callResult(object any, err error) (*CallToolResult, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if _, ok := object.(Content); ok {
+		// If the object is already a Content, we can return it directly
+		return &CallToolResult{
+			IsError: false,
+			Content: []Content{object.(Content)},
+		}, nil
+	}
+	if _, ok := object.([]Content); ok {
+		// If the object is already a slice of Content, we can return it directly
+		return &CallToolResult{
+			IsError: false,
+			Content: object.([]Content),
+		}, nil
+	}
+	if _, ok := object.(*CallToolResult); ok {
+		// If the object is already a CallToolResult, we can return it directly
+		return object.(*CallToolResult), nil
+	}
+
 	dataBytes, err := json.Marshal(object)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal thread data: %w", err)

@@ -72,6 +72,7 @@ func (m *Manager) Store(req *http.Request, id string, session *mcp.ServerSession
 	if !session.GetSession().Get(types.ConfigSessionKey, &types.Config{}) {
 		session.GetSession().Set(types.ConfigSessionKey, setupConfig(m.config))
 	}
+	session.GetSession().Set(types.AccountIDSessionKey, stored.AccountID)
 
 	state, err := session.GetSession().State()
 	if err != nil {

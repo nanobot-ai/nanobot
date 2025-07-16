@@ -163,16 +163,9 @@ func (d *Data) ResourceTemplateMappings(ctx context.Context, opts ...GetOption) 
 
 func (d *Data) ResourceMappings(ctx context.Context, opts ...GetOption) (types.ResourceMappings, error) {
 	var (
-		resources = types.ResourceMappings{}
-		session   = mcp.SessionFromContext(ctx)
-		c         types.Config
+		session = mcp.SessionFromContext(ctx)
+		c       types.Config
 	)
-
-	if found := session.Get(resourceMappingKey, &resources); !found && complete.Complete(opts...).AllowMissing {
-		return nil, nil
-	} else if found {
-		return resources, nil
-	}
 
 	session.Get(types.ConfigSessionKey, &c)
 
@@ -181,7 +174,6 @@ func (d *Data) ResourceMappings(ctx context.Context, opts ...GetOption) (types.R
 		return nil, err
 	}
 
-	session.Set(resourceMappingKey, resourceMappings)
 	return resourceMappings, nil
 }
 

@@ -142,7 +142,10 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 	runtimeOpt.CallbackHandler = oauthcallbackHandler
 
 	if r.MCP {
-		runtime, err := r.n.GetRuntime(runtimeOpt, runtime.Options{OAuthRedirectURL: "http://" + strings.Replace(r.ListenAddress, "127.0.0.1", "localhost", 1) + "/oauth/callback"})
+		runtime, err := r.n.GetRuntime(runtimeOpt, runtime.Options{
+			OAuthRedirectURL: "http://" + strings.Replace(r.ListenAddress, "127.0.0.1", "localhost", 1) + "/oauth/callback",
+			DSN:              r.n.DSN(),
+		})
 		if err != nil {
 			return err
 		}
@@ -159,7 +162,10 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 	}
 	r.ListenAddress = l.Addr().String()
 
-	runtime, err := r.n.GetRuntime(runtimeOpt, runtime.Options{OAuthRedirectURL: "http://" + strings.Replace(r.ListenAddress, "127.0.0.1", "localhost", 1) + "/oauth/callback"})
+	runtime, err := r.n.GetRuntime(runtimeOpt, runtime.Options{
+		OAuthRedirectURL: "http://" + strings.Replace(r.ListenAddress, "127.0.0.1", "localhost", 1) + "/oauth/callback",
+		DSN:              r.n.DSN(),
+	})
 	if err != nil {
 		return err
 	}

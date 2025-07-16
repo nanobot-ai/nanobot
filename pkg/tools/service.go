@@ -12,9 +12,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/envvar"
 	"github.com/nanobot-ai/nanobot/pkg/expr"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/meta"
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
-	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
@@ -26,6 +24,7 @@ type Service struct {
 	callbackHandler  mcp.CallbackHandler
 	oauthRedirectURL string
 	concurrency      int
+	serverFactories  map[string]func() mcp.MessageHandler
 }
 
 type Sampler interface {
@@ -62,6 +61,13 @@ func NewToolsService(opts ...RegistryOptions) *Service {
 		oauthRedirectURL: opt.OAuthRedirectURL,
 		callbackHandler:  opt.CallbackHandler,
 	}
+}
+
+func (s *Service) AddServer(name string, factory func() mcp.MessageHandler) {
+	if s.serverFactories == nil {
+		s.serverFactories = make(map[string]func() mcp.MessageHandler)
+	}
+	s.serverFactories[name] = factory
 }
 
 func (s *Service) SetSampler(sampler Sampler) {
@@ -216,8 +222,8 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 		return nil, fmt.Errorf("MCP server %s not found in config", name)
 	}
 
-	if name == "__meta" {
-		serverSession, err := mcp.NewExistingServerSession(session.Context(), mcp.SessionState{}, meta.NewServer(sessiondata.NewData(s)))
+	if f, ok := s.serverFactories[name]; ok {
+		serverSession, err := mcp.NewExistingServerSession(session.Context(), mcp.SessionState{}, f())
 		if err != nil {
 			return nil, fmt.Errorf("failed to create meta server session: %w", err)
 		}

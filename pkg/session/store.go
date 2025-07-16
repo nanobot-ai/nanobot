@@ -3,19 +3,14 @@ package session
 import (
 	"context"
 	"fmt"
-	"log"
-	"os"
-	"strings"
-	"time"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/driver/mysql"
-	"gorm.io/driver/postgres"
+	"github.com/nanobot-ai/nanobot/pkg/gormdsn"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
-const StoreSessionKey = "sessionStore"
+const (
+	StoreSessionKey = "sessionStore"
+)
 
 type Store struct {
 	db *gorm.DB
@@ -26,31 +21,9 @@ func NewStore(db *gorm.DB) *Store {
 }
 
 func NewStoreFromDSN(dsn string) (*Store, error) {
-	var dialector gorm.Dialector
-
-	switch {
-	case strings.HasPrefix(dsn, "sqlite:") || strings.HasSuffix(dsn, ".db") || strings.Contains(dsn, ":memory:"):
-		dsn = strings.TrimPrefix(dsn, "sqlite:")
-		dialector = sqlite.Open(dsn)
-	case strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://"):
-		dialector = postgres.Open(dsn)
-	case strings.HasPrefix(dsn, "mysql://") || strings.Contains(dsn, "@tcp("):
-		dsn = strings.TrimPrefix(dsn, "mysql://")
-		dialector = mysql.Open(dsn)
-	default:
-		return nil, fmt.Errorf("unsupported database type in DSN: %s", dsn)
-	}
-
-	db, err := gorm.Open(dialector, &gorm.Config{
-		Logger: logger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), logger.Config{
-			SlowThreshold:             200 * time.Millisecond,
-			LogLevel:                  logger.Warn,
-			IgnoreRecordNotFoundError: true,
-			Colorful:                  true,
-		}),
-	})
+	db, err := gormdsn.NewDBFromDSN(dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		return nil, fmt.Errorf("failed to create database connection: %w", err)
 	}
 
 	if err := db.AutoMigrate(&Session{}); err != nil {

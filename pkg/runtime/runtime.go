@@ -6,12 +6,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/agents"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/llm"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
+	"github.com/nanobot-ai/nanobot/pkg/servers/meta"
+	"github.com/nanobot-ai/nanobot/pkg/servers/resources"
+	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
 	"github.com/nanobot-ai/nanobot/pkg/tools"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
@@ -28,6 +32,7 @@ type Options struct {
 	MaxConcurrency   int
 	CallbackHandler  mcp.CallbackHandler
 	OAuthRedirectURL string
+	DSN              string
 }
 
 func (o Options) Merge(other Options) (result Options) {
@@ -36,6 +41,7 @@ func (o Options) Merge(other Options) (result Options) {
 	result.Roots = append(o.Roots, other.Roots...)
 	result.CallbackHandler = complete.Last(o.CallbackHandler, other.CallbackHandler)
 	result.OAuthRedirectURL = complete.Last(o.OAuthRedirectURL, other.OAuthRedirectURL)
+	result.DSN = complete.Last(o.DSN, other.DSN)
 	return
 }
 
@@ -54,11 +60,34 @@ func NewRuntime(cfg llm.Config, opts ...Options) *Runtime {
 	// This is a circular dependency. Oh well, so much for good design.
 	registry.SetSampler(sampler)
 
-	return &Runtime{
+	r := &Runtime{
 		Service:   registry,
 		llmConfig: cfg,
 		opt:       opt,
 	}
+
+	registry.AddServer("__meta", func() mcp.MessageHandler {
+		return meta.NewServer(sessiondata.NewData(r))
+	})
+
+	if opt.DSN != "" {
+		var (
+			once  = &sync.Once{}
+			store *resources.Store
+		)
+		registry.AddServer("__resources", func() mcp.MessageHandler {
+			once.Do(func() {
+				var err error
+				store, err = resources.NewStoreFromDSN(opt.DSN)
+				if err != nil {
+					panic(fmt.Errorf("failed to create resources store: %w", err))
+				}
+			})
+			return resources.NewServer(store)
+		})
+	}
+
+	return r
 }
 
 func (r *Runtime) WithTempSession(ctx context.Context, config *types.Config) context.Context {

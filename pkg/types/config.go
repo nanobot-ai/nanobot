@@ -12,7 +12,10 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 )
 
-const ConfigSessionKey = "config"
+const (
+	ConfigSessionKey    = "config"
+	AccountIDSessionKey = "accountID"
+)
 
 func ConfigFromContext(ctx context.Context) (result Config) {
 	mcp.SessionFromContext(ctx).Get(ConfigSessionKey, &result)

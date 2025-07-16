@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/cmd"
@@ -53,8 +54,27 @@ type Nanobot struct {
 	env map[string]string
 }
 
+func ensureDirectoryForDSN(dsn string) error {
+	dsnFile, _, _ := strings.Cut(dsn, "?")
+	dsnFile = strings.TrimPrefix(dsnFile, "file:")
+	if !strings.HasSuffix(dsnFile, ".db") {
+		return nil
+	}
+
+	dir := filepath.Dir(dsnFile)
+	if dir == "." {
+		return nil
+	}
+
+	_, err := os.Stat(dir)
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return os.MkdirAll(dir, 0o700)
+}
+
 func (n *Nanobot) DSN() string {
-	return os.Expand(n.State, func(s string) string {
+	dsn := os.Expand(n.State, func(s string) string {
 		if s == "XDG_CONFIG_HOME" {
 			config, err := os.UserConfigDir()
 			if err != nil {
@@ -64,6 +84,12 @@ func (n *Nanobot) DSN() string {
 		}
 		return os.Getenv(s)
 	})
+
+	if err := ensureDirectoryForDSN(dsn); err != nil {
+		log.Fatalf(context.Background(), "Failed to ensure directory for state file %s: %v", dsn, err)
+	}
+
+	return dsn
 }
 
 func (n *Nanobot) Customize(cmd *cobra.Command) {
