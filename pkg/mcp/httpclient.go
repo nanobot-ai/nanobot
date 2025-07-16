@@ -142,7 +142,6 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 		return nil
 	}
 
-	gotResponse := make(chan error, 1)
 	// Start the SSE stream with the managed context.
 	req, err := s.newRequest(s.ctx, http.MethodGet, nil)
 	if err != nil {
@@ -184,6 +183,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 
 	s.needReconnect = false
 
+	gotResponse := make(chan error, 1)
 	go func() (err error, send bool) {
 		defer func() {
 			if err != nil {
@@ -366,24 +366,44 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) (err error) {
 			return
 		}
 
-		var oauthErr AuthRequiredErr
-		if !errors.As(err, &oauthErr) {
+		var (
+			httpClient *http.Client
+			oauthErr   AuthRequiredErr
+		)
+		if errors.As(err, &oauthErr) {
+			httpClient, err = s.oauthHandler.oauthClient(s.ctx, s, s.baseURL, oauthErr.ProtectedResourceValue)
+			if err != nil || httpClient == nil {
+				streamError := fmt.Errorf("failed to initialize HTTP Streaming client: %w", oauthErr)
+				err = errors.Join(streamError, err)
+				return
+			}
+
+			s.clientLock.Lock()
+			s.httpClient = httpClient
+			s.clientLock.Unlock()
+
+			err = s.send(ctx, msg)
 			return
 		}
 
-		var httpClient *http.Client
-		httpClient, err = s.oauthHandler.oauthClient(s.ctx, s, s.baseURL, oauthErr.ProtectedResourceValue)
-		if err != nil || httpClient == nil {
-			streamError := fmt.Errorf("failed to initialize HTTP Streaming client: %w", oauthErr)
-			err = errors.Join(streamError, err)
-			return
+		unwrappedErr := err
+		for unwrappedErr != nil {
+			// Continually unwrap the errors until we find one that starts with oauth2:
+			if strings.HasPrefix(unwrappedErr.Error(), "oauth2:") {
+				// If we do find an error that starts with "oauth2:" then there was an issue with the oauth2 HTTP client.
+				// Reset the HTTP client to the default and try again. Using the default client will give us the unauthenticated
+				// error that we need to continue the process.
+
+				s.clientLock.Lock()
+				s.httpClient = http.DefaultClient
+				s.clientLock.Unlock()
+
+				// Use the exported Send method here so that we catch the AuthRequiredErr above on the recursed call.
+				err = s.Send(ctx, msg)
+				return
+			}
+			unwrappedErr = errors.Unwrap(unwrappedErr)
 		}
-
-		s.clientLock.Lock()
-		s.httpClient = httpClient
-		s.clientLock.Unlock()
-
-		err = s.send(ctx, msg)
 	}()
 
 	return s.send(ctx, msg)
