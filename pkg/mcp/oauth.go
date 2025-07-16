@@ -20,6 +20,7 @@ var resourceMetadataRegex = regexp.MustCompile(`resource_metadata="([^"]*)"`)
 
 type oauth struct {
 	redirectURL, clientName string
+	currentToken            oauth2.Token
 	metadataClient          *http.Client
 	callbackHandler         CallbackHandler
 	clientLookup            ClientCredLookup
@@ -54,6 +55,7 @@ func (o *oauth) loadFromStorage(ctx context.Context, connectURL string) (*http.C
 	if conf != nil && tok != nil {
 		tok, err = conf.TokenSource(ctx, tok).Token()
 		if err == nil && tok.Valid() {
+			o.currentToken = *tok
 			return conf.Client(ctx, tok), nil
 		}
 	}
@@ -62,6 +64,14 @@ func (o *oauth) loadFromStorage(ctx context.Context, connectURL string) (*http.C
 }
 
 func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, authenticateHeader string) (*http.Client, error) {
+	if o.tokenStorage != nil {
+		conf, tok, err := o.tokenStorage.GetTokenConfig(ctx, connectURL)
+		if err == nil && tok.AccessToken != o.currentToken.AccessToken && tok.Valid() {
+			o.currentToken = *tok
+			return conf.Client(ctx, tok), nil
+		}
+	}
+
 	if o.callbackHandler == nil || o.redirectURL == "" {
 		return nil, fmt.Errorf("oauth callback server is not configured")
 	}
@@ -211,6 +221,8 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 		return nil, fmt.Errorf("failed to exchange code for token: %w", err)
 	}
 
+	o.currentToken = *tok
+
 	if o.tokenStorage != nil {
 		if err = o.tokenStorage.SetTokenConfig(ctx, connectURL, conf, tok); err != nil {
 			log.Infof(ctx, "failed to save token config: %v", err)
@@ -231,7 +243,7 @@ func (o *oauth) getAuthServerMetadata(authURL string) (authorizationServerMetada
 		u.Path = "/.well-known/oauth-authorization-server" + u.Path
 		authServerMetadata = u.String()
 	} else {
-		authServerMetadata = fmt.Sprintf("%s/.well-known/oauth-authorization-server/", authServerMetadata)
+		authServerMetadata = fmt.Sprintf("%s/.well-known/oauth-authorization-server/mcp", authServerMetadata)
 	}
 	oauthMetadataResp, err := o.metadataClient.Get(authServerMetadata)
 	if err != nil {
