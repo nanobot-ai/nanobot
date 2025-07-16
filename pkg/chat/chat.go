@@ -91,6 +91,7 @@ func Chat(ctx context.Context, listenAddress string,
 		if err != nil {
 			return err
 		}
+		printer.Prefix("<-(user)", line)
 
 		if strings.Fields(line)[0] == "/reload" {
 			if err := reload(c); err != nil {
@@ -111,8 +112,9 @@ func Chat(ctx context.Context, listenAddress string,
 			ProgressToken: progressToken,
 		})
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			log.Errorf(ctx, "%v", err)
 		}
+		fmt.Println()
 	}
 }
 

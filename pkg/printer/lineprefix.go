@@ -77,7 +77,7 @@ func formatPrefix(prefix string) string {
 		return prefix
 	}
 
-	key := prefix[2:]
+	key := strings.ReplaceAll(prefix[2:], " ", "")
 
 	colorsCodes := termColorToAscii
 	if strings.HasPrefix(prefix, "-") {
