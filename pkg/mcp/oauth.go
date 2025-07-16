@@ -243,7 +243,7 @@ func (o *oauth) getAuthServerMetadata(authURL string) (authorizationServerMetada
 		u.Path = "/.well-known/oauth-authorization-server" + u.Path
 		authServerMetadata = u.String()
 	} else {
-		authServerMetadata = fmt.Sprintf("%s/.well-known/oauth-authorization-server/mcp", authServerMetadata)
+		authServerMetadata = fmt.Sprintf("%s/.well-known/oauth-authorization-server", authServerMetadata)
 	}
 	oauthMetadataResp, err := o.metadataClient.Get(authServerMetadata)
 	if err != nil {
