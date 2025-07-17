@@ -66,7 +66,7 @@ func (o *oauth) loadFromStorage(ctx context.Context, connectURL string) (*http.C
 func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, authenticateHeader string) (*http.Client, error) {
 	if o.tokenStorage != nil {
 		conf, tok, err := o.tokenStorage.GetTokenConfig(ctx, connectURL)
-		if err == nil && conf != nil && tok != nil && tok.AccessToken != o.currentToken.AccessToken && tok.Valid() {
+		if err == nil && conf != nil && tok != nil && tok.AccessToken != o.currentToken.AccessToken {
 			o.currentToken = *tok
 			return conf.Client(ctx, tok), nil
 		}
