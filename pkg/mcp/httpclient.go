@@ -39,7 +39,7 @@ type HTTPClient struct {
 	needReconnect bool
 }
 
-func newHTTPClient(ctx context.Context, serverName, baseURL, oauthClientName, oauthRedirectURL string, callbackHandler CallbackHandler, clientCredLookup ClientCredLookup, tokenStorage TokenStorage, headers map[string]string) *HTTPClient {
+func newHTTPClient(serverName, baseURL, oauthClientName, oauthRedirectURL string, callbackHandler CallbackHandler, clientCredLookup ClientCredLookup, tokenStorage TokenStorage, headers map[string]string) *HTTPClient {
 	_, initialized := headers[SessionIDHeader]
 	h := &HTTPClient{
 		httpClient:    http.DefaultClient,
@@ -52,11 +52,6 @@ func newHTTPClient(ctx context.Context, serverName, baseURL, oauthClientName, oa
 		needReconnect: true,
 		sessionID:     headers[SessionIDHeader],
 		initialized:   initialized,
-	}
-
-	httpClient, err := h.oauthHandler.loadFromStorage(ctx, baseURL)
-	if err == nil && httpClient != nil {
-		h.httpClient = httpClient
 	}
 
 	return h
@@ -298,6 +293,11 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 func (s *HTTPClient) Start(ctx context.Context, handler WireHandler) error {
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	s.handler = handler
+
+	if httpClient := s.oauthHandler.loadFromStorage(s.ctx, s.baseURL); httpClient != nil {
+		s.httpClient = httpClient
+	}
+
 	return nil
 }
 

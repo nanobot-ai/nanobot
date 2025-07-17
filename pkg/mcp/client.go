@@ -275,7 +275,7 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 			}
 			header["Mcp-Session-Id"] = opt.SessionState.ID
 		}
-		wire = newHTTPClient(ctx, serverName, config.BaseURL, opt.OAuthClientName, opt.OAuthRedirectURL, opt.CallbackHandler, opt.ClientCredLookup, opt.TokenStorage, envvar.ReplaceMap(opt.Env, config.Headers))
+		wire = newHTTPClient(serverName, config.BaseURL, opt.OAuthClientName, opt.OAuthRedirectURL, opt.CallbackHandler, opt.ClientCredLookup, opt.TokenStorage, envvar.ReplaceMap(opt.Env, config.Headers))
 	} else {
 		wire, err = newStdioClient(ctx, opt.Roots, opt.Env, serverName, config, opt.Runner)
 		if err != nil {
