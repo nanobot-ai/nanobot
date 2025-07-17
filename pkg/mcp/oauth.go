@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/log"
@@ -40,9 +41,9 @@ func newOAuth(callbackHandler CallbackHandler, clientLookup ClientCredLookup, to
 	}
 }
 
-func (o *oauth) loadFromStorage(ctx context.Context, connectURL string) (*http.Client, error) {
+func (o *oauth) loadFromStorage(ctx context.Context, connectURL string) *http.Client {
 	if o.tokenStorage == nil {
-		return nil, nil
+		return nil
 	}
 
 	// Read the token config from storage to see if we have valid auth
@@ -53,23 +54,20 @@ func (o *oauth) loadFromStorage(ctx context.Context, connectURL string) (*http.C
 	}
 
 	if conf != nil && tok != nil {
-		tok, err = conf.TokenSource(ctx, tok).Token()
+		ts := newTokenSource(ctx, o.tokenStorage, connectURL, conf, tok)
+		tok, err = ts.Token()
 		if err == nil && tok.Valid() {
 			o.currentToken = *tok
-			return conf.Client(ctx, tok), nil
+			return oauth2.NewClient(ctx, ts)
 		}
 	}
 
-	return nil, nil
+	return nil
 }
 
 func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, authenticateHeader string) (*http.Client, error) {
-	if o.tokenStorage != nil {
-		conf, tok, err := o.tokenStorage.GetTokenConfig(ctx, connectURL)
-		if err == nil && conf != nil && tok != nil && tok.AccessToken != o.currentToken.AccessToken && tok.Valid() {
-			o.currentToken = *tok
-			return conf.Client(ctx, tok), nil
-		}
+	if httpClient := o.loadFromStorage(ctx, connectURL); httpClient != nil {
+		return httpClient, nil
 	}
 
 	if o.callbackHandler == nil || o.redirectURL == "" {
@@ -229,7 +227,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 		}
 	}
 
-	return conf.Client(ctx, tok), nil
+	return oauth2.NewClient(ctx, newTokenSource(ctx, o.tokenStorage, connectURL, conf, tok)), nil
 }
 
 func (o *oauth) getAuthServerMetadata(authURL string) (authorizationServerMetadata, error) {
@@ -625,4 +623,48 @@ func parseClientRegistrationResponse(reader io.Reader) (clientRegistrationRespon
 	}
 
 	return response, nil
+}
+
+// tokenSource implements the oauth2.TokenSource interface to store new tokens in the TokenStorage.
+type tokenSource struct {
+	ctx          context.Context
+	lock         sync.Mutex
+	tokenStorage TokenStorage
+	connectURL   string
+	conf         *oauth2.Config
+	tok          *oauth2.Token
+	tokenSource  oauth2.TokenSource
+}
+
+func newTokenSource(ctx context.Context, tokenStorage TokenStorage, connectURL string, conf *oauth2.Config, tok *oauth2.Token) oauth2.TokenSource {
+	return oauth2.ReuseTokenSource(tok, &tokenSource{
+		ctx:          ctx,
+		tokenStorage: tokenStorage,
+		connectURL:   connectURL,
+		conf:         conf,
+		tok:          tok,
+		tokenSource:  conf.TokenSource(ctx, tok),
+	})
+}
+
+func (ts *tokenSource) Token() (*oauth2.Token, error) {
+	tok, err := ts.tokenSource.Token()
+	if err != nil {
+		return nil, err
+	}
+
+	ts.lock.Lock()
+	defer ts.lock.Unlock()
+
+	if tok.AccessToken != ts.tok.AccessToken || tok.RefreshToken != ts.tok.RefreshToken || tok.Expiry.Unix() != ts.tok.Expiry.Unix() {
+		ts.tok = tok
+
+		if ts.tokenStorage != nil {
+			if err = ts.tokenStorage.SetTokenConfig(ts.ctx, ts.connectURL, ts.conf, ts.tok); err != nil {
+				return nil, fmt.Errorf("failed to store token: %w", err)
+			}
+		}
+	}
+
+	return ts.tok, nil
 }
