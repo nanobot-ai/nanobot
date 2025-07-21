@@ -400,6 +400,12 @@ func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 	return &tools, err
 }
 
+func (c *Client) Ping(ctx context.Context) (*PingResult, error) {
+	var result PingResult
+	err := c.Session.Exchange(ctx, "ping", PingRequest{}, &result)
+	return &result, err
+}
+
 type CallOption struct {
 	ProgressToken any
 }
