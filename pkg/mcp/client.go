@@ -37,6 +37,7 @@ type ClientOption struct {
 	ParentSession    *Session
 	SessionState     *SessionState
 	Runner           *Runner
+	ClientName       string
 	OAuthClientName  string
 	OAuthRedirectURL string
 	CallbackHandler  CallbackHandler
@@ -98,6 +99,7 @@ func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
 	if other.TokenStorage != nil {
 		result.TokenStorage = other.TokenStorage
 	}
+	result.ClientName = complete.Last(c.ClientName, other.ClientName)
 	result.OAuthRedirectURL = complete.Last(c.OAuthRedirectURL, other.OAuthRedirectURL)
 	result.OAuthClientName = complete.Last(c.OAuthClientName, other.OAuthClientName)
 	result.Env = complete.MergeMap(c.Env, other.Env)
@@ -105,9 +107,16 @@ func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
 	result.ParentSession = complete.Last(c.ParentSession, other.ParentSession)
 	result.Runner = complete.Last(c.Runner, other.Runner)
 	result.Wire = complete.Last(c.Wire, other.Wire)
+
 	result.Roots = c.Roots
 	if other.Roots != nil {
 		result.Roots = other.Roots
+	}
+
+	if result.ClientName == "" {
+		result.ClientName = "nanobot"
+	} else {
+		result.ClientName += " via nanobot"
 	}
 	return result
 }
@@ -330,7 +339,7 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 				Elicitation: elicitations,
 			},
 			ClientInfo: ClientInfo{
-				Name:    "nanobot",
+				Name:    opt.ClientName,
 				Version: version.Get().String(),
 			},
 		})
