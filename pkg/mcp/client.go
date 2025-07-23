@@ -38,6 +38,7 @@ type ClientOption struct {
 	SessionState     *SessionState
 	Runner           *Runner
 	ClientName       string
+	ClientVersion    string
 	OAuthClientName  string
 	OAuthRedirectURL string
 	CallbackHandler  CallbackHandler
@@ -58,6 +59,12 @@ func (c ClientOption) Complete() ClientOption {
 	}
 	if c.OAuthClientName == "" {
 		c.OAuthClientName = "Nanobot MCP Client"
+	}
+	if c.ClientName == "" {
+		c.ClientName = "nanobot"
+		c.ClientVersion = version.Get().String()
+	} else {
+		c.ClientName += fmt.Sprintf(" (via nanobot %s)", version.Get().String())
 	}
 	return c
 }
@@ -100,6 +107,7 @@ func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
 		result.TokenStorage = other.TokenStorage
 	}
 	result.ClientName = complete.Last(c.ClientName, other.ClientName)
+	result.ClientVersion = complete.Last(c.ClientVersion, other.ClientVersion)
 	result.OAuthRedirectURL = complete.Last(c.OAuthRedirectURL, other.OAuthRedirectURL)
 	result.OAuthClientName = complete.Last(c.OAuthClientName, other.OAuthClientName)
 	result.Env = complete.MergeMap(c.Env, other.Env)
@@ -113,11 +121,6 @@ func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
 		result.Roots = other.Roots
 	}
 
-	if result.ClientName == "" {
-		result.ClientName = "nanobot"
-	} else {
-		result.ClientName += " via nanobot"
-	}
 	return result
 }
 
@@ -340,7 +343,7 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 			},
 			ClientInfo: ClientInfo{
 				Name:    opt.ClientName,
-				Version: version.Get().String(),
+				Version: opt.ClientVersion,
 			},
 		})
 		return c, err
