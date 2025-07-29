@@ -39,7 +39,7 @@ func (s *StdioServer) Start(ctx context.Context, in io.ReadCloser, out io.WriteC
 
 	s.stdio = NewStdio("proxy", nil, in, out, func() {})
 
-	return s.stdio.Start(ctx, func(ctx context.Context, msg Message) {
+	if err = s.stdio.Start(ctx, func(ctx context.Context, msg Message) {
 		resp, err := session.Exchange(ctx, msg)
 		if errors.Is(err, ErrNoResponse) {
 			return
@@ -49,5 +49,14 @@ func (s *StdioServer) Start(ctx context.Context, in io.ReadCloser, out io.WriteC
 		if err := s.stdio.Send(ctx, resp); err != nil {
 			log.Errorf(ctx, "failed to send message in reply to %v: %v", msg.ID, err)
 		}
-	})
+	}); err != nil {
+		return fmt.Errorf("failed to start stdio: %w", err)
+	}
+
+	go func() {
+		s.stdio.Wait()
+		session.Close()
+	}()
+
+	return nil
 }
