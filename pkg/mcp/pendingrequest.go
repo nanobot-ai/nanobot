@@ -41,3 +41,13 @@ func (p *PendingRequests) Done(id any) {
 
 	delete(p.ids, id)
 }
+
+func (p *PendingRequests) Close() {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	for _, ch := range p.ids {
+		close(ch)
+	}
+	p.ids = nil
+}

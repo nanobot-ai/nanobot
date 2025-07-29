@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	log2 "log"
+	"os/exec"
 	"strings"
 	"sync"
 
@@ -41,6 +42,7 @@ func (w *waiter) Close() {
 type Stdio struct {
 	stdout         io.Reader
 	stdin          io.Writer
+	cmd            *exec.Cmd
 	closer         func()
 	server         string
 	pendingRequest PendingRequests
@@ -55,6 +57,10 @@ func (s *Stdio) Send(ctx context.Context, req Message) error {
 	data, err := json.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
+	}
+
+	if s.cmd != nil && (s.cmd.Process == nil || s.cmd.ProcessState != nil) {
+		return fmt.Errorf("stdin is closed")
 	}
 
 	log.Messages(ctx, s.server, true, data)
@@ -91,6 +97,8 @@ func (s *Stdio) Start(ctx context.Context, handler WireHandler) error {
 }
 
 func (s *Stdio) start(ctx context.Context, handler WireHandler) error {
+	defer s.Close()
+
 	buf := bufio.NewScanner(s.stdout)
 	buf.Buffer(make([]byte, 0, 1024), 10*1024*1024)
 	for buf.Scan() {
@@ -112,13 +120,14 @@ func newStdioClient(ctx context.Context, roots func(context.Context) ([]Root, er
 		return nil, fmt.Errorf("failed to create stream: %w", err)
 	}
 
-	s := NewStdio(serverName, result.Stdout, result.Stdin, result.Close)
+	s := NewStdio(serverName, result.cmd, result.Stdout, result.Stdin, result.Close)
 	return s, nil
 }
 
-func NewStdio(server string, in io.Reader, out io.Writer, close func()) *Stdio {
+func NewStdio(server string, cmd *exec.Cmd, in io.Reader, out io.Writer, close func()) *Stdio {
 	return &Stdio{
 		server: server,
+		cmd:    cmd,
 		stdout: in,
 		stdin:  out,
 		closer: close,

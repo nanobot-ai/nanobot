@@ -104,6 +104,7 @@ func (s *Session) State() (*SessionState, error) {
 		Attributes:        attr,
 	}, nil
 }
+
 func (s *Session) EnvMap() map[string]string {
 	if s == nil {
 		return map[string]string{}
@@ -241,6 +242,7 @@ func (s *Session) Close() {
 		s.wire.Close()
 	}
 	s.cancel()
+	s.pendingRequest.Close()
 }
 
 func (s *Session) Wait() {
@@ -445,7 +447,17 @@ func newSession(ctx context.Context, wire Wire, handler MessageHandler, session 
 	}
 	withSession := WithSession(ctx, s)
 	s.ctx, s.cancel = context.WithCancel(withSession)
-	return s, wire.Start(s.ctx, s.onWire)
+
+	if err := wire.Start(s.ctx, s.onWire); err != nil {
+		return nil, err
+	}
+
+	go func() {
+		wire.Wait()
+		s.Close()
+	}()
+
+	return s, nil
 }
 
 type recorder struct {

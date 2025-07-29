@@ -37,7 +37,7 @@ func (s *StdioServer) Start(ctx context.Context, in io.ReadCloser, out io.WriteC
 
 	maps.Copy(session.session.EnvMap(), s.env)
 
-	s.stdio = NewStdio("proxy", in, out, func() {})
+	s.stdio = NewStdio("proxy", nil, in, out, func() {})
 
 	return s.stdio.Start(ctx, func(ctx context.Context, msg Message) {
 		resp, err := session.Exchange(ctx, msg)
