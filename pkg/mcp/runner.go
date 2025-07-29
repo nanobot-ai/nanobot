@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ type Runner struct {
 }
 
 type streamResult struct {
+	cmd    *exec.Cmd
 	Stdout io.Reader
 	Stdin  io.Writer
 	Close  func()
@@ -214,6 +216,7 @@ func (r *Runner) doStream(ctx context.Context, serverName string, cmd *sandbox.C
 	}()
 
 	return &streamResult{
+		cmd:    cmd.Cmd,
 		Stdout: stdoutPipe,
 		Stdin:  stdinPipe,
 	}, nil
