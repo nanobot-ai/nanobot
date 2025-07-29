@@ -166,6 +166,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		// If msg is nil, then this is an SSE request for HTTP streaming.
 		// If the server doesn't support a separate SSE endpoint, then we can just return.
@@ -173,7 +174,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 			s.needReconnect = false
 			return nil
 		}
-		return fmt.Errorf("failed to connect to SSE server: %s", resp.Status)
+		return fmt.Errorf("failed to connect to SSE server url %s: %s, %s", req.URL.String(), resp.Status, string(body))
 	}
 
 	s.needReconnect = false

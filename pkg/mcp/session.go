@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"reflect"
@@ -11,6 +12,8 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
+
+var ErrNoResult = errors.New("no result in response")
 
 type MessageHandler interface {
 	OnMessage(ctx context.Context, msg Message)
@@ -241,8 +244,8 @@ func (s *Session) Close() {
 	if s.wire != nil {
 		s.wire.Close()
 	}
-	s.cancel()
 	s.pendingRequest.Close()
+	s.cancel()
 }
 
 func (s *Session) Wait() {
@@ -355,7 +358,7 @@ func (s *Session) marshalResponse(m Message, out any) error {
 		return fmt.Errorf("error from server: %s", m.Error.Message)
 	}
 	if m.Result == nil {
-		return fmt.Errorf("no result in response")
+		return ErrNoResult
 	}
 	if err := json.Unmarshal(m.Result, out); err != nil {
 		return fmt.Errorf("failed to unmarshal result: %w", err)
