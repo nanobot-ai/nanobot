@@ -34,8 +34,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     customAgents,
     sidebar: cookie || "true",
     user: {
-      name: "Darren Shepherd",
-      email: "darren.s.shepherd@gmail.com",
+      name: "User",
+      email: "user@example.com",
     } as User,
   };
 }
