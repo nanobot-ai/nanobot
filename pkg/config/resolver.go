@@ -47,6 +47,12 @@ func httpGet(ctx context.Context, url string) ([]byte, error) {
 }
 
 func (r *resource) Load(ctx context.Context) (result types.Config, _ error) {
+	defer func() {
+		if len(result.Extends) == 0 && result.ShouldPublishAgent() {
+			result.Extends = []string{"nanobot.agent"}
+		}
+	}()
+
 	if r.static != nil {
 		return *r.static, nil
 	}
@@ -68,10 +74,6 @@ func (r *resource) Load(ctx context.Context) (result types.Config, _ error) {
 
 	if err := mcp.JSONCoerce(obj, &result); err != nil {
 		return result, fmt.Errorf("error marshalling resource %s: %w", r.url, err)
-	}
-
-	if len(result.Extends) == 0 && result.ShouldPublishAgent() {
-		result.Extends = []string{"nanobot.agent"}
 	}
 
 	return
@@ -256,6 +258,17 @@ func gitRead(ctx context.Context, parts []string, ref string) ([]byte, error) {
 }
 
 func resolve(name string) (*resource, error) {
+	if name == "nanobot.default" {
+		return &resource{
+			resourceType: "static",
+			static: &types.Config{
+				Agents: map[string]types.Agent{
+					"main": {},
+				},
+			},
+		}, nil
+	}
+
 	if strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://") {
 		// Handle HTTP resources
 		return &resource{

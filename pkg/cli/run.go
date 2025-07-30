@@ -127,17 +127,14 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	config := &types.Config{
-		Agents: map[string]types.Agent{
-			"main": {},
-		},
+	cfgPath := "nanobot.default"
+	if len(args) > 0 {
+		cfgPath = args[0]
 	}
 
-	if len(args) > 0 {
-		config, err = r.n.ReadConfig(cmd.Context(), args[0], runtimeOpt)
-		if err != nil {
-			return fmt.Errorf("failed to read config file %q: %w", args[0], err)
-		}
+	config, err := r.n.ReadConfig(cmd.Context(), cfgPath, runtimeOpt)
+	if err != nil {
+		return fmt.Errorf("failed to read config file %q: %w", args[0], err)
 	}
 
 	oauthcallbackHandler := mcp.NewCallbackServer(confirm.New())
