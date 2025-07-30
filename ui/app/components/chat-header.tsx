@@ -11,27 +11,18 @@ import { type Dispatch, type SetStateAction, memo } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { useNavigate } from "react-router";
 import type { CustomAgent, CustomAgentMeta } from "~/lib/nanobot";
-import type { ChatVisibilityType } from "~/hooks/use-chat";
-import type { User } from "~/services/auth.server";
-import { VisibilitySelector } from "~/components/visibility-selector";
 
 function PureChatHeader({
   currentAgent,
   setCurrentAgent,
   agents,
   customAgent,
-  visibilityType,
-  setVisibilityType,
   isReadonly,
-  user,
 }: {
-  user?: User;
   currentAgent: string;
   setCurrentAgent: Dispatch<SetStateAction<string>>;
   agents: Record<string, CustomAgentMeta>;
   customAgent?: CustomAgent;
-  visibilityType: ChatVisibilityType;
-  setVisibilityType: Dispatch<SetStateAction<ChatVisibilityType>>;
   isReadonly: boolean;
 }) {
   const navigate = useNavigate();
@@ -73,20 +64,11 @@ function PureChatHeader({
           className="order-1 md:order-2"
         />
       )}
-
-      {!isReadonly && user && (
-        <VisibilitySelector
-          visibilityType={visibilityType}
-          setVisibilityType={setVisibilityType}
-          className="order-1 md:order-3"
-        />
-      )}
     </header>
   );
 }
 
 export const ChatHeader = memo(PureChatHeader, (prevProps, nextProps) => {
-  if (prevProps.visibilityType !== nextProps.visibilityType) return false;
   if (prevProps.customAgent?.id !== nextProps.customAgent?.id) return false;
   if (
     Object.keys(prevProps.agents || {}) !== Object.keys(nextProps.agents || {})

@@ -25,7 +25,6 @@ import type { UseChatType } from "~/hooks/use-chat";
 import { cn } from "~/lib/utils";
 import type { Message, Attachment } from "~/lib/nanobot";
 import { useFetcher } from "react-router";
-import { OptionsButton } from "~/components/multimodal-input-options";
 
 function PureMultimodalInput({
   chatId,
@@ -38,7 +37,6 @@ function PureMultimodalInput({
   messages,
   setMessages,
   handleSubmit,
-  supportsCustomAgents,
   className,
 }: {
   chatId: string;
@@ -51,7 +49,6 @@ function PureMultimodalInput({
   messages: Array<Message>;
   setMessages: UseChatType["setMessages"];
   handleSubmit: UseChatType["handleSubmit"];
-  supportsCustomAgents?: boolean;
   className?: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -271,11 +268,6 @@ function PureMultimodalInput({
 
       <div className="absolute bottom-0 p-2 w-fit flex flex-row justify-start">
         <AttachmentsButton fileInputRef={fileInputRef} status={status} />
-        <OptionsButton
-          status={status}
-          chatId={chatId}
-          supportsCustomAgents={supportsCustomAgents}
-        />
       </div>
 
       <div className="absolute bottom-0 right-0 p-2 w-fit flex flex-row justify-end">
@@ -298,6 +290,7 @@ export const MultimodalInput = memo(
   (prevProps, nextProps) => {
     if (prevProps.input !== nextProps.input) return false;
     if (prevProps.status !== nextProps.status) return false;
+    if (prevProps.messages?.length !== nextProps.messages?.length) return false;
     if (!equal(prevProps.attachments, nextProps.attachments)) return false;
 
     return true;

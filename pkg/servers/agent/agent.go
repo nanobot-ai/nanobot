@@ -100,6 +100,7 @@ func (s *Server) describeSession(ctx context.Context, args any) <-chan struct{} 
 	var description string
 
 	session := mcp.SessionFromContext(ctx)
+	session = session.Parent
 	session.Get(types.DescriptionSessionKey, &description)
 	if description == "" {
 		go func() {

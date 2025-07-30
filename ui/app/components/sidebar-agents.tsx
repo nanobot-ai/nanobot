@@ -153,10 +153,10 @@ export function SidebarAgents({
       <SidebarGroupLabel className="flex items-center justify-between">
         <span>Agents</span>
       </SidebarGroupLabel>
-      <Form action={"/agent/new"} method="post">
+      <Form action={"/agent/new"} method="post" className="contents">
         <SidebarMenuAction
           type="submit"
-          className="pr-6 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+          className="mr-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
         >
           <PlusIcon />
         </SidebarMenuAction>

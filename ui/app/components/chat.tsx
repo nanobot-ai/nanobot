@@ -34,7 +34,6 @@ export default function Chat({
     visibilityType,
     setVisibilityType,
     votes,
-    supportsCustomAgents,
   } = useChat({
     chat,
     onError: (error) => {
@@ -54,14 +53,11 @@ export default function Chat({
       <div className="flex flex-col min-w-0 h-dvh bg-background">
         {!disableHeader && (
           <ChatHeader
-            user={user}
             currentAgent={currentAgent}
             setCurrentAgent={setCurrentAgent}
             agents={agents}
             customAgent={chat.customAgent}
             isReadonly={!!chat.readonly}
-            visibilityType={visibilityType}
-            setVisibilityType={setVisibilityType}
           />
         )}
 
@@ -88,7 +84,6 @@ export default function Chat({
               setAttachments={setAttachments}
               messages={messages}
               setMessages={setMessages}
-              supportsCustomAgents={supportsCustomAgents}
             />
           )}
           {!!chat.readonly && <CloneChat chatId={chat.id} />}
