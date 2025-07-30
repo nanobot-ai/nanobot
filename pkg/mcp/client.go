@@ -125,6 +125,10 @@ func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
 }
 
 type Server struct {
+	Name        string `json:"name,omitempty"`
+	ShortName   string `json:"shortName,omitempty"`
+	Description string `json:"description,omitempty"`
+
 	Image        string            `json:"image,omitempty"`
 	Dockerfile   string            `json:"dockerfile,omitempty"`
 	Source       ServerSource      `json:"source,omitempty"`

@@ -25,6 +25,7 @@ import (
 
 type Run struct {
 	MCP           bool     `usage:"Run the nanobot as an MCP server" default:"false" short:"m" env:"NANOBOT_MCP"`
+	UI            bool     `usage:"Run the nanobot with a UI" default:"false" short:"u"`
 	AutoConfirm   bool     `usage:"Automatically confirm all tool calls" default:"false" short:"y"`
 	Output        string   `usage:"Output file for the result. Use - for stdout" default:"" short:"o"`
 	ListenAddress string   `usage:"Address to listen on (ex: localhost:8099) (implies -m)" default:"stdio" short:"a"`
@@ -117,6 +118,10 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		r.MCP = true
 	}
 
+	if r.UI {
+		runtimeOpt.Profiles = append(runtimeOpt.Profiles, "nanobot.ui")
+	}
+
 	roots, err := r.getRoots()
 	if err != nil {
 		return err
@@ -170,7 +175,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if config.Publish.Entrypoint == "" {
+	if len(config.Publish.Entrypoint) == 0 {
 		if _, ok := config.Agents["main"]; !ok {
 			var (
 				agentName string
@@ -216,6 +221,12 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		}
 		clientOpt.SessionState = (*mcp.SessionState)(&sessions[0].State)
 		clientOpt.SessionState.ID = sessions[0].SessionID
+		if len(sessions[0].Config.Agents) > 0 && len(args) == 0 {
+			config = (*types.Config)(&sessions[0].Config)
+		}
+		if clientOpt.SessionState.Attributes == nil {
+			clientOpt.SessionState.Attributes = make(map[string]any)
+		}
 	}
 
 	eg, ctx := errgroup.WithContext(cmd.Context())

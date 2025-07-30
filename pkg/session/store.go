@@ -54,6 +54,13 @@ func (s *Store) FindByPrefix(ctx context.Context, sessionIDPrefix string) ([]Ses
 	return sessions, nil
 }
 
+func (s *Store) Delete(ctx context.Context, id string) error {
+	if id == "" {
+		return fmt.Errorf("session ID cannot be empty")
+	}
+	return s.db.WithContext(ctx).Where("session_id = ?", id).Delete(&Session{}).Error
+}
+
 func (s *Store) Get(ctx context.Context, id string) (*Session, error) {
 	var session Session
 	err := s.db.WithContext(ctx).Where("session_id = ?", id).First(&session).Error
@@ -62,8 +69,9 @@ func (s *Store) Get(ctx context.Context, id string) (*Session, error) {
 
 func (s *Store) FindByAccount(ctx context.Context, accountID string) ([]Session, error) {
 	var sessions []Session
-	err := s.db.WithContext(ctx).Where("account_id = ?", accountID).
-		Select("id", "created_at", "session_id", "account_id").Find(&sessions).Error
+	err := s.db.WithContext(ctx).Where("account_id = ? and description != ?", accountID, "").
+		Select("id", "created_at", "session_id", "account_id", "description", "is_public").
+		Order("created_at desc").Find(&sessions).Error
 	if err != nil {
 		return nil, err
 	}

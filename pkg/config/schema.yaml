@@ -243,7 +243,7 @@ definitions:
           A list of resource templates that this Nanobot will publish. Resource templates
           are predefined configurations that can be used to create resources.
       entrypoint:
-        type: string
+        $ref: "#/definitions/StringOrStringList"
         description: |
           The entrypoint for the Nanobot. This is the tool, agent, or flow that
           will be invoked when "nanobot run" is executed.
@@ -660,6 +660,23 @@ definitions:
           lower temperature will result in more focused and deterministic responses.
           Defaults to unset which means it's up to the LLM provider to decide when
           default value is used.
+      reasoning:
+        type: object
+        additionalProperties: false
+        properties:
+          effort:
+            type: string
+            enum: [ low, medium, high ]
+            description: |
+              The amount of reasoning to use when generating responses. This can be
+              "low", "medium", or "high".
+          summary:
+            type: string
+            enum: [ auto, concise, detailed ]
+            description: |
+              The level of detail to use when summarizing the reasoning process.
+              Can be "auto", "concise", or "detailed". If set to auto the LLM will
+              decide how detailed the summary should be.
       topP:
         type: number
         description: |

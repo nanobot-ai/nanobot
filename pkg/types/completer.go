@@ -44,6 +44,7 @@ type CompletionRequest struct {
 	Metadata          map[string]any       `json:"metadata,omitempty"`
 	Tools             []ToolUseDefinition  `json:"tools,omitzero"`
 	InputAsToolResult *bool                `json:"inputAsToolResult,omitempty"`
+	Reasoning         *AgentReasoning      `json:"reasoning,omitempty"`
 }
 
 func (r CompletionRequest) Reset() CompletionRequest {
@@ -229,9 +230,8 @@ func (c CompletionItem) MarshalJSON() ([]byte, error) {
 			Reasoning: c.Reasoning,
 		})
 	}
-	return json.Marshal(map[string]any{
-		"id": c.ID,
-	})
+	type Alias CompletionItem
+	return json.Marshal(Alias(c))
 }
 
 type Reasoning struct {

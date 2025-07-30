@@ -141,6 +141,7 @@ func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *
 	}
 
 	req.Agent = agentName
+	req.Reasoning = agent.Reasoning
 
 	if req.SystemPrompt != "" {
 		var agentInstructions types.DynamicInstructions
@@ -311,18 +312,18 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 				session.Set(previousExecutionKey, currentRun)
 			}
 
-			finalResponse := currentRun.Response
+			finalResponse := *currentRun.Response
 
 			if startID != "" && currentRun.PopulatedRequest != nil {
 				i := slices.IndexFunc(currentRun.PopulatedRequest.Input, func(msg types.Message) bool {
 					return msg.ID == startID
 				})
 				if i >= 0 {
-					finalResponse.InternalMessages = currentRun.PopulatedRequest.Input[i:]
+					finalResponse.InternalMessages = types.ConsolidateTools(currentRun.PopulatedRequest.Input[i+1:])
 				}
 			}
 
-			return finalResponse, nil
+			return &finalResponse, nil
 		}
 
 		previousRun = currentRun

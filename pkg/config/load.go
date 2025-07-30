@@ -40,8 +40,9 @@ func loadResource(ctx context.Context, configResource *resource, profiles ...str
 		return nil, "", err
 	}
 
-	if last.Extends != "" {
-		parentResource, err := configResource.Rel(last.Extends)
+	var lastParent *types.Config
+	for _, parentRef := range last.Extends {
+		parentResource, err := configResource.Rel(parentRef)
 		if err != nil {
 			return nil, "", fmt.Errorf("error resolving extends %s: %w", last.Extends, err)
 		}
@@ -51,7 +52,19 @@ func loadResource(ctx context.Context, configResource *resource, profiles ...str
 			return nil, "", fmt.Errorf("error loading parent config %s: %w", parentResource.url, err)
 		}
 
-		last, err = Merge(parent, last)
+		if lastParent == nil {
+			lastParent = &parent
+		} else {
+			merged, err := Merge(*lastParent, parent)
+			if err != nil {
+				return nil, "", fmt.Errorf("error merging parent config %s: %w", parentResource.url, err)
+			}
+			lastParent = &merged
+		}
+	}
+
+	if lastParent != nil {
+		last, err = Merge(*lastParent, last)
 		if err != nil {
 			return nil, "", fmt.Errorf("error merging %s: %w", last.Extends, err)
 		}

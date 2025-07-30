@@ -13,8 +13,14 @@ import (
 )
 
 const (
-	ConfigSessionKey    = "config"
-	AccountIDSessionKey = "accountID"
+	ConfigSessionKey              = "config"
+	CurrentAgentSessionKey        = "currentAgent"
+	AccountIDSessionKey           = "accountID"
+	AgentUUIDSessionKey           = "agentID"
+	CustomAgentConfigSessionKey   = "customAgentConfig"
+	CustomAgentModifiedSessionKey = "customAgentModified"
+	DescriptionSessionKey         = "description"
+	PublicSessionKey              = "public"
 )
 
 func ConfigFromContext(ctx context.Context) (result Config) {
@@ -23,7 +29,7 @@ func ConfigFromContext(ctx context.Context) (result Config) {
 }
 
 type Config struct {
-	Extends    string                `json:"extends,omitempty"`
+	Extends    StringList            `json:"extends,omitempty"`
 	Env        map[string]EnvDef     `json:"env,omitempty"`
 	Publish    Publish               `json:"publish,omitempty"`
 	Agents     map[string]Agent      `json:"agents,omitempty"`
@@ -33,12 +39,9 @@ type Config struct {
 	Prompts    map[string]Prompt     `json:"prompts,omitempty"`
 }
 
-func (c *Config) Serialize() (any, error) {
-	return c, nil
-}
-
-func (c *Config) Deserialize(data any) (any, error) {
-	return c, mcp.JSONCoerce(data, c)
+func (c Config) ShouldPublishAgent() bool {
+	_, hasMain := c.Agents[DefaultAgentName]
+	return hasMain || len(c.Publish.Entrypoint) > 0
 }
 
 func (c Config) Validate(allowLocal bool) error {
@@ -46,8 +49,10 @@ func (c Config) Validate(allowLocal bool) error {
 		errs      []error
 		seenNames = map[string]string{}
 	)
-	if strings.HasPrefix(strings.TrimSpace(c.Extends), "/") {
-		errs = append(errs, fmt.Errorf("extends cannot be an absolute path: %s", c.Extends))
+	for _, extend := range c.Extends {
+		if strings.HasPrefix(strings.TrimSpace(extend), "/") {
+			errs = append(errs, fmt.Errorf("extends cannot be an absolute path: %s", c.Extends))
+		}
 	}
 
 	for agentName, agent := range c.Agents {
@@ -279,7 +284,7 @@ type Publish struct {
 	Resources         StringList          `json:"resources,omitzero"`
 	ResourceTemplates StringList          `json:"resourceTemplates,omitzero"`
 	MCPServers        StringList          `json:"mcpServers,omitzero"`
-	Entrypoint        string              `json:"entrypoint,omitempty"`
+	Entrypoint        StringList          `json:"entrypoint,omitempty"`
 }
 
 type ToolRef struct {
@@ -429,6 +434,8 @@ type Agent struct {
 	Tools          StringList                `json:"tools,omitempty"`
 	Agents         StringList                `json:"agents,omitempty"`
 	Flows          StringList                `json:"flows,omitempty"`
+	Prompts        StringList                `json:"prompts,omitzero"`
+	Reasoning      *AgentReasoning           `json:"reasoning,omitempty"`
 	ThreadName     string                    `json:"threadName,omitempty"`
 	Chat           *bool                     `json:"chat,omitempty"`
 	ToolExtensions map[string]map[string]any `json:"toolExtensions,omitempty"`
@@ -438,6 +445,7 @@ type Agent struct {
 	Output         *OutputSchema             `json:"output,omitempty"`
 	Truncation     string                    `json:"truncation,omitempty"`
 	MaxTokens      int                       `json:"maxTokens,omitempty"`
+	MimeTypes      []string                  `json:"mimeTypes,omitempty"`
 
 	// Selection criteria fields
 
@@ -445,6 +453,11 @@ type Agent struct {
 	Cost         float64  `json:"cost,omitempty"`
 	Speed        float64  `json:"speed,omitempty"`
 	Intelligence float64  `json:"intelligence,omitempty"`
+}
+
+type AgentReasoning struct {
+	Effort  string `json:"effort,omitempty"`
+	Summary string `json:"summary,omitempty"`
 }
 
 func (a Agent) ToDisplay() AgentDisplay {

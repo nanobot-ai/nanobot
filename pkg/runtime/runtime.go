@@ -13,6 +13,8 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/llm"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
+	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
+	"github.com/nanobot-ai/nanobot/pkg/servers/agentbuilder"
 	"github.com/nanobot-ai/nanobot/pkg/servers/meta"
 	"github.com/nanobot-ai/nanobot/pkg/servers/resources"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
@@ -66,24 +68,40 @@ func NewRuntime(cfg llm.Config, opts ...Options) *Runtime {
 		opt:       opt,
 	}
 
-	registry.AddServer("__meta", func() mcp.MessageHandler {
-		return meta.NewServer(sessiondata.NewData(r))
+	registry.AddServer("nanobot.meta", func() mcp.MessageHandler {
+		return meta.NewServer()
+	})
+
+	registry.AddServer("nanobot.agent", func() mcp.MessageHandler {
+		return agent.NewServer(sessiondata.NewData(r), r)
 	})
 
 	if opt.DSN != "" {
 		var (
-			once  = &sync.Once{}
-			store *resources.Store
+			once        = &sync.Once{}
+			store       *resources.Store
+			agentsStore *agentbuilder.Store
 		)
-		registry.AddServer("__resources", func() mcp.MessageHandler {
+		init := func() {
 			once.Do(func() {
 				var err error
 				store, err = resources.NewStoreFromDSN(opt.DSN)
 				if err != nil {
 					panic(fmt.Errorf("failed to create resources store: %w", err))
 				}
+				agentsStore, err = agentbuilder.NewStoreFromDSN(opt.DSN)
+				if err != nil {
+					panic(fmt.Errorf("failed to create agents store: %w", err))
+				}
 			})
+		}
+		registry.AddServer("nanobot.resources", func() mcp.MessageHandler {
+			init()
 			return resources.NewServer(store)
+		})
+		registry.AddServer("nanobot.agentbuilder", func() mcp.MessageHandler {
+			init()
+			return agentbuilder.NewServer(agentsStore)
 		})
 	}
 

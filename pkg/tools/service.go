@@ -259,6 +259,9 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 				Roots: roots,
 			})
 		},
+		OnNotify: func(ctx context.Context, msg mcp.Message) error {
+			return session.Send(ctx, msg)
+		},
 		OnLogging: func(ctx context.Context, logMsg mcp.LoggingMessage) error {
 			data, err := json.Marshal(mcp.LoggingMessage{
 				Level:  logMsg.Level,
@@ -760,33 +763,6 @@ func (s *Service) getMatches(ref string, tools []ListToolsResult) types.ToolMapp
 	}
 
 	return result
-}
-
-func (s *Service) GetEntryPoint(ctx context.Context, existingTools types.ToolMappings, entrypoint string) (types.TargetMapping[mcp.Tool], error) {
-	if tm, ok := existingTools[types.AgentTool]; ok {
-		return tm, nil
-	}
-
-	if entrypoint == "" {
-		return types.TargetMapping[mcp.Tool]{}, fmt.Errorf("no entrypoint specified")
-	}
-
-	tools, err := s.listToolsForReferences(ctx, []string{entrypoint})
-	if err != nil {
-		return types.TargetMapping[mcp.Tool]{}, err
-	}
-
-	agents := s.getMatches(entrypoint, tools)
-	if len(agents) != 1 {
-		return types.TargetMapping[mcp.Tool]{}, fmt.Errorf("expected one agent for entrypoint %s, got %d", entrypoint, len(agents))
-	}
-	for _, v := range agents {
-		target := v.Target
-		target.Name = types.AgentTool
-		v.Target = target
-		return v, nil
-	}
-	panic("unreachable")
 }
 
 func (s *Service) listToolsForReferences(ctx context.Context, toolList []string) ([]ListToolsResult, error) {

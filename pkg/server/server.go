@@ -191,14 +191,6 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 		return fmt.Errorf("tool %s not found", payload.Name)
 	}
 
-	if payload.Name == types.AgentTool {
-		currentAgent := s.data.CurrentAgent(ctx)
-		toolMapping = types.TargetMapping[mcp.Tool]{
-			MCPServer:  currentAgent,
-			TargetName: types.AgentTool,
-		}
-	}
-
 	result, err := s.runtime.Call(ctx, toolMapping.MCPServer, toolMapping.TargetName, payload.Arguments, tools.CallOptions{
 		ProgressToken: msg.ProgressToken(),
 		LogData: map[string]any{
@@ -207,10 +199,6 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 	})
 	if err != nil {
 		return err
-	}
-
-	if payload.Name == types.AgentTool && result.ChatResponse && result.Agent != "" {
-		s.data.SetCurrentAgent(ctx, result.Agent)
 	}
 
 	mcpResult := mcp.CallToolResult{

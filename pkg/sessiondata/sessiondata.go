@@ -11,11 +11,12 @@ import (
 )
 
 const (
-	toolMappingKey             = "toolMapping"
-	currentAgentKey            = "currentAgent"
-	promptMappingKey           = "promptMapping"
-	resourceMappingKey         = "resourceMapping"
-	resourceTemplateMappingKey = "resourceTemplateMapping"
+	toolMappingKey               = "toolMapping"
+	promptMappingKey             = "promptMapping"
+	resourceMappingKey           = "resourceMapping"
+	resourceTemplateMappingKey   = "resourceTemplateMapping"
+	agentsSessionKey             = "agents"
+	currentAgentTargetSessionKey = "currentAgentTargetMapping"
 )
 
 type Data struct {
@@ -30,7 +31,6 @@ func NewData(runtime RuntimeMeta) *Data {
 
 type RuntimeMeta interface {
 	BuildToolMappings(ctx context.Context, toolList []string) (types.ToolMappings, error)
-	GetEntryPoint(ctx context.Context, existingTools types.ToolMappings, entrypoint string) (types.TargetMapping[mcp.Tool], error)
 	GetClient(ctx context.Context, name string) (*mcp.Client, error)
 }
 
@@ -49,55 +49,144 @@ func WithAllowMissing() GetOption {
 	}
 }
 
-func (d *Data) SetCurrentAgent(ctx context.Context, currentAgent string) {
+func (d *Data) SetCurrentAgent(ctx context.Context, currentAgent string) error {
 	session := mcp.SessionFromContext(ctx)
 	for session.Parent != nil {
 		session = session.Parent
 	}
+	d.Refresh(ctx)
 	if currentAgent == "" {
-		session.Delete(currentAgentKey)
+		session.Delete(types.CurrentAgentSessionKey)
 	} else {
-		session.Set(currentAgentKey, mcp.SavedString(currentAgent))
+		mappings, err := d.getEntrypointMapping(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to build tool mappings: %w", err)
+		}
+		if _, ok := mappings[currentAgent]; !ok {
+			return fmt.Errorf("current agent %s not found in tool mappings", currentAgent)
+		}
+		session.Set(types.CurrentAgentSessionKey, mcp.SavedString(currentAgent))
 	}
+	return nil
 }
 
-func (d *Data) Agents(ctx context.Context) types.Agents {
+func (d *Data) GetCurrentAgentTargetMapping(ctx context.Context) (string, string, error) {
+	var target types.TargetMapping[mcp.Tool]
+	session := mcp.SessionFromContext(ctx)
+	if found := session.Get(currentAgentTargetSessionKey, &target); found {
+		return target.MCPServer, target.TargetName, nil
+	}
+
+	mappings, err := d.getEntrypointMapping(ctx)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to build tool mappings: %w", err)
+	}
+
+	currentAgent := d.CurrentAgent(ctx)
+
+	target, ok := mappings[currentAgent]
+	if !ok {
+		return "", "", fmt.Errorf("current agent %s not found in tool mappings", currentAgent)
+	}
+
+	session.Set(currentAgentTargetSessionKey, &target)
+	return target.MCPServer, target.TargetName, nil
+}
+
+func (d *Data) getEntrypointMapping(ctx context.Context) (types.ToolMappings, error) {
+	var (
+		session = mcp.SessionFromContext(ctx)
+		c       types.Config
+	)
+
+	session.Get(types.ConfigSessionKey, &c)
+	entrypoints := c.Publish.Entrypoint
+	if _, ok := c.Agents[types.DefaultAgentName]; ok && len(entrypoints) == 0 {
+		entrypoints = []string{types.DefaultAgentName}
+	}
+
+	return d.runtime.BuildToolMappings(ctx, entrypoints)
+}
+
+func (d *Data) Agents(ctx context.Context) (types.Agents, error) {
 	var (
 		session = mcp.SessionFromContext(ctx)
 		agents  = types.Agents{}
 		c       types.Config
 	)
 
-	session.Get(types.ConfigSessionKey, &c)
-	for key, agent := range c.Agents {
-		agents[key] = agent.ToDisplay()
+	if found := session.Get(agentsSessionKey, &agents); found {
+		return agents, nil
 	}
 
-	return agents
+	session.Get(types.ConfigSessionKey, &c)
+
+	mapping, err := d.getEntrypointMapping(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build tool mappings: %w", err)
+	}
+
+	for agentKey, target := range mapping {
+		var (
+			agentDisplay types.AgentDisplay
+			key          = target.MCPServer
+		)
+
+		if agent, ok := c.Agents[key]; ok {
+			agentDisplay = agent.ToDisplay()
+			agentDisplay.Name = complete.First(agentDisplay.Name, agentDisplay.ShortName, key)
+		} else if mcpServer, ok := c.MCPServers[key]; ok {
+			c, err := d.runtime.GetClient(ctx, key)
+			if err != nil {
+				return agents, err
+			}
+
+			name := c.Session.InitializeResult.ServerInfo.Name
+			if name == "" {
+				name = key
+			}
+
+			agentDisplay = types.AgentDisplay{
+				Name:        complete.First(c.Session.InitializeResult.ServerInfo.Name, mcpServer.Name, mcpServer.ShortName, key),
+				ShortName:   complete.First(mcpServer.ShortName, c.Session.InitializeResult.ServerInfo.Name, mcpServer.Name, key),
+				Description: target.Target.Description,
+			}
+		} else {
+			continue
+		}
+		agents[agentKey] = agentDisplay
+	}
+
+	session.Set(agentsSessionKey, &agents)
+	return agents, nil
 }
 
 func (d *Data) CurrentAgent(ctx context.Context) string {
 	var (
 		session      = mcp.SessionFromContext(ctx)
 		currentAgent string
+		c            types.Config
 	)
-	if !session.Get(currentAgentKey, &currentAgent) {
-		tm, _ := d.ToolMapping(ctx, WithAllowMissing())
-		if agentMapping, ok := tm[types.AgentTool]; ok {
-			return agentMapping.MCPServer
+	if !session.Get(types.CurrentAgentSessionKey, &currentAgent) {
+		session.Get(types.ConfigSessionKey, &c)
+		if len(c.Publish.Entrypoint) > 0 {
+			currentAgent = c.Publish.Entrypoint[0]
+		} else if _, ok := c.Agents[types.DefaultAgentName]; ok {
+			currentAgent = types.DefaultAgentName
 		}
 	}
 	return currentAgent
-
 }
 
 func (d *Data) Refresh(ctx context.Context) {
 	session := mcp.SessionFromContext(ctx)
 	session.Delete(toolMappingKey)
-	session.Delete(currentAgentKey)
+	session.Delete(types.CurrentAgentSessionKey)
 	session.Delete(promptMappingKey)
 	session.Delete(resourceMappingKey)
 	session.Delete(resourceTemplateMappingKey)
+	session.Delete(agentsSessionKey)
+	session.Delete(currentAgentTargetSessionKey)
 }
 
 func (d *Data) ToolMapping(ctx context.Context, opts ...GetOption) (types.ToolMappings, error) {
@@ -118,17 +207,6 @@ func (d *Data) ToolMapping(ctx context.Context, opts ...GetOption) (types.ToolMa
 	toolMappings, err := d.runtime.BuildToolMappings(ctx, append(c.Publish.Tools, c.Publish.MCPServers...))
 	if err != nil {
 		return nil, err
-	}
-	if c.Publish.Entrypoint != "" {
-		toolMappings[types.AgentTool], err = d.runtime.GetEntryPoint(ctx, toolMappings, c.Publish.Entrypoint)
-		if err != nil {
-			return nil, err
-		}
-	} else if _, ok := c.Agents["main"]; ok {
-		toolMappings[types.AgentTool], err = d.runtime.GetEntryPoint(ctx, toolMappings, "main")
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	toolMappings = schema.ValidateToolMappings(toolMappings)

@@ -90,6 +90,10 @@ func TestSchema(t *testing.T) {
 			"model": "a model",
 			"tools": "atool",
 			"flows": "atool",
+			"reasoning": {
+				"effort": "low",
+				"summary": "detailed"
+			},
 			"agents": "atool",
 			"chat": true,
 			"instructions": "These are the instructions for the agent.",

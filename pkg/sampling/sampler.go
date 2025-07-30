@@ -137,8 +137,8 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 			role = "user"
 		}
 
+		var id string
 		if role != currentRole {
-			var id string
 			if opt.ProgressToken != nil {
 				id = fmt.Sprint(opt.ProgressToken)
 			}
@@ -155,8 +155,10 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 			currentRole = role
 		}
 
-		request.Input[len(request.Input)-1].Items = append(request.Input[len(request.Input)-1].Items, types.CompletionItem{
-			ID:      uuid.String(),
+		inputIndex := len(request.Input) - 1
+		itemsLength := len(request.Input[inputIndex].Items)
+		request.Input[inputIndex].Items = append(request.Input[inputIndex].Items, types.CompletionItem{
+			ID:      fmt.Sprintf("%s_%d", id, itemsLength),
 			Content: &content.Content,
 		})
 	}

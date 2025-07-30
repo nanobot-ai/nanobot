@@ -19,6 +19,7 @@ type resource struct {
 	url          string
 	parts        []string
 	ref          string
+	static       *types.Config
 }
 
 func httpGet(ctx context.Context, url string) ([]byte, error) {
@@ -46,6 +47,10 @@ func httpGet(ctx context.Context, url string) ([]byte, error) {
 }
 
 func (r *resource) Load(ctx context.Context) (result types.Config, _ error) {
+	if r.static != nil {
+		return *r.static, nil
+	}
+
 	data, err := r.read(ctx)
 	if err != nil {
 		return result, fmt.Errorf("error reading resource %s: %w", r.url, err)
@@ -64,6 +69,11 @@ func (r *resource) Load(ctx context.Context) (result types.Config, _ error) {
 	if err := mcp.JSONCoerce(obj, &result); err != nil {
 		return result, fmt.Errorf("error marshalling resource %s: %w", r.url, err)
 	}
+
+	if len(result.Extends) == 0 && result.ShouldPublishAgent() {
+		result.Extends = []string{"nanobot.agent"}
+	}
+
 	return
 }
 
@@ -181,6 +191,32 @@ func (r *resource) fileToRead() (string, error) {
 }
 
 func (r *resource) Rel(path string) (*resource, error) {
+	if path == "nanobot.agent" {
+		return &resource{
+			resourceType: "static",
+			static: &types.Config{
+				Publish: types.Publish{
+					MCPServers: []string{"nanobot.agent"},
+				},
+				MCPServers: map[string]mcp.Server{
+					"nanobot.agent": {},
+				},
+				Profiles: map[string]types.Config{
+					"nanobot.ui": {
+						Publish: types.Publish{
+							MCPServers: []string{"nanobot.agentbuilder", "nanobot.meta", "nanobot.resources"},
+						},
+						MCPServers: map[string]mcp.Server{
+							"nanobot.agentbuilder": {},
+							"nanobot.meta":         {},
+							"nanobot.resources":    {},
+						},
+					},
+				},
+			},
+		}, nil
+	}
+
 	switch r.resourceType {
 	case "http":
 		return &resource{

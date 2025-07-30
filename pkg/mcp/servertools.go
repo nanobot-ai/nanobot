@@ -127,6 +127,13 @@ func callResult(object any, err error) (*CallToolResult, error) {
 			Content: []Content{object.(Content)},
 		}, nil
 	}
+	if _, ok := object.(*Content); ok {
+		// If the object is already a Content, we can return it directly
+		return &CallToolResult{
+			IsError: false,
+			Content: []Content{*(object.(*Content))},
+		}, nil
+	}
 	if _, ok := object.([]Content); ok {
 		// If the object is already a slice of Content, we can return it directly
 		return &CallToolResult{
@@ -157,6 +164,7 @@ func callResult(object any, err error) (*CallToolResult, error) {
 }
 
 func (s ServerTools) List(_ context.Context, _ Message, _ ListToolsRequest) (*ListToolsResult, error) {
+	// purposefully not set to nil, so that we can return an empty list
 	tools := []Tool{}
 	for _, key := range slices.Sorted(maps.Keys(s)) {
 		tools = append(tools, s[key].Definition())

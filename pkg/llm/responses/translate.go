@@ -98,6 +98,17 @@ func toRequest(completion *types.CompletionRequest) (req Request, _ error) {
 
 	if reasoningPrefix.MatchString(req.Model) {
 		req.Include = append(req.Include, "reasoning.encrypted_content")
+		req.Reasoning = &ResponseReasoning{}
+		if completion.Reasoning != nil && completion.Reasoning.Summary != "" {
+			req.Reasoning.Summary = &completion.Reasoning.Summary
+		} else {
+			req.Reasoning.Summary = &[]string{"auto"}[0]
+		}
+		if completion.Reasoning != nil && completion.Reasoning.Effort != "" {
+			req.Reasoning.Effort = &completion.Reasoning.Effort
+		} else {
+			req.Reasoning.Effort = &[]string{"medium"}[0]
+		}
 	}
 
 	if completion.Truncation != "" {

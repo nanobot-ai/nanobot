@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 )
 
-var AgentTool = "chat"
+const (
+	AgentTool            = "chat"
+	AgentToolDescription = "Chat with the current agent"
+	DefaultAgentName     = "main"
+)
 
 var ChatInputSchema = []byte(`{
   "type": "object",
