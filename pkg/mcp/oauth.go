@@ -81,13 +81,10 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 
 	var resourceMetadataURL string
 	if authenticateHeader != "" {
-		var err error
-		resourceMetadataURL, err = parseResourceMetadata(authenticateHeader)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse authenticate header: %w", err)
-		}
-	} else {
-		// If the authenticate header was not sent back, then the spec says we should default to...
+		resourceMetadataURL = parseResourceMetadata(authenticateHeader)
+	}
+	if resourceMetadataURL == "" {
+		// If the authenticate header was not sent back or it did not have a resource metadata URL, then the spec says we should default to...
 		u.Path = "/.well-known/oauth-protected-resource"
 		resourceMetadataURL = u.String()
 	}
@@ -366,16 +363,16 @@ func parseProtectedResourceMetadata(reader io.Reader) (protectedResourceMetadata
 }
 
 // parseResourceMetadata extracts the resource_metadata URL from a Bearer authenticate header
-func parseResourceMetadata(authenticateHeader string) (string, error) {
+func parseResourceMetadata(authenticateHeader string) string {
 	// Use regex to find resource_metadata parameter
 	// Pattern matches: resource_metadata="<URL>"
 	matches := resourceMetadataRegex.FindStringSubmatch(authenticateHeader)
 
 	if len(matches) < 2 {
-		return "", fmt.Errorf("resource_metadata not found in authenticate header")
+		return ""
 	}
 
-	return matches[1], nil
+	return matches[1]
 }
 
 // protectedResourceMetadata represents OAuth 2.0 Protected Resource Metadata
