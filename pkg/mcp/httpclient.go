@@ -21,26 +21,32 @@ import (
 const SessionIDHeader = "Mcp-Session-Id"
 
 type HTTPClient struct {
-	ctx           context.Context
-	cancel        context.CancelFunc
-	clientLock    sync.RWMutex
-	httpClient    *http.Client
-	handler       WireHandler
-	oauthHandler  *oauth
-	baseURL       string
-	messageURL    string
-	serverName    string
-	headers       map[string]string
-	waiter        *waiter
-	sse           bool
-	initialized   bool
-	sessionID     string
+	ctx          context.Context
+	cancel       context.CancelFunc
+	clientLock   sync.RWMutex
+	httpClient   *http.Client
+	handler      WireHandler
+	oauthHandler *oauth
+	baseURL      string
+	messageURL   string
+	serverName   string
+	headers      map[string]string
+	waiter       *waiter
+	sse          bool
+
+	initializeLock    sync.RWMutex
+	initializeRequest *Message
+	sessionID         *string
+
 	sseLock       sync.RWMutex
 	needReconnect bool
 }
 
 func newHTTPClient(serverName, baseURL, oauthClientName, oauthRedirectURL string, callbackHandler CallbackHandler, clientCredLookup ClientCredLookup, tokenStorage TokenStorage, headers map[string]string) *HTTPClient {
-	_, initialized := headers[SessionIDHeader]
+	var sessionID *string
+	if id := headers[SessionIDHeader]; id != "" {
+		sessionID = &id
+	}
 	h := &HTTPClient{
 		httpClient:    http.DefaultClient,
 		oauthHandler:  newOAuth(callbackHandler, clientCredLookup, tokenStorage, oauthClientName, oauthRedirectURL),
@@ -50,8 +56,7 @@ func newHTTPClient(serverName, baseURL, oauthClientName, oauthRedirectURL string
 		headers:       maps.Clone(headers),
 		waiter:        newWaiter(),
 		needReconnect: true,
-		sessionID:     headers[SessionIDHeader],
-		initialized:   initialized,
+		sessionID:     sessionID,
 	}
 
 	return h
@@ -62,7 +67,13 @@ func (s *HTTPClient) SetOAuthCallbackHandler(handler CallbackHandler) {
 }
 
 func (s *HTTPClient) SessionID() string {
-	return s.sessionID
+	s.initializeLock.RLock()
+	defer s.initializeLock.RUnlock()
+
+	if s.sessionID == nil {
+		return ""
+	}
+	return *s.sessionID
 }
 
 func (s *HTTPClient) Close() {
@@ -77,9 +88,7 @@ func (s *HTTPClient) Wait() {
 }
 
 func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*http.Request, error) {
-	var (
-		body io.Reader
-	)
+	var body io.Reader
 	if in != nil {
 		data, err := json.Marshal(in)
 		if err != nil {
@@ -104,9 +113,13 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 	for k, v := range s.headers {
 		req.Header.Set(k, v)
 	}
-	if s.sessionID != "" {
-		req.Header.Set(SessionIDHeader, s.sessionID)
+
+	s.initializeLock.RLock()
+	if s.sessionID != nil && *s.sessionID != "" {
+		req.Header.Set(SessionIDHeader, *s.sessionID)
 	}
+	s.initializeLock.RUnlock()
+
 	req.Header.Set("Accept", "text/event-stream")
 	if method != http.MethodGet {
 		// Don't add because some *cough* CloudFront *cough* proxies don't like it
@@ -162,6 +175,19 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 		return AuthRequiredErr{
 			ProtectedResourceValue: resp.Header.Get("WWW-Authenticate"),
 			Err:                    fmt.Errorf("failed to connect to SSE server: %s: %s", resp.Status, body),
+		}
+	}
+
+	if resp.StatusCode == http.StatusNotFound && (msg == nil || msg.Method != "initialize") {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+
+		s.initializeLock.RLock()
+		defer s.initializeLock.RUnlock()
+
+		return SessionNotFoundErr{
+			SessionID: *s.sessionID,
+			Err:       fmt.Errorf("failed to connect to SSE server: %s: %s", resp.Status, body),
 		}
 	}
 
@@ -302,7 +328,7 @@ func (s *HTTPClient) Start(ctx context.Context, handler WireHandler) error {
 	return nil
 }
 
-func (s *HTTPClient) initialize(ctx context.Context, msg Message) (err error) {
+func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 	req, err := s.newRequest(ctx, http.MethodPost, msg)
 	if err != nil {
 		return err
@@ -333,16 +359,13 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) (err error) {
 			return errors.Join(streamError, err)
 		}
 
+		// Mark this client as initialized.
+		s.initializeLock.Lock()
+		defer s.initializeLock.Unlock()
+		s.sessionID = new(string)
+
 		s.sse = true
 		return nil
-	}
-
-	sessionID := resp.Header.Get(SessionIDHeader)
-	if sessionID != "" {
-		if s.headers == nil {
-			s.headers = make(map[string]string)
-		}
-		s.headers[SessionIDHeader] = sessionID
 	}
 
 	seen, err := s.readResponse(resp)
@@ -352,74 +375,113 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) (err error) {
 		return fmt.Errorf("no response from server, expected an initialize response")
 	}
 
-	defer func() {
-		if err == nil {
-			s.initialized = true
-		}
-	}()
+	sessionID := resp.Header.Get(SessionIDHeader)
+	s.initializeLock.Lock()
+	s.sessionID = &sessionID
+	s.initializeRequest = &msg
+	s.initializeLock.Unlock()
 
-	return s.ensureSSE(ctx, nil, nil)
+	if err = s.ensureSSE(ctx, nil, nil); err != nil {
+		s.initializeLock.Lock()
+		s.sessionID = nil
+		s.initializeRequest = nil
+		s.initializeLock.Unlock()
+
+		return fmt.Errorf("failed to initialize SSE: %w", err)
+	}
+
+	return nil
 }
 
-func (s *HTTPClient) Send(ctx context.Context, msg Message) (err error) {
-	defer func() {
-		if err == nil {
-			return
+func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
+	err := s.send(ctx, msg)
+	if err == nil {
+		return nil
+	}
+
+	// We need to check for various errors and handle them according the spec.
+
+	// Check for an authentication-required error and put the user through the OAuth process.
+	var oauthErr AuthRequiredErr
+	if errors.As(err, &oauthErr) {
+		httpClient, err := s.oauthHandler.oauthClient(s.ctx, s, s.baseURL, oauthErr.ProtectedResourceValue)
+		if err != nil || httpClient == nil {
+			streamError := fmt.Errorf("failed to initialize HTTP Streaming client: %w", oauthErr)
+			return errors.Join(streamError, err)
 		}
 
-		var (
-			httpClient *http.Client
-			oauthErr   AuthRequiredErr
-		)
-		if errors.As(err, &oauthErr) {
-			httpClient, err = s.oauthHandler.oauthClient(s.ctx, s, s.baseURL, oauthErr.ProtectedResourceValue)
-			if err != nil || httpClient == nil {
-				streamError := fmt.Errorf("failed to initialize HTTP Streaming client: %w", oauthErr)
-				err = errors.Join(streamError, err)
-				return
-			}
+		s.clientLock.Lock()
+		s.httpClient = httpClient
+		s.clientLock.Unlock()
+
+		// Make the call to send instead of Send so we don't get stuck in an authentication loop.
+		return s.send(ctx, msg)
+	}
+
+	// Check for a session-not-found error and re-initialize.
+	var sessionNotFoundErr SessionNotFoundErr
+	if errors.As(err, &sessionNotFoundErr) && sessionNotFoundErr.SessionID != "" {
+		s.initializeLock.Lock()
+		s.sessionID = nil
+		s.initializeLock.Unlock()
+
+		// Make the call to send instead of Send so we don't get stuck in a reinitialize loop.
+		return s.send(ctx, msg)
+	}
+
+	// This loop checks for errors from the oauth2 package we use for the HTTP client after authentication.
+	// This is meant to catch errors such as failing to refresh the OAuth token.
+	unwrappedErr := err
+	for unwrappedErr != nil {
+		// Continually unwrap the errors until we find one that starts with oauth2:
+		if strings.HasPrefix(unwrappedErr.Error(), "oauth2:") {
+			// If we do find an error that starts with "oauth2:" then there was an issue with the oauth2 HTTP client.
+			// Reset the HTTP client to the default and try again. Using the default client will give us the unauthenticated
+			// error that we need to continue the process.
 
 			s.clientLock.Lock()
-			s.httpClient = httpClient
+			s.httpClient = http.DefaultClient
 			s.clientLock.Unlock()
 
-			err = s.send(ctx, msg)
-			return
+			// Use the exported Send method here so that we catch the AuthRequiredErr above on the recursed call.
+			return s.Send(ctx, msg)
 		}
+		unwrappedErr = errors.Unwrap(unwrappedErr)
+	}
 
-		unwrappedErr := err
-		for unwrappedErr != nil {
-			// Continually unwrap the errors until we find one that starts with oauth2:
-			if strings.HasPrefix(unwrappedErr.Error(), "oauth2:") {
-				// If we do find an error that starts with "oauth2:" then there was an issue with the oauth2 HTTP client.
-				// Reset the HTTP client to the default and try again. Using the default client will give us the unauthenticated
-				// error that we need to continue the process.
-
-				s.clientLock.Lock()
-				s.httpClient = http.DefaultClient
-				s.clientLock.Unlock()
-
-				// Use the exported Send method here so that we catch the AuthRequiredErr above on the recursed call.
-				err = s.Send(ctx, msg)
-				return
-			}
-			unwrappedErr = errors.Unwrap(unwrappedErr)
-		}
-	}()
-
-	return s.send(ctx, msg)
+	return err
 }
 
 func (s *HTTPClient) send(ctx context.Context, msg Message) error {
-	if !s.initialized {
-		if msg.Method != "initialize" {
+	s.initializeLock.RLock()
+	initialized := s.sessionID != nil
+	initializeMessage := s.initializeRequest
+	s.initializeLock.RUnlock()
+
+	if !initialized {
+		if msg.Method != "initialize" && initializeMessage == nil {
 			return fmt.Errorf("client not initialized, must send InitializeRequest first")
 		}
-		if err := s.initialize(ctx, msg); err != nil {
+
+		if initializeMessage == nil {
+			initializeMessage = &msg
+		} else {
+			initializeMessage.ID = uuid.String()
+		}
+		if err := s.initialize(ctx, *initializeMessage); err != nil {
 			return fmt.Errorf("failed to initialize client: %w", err)
 		}
-		s.initialized = true
-		return nil
+
+		if msg.Method == "initialize" {
+			// If we're sending the request to initialize, then we're done.
+			// Otherwise, we're reinitializing and should continue.
+			return nil
+		} else if err := s.send(ctx, Message{
+			JSONRPC: "2.0",
+			Method:  "notifications/initialized",
+		}); err != nil {
+			return fmt.Errorf("failed to send notifications/initialized: %w", err)
+		}
 	}
 
 	if err := s.ensureSSE(ctx, &msg, nil); err != nil {
@@ -446,6 +508,14 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 		return AuthRequiredErr{
 			ProtectedResourceValue: resp.Header.Get("WWW-Authenticate"),
 			Err:                    fmt.Errorf("failed to send message: %s: %s", resp.Status, streamingErrorMessage),
+		}
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		streamingErrorMessage, _ := io.ReadAll(resp.Body)
+		return SessionNotFoundErr{
+			SessionID: req.Header.Get(SessionIDHeader),
+			Err:       fmt.Errorf("failed to send message: %s: %s", resp.Status, streamingErrorMessage),
 		}
 	}
 
