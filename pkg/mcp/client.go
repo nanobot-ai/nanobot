@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -178,7 +179,11 @@ func toHandler(opts ClientOption) MessageHandler {
 			go func() {
 				resp, err := opts.OnSampling(ctx, param)
 				if err != nil {
-					msg.SendError(ctx, fmt.Errorf("failed to handle sampling/createMessage: %w", err))
+					if errors.Is(err, ErrNoReader) {
+						msg.SendError(ctx, ErrRPCMethodNotFound)
+					} else {
+						msg.SendError(ctx, fmt.Errorf("failed to handle sampling/createMessage: %w", err))
+					}
 					return
 				}
 				err = msg.Reply(ctx, resp)
@@ -195,7 +200,11 @@ func toHandler(opts ClientOption) MessageHandler {
 			go func() {
 				resp, err := opts.OnElicit(ctx, param)
 				if err != nil {
-					msg.SendError(ctx, fmt.Errorf("failed to handle elicitation/create: %w", err))
+					if errors.Is(err, ErrNoReader) {
+						msg.SendError(ctx, ErrRPCMethodNotFound)
+					} else {
+						msg.SendError(ctx, fmt.Errorf("failed to handle elicitation/create: %w", err))
+					}
 					return
 				}
 				err = msg.Reply(ctx, resp)
@@ -205,9 +214,8 @@ func toHandler(opts ClientOption) MessageHandler {
 			}()
 		} else if msg.Method == "roots/list" && opts.OnRoots != nil {
 			go func() {
-				if err := opts.OnRoots(ctx, msg); err != nil {
+				if err := opts.OnRoots(ctx, msg); err != nil && !errors.Is(err, ErrNoReader) {
 					msg.SendError(ctx, fmt.Errorf("failed to handle roots/list: %w", err))
-					return
 				}
 			}()
 		} else if msg.Method == "notifications/message" && opts.OnLogging != nil {
@@ -216,16 +224,15 @@ func toHandler(opts ClientOption) MessageHandler {
 				msg.SendError(ctx, fmt.Errorf("failed to unmarshal notifications/message: %w", err))
 				return
 			}
-			if err := opts.OnLogging(ctx, param); err != nil {
+			if err := opts.OnLogging(ctx, param); err != nil && !errors.Is(err, ErrNoReader) {
 				msg.SendError(ctx, fmt.Errorf("failed to handle notifications/message: %w", err))
-				return
 			}
 		} else if strings.HasPrefix(msg.Method, "notifications/") && opts.OnNotify != nil {
-			if err := opts.OnNotify(ctx, msg); err != nil {
+			if err := opts.OnNotify(ctx, msg); err != nil && !errors.Is(err, ErrNoReader) {
 				log.Errorf(ctx, "failed to handle notification: %v", err)
 			}
 		} else if opts.OnMessage != nil {
-			if err := opts.OnMessage(ctx, msg); err != nil {
+			if err := opts.OnMessage(ctx, msg); err != nil && !errors.Is(err, ErrNoReader) {
 				log.Errorf(ctx, "failed to handle message: %v", err)
 			}
 		}
