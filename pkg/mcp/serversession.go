@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
@@ -22,8 +23,11 @@ func NewServerSession(ctx context.Context, handler MessageHandler) (*ServerSessi
 func NewExistingServerSession(ctx context.Context, state SessionState, handler MessageHandler) (*ServerSession, error) {
 	s := &serverWire{
 		read:      make(chan Message),
+		noReader:  make(chan struct{}),
 		sessionID: state.ID,
 	}
+	s.stopReading()
+
 	session, err := newSession(ctx, s, handler, &state, nil)
 	if err != nil {
 		return nil, err
@@ -51,7 +55,11 @@ func (s *ServerSession) Wait() {
 }
 
 func (s *ServerSession) Start(ctx context.Context, handler WireHandler) error {
+	s.wire.startReading()
+
 	go func() {
+		defer s.wire.stopReading()
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -79,7 +87,10 @@ func (s *ServerSession) ID() string {
 	return id
 }
 
-var ErrNoResponse = errors.New("no response")
+var (
+	ErrNoResponse = errors.New("no response")
+	ErrNoReader   = errors.New("no reader")
+)
 
 func (s *ServerSession) GetSession() *Session {
 	return s.session
@@ -114,6 +125,14 @@ func (s *ServerSession) Read(ctx context.Context) (Message, bool) {
 	}
 }
 
+func (s *ServerSession) StartReading() {
+	s.wire.startReading()
+}
+
+func (s *ServerSession) StopReading() {
+	s.wire.stopReading()
+}
+
 func (s *ServerSession) Send(ctx context.Context, req Message) error {
 	req.Session = s.session
 	go s.session.handler.OnMessage(WithSession(ctx, s.session), req)
@@ -128,12 +147,14 @@ func (s *ServerSession) Close() {
 }
 
 type serverWire struct {
-	ctx       context.Context
-	cancel    context.CancelFunc
-	pending   PendingRequests
-	read      chan Message
-	handler   WireHandler
-	sessionID string
+	ctx        context.Context
+	cancel     context.CancelFunc
+	pending    PendingRequests
+	read       chan Message
+	readerLock sync.RWMutex
+	noReader   chan struct{}
+	handler    WireHandler
+	sessionID  string
 }
 
 func (s *serverWire) SessionID() string {
@@ -185,7 +206,31 @@ func (s *serverWire) Send(ctx context.Context, req Message) error {
 		return ctx.Err()
 	case <-s.ctx.Done():
 		return s.ctx.Err()
+	case <-s.noReader:
+		return ErrNoReader
 	case s.read <- req:
 		return nil
 	}
+}
+
+func (s *serverWire) startReading() {
+	s.readerLock.Lock()
+	defer s.readerLock.Unlock()
+
+	s.noReader = nil
+}
+
+func (s *serverWire) stopReading() {
+	s.readerLock.Lock()
+	defer s.readerLock.Unlock()
+
+	s.noReader = make(chan struct{})
+	close(s.noReader)
+}
+
+func (s *serverWire) isReading() bool {
+	s.readerLock.RLock()
+	defer s.readerLock.RUnlock()
+
+	return s.noReader != nil
 }

@@ -83,6 +83,10 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request) {
 	if flusher, ok := rw.(http.Flusher); ok {
 		flusher.Flush()
 	}
+
+	session.StartReading()
+	defer session.StopReading()
+
 	for {
 		msg, ok := session.Read(req.Context())
 		if !ok {
