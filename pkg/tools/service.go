@@ -176,6 +176,9 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 	if session == nil {
 		return nil, fmt.Errorf("session not found in context")
 	}
+	for session.Parent != nil {
+		session = session.Parent
+	}
 
 	sessionKey := "clients/" + name
 	factory := clientFactory{
@@ -200,6 +203,9 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 	session := mcp.SessionFromContext(ctx)
 	if session == nil {
 		return nil, fmt.Errorf("session not found in context")
+	}
+	for session.Parent != nil {
+		session = session.Parent
 	}
 
 	abortCtx, cancel := context.WithCancel(ctx)
@@ -739,9 +745,10 @@ func filterTools(tools *mcp.ListToolsResult, filter []string) *mcp.ListToolsResu
 	return &filteredTools
 }
 
-func (s *Service) getMatches(ref string, tools []ListToolsResult) types.ToolMappings {
+func (s *Service) getMatches(ref string, tools []ListToolsResult, opts ...types.BuildToolMappingsOptions) types.ToolMappings {
 	toolRef := types.ParseToolRef(ref)
 	result := types.ToolMappings{}
+	opt := complete.Complete(opts...)
 
 	for _, t := range tools {
 		if t.Server != toolRef.Server {
@@ -750,6 +757,9 @@ func (s *Service) getMatches(ref string, tools []ListToolsResult) types.ToolMapp
 		for _, tool := range t.Tools {
 			if toolRef.Tool == "" || tool.Name == toolRef.Tool {
 				originalName := tool.Name
+				if opt.DefaultAsToServer && toolRef.As == "" {
+					toolRef.As = toolRef.Server
+				}
 				if toolRef.As != "" {
 					tool.Name = toolRef.As
 				}
@@ -770,7 +780,10 @@ func (s *Service) listToolsForReferences(ctx context.Context, toolList []string)
 		return nil, nil
 	}
 
-	var servers []string
+	var (
+		servers []string
+	)
+
 	for _, ref := range toolList {
 		toolRef := types.ParseToolRef(ref)
 		if toolRef.Server != "" {
@@ -783,7 +796,7 @@ func (s *Service) listToolsForReferences(ctx context.Context, toolList []string)
 	})
 }
 
-func (s *Service) BuildToolMappings(ctx context.Context, toolList []string) (types.ToolMappings, error) {
+func (s *Service) BuildToolMappings(ctx context.Context, toolList []string, opts ...types.BuildToolMappingsOptions) (types.ToolMappings, error) {
 	tools, err := s.listToolsForReferences(ctx, toolList)
 	if err != nil {
 		return nil, err
@@ -791,7 +804,7 @@ func (s *Service) BuildToolMappings(ctx context.Context, toolList []string) (typ
 
 	result := types.ToolMappings{}
 	for _, ref := range toolList {
-		maps.Copy(result, s.getMatches(ref, tools))
+		maps.Copy(result, s.getMatches(ref, tools, opts...))
 	}
 
 	return result, nil

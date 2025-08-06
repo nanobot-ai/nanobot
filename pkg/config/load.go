@@ -29,6 +29,13 @@ func Load(ctx context.Context, path string, profiles ...string) (cfg *types.Conf
 	return loadResource(ctx, configResource, profiles...)
 }
 
+func LoadFromConfig(ctx context.Context, config types.Config, profiles ...string) (*types.Config, string, error) {
+	return loadResource(ctx, &resource{
+		resourceType: "static",
+		static:       &config,
+	}, profiles...)
+}
+
 func loadResource(ctx context.Context, configResource *resource, profiles ...string) (*types.Config, string, error) {
 	targetCwd, err := configResource.Cwd()
 	if err != nil {

@@ -21,6 +21,7 @@ const (
 	CustomAgentModifiedSessionKey = "customAgentModified"
 	DescriptionSessionKey         = "description"
 	PublicSessionKey              = "public"
+	AgentPassthroughEnv           = "nanobot:agent_passthrough"
 )
 
 func ConfigFromContext(ctx context.Context) (result Config) {
@@ -300,6 +301,9 @@ func (t ToolRef) PublishedName(name string) string {
 	if t.Tool != "" {
 		return t.Tool
 	}
+	if name == "" {
+		return t.Server
+	}
 	return name
 }
 
@@ -396,6 +400,15 @@ func (t ToolMappings) Serialize() (any, error) {
 
 func (t *ToolMappings) Deserialize(data any) (any, error) {
 	return t, mcp.JSONCoerce(data, &t)
+}
+
+type BuildToolMappingsOptions struct {
+	DefaultAsToServer bool
+}
+
+func (b BuildToolMappingsOptions) Merge(other BuildToolMappingsOptions) BuildToolMappingsOptions {
+	b.DefaultAsToServer = complete.Last(b.DefaultAsToServer, other.DefaultAsToServer)
+	return b
 }
 
 type StringList []string

@@ -109,17 +109,14 @@ func (r *Run) reload(ctx context.Context, client *mcp.Client, cfgPath string, ru
 	return client.Session.Exchange(ctx, "initialize", mcp.InitializeRequest{}, &mcp.InitializeResult{})
 }
 
-func (r *Run) Run(cmd *cobra.Command, args []string) error {
+func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 	var (
 		runtimeOpt runtime.Options
+		config     *types.Config
 	)
 
 	if r.ListenAddress != "stdio" {
 		r.MCP = true
-	}
-
-	if r.UI {
-		runtimeOpt.Profiles = append(runtimeOpt.Profiles, "nanobot.ui")
 	}
 
 	roots, err := r.getRoots()
@@ -132,16 +129,45 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 		cfgPath = args[0]
 	}
 
-	config, err := r.n.ReadConfig(cmd.Context(), cfgPath, runtimeOpt)
-	if err != nil {
-		return fmt.Errorf("failed to read config file %q: %w", args[0], err)
+	if r.UI {
+		runtimeOpt.Profiles = append(runtimeOpt.Profiles, "nanobot.ui")
+		r.MCP = true
+		if r.ListenAddress == "stdio" {
+			r.ListenAddress = "localhost:9999"
+		}
 	}
 
-	oauthcallbackHandler := mcp.NewCallbackServer(confirm.New())
+	if r.UI && (strings.HasPrefix(cfgPath, "http://") || strings.HasPrefix(cfgPath, "https://")) {
+		r.n.Env = append(r.n.Env, types.AgentPassthroughEnv+"=true")
+		config = &types.Config{
+			Publish: types.Publish{
+				Entrypoint: []string{"agent/chat"},
+			},
+			MCPServers: map[string]mcp.Server{
+				"agent": {
+					BaseURL: cfgPath,
+				},
+			},
+		}
+	}
+
+	if config == nil {
+		config, err = r.n.ReadConfig(cmd.Context(), cfgPath, runtimeOpt)
+		if err != nil {
+			return fmt.Errorf("failed to read config file %q: %w", args[0], err)
+		}
+	} else {
+		config, err = r.n.ReadConfigType(cmd.Context(), config, runtimeOpt)
+		if err != nil {
+			return fmt.Errorf("failed to read config for URL %q: %w", args[0], err)
+		}
+	}
+
+	oauthCallbackHandler := mcp.NewCallbackServer(confirm.New())
 
 	runtimeOpt.Roots = roots
 	runtimeOpt.MaxConcurrency = r.n.MaxConcurrency
-	runtimeOpt.CallbackHandler = oauthcallbackHandler
+	runtimeOpt.CallbackHandler = oauthCallbackHandler
 
 	if r.MCP {
 		runtime, err := r.n.GetRuntime(runtimeOpt, runtime.Options{
@@ -152,7 +178,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		return r.runMCP(cmd.Context(), *config, runtime, oauthcallbackHandler, nil, r.HealthzPath)
+		return r.runMCP(cmd.Context(), *config, runtime, oauthCallbackHandler, nil, r.HealthzPath)
 	}
 	if r.Port == "" {
 		r.Port = "0"
@@ -229,7 +255,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) error {
 	eg, ctx := errgroup.WithContext(cmd.Context())
 	ctx, cancel := context.WithCancel(ctx)
 	eg.Go(func() error {
-		return r.runMCP(ctx, *config, runtime, oauthcallbackHandler, l, r.HealthzPath)
+		return r.runMCP(ctx, *config, runtime, oauthCallbackHandler, l, r.HealthzPath)
 	})
 	eg.Go(func() error {
 		defer cancel()
@@ -254,7 +280,7 @@ func (r *Run) runMCP(ctx context.Context, config types.Config, runtime *runtime.
 		return fmt.Errorf("https:// is not supported, use http:// instead")
 	}
 
-	var mcpServer mcp.MessageHandler = server.NewServer(runtime)
+	var mcpServer mcp.MessageHandler = server.NewServer(runtime, config)
 
 	if address == "stdio" {
 		stdio := mcp.NewStdioServer(env, mcpServer)

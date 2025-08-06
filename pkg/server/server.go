@@ -21,12 +21,14 @@ type Server struct {
 	handlers []handler
 	runtime  *runtime.Runtime
 	data     *sessiondata.Data
+	config   types.Config
 }
 
-func NewServer(runtime *runtime.Runtime) *Server {
+func NewServer(runtime *runtime.Runtime, config types.Config) *Server {
 	s := &Server{
 		runtime: runtime,
 		data:    sessiondata.NewData(runtime),
+		config:  config,
 	}
 	s.init()
 	return s
@@ -299,6 +301,9 @@ func (s *Server) handleInitialized(ctx context.Context, msg mcp.Message, payload
 func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload mcp.InitializeRequest) error {
 	session := mcp.SessionFromContext(ctx)
 	c := types.ConfigFromContext(ctx)
+	if !mcp.SessionFromContext(ctx).Get(types.ConfigSessionKey, &c) {
+		c = s.config
+	}
 
 	if err := reconcileEnv(session, c); err != nil {
 		return err

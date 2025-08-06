@@ -214,6 +214,11 @@ func (n *Nanobot) ReadConfig(ctx context.Context, cfgPath string, opts ...runtim
 	return cfg, err
 }
 
+func (n *Nanobot) ReadConfigType(ctx context.Context, cfg *types.Config, opts ...runtime.Options) (*types.Config, error) {
+	cfg, _, err := config.LoadFromConfig(ctx, *cfg, complete.Complete(opts...).Profiles...)
+	return cfg, err
+}
+
 func (n *Nanobot) GetRuntime(opts ...runtime.Options) (*runtime.Runtime, error) {
 	return runtime.NewRuntime(n.llmConfig(), opts...), nil
 }

@@ -89,7 +89,9 @@ func (s *Session) State() (*SessionState, error) {
 
 	attr := make(map[string]any, len(s.attributes))
 	for k, v := range s.attributes {
-		if serializable, ok := v.(Serializable); ok {
+		if k == SessionEnvMapKey {
+			attr[k] = v
+		} else if serializable, ok := v.(Serializable); ok {
 			data, err := serializable.Serialize()
 			if err != nil {
 				return nil, fmt.Errorf("failed to serialize attribute %s: %w", k, err)
@@ -116,11 +118,32 @@ func (s *Session) EnvMap() map[string]string {
 		s.attributes = make(map[string]any)
 	}
 
+	envGeneric, ok := s.attributes[SessionEnvMapKey].(map[string]any)
+	if ok {
+		env := make(map[string]string, len(envGeneric))
+		for k, v := range envGeneric {
+			if str, ok := v.(string); ok {
+				env[k] = str
+			}
+		}
+		s.attributes[SessionEnvMapKey] = env
+	}
+
 	env, ok := s.attributes[SessionEnvMapKey].(map[string]string)
 	if !ok {
 		env = make(map[string]string)
 		s.attributes[SessionEnvMapKey] = env
 	}
+
+	if s.Parent != nil {
+		parentEnv := s.Parent.EnvMap()
+		for k, v := range parentEnv {
+			if _, exists := env[k]; !exists {
+				env[k] = v
+			}
+		}
+	}
+
 	return env
 }
 

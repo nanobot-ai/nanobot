@@ -82,20 +82,20 @@ func (a *Agents) invoke(ctx context.Context, config types.Config, target types.T
 		}
 	}
 
-	response, err := a.confirm(ctx, config, target, &funcCall.ToolCall)
-	if err != nil {
-		return nil, fmt.Errorf("failed to confirm tool call: %w", err)
-	}
+	//response, err := a.confirm(ctx, config, target, &funcCall.ToolCall)
+	//if err != nil {
+	//	return nil, fmt.Errorf("failed to confirm tool call: %w", err)
+	//}
 
-	if response == nil {
-		response, err = a.registry.Call(ctx, target.MCPServer, target.TargetName, data, tools.CallOptions{
-			ProgressToken:      complete.Complete(opts...).ProgressToken,
-			ToolCallInvocation: &funcCall,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to invoke tool %s on mcp server %s: %w", target.TargetName, target.MCPServer, err)
-		}
+	//if response == nil {
+	response, err := a.registry.Call(ctx, target.MCPServer, target.TargetName, data, tools.CallOptions{
+		ProgressToken:      complete.Complete(opts...).ProgressToken,
+		ToolCallInvocation: &funcCall,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to invoke tool %s on mcp server %s: %w", target.TargetName, target.MCPServer, err)
 	}
+	//}
 	return &types.Message{
 		Role: "user",
 		Items: []types.CompletionItem{

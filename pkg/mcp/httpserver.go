@@ -157,6 +157,8 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		maps.Copy(streamingSession.session.EnvMap(), h.getEnv(req))
+
 		var setID bool
 		if msg.ID == nil {
 			msg.ID = uuid.String()
@@ -202,6 +204,8 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		maps.Copy(sseSession.session.EnvMap(), h.getEnv(req))
+
 		if err := sseSession.Send(req.Context(), msg); err != nil {
 			http.Error(rw, "Failed to handle message: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -222,13 +226,14 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	maps.Copy(session.session.EnvMap(), h.getEnv(req))
+
 	resp, err := session.Exchange(req.Context(), msg)
 	if err != nil {
 		http.Error(rw, "Failed to handle message: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	maps.Copy(session.session.EnvMap(), h.getEnv(req))
 	if err := h.sessions.Store(req, session.ID(), session); err != nil {
 		http.Error(rw, "Failed to store session: "+err.Error(), http.StatusInternalServerError)
 		return

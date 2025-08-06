@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
@@ -11,14 +12,16 @@ import (
 )
 
 type Server struct {
-	tools      mcp.ServerTools
-	data       *sessiondata.Data
-	multiAgent bool
-	runtime    Caller
+	tools              mcp.ServerTools
+	data               *sessiondata.Data
+	multiAgent         bool
+	isAgentPassthrough bool
+	runtime            Caller
 }
 
 type Caller interface {
 	Call(ctx context.Context, server, tool string, args any, opts ...tools.CallOptions) (ret *types.CallResult, err error)
+	GetClient(ctx context.Context, name string) (*mcp.Client, error)
 }
 
 func NewServer(d *sessiondata.Data, r Caller) *Server {
@@ -28,8 +31,8 @@ func NewServer(d *sessiondata.Data, r Caller) *Server {
 	}
 
 	s.tools = mcp.NewServerTools(
-		mcp.NewServerTool("get_chat", "Returns the contents of the current thread", s.getChat),
-		mcp.NewServerTool("set_current_agent", "Set the current agent the user is chatting with", s.setAgent),
+		getChatCall{s: s},
+		setCurrentAgentCall{s: s},
 		chatCall{s: s},
 	)
 
@@ -50,51 +53,6 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 		msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage(msg.Method))
 	}
 }
-
-type chatCall struct {
-	s *Server
-}
-
-func (c chatCall) Definition() mcp.Tool {
-	return mcp.Tool{
-		Name:        types.AgentTool,
-		Description: types.AgentToolDescription,
-		InputSchema: types.ChatInputSchema,
-	}
-}
-
-func (c chatCall) Invoke(ctx context.Context, msg mcp.Message, payload mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	currentAgent := c.s.data.CurrentAgent(ctx)
-
-	description := c.s.describeSession(ctx, payload.Arguments)
-
-	result, err := c.s.runtime.Call(ctx, currentAgent, types.AgentTool, payload.Arguments, tools.CallOptions{
-		ProgressToken: msg.ProgressToken(),
-		LogData: map[string]any{
-			"mcpToolName": payload.Name,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	if payload.Name == types.AgentTool && result.ChatResponse && result.Agent != "" {
-		c.s.data.SetCurrentAgent(ctx, result.Agent)
-	}
-
-	mcpResult := mcp.CallToolResult{
-		IsError: result.IsError,
-		Content: result.Content,
-	}
-
-	if description != nil {
-		<-description
-	}
-
-	err = msg.Reply(ctx, mcpResult)
-	return &mcpResult, err
-}
-
 func (s *Server) describeSession(ctx context.Context, args any) <-chan struct{} {
 	result := make(chan struct{})
 	var description string
@@ -129,11 +87,42 @@ func (s *Server) initialize(ctx context.Context, _ mcp.Message, params mcp.Initi
 	if err != nil {
 		return nil, err
 	}
-	if len(agents) <= 1 {
+
+	if mcp.SessionFromContext(ctx).EnvMap()[types.AgentPassthroughEnv] == "true" {
+		s.isAgentPassthrough = true
+
+		target, err := s.data.GetCurrentAgentTargetMapping(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		remoteClient, err := s.runtime.GetClient(ctx, target.MCPServer)
+		if err != nil {
+			return nil, err
+		}
+
+		tools, err := remoteClient.ListTools(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list tools: %w", err)
+		}
+
+		found := false
+		for _, tool := range tools.Tools {
+			if tool.Name == "set_current_agent" {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			delete(s.tools, "set_current_agent")
+		}
+	} else if len(agents) <= 1 {
 		delete(s.tools, "set_current_agent")
 	} else {
 		s.multiAgent = true
 	}
+
 	return &mcp.InitializeResult{
 		ProtocolVersion: params.ProtocolVersion,
 		Capabilities: mcp.ServerCapabilities{

@@ -81,6 +81,29 @@ export type CustomAgentMeta = {
   isPublic?: boolean;
 };
 
+export function getWidgets(messages: Message[]): Content[] {
+  const widgets: Content[] = [];
+  const uriToIndex: Record<string, number> = {};
+  for (const message of messages) {
+    for (const item of message.items || []) {
+      if (item.type === "tool" && item.output?.content) {
+        for (const output of item.output.content) {
+          if (output.resource?.uri?.startsWith("ui://widget/")) {
+            const currentIdx = uriToIndex[output.resource.uri];
+            if (currentIdx !== undefined) {
+              widgets[currentIdx] = output;
+            } else {
+              widgets.push(output);
+              uriToIndex[output.resource.uri] = widgets.length - 1;
+            }
+          }
+        }
+      }
+    }
+  }
+  return widgets;
+}
+
 export function appendProgress(
   messages: Message[],
   progress: CompletionProgress,
@@ -89,9 +112,11 @@ export function appendProgress(
     return;
   }
 
-  let message = messages.find((m) => m.id === progress.messageID);
-  if (!message) {
-    message = {
+  console.log("appendProgress", progress);
+
+  const messageIndex = messages.findIndex((m) => m.id === progress.messageID);
+  if (messageIndex < 0) {
+    const message = {
       id: progress.messageID,
       role: "assistant",
       created: new Date().toISOString(),
@@ -101,9 +126,14 @@ export function appendProgress(
     return;
   }
 
-  if (!message.items) {
-    message.items = [];
-  }
+  // copy the message for modification
+  const prevMessage = messages[messageIndex];
+  const message = {
+    ...prevMessage,
+    items: [...(prevMessage.items ?? [])],
+    revision: (prevMessage.revision || 0) + 1,
+  };
+  messages[messageIndex] = message;
 
   const itemIndex = message.items?.findIndex((x) => x.id === progress.item?.id);
   if (itemIndex === undefined || itemIndex === -1) {
@@ -111,31 +141,17 @@ export function appendProgress(
     return;
   }
 
-  const item = message.items[itemIndex];
-
-  if (!item.partial) {
-    // Already completed, no need to update
-    item.partials = undefined;
-    return;
-  }
+  const item = { ...message.items[itemIndex] };
+  message.items[itemIndex] = item;
 
   if (!progress.item.partial) {
     message.items[itemIndex] = progress.item;
     return;
   }
 
-  if (progress.id) {
-    if (item.partials?.has(progress.id)) {
-      // Already processed this partial update
-      return;
-    }
-    if (!item.partials) {
-      item.partials = new Set<string>();
-    }
-    item.partials?.add(progress.id);
+  if (!item.partial) {
+    return;
   }
-
-  message.revision = (message.revision || 0) + 1;
 
   item.hasMore = progress.item.hasMore;
   if (!item.hasMore) {
@@ -158,7 +174,6 @@ export type CompletionItem = {
   id?: string;
   hasMore?: boolean;
   partial?: boolean;
-  partials?: Set<string>;
 } & (Content | ToolCall | Reasoning);
 
 export interface Reasoning {
@@ -207,6 +222,7 @@ export type Content = {
   data?: string;
   mimeType?: string;
   resource?: {
+    name?: string;
     uri: string;
     mimeType?: string;
     blob?: number;

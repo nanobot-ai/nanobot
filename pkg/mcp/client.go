@@ -291,14 +291,14 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 				return nil, err
 			}
 		}
-		header := envvar.ReplaceMap(opt.Env, config.Headers)
+		headers := envvar.ReplaceMap(opt.Env, config.Headers)
 		if opt.SessionState != nil && opt.SessionState.ID != "" {
-			if header == nil {
-				header = make(map[string]string)
+			if headers == nil {
+				headers = make(map[string]string)
 			}
-			header["Mcp-Session-Id"] = opt.SessionState.ID
+			headers["Mcp-Session-Id"] = opt.SessionState.ID
 		}
-		wire = newHTTPClient(serverName, config.BaseURL, opt.OAuthClientName, opt.OAuthRedirectURL, opt.CallbackHandler, opt.ClientCredLookup, opt.TokenStorage, envvar.ReplaceMap(opt.Env, config.Headers))
+		wire = newHTTPClient(serverName, config.BaseURL, opt.OAuthClientName, opt.OAuthRedirectURL, opt.CallbackHandler, opt.ClientCredLookup, opt.TokenStorage, headers)
 	} else {
 		wire, err = newStdioClient(ctx, opt.Roots, opt.Env, serverName, config, opt.Runner)
 		if err != nil {

@@ -30,7 +30,7 @@ func NewData(runtime RuntimeMeta) *Data {
 }
 
 type RuntimeMeta interface {
-	BuildToolMappings(ctx context.Context, toolList []string) (types.ToolMappings, error)
+	BuildToolMappings(ctx context.Context, toolList []string, opts ...types.BuildToolMappingsOptions) (types.ToolMappings, error)
 	GetClient(ctx context.Context, name string) (*mcp.Client, error)
 }
 
@@ -70,27 +70,26 @@ func (d *Data) SetCurrentAgent(ctx context.Context, currentAgent string) error {
 	return nil
 }
 
-func (d *Data) GetCurrentAgentTargetMapping(ctx context.Context) (string, string, error) {
-	var target types.TargetMapping[mcp.Tool]
+func (d *Data) GetCurrentAgentTargetMapping(ctx context.Context) (target types.TargetMapping[mcp.Tool], _ error) {
 	session := mcp.SessionFromContext(ctx)
 	if found := session.Get(currentAgentTargetSessionKey, &target); found {
-		return target.MCPServer, target.TargetName, nil
+		return target, nil
 	}
 
 	mappings, err := d.getEntrypointMapping(ctx)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to build tool mappings: %w", err)
+		return target, fmt.Errorf("failed to build tool mappings: %w", err)
 	}
 
 	currentAgent := d.CurrentAgent(ctx)
 
 	target, ok := mappings[currentAgent]
 	if !ok {
-		return "", "", fmt.Errorf("current agent %s not found in tool mappings", currentAgent)
+		return target, fmt.Errorf("current agent %s not found in tool mappings", currentAgent)
 	}
 
 	session.Set(currentAgentTargetSessionKey, &target)
-	return target.MCPServer, target.TargetName, nil
+	return target, nil
 }
 
 func (d *Data) getEntrypointMapping(ctx context.Context) (types.ToolMappings, error) {
@@ -105,7 +104,9 @@ func (d *Data) getEntrypointMapping(ctx context.Context) (types.ToolMappings, er
 		entrypoints = []string{types.DefaultAgentName}
 	}
 
-	return d.runtime.BuildToolMappings(ctx, entrypoints)
+	return d.runtime.BuildToolMappings(ctx, entrypoints, types.BuildToolMappingsOptions{
+		DefaultAsToServer: true,
+	})
 }
 
 func (d *Data) Agents(ctx context.Context) (types.Agents, error) {
@@ -175,7 +176,11 @@ func (d *Data) CurrentAgent(ctx context.Context) string {
 			currentAgent = types.DefaultAgentName
 		}
 	}
-	return currentAgent
+	ref := types.ParseToolRef(currentAgent)
+	if ref.As != "" {
+		return ref.As
+	}
+	return ref.Server
 }
 
 func (d *Data) Refresh(ctx context.Context) {

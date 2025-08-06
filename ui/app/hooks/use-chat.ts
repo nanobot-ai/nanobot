@@ -8,17 +8,9 @@ import {
   appendProgress,
   type CompletionProgress,
 } from "~/lib/nanobot";
-import {
-  type Dispatch,
-  type SetStateAction,
-  useDebugValue,
-  useEffect,
-  useState,
-} from "react";
+import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import { useFetcher, useNavigate } from "react-router";
 import { uuidv4 } from "~/lib/utils";
-import { useDebounce } from "use-debounce";
-import { useDebounceCallback } from "usehooks-ts";
 
 export type ChatVisibilityType = "public" | "private";
 
@@ -103,31 +95,6 @@ export function useChat({
           return messages;
         });
       });
-
-      const eventQueue: CompletionProgress[] = [];
-
-      const close1 = events(chat.id, (event) => {
-        eventQueue.push(event);
-      });
-
-      const close2 = setInterval(function () {
-        if (eventQueue.length === 0) {
-          return;
-        }
-        setMessages((prev) => {
-          const messages = [...prev];
-          for (const event of eventQueue) {
-            appendProgress(messages, event);
-          }
-          return messages;
-        });
-        eventQueue.length = 0; // Clear the queue after processing
-      }, 100);
-
-      return function () {
-        close1();
-        clearInterval(close2);
-      };
     }
   }, [chat.id]);
 
@@ -239,6 +206,6 @@ export function useChat({
     visibilityType: getVisibilityType(),
     setVisibilityType,
     votes: chat.votes,
-    supportsCustomAgents: chat.supportsCustomAgents || true,
+    supportsCustomAgents: true,
   };
 }

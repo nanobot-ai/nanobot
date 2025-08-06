@@ -5,17 +5,15 @@ import { MultimodalInput } from "./multimodal-input";
 import { Messages } from "./messages";
 import { toast } from "./toast";
 import { ChatSDKError } from "~/lib/errors";
-import type { Attachment, ChatData } from "~/lib/nanobot";
+import { type Attachment, type ChatData, getWidgets } from "~/lib/nanobot";
 import CloneChat from "~/components/clone-chat";
-import type { User } from "~/services/auth.server";
+import { Widgets } from "~/components/messages-widgets";
 
 export default function Chat({
   chat,
   disableHeader,
-  user,
 }: {
   chat: ChatData;
-  user?: User;
   disableHeader?: boolean;
 }) {
   const {
@@ -31,8 +29,6 @@ export default function Chat({
     currentAgent,
     setCurrentAgent,
     agents,
-    visibilityType,
-    setVisibilityType,
     votes,
   } = useChat({
     chat,
@@ -47,6 +43,7 @@ export default function Chat({
   });
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const widgets = getWidgets(messages);
 
   return (
     <>
@@ -61,33 +58,42 @@ export default function Chat({
           />
         )}
 
-        <Messages
-          chatId={chat.id}
-          status={status}
-          votes={votes}
-          messages={messages}
-          updateMessage={updateMessage}
-          reload={reload}
-          isReadonly={!!chat.readonly}
-        />
-
-        <form className="flex mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl">
-          {!chat.readonly && (
-            <MultimodalInput
+        <div className="flex overflow-hidden h-full">
+          <div className="flex flex-col flex-1 h-full">
+            <Messages
               chatId={chat.id}
-              input={input}
-              setInput={setInput}
-              handleSubmit={handleSubmit}
               status={status}
-              stop={stop}
-              attachments={attachments}
-              setAttachments={setAttachments}
+              votes={votes}
               messages={messages}
-              setMessages={setMessages}
+              updateMessage={updateMessage}
+              reload={reload}
+              isReadonly={!!chat.readonly}
             />
-          )}
-          {!!chat.readonly && <CloneChat chatId={chat.id} />}
-        </form>
+
+            <form className="flex mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl">
+              {!chat.readonly && (
+                <MultimodalInput
+                  chatId={chat.id}
+                  input={input}
+                  setInput={setInput}
+                  handleSubmit={handleSubmit}
+                  status={status}
+                  stop={stop}
+                  attachments={attachments}
+                  setAttachments={setAttachments}
+                  messages={messages}
+                  setMessages={setMessages}
+                />
+              )}
+              {!!chat.readonly && <CloneChat chatId={chat.id} />}
+            </form>
+          </div>
+          {widgets.length ? (
+            <div className="h-full w-1/2 p-2">
+              <Widgets widgets={widgets} />
+            </div>
+          ) : null}
+        </div>
       </div>
     </>
   );

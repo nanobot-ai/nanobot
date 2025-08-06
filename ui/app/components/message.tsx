@@ -13,6 +13,7 @@ import { MessageEditor } from "./message-editor";
 import { MessageReasoning } from "./message-reasoning";
 import type { Message } from "~/lib/nanobot";
 import type { UseChatType } from "~/hooks/use-chat";
+import { ToolCall } from "~/components/message-toolcall";
 
 const PurePreviewMessage = ({
   chatId,
@@ -36,7 +37,6 @@ const PurePreviewMessage = ({
   const [mode, setMode] = useState<"view" | "edit">("view");
   const images = message.items?.filter((i) => i.type === "image") || [];
 
-  console.log("render", message.id);
   return (
     <AnimatePresence>
       <motion.div
@@ -154,36 +154,7 @@ const PurePreviewMessage = ({
               }
 
               if (type === "tool") {
-                const { name, arguments: args, output, callID } = part;
-
-                if (output) {
-                  return (
-                    <div key={callID}>
-                      <span>
-                        Called {name}: {args}
-                      </span>
-                      <pre className="wrap-break-word">
-                        ${JSON.stringify(output, null, "  ")}
-                      </pre>
-                    </div>
-                  );
-                } else {
-                  return (
-                    <div
-                      key={callID}
-                      className={cn({
-                        skeleton: true,
-                      })}
-                    >
-                      <div className="flex items-center gap-2">
-                        <SparklesIcon size={14} />
-                        <span>
-                          Calling {name}: {args}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                }
+                return <ToolCall key={key} toolCall={part} />;
               }
             })}
 
