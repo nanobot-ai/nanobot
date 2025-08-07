@@ -125,7 +125,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 		return nil, fmt.Errorf("failed to marshal client metadata: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", authorizationServerMetadata.RegistrationEndpoint, bytes.NewReader(b))
+	req, err := http.NewRequest(http.MethodPost, authorizationServerMetadata.RegistrationEndpoint, bytes.NewReader(b))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create registration request: %w", err)
 	}
@@ -146,7 +146,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 			return nil, fmt.Errorf("failed to lookup client credentials: %w", err)
 		}
 		if clientInfo.ClientID == "" {
-			return nil, fmt.Errorf("failed to lookup client credentials")
+			return nil, fmt.Errorf("client registration failed with status %s and no client credentials were found", resp.Status)
 		}
 	} else if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
