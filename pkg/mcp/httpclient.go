@@ -307,9 +307,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 				continue
 			}
 
-			if msg.ID == nil {
-				msg.ID = uuid.String()
-			} else {
+			if msg.ID != nil {
 				lastEventID = msg.ID
 			}
 
