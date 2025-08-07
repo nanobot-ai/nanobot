@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/cmd"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -17,8 +20,12 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/llm/anthropic"
 	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
 	"github.com/nanobot-ai/nanobot/pkg/log"
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
+	"github.com/nanobot-ai/nanobot/pkg/server"
+	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/nanobot-ai/nanobot/pkg/ui"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
@@ -31,6 +38,7 @@ func New() *cobra.Command {
 		NewCall(n),
 		NewTargets(n),
 		NewSessions(n),
+		NewUI(n),
 		NewRun(n))
 	return root
 }
@@ -225,4 +233,78 @@ func (n *Nanobot) GetRuntime(opts ...runtime.Options) (*runtime.Runtime, error) 
 
 func (n *Nanobot) Run(cmd *cobra.Command, _ []string) error {
 	return cmd.Help()
+}
+
+func (n *Nanobot) runMCP(ctx context.Context, config types.Config, runtime *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, l net.Listener, listenAddress string, healthzPath string, startUI bool) error {
+	env, err := n.loadEnv()
+	if err != nil {
+		return fmt.Errorf("failed to load environment: %w", err)
+	}
+
+	address := listenAddress
+	if strings.HasPrefix("address", "http://") {
+		address = strings.TrimPrefix(address, "http://")
+	} else if strings.HasPrefix(address, "https://") {
+		return fmt.Errorf("https:// is not supported, use http:// instead")
+	}
+
+	var mcpServer mcp.MessageHandler = server.NewServer(runtime, config)
+
+	if address == "stdio" {
+		stdio := mcp.NewStdioServer(env, mcpServer)
+		if err := stdio.Start(ctx, os.Stdin, os.Stdout); err != nil {
+			return fmt.Errorf("failed to start stdio server: %w", err)
+		}
+
+		stdio.Wait()
+		return nil
+	}
+
+	sessionManager, err := session.NewManager(mcpServer, n.DSN(), config)
+	if err != nil {
+		return err
+	}
+
+	httpServer := mcp.NewHTTPServer(env, mcpServer, mcp.HTTPServerOptions{
+		SessionStore: sessionManager,
+		HealthzPath:  healthzPath,
+	})
+
+	mux := http.NewServeMux()
+	if oauthCallbackHandler != nil {
+		mux.Handle("/oauth/callback", oauthCallbackHandler)
+	}
+	if startUI {
+		uiHandler, err := ui.StartUI(ctx, "http://"+address)
+		if err != nil {
+			return err
+		}
+		mux.Handle("/", uiHandler)
+		mux.Handle("/mcp/", httpServer)
+	} else {
+		mux.Handle("/", httpServer)
+	}
+
+	s := &http.Server{
+		Addr:    address,
+		Handler: mux,
+	}
+
+	context.AfterFunc(ctx, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = s.Shutdown(ctx)
+	})
+
+	if l == nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Starting server on http://%s\n", address)
+		err = s.ListenAndServe()
+	} else {
+		err = s.Serve(l)
+	}
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	log.Debugf(ctx, "Server stopped: %v", err)
+	return err
 }

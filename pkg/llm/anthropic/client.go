@@ -107,7 +107,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 	defer httpResp.Body.Close()
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
-		return nil, fmt.Errorf("failed to get response: %s %q", httpResp.Status, string(body))
+		return nil, fmt.Errorf("failed to get response from Anthropic API: %s %q", httpResp.Status, string(body))
 	}
 
 	var (

@@ -2,21 +2,16 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/chat"
 	"github.com/nanobot-ai/nanobot/pkg/confirm"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
-	"github.com/nanobot-ai/nanobot/pkg/server"
 	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/spf13/cobra"
@@ -25,11 +20,10 @@ import (
 
 type Run struct {
 	MCP           bool     `usage:"Run the nanobot as an MCP server" default:"false" short:"m" env:"NANOBOT_MCP"`
-	UI            bool     `usage:"Run the nanobot with a UI" default:"false" short:"u"`
 	AutoConfirm   bool     `usage:"Automatically confirm all tool calls" default:"false" short:"y"`
 	Output        string   `usage:"Output file for the result. Use - for stdout" default:"" short:"o"`
 	ListenAddress string   `usage:"Address to listen on (ex: localhost:8099) (implies -m)" default:"stdio" short:"a"`
-	Port          string   `usage:"Port to listen on for stdio" default:"8099"`
+	Port          string   `usage:"Port to listen on for stdio" default:"8099" hidden:"true"`
 	HealthzPath   string   `usage:"Path to serve healthz on"`
 	Roots         []string `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
 	Input         string   `usage:"Input file for the prompt" default:"" short:"f"`
@@ -129,38 +123,9 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		cfgPath = args[0]
 	}
 
-	if r.UI {
-		runtimeOpt.Profiles = append(runtimeOpt.Profiles, "nanobot.ui")
-		r.MCP = true
-		if r.ListenAddress == "stdio" {
-			r.ListenAddress = "localhost:9999"
-		}
-	}
-
-	if r.UI && (strings.HasPrefix(cfgPath, "http://") || strings.HasPrefix(cfgPath, "https://")) {
-		r.n.Env = append(r.n.Env, types.AgentPassthroughEnv+"=true")
-		config = &types.Config{
-			Publish: types.Publish{
-				Entrypoint: []string{"agent/chat"},
-			},
-			MCPServers: map[string]mcp.Server{
-				"agent": {
-					BaseURL: cfgPath,
-				},
-			},
-		}
-	}
-
-	if config == nil {
-		config, err = r.n.ReadConfig(cmd.Context(), cfgPath, runtimeOpt)
-		if err != nil {
-			return fmt.Errorf("failed to read config file %q: %w", args[0], err)
-		}
-	} else {
-		config, err = r.n.ReadConfigType(cmd.Context(), config, runtimeOpt)
-		if err != nil {
-			return fmt.Errorf("failed to read config for URL %q: %w", args[0], err)
-		}
+	config, err = r.n.ReadConfig(cmd.Context(), cfgPath, runtimeOpt)
+	if err != nil {
+		return fmt.Errorf("failed to read config file %q: %w", args[0], err)
 	}
 
 	oauthCallbackHandler := mcp.NewCallbackServer(confirm.New())
@@ -178,7 +143,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 			return err
 		}
 
-		return r.runMCP(cmd.Context(), *config, runtime, oauthCallbackHandler, nil, r.HealthzPath)
+		return r.n.runMCP(cmd.Context(), *config, runtime, oauthCallbackHandler, nil, r.ListenAddress, r.HealthzPath, false)
 	}
 	if r.Port == "" {
 		r.Port = "0"
@@ -255,7 +220,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 	eg, ctx := errgroup.WithContext(cmd.Context())
 	ctx, cancel := context.WithCancel(ctx)
 	eg.Go(func() error {
-		return r.runMCP(ctx, *config, runtime, oauthCallbackHandler, l, r.HealthzPath)
+		return r.n.runMCP(ctx, *config, runtime, oauthCallbackHandler, l, r.ListenAddress, r.HealthzPath, false)
 	})
 	eg.Go(func() error {
 		defer cancel()
@@ -265,69 +230,4 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 			}, clientOpt)
 	})
 	return eg.Wait()
-}
-
-func (r *Run) runMCP(ctx context.Context, config types.Config, runtime *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, l net.Listener, healthzPath string) error {
-	env, err := r.n.loadEnv()
-	if err != nil {
-		return fmt.Errorf("failed to load environment: %w", err)
-	}
-
-	address := r.ListenAddress
-	if strings.HasPrefix("address", "http://") {
-		address = strings.TrimPrefix(address, "http://")
-	} else if strings.HasPrefix(address, "https://") {
-		return fmt.Errorf("https:// is not supported, use http:// instead")
-	}
-
-	var mcpServer mcp.MessageHandler = server.NewServer(runtime, config)
-
-	if address == "stdio" {
-		stdio := mcp.NewStdioServer(env, mcpServer)
-		if err := stdio.Start(ctx, os.Stdin, os.Stdout); err != nil {
-			return fmt.Errorf("failed to start stdio server: %w", err)
-		}
-
-		stdio.Wait()
-		return nil
-	}
-
-	sessionManager, err := session.NewManager(mcpServer, r.n.DSN(), config)
-	if err != nil {
-		return err
-	}
-
-	httpServer := mcp.NewHTTPServer(env, mcpServer, mcp.HTTPServerOptions{
-		SessionStore: sessionManager,
-		HealthzPath:  healthzPath,
-	})
-
-	mux := http.NewServeMux()
-	mux.Handle("/", httpServer)
-	if oauthCallbackHandler != nil {
-		mux.Handle("/oauth/callback", oauthCallbackHandler)
-	}
-
-	s := &http.Server{
-		Addr:    address,
-		Handler: mux,
-	}
-
-	context.AfterFunc(ctx, func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_ = s.Shutdown(ctx)
-	})
-
-	if l == nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Starting server on %s\n", address)
-		err = s.ListenAndServe()
-	} else {
-		err = s.Serve(l)
-	}
-	if errors.Is(err, http.ErrServerClosed) {
-		return nil
-	}
-	log.Debugf(ctx, "Server stopped: %v", err)
-	return err
 }
