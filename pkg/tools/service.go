@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -313,7 +314,16 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 				ProgressToken: uuid.String(),
 			})
 			if err != nil {
-				return mcp.CreateMessageResult{}, err
+				if !errors.Is(err, sampling.ErrNoMatchingModel) || session.InitializeRequest.Capabilities.Sampling == nil {
+					return mcp.CreateMessageResult{}, err
+				}
+
+				// There was no matching model, but the session supports sampling. Send the sampling request to it.
+				var result mcp.CreateMessageResult
+				if err = session.Exchange(ctx, "sampling/createMessage", samplingRequest, &result); err != nil {
+					return result, fmt.Errorf("failed to send sampling request: %w", err)
+				}
+				return result, nil
 			}
 			for _, content := range result.Content {
 				return mcp.CreateMessageResult{
