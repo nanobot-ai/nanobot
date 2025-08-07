@@ -178,7 +178,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 		}
 	}
 
-	if resp.StatusCode == http.StatusNotFound && (msg == nil || msg.Method != "initialize") {
+	if resp.StatusCode == http.StatusNotFound && !s.sse {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 
@@ -196,7 +196,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 		_ = resp.Body.Close()
 		// If msg is nil, then this is an SSE request for HTTP streaming.
 		// If the server doesn't support a separate SSE endpoint, then we can just return.
-		if msg == nil && resp.StatusCode == http.StatusMethodNotAllowed {
+		if !s.sse && resp.StatusCode == http.StatusMethodNotAllowed {
 			s.needReconnect = false
 			return nil
 		}
@@ -224,7 +224,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 
 		messages := newSSEStream(resp.Body)
 
-		if msg != nil && msg.Method == "initialize" {
+		if s.sse {
 			data, ok := messages.readNextMessage()
 			if !ok {
 				return fmt.Errorf("failed to read SSE message: %w", messages.err()), true
@@ -359,7 +359,10 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 	if resp.StatusCode != http.StatusOK {
 		streamingErrorMessage, _ := io.ReadAll(resp.Body)
 		streamError := fmt.Errorf("failed to initialize HTTP Streaming client: %s: %s", resp.Status, streamingErrorMessage)
+
+		s.sse = true
 		if err := s.ensureSSE(ctx, &msg, nil); err != nil {
+			s.sse = false
 			return errors.Join(streamError, err)
 		}
 
@@ -367,8 +370,8 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 		s.initializeLock.Lock()
 		defer s.initializeLock.Unlock()
 		s.sessionID = new(string)
+		s.initializeRequest = &msg
 
-		s.sse = true
 		return nil
 	}
 
@@ -379,18 +382,18 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 	s.initializeRequest = &msg
 	s.initializeLock.Unlock()
 
+	go func() {
+		if err = s.ensureSSE(ctx, nil, nil); err != nil {
+			log.Errorf(context.Background(), "failed to initialize SSE: %v", err)
+		}
+	}()
+
 	seen, err := s.readResponse(resp)
 	if err != nil {
 		return fmt.Errorf("failed to decode mcp initialize response: %w", err)
 	} else if !seen {
 		return fmt.Errorf("no response from server, expected an initialize response")
 	}
-
-	go func() {
-		if err = s.ensureSSE(ctx, nil, nil); err != nil {
-			log.Errorf(context.Background(), "failed to initialize SSE: %v", err)
-		}
-	}()
 
 	return nil
 }
@@ -490,7 +493,7 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 	go func() {
 		defer close(errChan)
 		// Ensure that the SSE connection is still active.
-		if err := s.ensureSSE(ctx, &msg, nil); err != nil {
+		if err := s.ensureSSE(ctx, initializeMessage, nil); err != nil {
 			errChan <- fmt.Errorf("failed to restart SSE: %w", err)
 		}
 	}()
