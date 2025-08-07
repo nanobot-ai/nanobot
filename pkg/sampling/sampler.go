@@ -14,6 +14,8 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
+var ErrNoMatchingModel = fmt.Errorf("no matching model found")
+
 type Sampler struct {
 	completer types.Completer
 }
@@ -107,7 +109,7 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 
 	model, ok := s.getMatchingModel(config, &req)
 	if !ok {
-		return nil, fmt.Errorf("no matching model found")
+		return nil, ErrNoMatchingModel
 	}
 
 	request := types.CompletionRequest{
