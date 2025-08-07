@@ -346,7 +346,7 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 	}
 	if opt.SessionState == nil {
 		_, err = c.Initialize(ctx, InitializeRequest{
-			ProtocolVersion: "2025-03-26",
+			ProtocolVersion: "2025-06-18",
 			Capabilities: ClientCapabilities{
 				Sampling:    sampling,
 				Roots:       roots,
