@@ -258,7 +258,7 @@ export async function deleteChat(ctx: Context, id: string): Promise<void> {
     if (process.env.NANOBOT_URL) {
       url = process.env.NANOBOT_URL + url;
     } else {
-      url = `http://localhost:9999${url}`;
+      url = `http://localhost:8080${url}`;
     }
   }
 
@@ -291,7 +291,7 @@ async function call(
     if (process.env.NANOBOT_URL) {
       url = process.env.NANOBOT_URL + url;
     } else {
-      url = `http://localhost:9999${url}`;
+      url = `http://localhost:8080${url}`;
     }
   }
 

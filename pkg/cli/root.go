@@ -280,6 +280,7 @@ func (n *Nanobot) runMCP(ctx context.Context, config types.Config, runtime *runt
 			return err
 		}
 		mux.Handle("/", uiHandler)
+		mux.Handle("/mcp", httpServer)
 		mux.Handle("/mcp/", httpServer)
 	} else {
 		mux.Handle("/", httpServer)

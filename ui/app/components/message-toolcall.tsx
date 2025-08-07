@@ -1,11 +1,9 @@
 import type { Content, ToolCall } from "~/lib/nanobot";
 import { UIResourceRenderer } from "@mcp-ui/client";
-import { SparklesIcon } from "./icons";
 import { ChevronDownIcon, Hammer } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Markdown } from "./markdown";
 import { cn, sanitizeText } from "~/lib/utils";
-import { clsx } from "clsx";
 
 function isValidJson(str: string) {
   try {
@@ -55,6 +53,32 @@ function ResourceTable({ resource }: { resource: Content["resource"] }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+function MCPUI({ resource }: { resource: Content["resource"] }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  return (
+    <UIResourceRenderer
+      resource={resource}
+      htmlProps={{
+        iframeRenderData: { theme: "dark" },
+        autoResizeIframe: {
+          height: true,
+        },
+        iframeProps: {
+          ref: iframeRef,
+        },
+        style: {
+          minHeight: "600px",
+        },
+      }}
+      onUIAction={async (e) => {
+        console.log(e, iframeRef.current);
+        alert(JSON.stringify(e, null, 2));
+      }}
+    />
   );
 }
 
@@ -207,9 +231,7 @@ export function ToolCall({ toolCall }: { toolCall: ToolCall }) {
             }
             return [];
           }) || []
-        ).map((resource, index) => (
-          <UIResourceRenderer key={index} resource={resource} />
-        ))}
+        ).map((resource, index) => <MCPUI resource={resource} key={index} />)}
     </>
   );
 }

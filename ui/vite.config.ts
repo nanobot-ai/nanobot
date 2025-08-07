@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/mcp": {
-        target: process.env.NANOBOT_URL || "http://localhost:9999",
+        target: process.env.NANOBOT_URL || "http://localhost:8080",
       },
     },
   },

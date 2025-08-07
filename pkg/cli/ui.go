@@ -137,8 +137,7 @@ func (r *UI) Run(cmd *cobra.Command, args []string) (err error) {
 	runtimeOpt.MaxConcurrency = r.n.MaxConcurrency
 
 	runtime, err := r.n.GetRuntime(runtimeOpt, runtime.Options{
-		OAuthRedirectURL: "http://" + strings.Replace(r.ListenAddress, "127.0.0.1", "localhost", 1) + "/oauth/callback",
-		DSN:              r.n.DSN(),
+		DSN: r.n.DSN(),
 	})
 	if err != nil {
 		return err

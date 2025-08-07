@@ -1,1 +1,0 @@
-import{w as o,u as a,j as r}from"./chunk-QMGIS6GS-DfTvyqh6.js";import{C as s}from"./chat-RWQutRVA.js";import"./use-chat-BHBTbUC_.js";import"./index-DnWePWqS.js";import"./index-_SmGZh4S.js";const c=o(function(){const t=a("routes/layout");return r.jsx(s,{chat:t.chat,user:t.user})});export{c as default};
