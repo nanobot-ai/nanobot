@@ -429,20 +429,35 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 		return err
 	}
 
-	if err := s.Send(ctx, *req); err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
+	errChan := make(chan error, 1)
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case m := <-ch:
-		if isInit {
-			if err := s.postInit(&m); err != nil {
-				return fmt.Errorf("failed to post init: %w", err)
-			}
+	go func() {
+		defer close(errChan)
+
+		if err := s.Send(ctx, *req); err != nil {
+			errChan <- fmt.Errorf("failed to send request: %w", err)
 		}
-		return s.marshalResponse(m, out)
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err = <-errChan:
+			if err != nil {
+				return err
+			}
+			// If the error is nil, then the send call was successful.
+			// Set the error channel to nil so that this case always blocks.
+			errChan = nil
+		case m := <-ch:
+			if isInit {
+				if err := s.postInit(&m); err != nil {
+					return fmt.Errorf("failed to post init: %w", err)
+				}
+			}
+			return s.marshalResponse(m, out)
+		}
 	}
 }
 
