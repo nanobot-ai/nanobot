@@ -421,6 +421,10 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 		return err
 	}
 
+	if req.ID == nil {
+		return s.Send(ctx, *req)
+	}
+
 	ch := s.pendingRequest.WaitFor(req.ID)
 	defer s.pendingRequest.Done(req.ID)
 

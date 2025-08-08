@@ -162,6 +162,11 @@ func (s *serverWire) SessionID() string {
 }
 
 func (s *serverWire) exchange(ctx context.Context, msg Message) (Message, error) {
+	if msg.ID == nil {
+		s.handler(ctx, msg)
+		return Message{}, ErrNoResponse
+	}
+
 	ch := s.pending.WaitFor(msg.ID)
 	defer s.pending.Done(msg.ID)
 
