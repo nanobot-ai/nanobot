@@ -48,6 +48,7 @@ type Nanobot struct {
 	Trace            bool              `usage:"Enable trace logging"`
 	Env              []string          `usage:"Environment variables to set in the form of KEY=VALUE, or KEY to load from current environ" short:"e"`
 	EnvFile          string            `usage:"Path to the environment file (default: ./nanobot.env)"`
+	EmptyEnv         bool              `usage:"Do not load environment variables from the environment by default"`
 	DefaultModel     string            `usage:"Default model to use for completions" default:"gpt-4.1" env:"NANOBOT_DEFAULT_MODEL" name:"default-model"`
 	OpenAIAPIKey     string            `usage:"OpenAI API key" env:"OPENAI_API_KEY" name:"openai-api-key"`
 	OpenAIBaseURL    string            `usage:"OpenAI API URL" env:"OPENAI_BASE_URL" name:"openai-base-url"`
@@ -178,6 +179,13 @@ func (n *Nanobot) loadEnv() (map[string]string, error) {
 	if err == nil {
 		env["PWD"] = cwd
 		env["CWD"] = cwd
+	}
+
+	if !n.EmptyEnv {
+		for _, kv := range os.Environ() {
+			k, v, _ := strings.Cut(kv, "=")
+			env[k] = v
+		}
 	}
 
 	defaultFile := n.EnvFile == ""
