@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
 type HTTPServer struct {
@@ -159,16 +158,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 		maps.Copy(streamingSession.session.EnvMap(), h.getEnv(req))
 
-		var setID bool
-		if msg.ID == nil {
-			msg.ID = uuid.String()
-			setID = true
-		}
-
 		response, err := streamingSession.Exchange(req.Context(), msg)
-		if setID {
-			response.ID = nil
-		}
 		if errors.Is(err, ErrNoResponse) {
 			rw.WriteHeader(http.StatusAccepted)
 			return
