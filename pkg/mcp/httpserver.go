@@ -172,7 +172,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 		rw.Header().Set("Content-Type", "application/json")
 
-		if (len(response.Result) <= 2 && response.Error == nil) && msg.Method != "ping" {
+		if len(response.Result) <= 2 && response.Error == nil && strings.HasPrefix(msg.Method, "notifications/") {
 			// Response has no data, write status accepted.
 			rw.WriteHeader(http.StatusAccepted)
 		}
