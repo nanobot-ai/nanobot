@@ -304,6 +304,7 @@ async function call(
     body: JSON.stringify({
       jsonrpc: "2.0",
       method: "tools/call",
+      id: uuidv4(),
       params: {
         name: tool,
         arguments: body,
