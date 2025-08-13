@@ -8,8 +8,11 @@ import (
 	"maps"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
+	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
 type HTTPServer struct {
@@ -18,6 +21,11 @@ type HTTPServer struct {
 	sessions       SessionStore
 	ctx            context.Context
 	healthzPath    string
+
+	// internal health check state
+	internalSession *ServerSession
+	healthErr       *error
+	healthMu        sync.RWMutex
 }
 
 type HTTPServerOptions struct {
@@ -45,13 +53,19 @@ func (h HTTPServerOptions) Merge(other HTTPServerOptions) (result HTTPServerOpti
 
 func NewHTTPServer(env map[string]string, handler MessageHandler, opts ...HTTPServerOptions) *HTTPServer {
 	o := complete.Complete(opts...)
-	return &HTTPServer{
+	h := &HTTPServer{
 		MessageHandler: handler,
 		env:            env,
 		sessions:       o.SessionStore,
 		ctx:            o.BaseContext,
 		healthzPath:    o.HealthzPath,
 	}
+
+	if h.healthzPath != "" {
+		h.startHealthTicker()
+	}
+
+	return h
 }
 
 func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request) {
@@ -107,7 +121,17 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request) {
 func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodGet {
 		if h.healthzPath != "" && req.URL.Path == h.healthzPath {
-			rw.WriteHeader(http.StatusOK)
+			h.healthMu.RLock()
+			healthErr := h.healthErr
+			h.healthMu.RUnlock()
+
+			if healthErr == nil {
+				http.Error(rw, "waiting for startup", http.StatusServiceUnavailable)
+			} else if *healthErr != nil {
+				http.Error(rw, (*healthErr).Error(), http.StatusServiceUnavailable)
+			} else {
+				rw.WriteHeader(http.StatusOK)
+			}
 			return
 		}
 
@@ -235,6 +259,113 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		http.Error(rw, "Failed to encode response: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+func (h *HTTPServer) startHealthTicker() {
+	go func() {
+		timer := time.NewTimer(time.Minute)
+		for {
+			ctx, cancel := context.WithTimeout(h.ctx, 30*time.Second)
+			err := h.checkTools(ctx)
+			cancel()
+
+			h.healthMu.Lock()
+			h.healthErr = &err
+			h.healthMu.Unlock()
+
+			timer.Reset(time.Minute)
+			select {
+			case <-h.ctx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
+		}
+	}()
+}
+
+func (h *HTTPServer) ensureInternalSession(ctx context.Context) (*ServerSession, error) {
+	h.healthMu.RLock()
+	s := h.internalSession
+	h.healthMu.RUnlock()
+	if s != nil {
+		return s, nil
+	}
+
+	session, err := NewServerSession(h.ctx, h.MessageHandler)
+	if err != nil {
+		return nil, err
+	}
+	// Set base environment on the internal session
+	maps.Copy(session.session.EnvMap(), h.env)
+
+	// Initialize the session
+	if _, err := session.Exchange(ctx, Message{
+		JSONRPC: "2.0",
+		ID:      "healthz-initialize",
+		Method:  "initialize",
+		Params:  []byte(`{"capabilities":{},"clientInfo":{"name":"nanobot-internal"},"protocolVersion":"2025-06-18"}`),
+	}); err != nil {
+		session.Close()
+		return nil, fmt.Errorf("initialize failed: %w", err)
+	}
+
+	// Send the initialized notification
+	if err = session.Send(ctx, Message{
+		JSONRPC: "2.0",
+		Method:  "notifications/initialized",
+	}); err != nil {
+		return nil, fmt.Errorf("failed to send initialized notification: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "/mcp", nil)
+	if err != nil {
+		session.Close()
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	h.sessions.Store(req, session.ID(), session)
+
+	h.healthMu.Lock()
+	if s = h.internalSession; s != nil {
+		h.healthMu.Unlock()
+		// If another goroutine already set the internal session, close this one.
+		session.Close()
+		return s, nil
+	}
+	h.internalSession = session
+	h.healthMu.Unlock()
+
+	return session, nil
+}
+
+func (h *HTTPServer) checkTools(ctx context.Context) error {
+	session, err := h.ensureInternalSession(ctx)
+	if err != nil {
+		return err
+	}
+
+	resp, err := session.Exchange(ctx, Message{
+		JSONRPC: "2.0",
+		ID:      uuid.String(),
+		Method:  "tools/list",
+		Params:  []byte(`{}`),
+	})
+	if err != nil {
+		return err
+	}
+	if resp.Error != nil {
+		return fmt.Errorf("tools/list error: %s", resp.Error.Message)
+	}
+
+	var out ListToolsResult
+	if err := json.Unmarshal(resp.Result, &out); err != nil {
+		return fmt.Errorf("failed to parse tools/list result: %w", err)
+	}
+
+	if len(out.Tools) == 0 {
+		return fmt.Errorf("no tools from server")
+	}
+	return nil
 }
 
 func (h *HTTPServer) getEnv(req *http.Request) map[string]string {
