@@ -88,7 +88,7 @@ func (s *Server) readResource(ctx context.Context, _ mcp.Message, body mcp.ReadR
 		Contents: []mcp.ResourceContent{
 			{
 				URI:      "nanobot://resource/" + artifact.UUID,
-				MimeType: artifact.MimeType,
+				MIMEType: artifact.MimeType,
 				Blob:     artifact.Blob,
 			},
 		},

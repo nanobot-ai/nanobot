@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 
 	"github.com/nanobot-ai/nanobot/pkg/log"
 )
@@ -35,7 +34,7 @@ func (s *StdioServer) Start(ctx context.Context, in io.ReadCloser, out io.WriteC
 		return fmt.Errorf("failed to create stdio session: %w", err)
 	}
 
-	maps.Copy(session.session.EnvMap(), s.env)
+	session.session.AddEnv(s.env)
 
 	s.stdio = NewStdio("proxy", nil, in, out, func() {})
 

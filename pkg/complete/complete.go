@@ -18,6 +18,9 @@ func MergeMap[K comparable, V any](m ...map[K]V) (result map[K]V) {
 			result[k] = v
 		}
 	}
+	if len(result) == 0 {
+		return nil
+	}
 	return
 }
 

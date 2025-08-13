@@ -79,7 +79,7 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	session, ok, err := h.sessions.Load(req, id)
+	session, ok, err := h.sessions.Acquire(req.Context(), h.MessageHandler, id)
 	if err != nil {
 		http.Error(rw, "Failed to load session: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -88,6 +88,7 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request) {
 		http.Error(rw, "Session not found", http.StatusNotFound)
 		return
 	}
+	defer h.sessions.Release(session)
 
 	rw.Header().Set("Content-Type", "text/event-stream")
 	rw.Header().Set("Cache-Control", "no-cache")
@@ -118,7 +119,20 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request) {
 	}
 }
 
+type requestKey struct{}
+
+func withRequest(req *http.Request) context.Context {
+	return context.WithValue(req.Context(), requestKey{}, req)
+}
+
+func RequestFromContext(ctx context.Context) *http.Request {
+	ret, _ := ctx.Value(requestKey{}).(*http.Request)
+	return ret
+}
+
 func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	req = req.WithContext(withRequest(req))
+
 	if req.Method == http.MethodGet {
 		if h.healthzPath != "" && req.URL.Path == h.healthzPath {
 			h.healthMu.RLock()
@@ -140,10 +154,9 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	streamingID := h.sessions.ExtractID(req)
-	sseID := req.URL.Query().Get("id")
 
 	if streamingID != "" && req.Method == http.MethodDelete {
-		sseSession, ok, err := h.sessions.LoadAndDelete(req, streamingID)
+		sseSession, ok, err := h.sessions.LoadAndDelete(req.Context(), h.MessageHandler, streamingID)
 		if err != nil {
 			http.Error(rw, "Failed to delete session: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -170,7 +183,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	if streamingID != "" {
-		streamingSession, ok, err := h.sessions.Load(req, streamingID)
+		streamingSession, ok, err := h.sessions.Acquire(req.Context(), h.MessageHandler, streamingID)
 		if err != nil {
 			http.Error(rw, "Failed to load session: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -179,8 +192,11 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			http.Error(rw, "Session not found", http.StatusNotFound)
 			return
 		}
+		defer h.sessions.Release(streamingSession)
 
-		maps.Copy(streamingSession.session.EnvMap(), h.getEnv(req))
+		streamingSession.session.sessionManager = h.sessions
+
+		streamingSession.session.AddEnv(h.getEnv(req))
 
 		response, err := streamingSession.Exchange(req.Context(), msg)
 		if errors.Is(err, ErrNoResponse) {
@@ -205,27 +221,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			http.Error(rw, "Failed to encode response: "+err.Error(), http.StatusInternalServerError)
 		}
 
-		_ = h.sessions.Store(req, streamingSession.ID(), streamingSession)
-		return
-	} else if sseID != "" {
-		sseSession, ok, err := h.sessions.Load(req, sseID)
-		if err != nil {
-			http.Error(rw, "Failed to load session: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if !ok {
-			http.Error(rw, "Session not found", http.StatusNotFound)
-			return
-		}
-
-		maps.Copy(sseSession.session.EnvMap(), h.getEnv(req))
-
-		if err := sseSession.Send(req.Context(), msg); err != nil {
-			http.Error(rw, "Failed to handle message: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		rw.WriteHeader(http.StatusAccepted)
+		_ = h.sessions.Store(req.Context(), streamingSession.ID(), streamingSession)
 		return
 	}
 
@@ -240,7 +236,8 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	maps.Copy(session.session.EnvMap(), h.getEnv(req))
+	session.session.sessionManager = h.sessions
+	session.session.AddEnv(h.getEnv(req))
 
 	resp, err := session.Exchange(req.Context(), msg)
 	if err != nil {
@@ -248,7 +245,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if err := h.sessions.Store(req, session.ID(), session); err != nil {
+	if err := h.sessions.Store(req.Context(), session.ID(), session); err != nil {
 		http.Error(rw, "Failed to store session: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -333,8 +330,9 @@ func (h *HTTPServer) ensureInternalSession(ctx context.Context) (*ServerSession,
 	if err != nil {
 		return nil, err
 	}
+
 	// Set base environment on the internal session
-	maps.Copy(session.session.EnvMap(), h.env)
+	session.session.AddEnv(h.env)
 
 	// Initialize the session
 	if _, err := session.Exchange(ctx, Message{
@@ -360,7 +358,7 @@ func (h *HTTPServer) ensureInternalSession(ctx context.Context) (*ServerSession,
 		session.Close(true)
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	h.sessions.Store(req, session.ID(), session)
+	h.sessions.Store(req.Context(), session.ID(), session)
 
 	h.healthMu.Lock()
 	if s = h.internalSession; s != nil {

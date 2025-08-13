@@ -13,15 +13,13 @@ import (
 )
 
 const (
-	ConfigSessionKey              = "config"
-	CurrentAgentSessionKey        = "currentAgent"
-	AccountIDSessionKey           = "accountID"
-	AgentUUIDSessionKey           = "agentID"
-	CustomAgentConfigSessionKey   = "customAgentConfig"
-	CustomAgentModifiedSessionKey = "customAgentModified"
-	DescriptionSessionKey         = "description"
-	PublicSessionKey              = "public"
-	AgentPassthroughEnv           = "nanobot:agent_passthrough"
+	ConfigSessionKey                = "config"
+	ConfigHashSessionKey            = "configHash"
+	CurrentAgentSessionKey          = "currentAgent"
+	AccountIDSessionKey             = "accountID"
+	DescriptionSessionKey           = "description"
+	PublicSessionKey                = "public"
+	ResourceSubscriptionsSessionKey = "resourceSubscriptions"
 )
 
 func ConfigFromContext(ctx context.Context) (result Config) {
@@ -40,16 +38,18 @@ type Config struct {
 	Prompts    map[string]Prompt     `json:"prompts,omitempty"`
 }
 
-func (c Config) ShouldPublishAgent() bool {
-	_, hasMain := c.Agents[DefaultAgentName]
-	return hasMain || len(c.Publish.Entrypoint) > 0
-}
+type ConfigFactory func(ctx context.Context, profiles string) (Config, error)
 
 func (c Config) Validate(allowLocal bool) error {
 	var (
 		errs      []error
 		seenNames = map[string]string{}
 	)
+
+	if len(c.Publish.Entrypoint) == 0 && len(c.Agents) > 1 {
+		errs = append(errs, fmt.Errorf("publish must have at least one entrypoint agent set if there are multiple agents"))
+	}
+
 	for _, extend := range c.Extends {
 		if strings.HasPrefix(strings.TrimSpace(extend), "/") {
 			errs = append(errs, fmt.Errorf("extends cannot be an absolute path: %s", c.Extends))
@@ -319,9 +319,9 @@ func ParseToolRef(ref string) ToolRef {
 
 type ResourceMappings map[string]TargetMapping[mcp.Resource]
 
-func (r ResourceMappings) Serialize() (any, error) {
-	return r, nil
-}
+//func (r ResourceMappings) Serialize() (any, error) {
+//	return r, nil
+//}
 
 func (r ResourceMappings) Deserialize(data any) (any, error) {
 	return r, mcp.JSONCoerce(data, &r)
@@ -329,9 +329,9 @@ func (r ResourceMappings) Deserialize(data any) (any, error) {
 
 type ResourceTemplateMappings map[string]TargetMapping[TemplateMatch]
 
-func (r ResourceTemplateMappings) Serialize() (any, error) {
-	return r, nil
-}
+//func (r ResourceTemplateMappings) Serialize() (any, error) {
+//	return r, nil
+//}
 
 func (r ResourceTemplateMappings) Deserialize(data any) (any, error) {
 	return r, mcp.JSONCoerce(data, &r)
@@ -378,9 +378,9 @@ func (t TemplateMatch) MarshalJSON() ([]byte, error) {
 
 type PromptMappings map[string]TargetMapping[mcp.Prompt]
 
-func (p PromptMappings) Serialize() (any, error) {
-	return p, nil
-}
+//func (p PromptMappings) Serialize() (any, error) {
+//	return p, nil
+//}
 
 func (p PromptMappings) Deserialize(data any) (any, error) {
 	return p, mcp.JSONCoerce(data, &p)
@@ -394,9 +394,9 @@ type TargetMapping[T any] struct {
 
 type ToolMappings map[string]TargetMapping[mcp.Tool]
 
-func (t ToolMappings) Serialize() (any, error) {
-	return t, nil
-}
+//func (t ToolMappings) Serialize() (any, error) {
+//	return t, nil
+//}
 
 func (t *ToolMappings) Deserialize(data any) (any, error) {
 	return t, mcp.JSONCoerce(data, &t)
@@ -425,7 +425,11 @@ func (s *StringList) UnmarshalJSON(data []byte) error {
 		if err := json.Unmarshal(data, &raw); err != nil {
 			return err
 		}
-		*s = StringList{raw}
+		var list []string
+		for _, item := range strings.Split(raw, ",") {
+			list = append(list, strings.TrimSpace(item))
+		}
+		*s = list
 	}
 	return nil
 }
@@ -433,6 +437,7 @@ func (s *StringList) UnmarshalJSON(data []byte) error {
 type Agents map[string]AgentDisplay
 
 type AgentDisplay struct {
+	ID          string `json:"id,omitempty"`
 	Name        string `json:"name,omitempty"`
 	ShortName   string `json:"shortName,omitempty"`
 	Description string `json:"description,omitempty"`
@@ -444,6 +449,7 @@ type Agent struct {
 	Description    string                    `json:"description,omitempty"`
 	Instructions   DynamicInstructions       `json:"instructions,omitempty"`
 	Model          string                    `json:"model,omitempty"`
+	MCPServers     StringList                `json:"mcpServers,omitempty"`
 	Tools          StringList                `json:"tools,omitempty"`
 	Agents         StringList                `json:"agents,omitempty"`
 	Flows          StringList                `json:"flows,omitempty"`
@@ -545,6 +551,12 @@ func (a Agent) validate(agentName string, c Config) error {
 		_, ok := c.MCPServers[a.Instructions.MCPServer]
 		if !ok {
 			errs = append(errs, fmt.Errorf("agent %q has instructions with MCP server %q that is not defined in config", agentName, a.Instructions.MCPServer))
+		}
+	}
+
+	for _, mcpServer := range a.MCPServers {
+		if _, ok := c.MCPServers[mcpServer]; !ok {
+			errs = append(errs, fmt.Errorf("agent %q has MCP server %q that is not defined in config", agentName, mcpServer))
 		}
 	}
 

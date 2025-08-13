@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nanobot-ai/nanobot/pkg/api"
 	"github.com/nanobot-ai/nanobot/pkg/cmd"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/config"
@@ -25,7 +26,6 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/server"
 	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/types"
-	"github.com/nanobot-ai/nanobot/pkg/ui"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
@@ -38,9 +38,7 @@ func New() *cobra.Command {
 		NewCall(n),
 		NewTargets(n),
 		NewSessions(n),
-		NewUI(n),
-		NewRun(n),
-	)
+		NewRun(n))
 	return root
 }
 
@@ -244,7 +242,7 @@ func (n *Nanobot) Run(cmd *cobra.Command, _ []string) error {
 	return cmd.Help()
 }
 
-func (n *Nanobot) runMCP(ctx context.Context, config types.Config, runtime *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, l net.Listener, listenAddress string, healthzPath string, startUI bool) error {
+func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, l net.Listener, listenAddress string, healthzPath string, startUI bool) error {
 	env, err := n.loadEnv()
 	if err != nil {
 		return fmt.Errorf("failed to load environment: %w", err)
@@ -257,7 +255,12 @@ func (n *Nanobot) runMCP(ctx context.Context, config types.Config, runtime *runt
 		return fmt.Errorf("https:// is not supported, use http:// instead")
 	}
 
-	var mcpServer mcp.MessageHandler = server.NewServer(runtime, config)
+	sessionManager, err := session.NewManager(n.DSN())
+	if err != nil {
+		return err
+	}
+
+	var mcpServer mcp.MessageHandler = server.NewServer(runt, config, sessionManager)
 
 	if address == "stdio" {
 		stdio := mcp.NewStdioServer(env, mcpServer)
@@ -267,11 +270,6 @@ func (n *Nanobot) runMCP(ctx context.Context, config types.Config, runtime *runt
 
 		stdio.Wait()
 		return nil
-	}
-
-	sessionManager, err := session.NewManager(mcpServer, n.DSN(), config)
-	if err != nil {
-		return err
 	}
 
 	httpServer := mcp.NewHTTPServer(env, mcpServer, mcp.HTTPServerOptions{
@@ -284,13 +282,8 @@ func (n *Nanobot) runMCP(ctx context.Context, config types.Config, runtime *runt
 		mux.Handle("/oauth/callback", oauthCallbackHandler)
 	}
 	if startUI {
-		uiHandler, err := ui.StartUI(ctx, "http://"+address)
-		if err != nil {
-			return err
-		}
-		mux.Handle("/", uiHandler)
-		mux.Handle("/mcp", httpServer)
-		mux.Handle("/mcp/", httpServer)
+		mux.Handle("/api/", api.Handler(sessionManager))
+		mux.Handle("/", session.UISession(httpServer, sessionManager))
 	} else {
 		mux.Handle("/", httpServer)
 	}

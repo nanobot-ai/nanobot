@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"time"
 )
 
 type ClientCapabilities struct {
@@ -145,6 +146,15 @@ type SamplingMessage struct {
 type Content struct {
 	Type string `json:"type,omitempty"`
 
+	// Name is used for resource_link
+	Name string `json:"name,omitempty"`
+
+	// Description is used for resource_link
+	Description string `json:"description,omitempty"`
+
+	// URI is used for resource_link
+	URI string `json:"uri,omitempty"`
+
 	// Text is set when type is "text"
 	Text string `json:"text,omitempty"`
 
@@ -170,6 +180,8 @@ func (c Content) MarshalJSON() ([]byte, error) {
 			c.Type = "text"
 		} else if c.Data != "" {
 			c.Type = "image"
+		} else if c.URI != "" {
+			c.Type = "resource_link"
 		}
 	}
 	return json.Marshal((*Alias)(&c))
@@ -187,10 +199,17 @@ func (c *Content) ToImageURL() string {
 }
 
 type EmbeddedResource struct {
-	URI      string `json:"uri,omitempty"`
-	MIMEType string `json:"mimeType,omitempty"`
-	Text     string `json:"text,omitempty"`
-	Blob     string `json:"blob,omitempty"`
+	URI         string               `json:"uri,omitempty"`
+	MIMEType    string               `json:"mimeType,omitempty"`
+	Text        string               `json:"text,omitempty"`
+	Blob        string               `json:"blob,omitempty"`
+	Annotations *ResourceAnnotations `json:"annotations,omitempty"`
+}
+
+type ResourceAnnotations struct {
+	Audience     []string    `json:"audience,omitempty"`
+	Priority     json.Number `json:"priority,omitempty"`
+	LastModified time.Time   `json:"lastModified,omitzero"`
 }
 
 type Tool struct {
@@ -231,6 +250,7 @@ type CallToolResult struct {
 type CallToolRequest struct {
 	Name      string         `json:"name"`
 	Arguments map[string]any `json:"arguments,omitempty"`
+	Meta      map[string]any `json:"_meta,omitzero"`
 }
 
 var EmptyObjectSchema = json.RawMessage(`{"type": "object", "properties": {}, "additionalProperties": false, "required": []}`)
@@ -265,9 +285,18 @@ type ReadResourceResult struct {
 	Contents []ResourceContent `json:"contents"`
 }
 
+func (s ReadResourceResult) MarshalJSON() ([]byte, error) {
+	if s.Contents == nil {
+		s.Contents = []ResourceContent{}
+	}
+	type Alias ReadResourceResult
+	return json.Marshal((*Alias)(&s))
+}
+
 type ResourceContent struct {
 	URI      string `json:"uri"`
-	MimeType string `json:"mimeType"`
+	Name     string `json:"name"`
+	MIMEType string `json:"mimeType"`
 	Text     string `json:"text,omitempty"`
 	Blob     string `json:"blob,omitempty"`
 }
@@ -277,6 +306,14 @@ type ListResourceTemplatesRequest struct {
 
 type ListResourceTemplatesResult struct {
 	ResourceTemplates []ResourceTemplate `json:"resourceTemplates"`
+}
+
+type SubscribeRequest struct {
+	URI string `json:"uri"`
+}
+
+type UnsubscribeRequest struct {
+	URI string `json:"uri"`
 }
 
 type ResourceTemplate struct {
@@ -297,6 +334,7 @@ type ListResourcesResult struct {
 type Resource struct {
 	URI         string       `json:"uri"`
 	Name        string       `json:"name"`
+	Title       string       `json:"title,omitempty"`
 	Description string       `json:"description,omitempty"`
 	MimeType    string       `json:"mimeType,omitempty"`
 	Annotations *Annotations `json:"annotations,omitempty"`

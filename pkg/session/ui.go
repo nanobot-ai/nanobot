@@ -1,0 +1,134 @@
+package session
+
+import (
+	"compress/gzip"
+	"errors"
+	"io"
+	"io/fs"
+	"mime"
+	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"path/filepath"
+	"strings"
+
+	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/nanobot-ai/nanobot/pkg/uuid"
+	"github.com/nanobot-ai/nanobot/ui"
+	"gorm.io/gorm"
+)
+
+func getCookieID(req *http.Request) string {
+	cookie, err := req.Cookie("nanobot-session-id")
+	if err == nil {
+		return cookie.Value
+	}
+	return ""
+}
+
+func UISession(next http.Handler, sessionStore *Manager) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		if !strings.Contains(strings.ToLower(req.UserAgent()), "mozilla") || req.Header.Get("Mcp-Session-Id") != "" {
+			next.ServeHTTP(rw, req)
+			return
+		}
+
+		user := types.NanobotContext(req.Context()).User
+		id := getCookieID(req)
+
+		if id != "" {
+			session, err := sessionStore.DB.GetByIDByAccountID(req.Context(), id, user.ID)
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				id = ""
+			} else if err != nil {
+				http.Error(rw, "Failed to load session: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			id = session.SessionID
+		}
+
+		if id == "" {
+			id = uuid.String()
+			err := sessionStore.DB.Create(req.Context(), &Session{
+				Type:      "ui",
+				SessionID: id,
+				AccountID: user.ID,
+			})
+			if err != nil {
+				http.Error(rw, "Failed to create session: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			cookie := http.Cookie{
+				Name:     "nanobot-session-id",
+				Value:    id,
+				Secure:   false,
+				HttpOnly: true,
+			}
+			rw.Header().Add("Set-Cookie", cookie.String())
+		}
+
+		req.Header.Set("Mcp-Session-Id", id)
+
+		if strings.HasPrefix(req.URL.Path, "/mcp") {
+			next.ServeHTTP(rw, req)
+			return
+		}
+
+		uiFS, _ := fs.Sub(ui.FS, "dist")
+		_, err := fs.Stat(uiFS, "fallback.html")
+		if err == nil {
+			if _, err := fs.Stat(uiFS, strings.TrimPrefix(req.URL.Path, "/")); err == nil {
+				if strings.Contains(req.URL.Path, "immutable") {
+					serveGzipAndCached(req, rw, uiFS)
+				} else {
+					http.FileServer(http.FS(uiFS)).ServeHTTP(rw, req)
+				}
+			} else {
+				http.ServeFileFS(rw, req, uiFS, "fallback.html")
+			}
+		} else {
+			url, _ := url.ParseRequestURI("http://localhost:5173")
+			httputil.NewSingleHostReverseProxy(url).ServeHTTP(rw, req)
+		}
+	})
+}
+
+func serveGzipAndCached(req *http.Request, rw http.ResponseWriter, fs fs.FS) {
+	path := req.URL.Path
+	file, err := fs.Open(strings.TrimPrefix(path, "/"))
+	if err != nil {
+		http.Error(rw, "File not found", http.StatusNotFound)
+		return
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		http.Error(rw, "File stat error", http.StatusInternalServerError)
+		return
+	}
+
+	// Set cache headers
+	rw.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	rw.Header().Set("Last-Modified", info.ModTime().UTC().Format(http.TimeFormat))
+
+	ctype := mime.TypeByExtension(filepath.Ext(path))
+	if ctype == "" {
+		ctype = http.DetectContentType(nil)
+	}
+	rw.Header().Set("Content-Type", ctype)
+
+	// Check if client accepts gzip
+	if strings.Contains(req.Header.Get("Accept-Encoding"), "gzip") {
+		rw.Header().Set("Content-Encoding", "gzip")
+		rw.Header().Del("Content-Length")
+		gz := gzip.NewWriter(rw)
+		defer gz.Close()
+		io.Copy(gz, file)
+		return
+	}
+
+	// Serve uncompressed
+	io.Copy(rw, file)
+}

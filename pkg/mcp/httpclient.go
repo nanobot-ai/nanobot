@@ -43,7 +43,7 @@ type HTTPClient struct {
 	needReconnect bool
 }
 
-func newHTTPClient(serverName, baseURL, oauthClientName, oauthRedirectURL string, callbackHandler CallbackHandler, clientCredLookup ClientCredLookup, tokenStorage TokenStorage, headers map[string]string) *HTTPClient {
+func newHTTPClient(serverName, baseURL, oauthClientName, oauthRedirectURL string, callbackHandler CallbackHandler, clientCredLookup ClientCredLookup, tokenStorage TokenStorage, headers map[string]string, watchesEvents bool) *HTTPClient {
 	var sessionID *string
 	if id := headers[SessionIDHeader]; id != "" {
 		sessionID = &id
@@ -56,7 +56,7 @@ func newHTTPClient(serverName, baseURL, oauthClientName, oauthRedirectURL string
 		serverName:    serverName,
 		headers:       maps.Clone(headers),
 		waiter:        newWaiter(),
-		needReconnect: true,
+		needReconnect: watchesEvents,
 		sessionID:     sessionID,
 	}
 
@@ -163,7 +163,7 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 	return req, nil
 }
 
-func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID any) error {
+func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID string) error {
 	s.sseLock.RLock()
 	if !s.needReconnect {
 		s.sseLock.RUnlock()
@@ -187,8 +187,8 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 		return err
 	}
 
-	if lastEventID != nil {
-		req.Header.Set("Last-Event-ID", fmt.Sprintf("%v", lastEventID))
+	if lastEventID != "" {
+		req.Header.Set("Last-Event-ID", lastEventID)
 	}
 
 	s.clientLock.RLock()
@@ -256,7 +256,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 		messages := newSSEStream(resp.Body)
 
 		if s.sse {
-			data, ok := messages.readNextMessage()
+			_, data, ok := messages.readNextMessage("endpoint")
 			if !ok {
 				return fmt.Errorf("failed to read SSE message: %w", messages.err()), true
 			}
@@ -305,7 +305,10 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 		close(gotResponse)
 
 		for {
-			message, ok := messages.readNextMessage()
+			seenID, message, ok := messages.readNextMessage("message")
+			if seenID != "" {
+				lastEventID = seenID
+			}
 			if !ok {
 				if err := messages.err(); err != nil {
 					if errors.Is(err, context.Canceled) {
@@ -344,10 +347,6 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 				continue
 			}
 
-			if msg.ID != nil {
-				lastEventID = msg.ID
-			}
-
 			log.Messages(ctx, s.serverName, false, []byte(message))
 			s.handler(s.ctx, msg)
 		}
@@ -362,6 +361,10 @@ func (s *HTTPClient) Start(ctx context.Context, handler WireHandler) error {
 
 	if httpClient := s.oauthHandler.loadFromStorage(s.ctx, s.baseURL); httpClient != nil {
 		s.httpClient = httpClient
+	}
+
+	if s.sessionID != nil {
+		_ = s.ensureSSE(ctx, nil, "")
 	}
 
 	return nil
@@ -396,7 +399,7 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 		streamError := fmt.Errorf("failed to initialize HTTP Streaming client: %s: %s", resp.Status, streamingErrorMessage)
 
 		s.sse = true
-		if err := s.ensureSSE(ctx, &msg, nil); err != nil {
+		if err := s.ensureSSE(ctx, &msg, ""); err != nil {
 			s.sse = false
 			return errors.Join(streamError, err)
 		}
@@ -414,7 +417,7 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 	s.initializeLock.Unlock()
 
 	go func() {
-		if err = s.ensureSSE(ctx, nil, nil); err != nil {
+		if err = s.ensureSSE(ctx, nil, ""); err != nil {
 			log.Errorf(context.Background(), "failed to initialize SSE: %v", err)
 		}
 	}()
@@ -524,7 +527,7 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 	go func() {
 		defer close(errChan)
 		// Ensure that the SSE connection is still active.
-		if err := s.ensureSSE(ctx, initializeMessage, nil); err != nil {
+		if err := s.ensureSSE(ctx, initializeMessage, ""); err != nil {
 			errChan <- fmt.Errorf("failed to restart SSE: %w", err)
 		}
 	}()
@@ -575,7 +578,8 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("failed to send message: %s", resp.Status)
+		streamingErrorMessage, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to send message: %s: %s", resp.Status, streamingErrorMessage)
 	}
 
 	if s.sse || resp.StatusCode == http.StatusAccepted {
@@ -597,7 +601,7 @@ func (s *HTTPClient) readResponse(resp *http.Response) (bool, error) {
 	if resp.Header.Get("Content-Type") == "text/event-stream" {
 		stream := newSSEStream(resp.Body)
 		for {
-			data, ok := stream.readNextMessage()
+			_, data, ok := stream.readNextMessage("message")
 			if !ok {
 				return seen, nil
 			}
@@ -649,21 +653,46 @@ func (s *SSEStream) err() error {
 	return s.lines.Err()
 }
 
-func (s *SSEStream) readNextMessage() (string, bool) {
-	var eventName string
+func (s *SSEStream) readNextMessage(expectedEventName string) (string, string, bool) {
+	var (
+		eventName string
+		id        string
+		data      string
+	)
 	for s.lines.Scan() {
 		line := s.lines.Text()
 		if len(line) == 0 {
+			if data != "" && (eventName == expectedEventName || (expectedEventName == "message" && eventName == "")) {
+				return id, data[:len(data)-1], true
+			}
 			eventName = ""
+			id = ""
+			data = ""
 			continue
 		}
 
-		if strings.HasPrefix(line, "event:") {
-			eventName = strings.TrimSpace(line[6:])
-		} else if strings.HasPrefix(line, "data:") && (eventName == "message" || eventName == "" || eventName == "endpoint") {
-			return strings.TrimSpace(line[5:]), true
+		k, v, ok := cutSSELine(line)
+		if !ok {
+			continue
+		}
+
+		switch k {
+		case "id":
+			id = v
+		case "data":
+			data += v + "\n"
+		case "event":
+			eventName = v
 		}
 	}
 
-	return "", false
+	return id, "", false
+}
+
+func cutSSELine(line string) (string, string, bool) {
+	key, value, ok := strings.Cut(line, ":")
+	if !ok {
+		return "", "", false
+	}
+	return key, strings.TrimPrefix(value, " "), true
 }

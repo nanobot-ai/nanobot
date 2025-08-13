@@ -596,6 +596,15 @@ definitions:
       defined by being backed by an LLM and that has tools to interact with.
     additionalProperties: false
     properties:
+      name:
+        type: string
+        description: |
+          The name of the agent that will be displayed to the user.
+      shortName:
+        type: string
+        description: |
+          A short name for the agent that will be used in the UI. If not set, the
+          name will be used.
       description:
         type: string
         description: |
@@ -631,6 +640,10 @@ definitions:
           A list of other agents that this agent can use as tools. This allows
           agents to delegate tasks to other agents.
         $ref: "#/definitions/StringOrStringList"
+      mcpServers:
+        description: |
+          A list of MCP Servers that this agent can use for tools, but also the prompts and resources of the these servers.
+          will be published for the agent.
       chat:
         type: boolean
         description: |

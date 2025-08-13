@@ -5,11 +5,12 @@ import (
 	"fmt"
 
 	"github.com/nanobot-ai/nanobot/pkg/gormdsn"
+	"github.com/nanobot-ai/nanobot/pkg/uuid"
 	"gorm.io/gorm"
 )
 
 const (
-	StoreSessionKey = "sessionStore"
+	ManagerSessionKey = "sessionManager"
 )
 
 type Store struct {
@@ -34,6 +35,19 @@ func NewStoreFromDSN(dsn string) (*Store, error) {
 }
 
 func (s *Store) Create(ctx context.Context, session *Session) error {
+	if session.SessionID == "" {
+		session.SessionID = session.State.ID
+	}
+	if session.SessionID == "" {
+		session.SessionID = uuid.String()
+		session.State.ID = session.SessionID
+	}
+	if session.State.ID == "" {
+		session.State.ID = session.SessionID
+	}
+	if session.Type == "" {
+		session.Type = "thread"
+	}
 	return s.db.WithContext(ctx).Create(session).Error
 }
 
@@ -67,20 +81,16 @@ func (s *Store) Get(ctx context.Context, id string) (*Session, error) {
 	return &session, err
 }
 
-func (s *Store) FindByAccount(ctx context.Context, accountID string) ([]Session, error) {
-	var sessions []Session
-	err := s.db.WithContext(ctx).Where("account_id = ? and description != ?", accountID, "").
-		Select("id", "created_at", "session_id", "account_id", "description", "is_public").
-		Order("created_at desc").Find(&sessions).Error
-	if err != nil {
-		return nil, err
-	}
-	return sessions, nil
+func (s *Store) GetByIDByAccountID(ctx context.Context, id, accountID string) (*Session, error) {
+	var session Session
+	err := s.db.WithContext(ctx).Where("session_id = ? and account_id = ?", id, accountID).First(&session).Error
+	return &session, err
 }
 
-func (s *Store) FindByTypeAndParentID(ctx context.Context, sessionType, parentID string) ([]Session, error) {
+func (s *Store) FindByAccount(ctx context.Context, sessionType, accountID string) ([]Session, error) {
 	var sessions []Session
-	err := s.db.WithContext(ctx).Where("type = ? AND parent_id = ?", sessionType, parentID).Find(&sessions).Error
+	err := s.db.WithContext(ctx).Where("type = ? and account_id = ?", sessionType, accountID).
+		Order("created_at desc").Find(&sessions).Error
 	if err != nil {
 		return nil, err
 	}

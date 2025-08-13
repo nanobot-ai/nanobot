@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
+	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -64,23 +65,6 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 
 	return toResponse(resp, ts)
 
-}
-
-func send(ctx context.Context, progress *types.CompletionProgress, progressToken any) {
-	if progressToken == "" || progressToken == nil {
-		return
-	}
-	session := mcp.SessionFromContext(ctx)
-	if session == nil {
-		return
-	}
-
-	_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
-		ProgressToken: progressToken,
-		Meta: map[string]any{
-			types.CompletionProgressMetaKey: progress,
-		},
-	})
 }
 
 func (c *Client) complete(ctx context.Context, agentName string, req Request, opts ...types.CompletionOptions) (*Response, error) {
@@ -142,7 +126,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 			case "text_delta":
 				if contentIndex >= 0 {
 					*resp.Content[contentIndex].Text += delta.Delta.Text
-					send(ctx, &types.CompletionProgress{
+					progress.Send(ctx, &types.CompletionProgress{
 						Model:     resp.Model,
 						Agent:     agentName,
 						MessageID: resp.ID,
@@ -160,7 +144,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 			case "input_json_delta":
 				partialJSON += delta.Delta.PartialJSON
 				if contentIndex >= 0 && partialJSON != "" {
-					send(ctx, &types.CompletionProgress{
+					progress.Send(ctx, &types.CompletionProgress{
 						Model:     resp.Model,
 						Agent:     agentName,
 						MessageID: resp.ID,
@@ -186,7 +170,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 				resp.Content[contentIndex].Input = args
 			}
 			if contentIndex >= 0 {
-				send(ctx, &types.CompletionProgress{
+				progress.Send(ctx, &types.CompletionProgress{
 					Model:     resp.Model,
 					Agent:     agentName,
 					MessageID: resp.ID,

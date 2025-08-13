@@ -23,6 +23,7 @@ type Run struct {
 	AutoConfirm   bool     `usage:"Automatically confirm all tool calls" default:"false" short:"y"`
 	Output        string   `usage:"Output file for the result. Use - for stdout" default:"" short:"o"`
 	ListenAddress string   `usage:"Address to listen on (ex: localhost:8099) (implies -m)" default:"stdio" short:"a"`
+	DisableUI     bool     `usage:"Disable the UI"`
 	Port          string   `usage:"Port to listen on for stdio" default:"8099" hidden:"true"`
 	HealthzPath   string   `usage:"Path to serve healthz on"`
 	Roots         []string `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
@@ -106,7 +107,7 @@ func (r *Run) reload(ctx context.Context, client *mcp.Client, cfgPath string, ru
 func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 	var (
 		runtimeOpt runtime.Options
-		config     *types.Config
+		config     types.Config
 	)
 
 	if r.ListenAddress != "stdio" {
@@ -123,7 +124,19 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		cfgPath = args[0]
 	}
 
-	config, err = r.n.ReadConfig(cmd.Context(), cfgPath, runtimeOpt)
+	cfgFactory := types.ConfigFactory(func(ctx context.Context, profiles string) (types.Config, error) {
+		optCopy := runtimeOpt
+		if profiles != "" {
+			optCopy.Profiles = append(optCopy.Profiles, strings.Split(profiles, ",")...)
+		}
+		cfg, err := r.n.ReadConfig(cmd.Context(), cfgPath, optCopy)
+		if err != nil {
+			return types.Config{}, err
+		}
+		return *cfg, nil
+	})
+
+	config, err = cfgFactory(cmd.Context(), "")
 	if err != nil {
 		return fmt.Errorf("failed to read config file %q: %w", args[0], err)
 	}
@@ -143,7 +156,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 			return err
 		}
 
-		return r.n.runMCP(cmd.Context(), *config, runtime, oauthCallbackHandler, nil, r.ListenAddress, r.HealthzPath, false)
+		return r.n.runMCP(cmd.Context(), cfgFactory, runtime, oauthCallbackHandler, nil, r.ListenAddress, r.HealthzPath, !r.DisableUI)
 	}
 	if r.Port == "" {
 		r.Port = "0"
@@ -210,7 +223,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		clientOpt.SessionState = (*mcp.SessionState)(&sessions[0].State)
 		clientOpt.SessionState.ID = sessions[0].SessionID
 		if len(sessions[0].Config.Agents) > 0 && len(args) == 0 {
-			config = (*types.Config)(&sessions[0].Config)
+			config = types.Config(sessions[0].Config)
 		}
 		if clientOpt.SessionState.Attributes == nil {
 			clientOpt.SessionState.Attributes = make(map[string]any)
@@ -220,7 +233,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 	eg, ctx := errgroup.WithContext(cmd.Context())
 	ctx, cancel := context.WithCancel(ctx)
 	eg.Go(func() error {
-		return r.n.runMCP(ctx, *config, runtime, oauthCallbackHandler, l, r.ListenAddress, r.HealthzPath, false)
+		return r.n.runMCP(ctx, cfgFactory, runtime, oauthCallbackHandler, l, r.ListenAddress, r.HealthzPath, false)
 	})
 	eg.Go(func() error {
 		defer cancel()

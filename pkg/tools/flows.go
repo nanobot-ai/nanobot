@@ -92,7 +92,7 @@ func (s *Service) startFlow(ctx context.Context, config types.Config, flowName s
 		opt: mcp.CallOption{
 			ProgressToken: opt.ProgressToken,
 		},
-		env:  mcp.SessionFromContext(ctx).EnvMap(),
+		env:  mcp.SessionFromContext(ctx).GetEnvMap(),
 		data: data,
 	}
 

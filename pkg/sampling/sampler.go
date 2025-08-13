@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -150,9 +151,11 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 			if id == "" {
 				id = uuid.String()
 			}
+			now := time.Now()
 			request.Input = append(request.Input, types.Message{
-				ID:   id,
-				Role: role,
+				ID:      id,
+				Created: &now,
+				Role:    role,
 			})
 			currentRole = role
 		}
@@ -175,6 +178,10 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 		return nil, err
 	}
 
+	if _, ok := config.Agents[request.Model]; ok {
+		resp.Agent = request.Model
+	}
+
 	result = &types.CallResult{
 		Model:        resp.Model,
 		ChatResponse: resp.ChatResponse,
@@ -182,6 +189,15 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 
 	if _, ok := config.Agents[request.Model]; ok {
 		result.Agent = request.Model
+	}
+
+	return CompletionResponseToCallResult(resp)
+}
+
+func CompletionResponseToCallResult(resp *types.CompletionResponse) (*types.CallResult, error) {
+	result := &types.CallResult{
+		Model:        resp.Model,
+		ChatResponse: resp.ChatResponse,
 	}
 
 	for _, output := range resp.Output.Items {
@@ -192,6 +208,14 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 			continue
 		}
 		result.Content = append(result.Content, *output.Content)
+	}
+
+	if resp.Error != "" {
+		result.IsError = true
+		result.Content = append(result.Content, mcp.Content{
+			Type: "text",
+			Text: resp.Error,
+		})
 	}
 
 	if len(result.Content) == 0 {
@@ -210,8 +234,8 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 		result.Content = append(result.Content, mcp.Content{
 			Type: "resource",
 			Resource: &mcp.EmbeddedResource{
-				URI:      "nanobot://message/" + msg.ID,
-				MIMEType: "application/vnd.nanobot.message",
+				URI:      fmt.Sprintf(types.MessageURI, msg.ID),
+				MIMEType: types.MessageMimeType,
 				Text:     string(textData),
 			},
 		})

@@ -1,0 +1,94 @@
+<script lang="ts">
+	import type { ChatMessageItemResource } from '$lib/types';
+	import React from 'react';
+	import ReactDOM from 'react-dom/client';
+	import {
+		UIResourceRenderer,
+		basicComponentLibrary,
+		remoteButtonDefinition,
+		remoteTextDefinition,
+		remoteCardDefinition,
+		remoteImageDefinition,
+		remoteStackDefinition,
+		type UIActionResult
+	} from '@mcp-ui/client';
+	import { onMount } from 'svelte';
+
+	interface Props {
+		item: ChatMessageItemResource;
+		onSend?: (message: string) => void;
+	}
+
+	let { item, onSend }: Props = $props();
+	let container: HTMLDivElement;
+	const iFrameRef = $state<{
+		current: HTMLIFrameElement | null;
+	}>({
+		current: null
+	});
+
+	$effect(() => {
+		if (iFrameRef.current) {
+			iFrameRef.current.classList.add('mx-auto');
+			console.log('Iframe ref:', iFrameRef.current);
+		}
+	});
+
+	async function onUIAction(e: UIActionResult) {
+		switch (e.type) {
+			case 'intent':
+				if (
+					e.payload.intent === 'link' &&
+					e.payload.params?.url &&
+					typeof e.payload.params.url === 'string'
+				) {
+					window.open(e.payload.params.url, '_blank');
+				} else {
+					console.log('UI Action:', e);
+					onSend?.(JSON.stringify(e));
+				}
+				break;
+			case 'tool':
+			case 'prompt':
+			case 'notify':
+				console.log('UI Action:', e);
+				onSend?.(JSON.stringify(e));
+				break;
+			case 'link':
+				window.open(e.payload.url, '_blank');
+				break;
+		}
+	}
+
+	onMount(() => {
+		const root = ReactDOM.createRoot(container);
+		root.render(
+			React.createElement(UIResourceRenderer, {
+				onUIAction,
+				resource: item.resource,
+				remoteDomProps: {
+					library: basicComponentLibrary,
+					remoteElements: [
+						remoteButtonDefinition,
+						remoteTextDefinition,
+						remoteCardDefinition,
+						remoteImageDefinition,
+						remoteStackDefinition
+					]
+				},
+				htmlProps: {
+					autoResizeIframe: true,
+					style: {
+						width: 'fit',
+						height: '400px'
+					},
+					iframeProps: {
+						ref: iFrameRef
+					}
+				}
+			})
+		);
+	});
+</script>
+
+<div bind:this={container} class="contents"></div>

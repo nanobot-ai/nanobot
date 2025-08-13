@@ -25,7 +25,7 @@ type Service struct {
 	callbackHandler  mcp.CallbackHandler
 	oauthRedirectURL string
 	concurrency      int
-	serverFactories  map[string]func() mcp.MessageHandler
+	serverFactories  map[string]func(name string) mcp.MessageHandler
 }
 
 type Sampler interface {
@@ -64,9 +64,9 @@ func NewToolsService(opts ...RegistryOptions) *Service {
 	}
 }
 
-func (s *Service) AddServer(name string, factory func() mcp.MessageHandler) {
+func (s *Service) AddServer(name string, factory func(name string) mcp.MessageHandler) {
 	if s.serverFactories == nil {
-		s.serverFactories = make(map[string]func() mcp.MessageHandler)
+		s.serverFactories = make(map[string]func(string) mcp.MessageHandler)
 	}
 	s.serverFactories[name] = factory
 }
@@ -83,10 +83,10 @@ func (s *Service) GetDynamicInstruction(ctx context.Context, instruction types.D
 	session := mcp.SessionFromContext(ctx)
 
 	if !instruction.IsPrompt() {
-		return expr.EvalString(ctx, session.EnvMap(), s.newGlobals(ctx, nil), instruction.Instructions)
+		return expr.EvalString(ctx, session.GetEnvMap(), s.newGlobals(ctx, nil), instruction.Instructions)
 	}
 
-	prompt, err := s.GetPrompt(ctx, instruction.MCPServer, instruction.Prompt, envvar.ReplaceMap(session.EnvMap(), instruction.Args))
+	prompt, err := s.GetPrompt(ctx, instruction.MCPServer, instruction.Prompt, envvar.ReplaceMap(session.GetEnvMap(), instruction.Args))
 	if err != nil {
 		return "", fmt.Errorf("failed to get prompt: %w", err)
 	}
@@ -109,7 +109,7 @@ func (s *Service) GetPrompt(ctx context.Context, target, prompt string, args map
 		for k, v := range args {
 			vals[k] = v
 		}
-		rendered, err := expr.EvalString(ctx, mcp.SessionFromContext(ctx).EnvMap(), s.newGlobals(ctx, vals), inline.Template)
+		rendered, err := expr.EvalString(ctx, mcp.SessionFromContext(ctx).GetEnvMap(), s.newGlobals(ctx, vals), inline.Template)
 		if err != nil {
 			return nil, fmt.Errorf("failed to render inline prompt %s: %w", prompt, err)
 		}
@@ -193,7 +193,7 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 	}
 
 	if err := factory.init(); err != nil {
-		return nil, fmt.Errorf("failed to initialize client factory: %w", err)
+		return nil, fmt.Errorf("failed to initialize client %q: %w", name, err)
 	}
 
 	session.Set(sessionKey, &factory)
@@ -222,15 +222,32 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 
 	config := types.ConfigFromContext(ctx)
 
-	var wire mcp.Wire
+	var (
+		wire          mcp.Wire
+		mcpConfig     mcp.Server
+		ok            bool
+		serverFactory func(string) mcp.MessageHandler
+	)
 
-	mcpConfig, ok := config.MCPServers[name]
+	serverFactory, ok = s.serverFactories[name]
+
+	if !ok {
+		mcpConfig, ok = config.MCPServers[name]
+	}
+
+	if !ok {
+		_, ok = config.Agents[name]
+		if ok {
+			serverFactory, ok = s.serverFactories["nanobot.agent"]
+		}
+	}
+
 	if !ok {
 		return nil, fmt.Errorf("MCP server %s not found in config", name)
 	}
 
-	if f, ok := s.serverFactories[name]; ok {
-		serverSession, err := mcp.NewExistingServerSession(session.Context(), mcp.SessionState{}, f())
+	if serverFactory != nil {
+		serverSession, err := mcp.NewExistingServerSession(session.Context(), mcp.SessionState{}, serverFactory(name))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create meta server session: %w", err)
 		}
@@ -255,7 +272,7 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 
 	clientOpts := mcp.ClientOption{
 		Roots:         roots,
-		Env:           session.EnvMap(),
+		Env:           session.GetEnvMap(),
 		ParentSession: session,
 		OnRoots: func(ctx context.Context, msg mcp.Message) error {
 			roots, err := roots(ctx)
@@ -363,6 +380,7 @@ type CallOptions struct {
 	ReturnOutput       bool
 	Target             any
 	ToolCallInvocation *ToolCallInvocation
+	Meta               map[string]any
 }
 
 type ToolCallInvocation struct {
@@ -379,6 +397,7 @@ func (o CallOptions) Merge(other CallOptions) (result CallOptions) {
 	result.ReturnOutput = o.ReturnOutput || other.ReturnOutput
 	result.Target = complete.Last(o.Target, other.Target)
 	result.ToolCallInvocation = complete.Last(o.ToolCallInvocation, other.ToolCallInvocation)
+	result.Meta = complete.MergeMap(o.Meta, other.Meta)
 	return
 }
 
@@ -614,6 +633,7 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 
 	mcpCallResult, err := c.Call(ctx, tool, args, mcp.CallOption{
 		ProgressToken: opt.ProgressToken,
+		Meta:          opt.Meta,
 	})
 	if err != nil {
 		return nil, err

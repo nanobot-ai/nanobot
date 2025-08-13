@@ -20,7 +20,9 @@ type Client struct {
 }
 
 func (c *Client) Close(deleteSession bool) {
-	c.Session.Close(deleteSession)
+	if c.Session != nil {
+		c.Session.Close(deleteSession)
+	}
 }
 
 type SessionState struct {
@@ -50,6 +52,7 @@ type ClientOption struct {
 	ClientCredLookup ClientCredLookup
 	TokenStorage     TokenStorage
 	Wire             Wire
+	ignoreEvents     bool
 }
 
 func (c ClientOption) Complete() ClientOption {
@@ -71,6 +74,8 @@ func (c ClientOption) Complete() ClientOption {
 	} else {
 		c.ClientName += fmt.Sprintf(" (via nanobot %s)", version.Get().String())
 	}
+	c.ignoreEvents = c.OnMessage == nil && c.OnNotify == nil && c.OnLogging == nil &&
+		c.OnRoots == nil && c.OnSampling == nil && c.OnElicit == nil
 	return c
 }
 
@@ -211,9 +216,12 @@ func toHandler(opts ClientOption) MessageHandler {
 					}
 					return
 				}
-				err = msg.Reply(ctx, resp)
-				if err != nil {
-					log.Errorf(ctx, "failed to reply to elicitation/create: %v", err)
+				// Give the client caller a way to handle the elicitation out of bounds
+				if resp.Action != "ignore" {
+					err = msg.Reply(ctx, resp)
+					if err != nil {
+						log.Errorf(ctx, "failed to reply to elicitation/create: %v", err)
+					}
 				}
 			}()
 		} else if msg.Method == "roots/list" && opts.OnRoots != nil {
@@ -302,7 +310,7 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 			}
 			headers["Mcp-Session-Id"] = opt.SessionState.ID
 		}
-		wire = newHTTPClient(serverName, config.BaseURL, opt.OAuthClientName, opt.OAuthRedirectURL, opt.CallbackHandler, opt.ClientCredLookup, opt.TokenStorage, headers)
+		wire = newHTTPClient(serverName, config.BaseURL, opt.OAuthClientName, opt.OAuthRedirectURL, opt.CallbackHandler, opt.ClientCredLookup, opt.TokenStorage, headers, !opt.ignoreEvents)
 	} else {
 		wire, err = newStdioClient(ctx, opt.Roots, opt.Env, serverName, config, opt.Runner)
 		if err != nil {
@@ -435,10 +443,12 @@ func (c *Client) Ping(ctx context.Context) (*PingResult, error) {
 
 type CallOption struct {
 	ProgressToken any
+	Meta          map[string]any
 }
 
 func (c CallOption) Merge(other CallOption) (result CallOption) {
 	result.ProgressToken = complete.Last(c.ProgressToken, other.ProgressToken)
+	result.Meta = complete.MergeMap(c.Meta, other.Meta)
 	return
 }
 
@@ -447,11 +457,13 @@ func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOp
 	result = new(CallToolResult)
 
 	err = c.Session.Exchange(ctx, "tools/call", struct {
-		Name      string `json:"name"`
-		Arguments any    `json:"arguments,omitempty"`
+		Name      string         `json:"name"`
+		Arguments any            `json:"arguments,omitempty"`
+		Meta      map[string]any `json:"_meta,omitempty"`
 	}{
 		Name:      tool,
 		Arguments: args,
+		Meta:      opt.Meta,
 	}, result, ExchangeOption{
 		ProgressToken: opt.ProgressToken,
 	})

@@ -2,12 +2,14 @@ package types
 
 import (
 	"encoding/json"
+	"time"
+
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 )
 
 const (
 	AgentTool            = "chat"
 	AgentToolDescription = "Chat with the current agent"
-	DefaultAgentName     = "main"
 )
 
 var ChatInputSchema = []byte(`{
@@ -65,4 +67,54 @@ func (a *Attachment) UnmarshalJSON(data []byte) error {
 	}
 	type Alias Attachment
 	return json.Unmarshal(data, (*Alias)(a))
+}
+
+type ChatData struct {
+	ID           string            `json:"id"`
+	Ext          ChatDataExtension `json:"ai.nanobot/ext,omitzero"`
+	CurrentAgent string            `json:"currentAgent,omitempty"`
+	Messages     []Message         `json:"messages"`
+}
+
+func (c ChatData) MarshalJSON() ([]byte, error) {
+	if c.Messages == nil {
+		c.Messages = []Message{}
+	}
+	// We want to omit the empty fields in the extension
+	type Alias ChatData
+	return json.Marshal(Alias(c))
+}
+
+type ChatDataExtension struct {
+	Tools   ToolMappings   `json:"tools,omitempty"`
+	Prompts PromptMappings `json:"prompts,omitempty"`
+	Agents  Agents         `json:"agents,omitempty"`
+}
+
+type ChatList struct {
+	Chats []Chat `json:"chats"`
+}
+
+type Chat struct {
+	ID         string    `json:"id"`
+	Title      string    `json:"title"`
+	Created    time.Time `json:"created"`
+	ReadOnly   bool      `json:"readonly,omitempty"`
+	Visibility string    `json:"visibility,omitempty"`
+}
+
+type ProjectConfig struct {
+	Name         string         `json:"name"`
+	Description  string         `json:"description"`
+	Instructions string         `json:"instructions"`
+	DefaultAgent string         `json:"defaultAgent"`
+	Agents       []AgentDisplay `json:"agents"`
+}
+
+func (p *ProjectConfig) Deserialize(v any) (any, error) {
+	return &p, mcp.JSONCoerce(v, &p)
+}
+
+func (p *ProjectConfig) Serialize() (any, error) {
+	return p, nil
 }

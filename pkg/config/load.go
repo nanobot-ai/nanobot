@@ -99,6 +99,12 @@ func loadResource(ctx context.Context, configResource *resource, profiles ...str
 		return nil, "", fmt.Errorf("error rewriting source references: %w", err)
 	}
 
+	if len(last.Agents) == 1 && len(last.Publish.Entrypoint) == 0 {
+		for agentName := range last.Agents {
+			last.Publish.Entrypoint = append(last.Publish.Entrypoint, agentName)
+		}
+	}
+
 	return &last, targetCwd, last.Validate(configResource.resourceType == "path")
 }
 

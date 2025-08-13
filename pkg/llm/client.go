@@ -4,7 +4,9 @@ import (
 	"context"
 	"strings"
 
+	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/llm/anthropic"
+	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
 	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -98,6 +100,21 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 	req, resp := c.handleAssistantRolesFromTools(req)
 	if resp != nil {
 		return resp, nil
+	}
+
+	opt := complete.Complete(opts...)
+	if opt.ProgressToken != nil && len(req.Input) > 0 {
+		lastMsg := req.Input[len(req.Input)-1]
+		if lastMsg.ID != "" && lastMsg.Role == "user" {
+			for _, item := range lastMsg.Items {
+				progress.Send(ctx, &types.CompletionProgress{
+					Model:     req.Model,
+					MessageID: lastMsg.ID,
+					Role:      lastMsg.Role,
+					Item:      item,
+				}, opt.ProgressToken)
+			}
+		}
 	}
 
 	if strings.HasPrefix(req.Model, "claude") {

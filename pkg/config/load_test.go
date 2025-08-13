@@ -86,6 +86,7 @@ func TestSchema(t *testing.T) {
     },
 	"agents": {
 		"agent1": {
+			"mcpServers": "otherServer",
 			"description": "This is the first agent.",
 			"model": "a model",
 			"tools": "atool",

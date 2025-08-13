@@ -4,18 +4,27 @@ import (
 	"context"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 )
 
 type Server struct {
 	tools mcp.ServerTools
+	data  *sessiondata.Data
 }
 
-func NewServer() *Server {
-	s := &Server{}
+func NewServer(data *sessiondata.Data) *Server {
+	s := &Server{
+		data: data,
+	}
 
 	s.tools = mcp.NewServerTools(
-		mcp.NewServerTool("list_chats", "Returns all previous chats", s.listChats),
+		mcp.NewServerTool("get_config", "Get current project configuration", s.getConfig),
+		mcp.NewServerTool("update_config", "Update project configuration", s.updateConfig),
+		mcp.NewServerTool("list_chats", "Returns all previous chat threads", s.listChats),
+		mcp.NewServerTool("update_chat", "Update fields of a give chat thread", s.updateChat),
+		mcp.NewServerTool("create_chat", "Create a new chat thread", s.createChat),
+		mcp.NewServerTool("delete_chat", "Delete an existing chat thread", s.deleteChat),
 		mcp.NewServerTool("set_visibility", "Make the current thread public or private", s.setVisibility),
 		mcp.NewServerTool("clone", "Clone the current session and return a new session ID", s.clone),
 	)

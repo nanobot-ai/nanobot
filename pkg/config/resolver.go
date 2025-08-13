@@ -47,12 +47,6 @@ func httpGet(ctx context.Context, url string) ([]byte, error) {
 }
 
 func (r *resource) Load(ctx context.Context) (result types.Config, _ error) {
-	defer func() {
-		if len(result.Extends) == 0 && result.ShouldPublishAgent() {
-			result.Extends = []string{"nanobot.agent"}
-		}
-	}()
-
 	if r.static != nil {
 		return *r.static, nil
 	}
@@ -193,60 +187,8 @@ func (r *resource) fileToRead() (string, error) {
 }
 
 func (r *resource) Rel(path string) (*resource, error) {
-	if path == "nanobot.agent" {
-		return &resource{
-			resourceType: "static",
-			static: &types.Config{
-				Publish: types.Publish{
-					MCPServers: []string{"nanobot.agent"},
-				},
-				MCPServers: map[string]mcp.Server{
-					"nanobot.agent": {},
-				},
-				Profiles: map[string]types.Config{
-					"nanobot.ui": {
-						Agents: map[string]types.Agent{
-							"nanobot.summary.agent": {
-								Chat: new(bool),
-								Instructions: types.DynamicInstructions{
-									Instructions: `- you will generate a short title based on the first message a user begins a conversation with
-- ensure it is not more than 80 characters long
-- the title should be a summary of the user's message
-- do not use quotes or colons`,
-								},
-							},
-						},
-						Flows: map[string]types.Flow{
-							"nanobot.summary": {
-								Input: types.InputSchema{
-									Fields: map[string]types.Field{
-										"prompt": {
-											Description: "The input prompt to summarize",
-										},
-									},
-								},
-								Steps: []types.Step{
-									{
-										Agent: types.AgentCall{
-											Name: "nanobot.summary.agent",
-										},
-										Input: "${input.prompt}",
-									},
-								},
-							},
-						},
-						Publish: types.Publish{
-							MCPServers: []string{"nanobot.agentbuilder", "nanobot.meta", "nanobot.resources"},
-						},
-						MCPServers: map[string]mcp.Server{
-							"nanobot.agentbuilder": {},
-							"nanobot.meta":         {},
-							"nanobot.resources":    {},
-						},
-					},
-				},
-			},
-		}, nil
+	if staticCfg := statics(path); staticCfg != nil {
+		return staticCfg, nil
 	}
 
 	switch r.resourceType {
@@ -287,17 +229,24 @@ func gitRead(ctx context.Context, parts []string, ref string) ([]byte, error) {
 	return httpGet(ctx, url)
 }
 
-func resolve(name string) (*resource, error) {
-	if name == "nanobot.agent" {
+func statics(name string) *resource {
+	switch name {
+	case "nanobot.ui":
 		return &resource{
 			resourceType: "static",
-			static:       &AgentBaseConfig,
-		}, nil
-	} else if name == "nanobot.default" {
+			static:       &UI,
+		}
+	case "nanobot.default":
 		return &resource{
 			resourceType: "static",
 			static:       &DefaultConfig,
-		}, nil
+		}
+	}
+	return nil
+}
+func resolve(name string) (*resource, error) {
+	if staticCfg := statics(name); staticCfg != nil {
+		return staticCfg, nil
 	}
 
 	if strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://") {

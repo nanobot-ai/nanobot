@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"slices"
 	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -24,6 +25,8 @@ type MessageHandlerFunc func(ctx context.Context, msg Message)
 func (f MessageHandlerFunc) OnMessage(ctx context.Context, msg Message) {
 	f(ctx, msg)
 }
+
+type MessageFilter func(ctx context.Context, msg *Message) (*Message, error)
 
 type Wire interface {
 	Close(deleteSession bool)
@@ -67,12 +70,43 @@ type Session struct {
 	Parent            *Session
 	attributes        map[string]any
 	lock              sync.Mutex
+	filters           []filterRegistration
+	filterID          int
+	sessionManager    SessionStore
+}
+
+type filterRegistration struct {
+	filter MessageFilter
+	id     int
 }
 
 const SessionEnvMapKey = "env"
 
 func (s *Session) Context() context.Context {
 	return s.ctx
+}
+
+func (s *Session) Go(ctx context.Context, f func(ctx context.Context)) {
+	parentSession := s
+	for parentSession.Parent != nil {
+		parentSession = parentSession.Parent
+	}
+
+	sm := parentSession.sessionManager
+	id := parentSession.ID()
+
+	if sm != nil && id != "" {
+		tempSession, ok, sessionErr := sm.Acquire(s.ctx, nil, id)
+		if sessionErr == nil && ok {
+			go func() {
+				defer sm.Release(tempSession)
+				f(WithSession(context.Background(), s))
+			}()
+			return
+		}
+	}
+
+	f(ctx)
 }
 
 func (s *Session) ID() string {
@@ -87,9 +121,12 @@ func (s *Session) State() (*SessionState, error) {
 		return nil, nil
 	}
 
+	keys, _ := s.attributes[".keys"].([]string)
 	attr := make(map[string]any, len(s.attributes))
 	for k, v := range s.attributes {
-		if serializable, ok := v.(Serializable); ok {
+		if k == ".keys" {
+			continue
+		} else if serializable, ok := v.(Serializable); ok {
 			data, err := serializable.Serialize()
 			if err != nil {
 				return nil, fmt.Errorf("failed to serialize attribute %s: %w", k, err)
@@ -97,6 +134,8 @@ func (s *Session) State() (*SessionState, error) {
 			if data != nil {
 				attr[k] = data
 			}
+		} else if slices.Contains(keys, k) {
+			attr[k] = v
 		}
 	}
 
@@ -108,34 +147,73 @@ func (s *Session) State() (*SessionState, error) {
 	}, nil
 }
 
-func (s *Session) EnvMap() map[string]string {
+func (s *Session) AddEnv(kvs map[string]string) {
 	if s == nil {
-		return map[string]string{}
+		return
 	}
 
 	s.lock.Lock()
 	defer s.lock.Unlock()
-
 	if s.attributes == nil {
 		s.attributes = make(map[string]any)
 	}
-
 	env, ok := s.attributes[SessionEnvMapKey].(map[string]string)
 	if !ok {
 		env = make(map[string]string)
 		s.attributes[SessionEnvMapKey] = env
 	}
+	for k, v := range kvs {
+		env[k] = v
+	}
+}
+
+func (s *Session) GetEnvMap() map[string]string {
+	if s == nil {
+		return map[string]string{}
+	}
+
+	result := make(map[string]string)
+	s.lock.Lock()
+	env, _ := s.attributes[SessionEnvMapKey].(map[string]string)
+	maps.Copy(result, env)
+	s.lock.Unlock()
 
 	if s.Parent != nil {
-		parentEnv := s.Parent.EnvMap()
+		parentEnv := s.Parent.GetEnvMap()
 		for k, v := range parentEnv {
 			if _, exists := env[k]; !exists {
-				env[k] = v
+				result[k] = v
 			}
 		}
 	}
 
-	return env
+	return result
+}
+
+func (s *Session) AddFilter(filter MessageFilter) (remove func()) {
+	if s == nil {
+		return func() {}
+	}
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	id := s.filterID
+	s.filterID++
+	s.filters = append(s.filters, filterRegistration{
+		filter: filter,
+		id:     id,
+	})
+
+	return func() {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+		for i, f := range s.filters {
+			if f.id == id {
+				s.filters = append(s.filters[:i], s.filters[i+1:]...)
+				return
+			}
+		}
+	}
 }
 
 func (s *Session) Delete(key string) {
@@ -322,6 +400,18 @@ func (s *Session) SendPayload(ctx context.Context, method string, payload any) e
 func (s *Session) Send(ctx context.Context, req Message) error {
 	if s.wire == nil {
 		return fmt.Errorf("empty session: wire is not initialized")
+	}
+
+	s.lock.Lock()
+	f := slices.Clone(s.filters)
+	s.lock.Unlock()
+
+	for _, filter := range f {
+		newReq, err := filter.filter(ctx, &req)
+		if err != nil || newReq == nil {
+			return err
+		}
+		req = *newReq
 	}
 
 	req.JSONRPC = "2.0"

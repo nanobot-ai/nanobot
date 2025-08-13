@@ -2,52 +2,49 @@ package session
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
+	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/servers/agentbuilder"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"gorm.io/gorm"
 )
 
-func NewManager(server mcp.MessageHandler, dsn string, config types.Config) (*Manager, error) {
+func NewManager(dsn string) (*Manager, error) {
 	store, err := NewStoreFromDSN(dsn)
 	if err != nil {
 		return nil, err
 	}
 
-	agentsStore, err := agentbuilder.NewStoreFromDSN(dsn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create agents store: %w", err)
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Manager{
-		ctx:         ctx,
-		close:       cancel,
-		server:      server,
-		store:       store,
-		agentsStore: agentsStore,
-		config:      config,
-		root:        &Session{},
-		inMemory:    mcp.NewInMemorySessionStore(),
+		ctx:          ctx,
+		close:        cancel,
+		DB:           store,
+		root:         &Session{},
+		liveSessions: make(map[string]liveSession),
 	}, nil
 }
 
 type Manager struct {
-	ctx         context.Context
-	close       context.CancelFunc
-	server      mcp.MessageHandler
-	store       *Store
-	agentsStore *agentbuilder.Store
-	root        *Session
-	config      types.Config
-	inMemory    mcp.SessionStore
+	ctx   context.Context
+	close context.CancelFunc
+	DB    *Store
+	root  *Session
+
+	liveSessionsLock sync.Mutex
+	liveSessions     map[string]liveSession
+}
+
+type liveSession struct {
+	session *mcp.ServerSession
+	count   int
 }
 
 func (m *Manager) newRecord(parent *Session, id string) *Session {
@@ -56,125 +53,35 @@ func (m *Manager) newRecord(parent *Session, id string) *Session {
 		cwd = ""
 	}
 	return &Session{
-		Type:      "thread",
 		SessionID: id,
-		ParentID:  parent.SessionID,
 		Cwd:       cwd,
 	}
-}
-
-func (m *Manager) setupAgentUUID(req *http.Request, stored *Session) string {
-	agentID := m.getAgent(req)
-	if agentID == "" {
-		return ""
-	}
-
-	agent, err := m.agentsStore.GetByUUID(m.ctx, agentID)
-	if err != nil {
-		// ignore all errors related to agent not found
-		return ""
-	}
-
-	if agent.AccountID != stored.AccountID && !agent.IsPublic {
-		return ""
-	}
-
-	return agentID
-}
-
-func (m *Manager) newSession(req *http.Request, stored *Session) {
-	stored.AccountID = m.getAccount(req)
-	stored.AgentUUID = m.setupAgentUUID(req, stored)
-	stored.Config = ConfigWrapper(m.config)
 }
 
 func (m *Manager) loadAttributesFromRecord(stored *Session, session *mcp.ServerSession) {
 	session.GetSession().Set(types.DescriptionSessionKey, stored.Description)
 	session.GetSession().Set(types.PublicSessionKey, stored.IsPublic)
 	session.GetSession().Set(types.AccountIDSessionKey, stored.AccountID)
-	session.GetSession().Set(types.AgentUUIDSessionKey, stored.AgentUUID)
-
-	var (
-		agentConfig types.CustomAgent
-		config      = m.config
-	)
-
-	if stored.AgentUUID != "" {
-		agent, err := m.agentsStore.GetByUUID(m.ctx, stored.AgentUUID)
-		if err == nil && agent != nil {
-			if err := json.Unmarshal([]byte(agent.Config), &agentConfig); err == nil {
-				agentConfig.ID = agent.UUID
-				agentConfig.Name = agent.Name
-				agentConfig.Description = agent.Description
-				agentConfig.IsPublic = agent.IsPublic
-				session.GetSession().Set(types.CustomAgentConfigSessionKey, &agentConfig)
-			}
-		}
-	}
-
-	session.GetSession().Set(types.ConfigSessionKey, config)
 }
 
-func (m *Manager) saveAttributesToRecord(ctx context.Context, stored *Session, session *mcp.ServerSession) error {
+func (m *Manager) saveAttributesToRecord(stored *Session, session *mcp.ServerSession) error {
+	var config types.Config
+
 	session.GetSession().Get(types.DescriptionSessionKey, &stored.Description)
 	session.GetSession().Get(types.PublicSessionKey, &stored.IsPublic)
-	stored.Config = ConfigWrapper(m.config)
+	session.GetSession().Get(types.ConfigSessionKey, &config)
 
-	if updated := false; session.GetSession().Get(types.CustomAgentModifiedSessionKey, &updated) && updated {
-		var agentConfig types.CustomAgent
-		if session.GetSession().Get(types.CustomAgentConfigSessionKey, &agentConfig) && agentConfig.ID != "" {
-			agentRecord, err := m.agentsStore.GetByUUID(ctx, agentConfig.ID)
-			if err != nil {
-				return fmt.Errorf("failed to get agent by UUID: %w", err)
-			}
-
-			agentRecord.Name = agentConfig.Name
-			agentRecord.Description = agentConfig.Description
-			agentRecord.IsPublic = agentConfig.IsPublic
-
-			// zero out
-			agentConfig.CustomAgentMeta = types.CustomAgentMeta{}
-			configData, err := json.Marshal(agentConfig)
-			if err != nil {
-				return fmt.Errorf("failed to marshal agent config: %w", err)
-			}
-			agentRecord.Config = string(configData)
-			if err := m.agentsStore.UpdateConfig(ctx, agentRecord); err != nil {
-				return fmt.Errorf("failed to update agent config: %w", err)
-			}
-		}
-	}
-
+	stored.Config = ConfigWrapper(config)
 	return nil
 }
 
-func (m *Manager) getAccount(req *http.Request) string {
-	return req.Header.Get("X-Nanobot-Account-Id")
-}
-
-func (m *Manager) getAgent(req *http.Request) string {
-	agent := req.Header.Get("X-Nanobot-Agent-Id")
-	if agent != "" {
-		return agent
-	}
-
-	parts := strings.Split(req.URL.Path, "/")
-	for i, part := range parts {
-		if len(strings.Split(part, "-")) == 5 && i > 0 && parts[i-1] == "agents" {
-			return part
-		}
-	}
-
-	return agent
-}
-
-func (m *Manager) Store(req *http.Request, id string, session *mcp.ServerSession) error {
+func (m *Manager) Store(ctx context.Context, id string, session *mcp.ServerSession) error {
 	if id == "" {
 		return nil
 	}
 
 	var create bool
-	stored, err := m.store.Get(req.Context(), id)
+	stored, err := m.DB.Get(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		stored = m.newRecord(m.root, id)
 		create = true
@@ -182,15 +89,14 @@ func (m *Manager) Store(req *http.Request, id string, session *mcp.ServerSession
 		return err
 	}
 
-	if create {
-		m.newSession(req, stored)
+	var accountID string
+	session.GetSession().Get(types.AccountIDSessionKey, &accountID)
+
+	if stored.AccountID != accountID {
+		return fmt.Errorf("session %s not found for account %s", id, accountID)
 	}
 
-	if stored.AccountID != m.getAccount(req) {
-		return fmt.Errorf("session %s not found for account %s", id, m.getAccount(req))
-	}
-
-	if err := m.saveAttributesToRecord(req.Context(), stored, session); err != nil {
+	if err := m.saveAttributesToRecord(stored, session); err != nil {
 		return fmt.Errorf("failed to save attributes to session record: %w", err)
 	}
 
@@ -201,17 +107,17 @@ func (m *Manager) Store(req *http.Request, id string, session *mcp.ServerSession
 	stored.State = *(*State)(state)
 
 	if create {
-		if err := m.store.Create(req.Context(), stored); err != nil {
+		if err := m.DB.Create(ctx, stored); err != nil {
 			return fmt.Errorf("failed to create session record: %w", err)
 		}
 	} else {
-		if err := m.store.Update(req.Context(), stored); err != nil {
+		if err := m.DB.Update(ctx, stored); err != nil {
 			return err
 		}
 	}
 
 	m.loadAttributesFromRecord(stored, session)
-	return m.inMemory.Store(nil, id, session)
+	return nil
 }
 
 func (m *Manager) ExtractID(req *http.Request) string {
@@ -235,65 +141,78 @@ func (m *Manager) ExtractID(req *http.Request) string {
 	return ""
 }
 
-func (m *Manager) Load(req *http.Request, id string) (ret *mcp.ServerSession, found bool, retErr error) {
-	defer func() {
-		if found && ret != nil {
-			var account string
-			ret.GetSession().Get(types.AccountIDSessionKey, &account)
-			if account != m.getAccount(req) {
-				var isPublic bool
-				ret.GetSession().Get(types.PublicSessionKey, &isPublic)
-				if isPublic {
-					ret, found, retErr = m.loadSessionFromDatabase(req, id)
-					if found && retErr == nil {
-						ret.GetSession().Set(types.AccountIDSessionKey, m.getAccount(req))
-					}
-				} else {
-					found = false
-					ret = nil
-				}
-			}
-		}
-
-		if found && ret != nil {
-			ret.GetSession().Set(StoreSessionKey, m.store)
-		}
-	}()
-
-	if id == "new" {
-		s, err := mcp.NewServerSession(m.ctx, m.server)
-		if err != nil {
-			return nil, false, fmt.Errorf("failed to create new server session: %w", err)
-		}
-		if err := m.Store(req, s.ID(), s); err != nil {
-			return nil, false, fmt.Errorf("failed to store new server session: %w", err)
-		}
-		return s, true, nil
+func (m *Manager) Acquire(ctx context.Context, server mcp.MessageHandler, id string) (ret *mcp.ServerSession, found bool, retErr error) {
+	m.liveSessionsLock.Lock()
+	live, ok := m.liveSessions[id]
+	if ok {
+		live.count++
+		m.liveSessions[id] = live
+		m.liveSessionsLock.Unlock()
+		return live.session, true, nil
 	}
+	m.liveSessionsLock.Unlock()
 
-	session, ok, err := m.inMemory.Load(req, id)
-	if err != nil {
-		return nil, false, err
-	} else if ok {
-		// Check if closed
-		select {
-		case <-session.GetSession().Context().Done():
-		default:
-			return session, true, nil
-		}
-	}
-
-	serverSession, ok, err := m.loadSessionFromDatabase(req, id)
+	serverSession, ok, err := m.loadSessionFromDatabase(ctx, server, id)
 	if err != nil || !ok {
 		return nil, false, err
 	}
 
-	err = m.inMemory.Store(nil, id, serverSession)
+	select {
+	case <-serverSession.GetSession().Context().Done():
+		return nil, false, nil
+	default:
+	}
+
+	var (
+		account        string
+		nanobotContext = types.NanobotContext(ctx)
+	)
+
+	serverSession.GetSession().Get(types.AccountIDSessionKey, &account)
+	if account != nanobotContext.User.ID {
+		var isPublic bool
+		serverSession.GetSession().Get(types.PublicSessionKey, &isPublic)
+		if !isPublic {
+			return nil, false, nil
+		}
+	}
+
+	m.liveSessionsLock.Lock()
+	live, ok = m.liveSessions[id]
+	if ok {
+		serverSession.Close(false)
+		live.count++
+		m.liveSessions[id] = live
+		m.liveSessionsLock.Unlock()
+		return live.session, true, nil
+	}
+	m.liveSessions[id] = liveSession{
+		session: serverSession,
+		count:   1,
+	}
+	m.liveSessionsLock.Unlock()
+
 	return serverSession, true, err
 }
 
-func (m *Manager) loadSessionFromDatabase(req *http.Request, id string) (*mcp.ServerSession, bool, error) {
-	storedSession, err := m.store.Get(req.Context(), id)
+func (m *Manager) Release(session *mcp.ServerSession) {
+	m.liveSessionsLock.Lock()
+	defer m.liveSessionsLock.Unlock()
+
+	live, ok := m.liveSessions[session.ID()]
+	if ok {
+		live.count--
+		if live.count == 0 {
+			delete(m.liveSessions, session.ID())
+			live.session.Close(false)
+		} else {
+			m.liveSessions[session.ID()] = live
+		}
+	}
+}
+
+func (m *Manager) loadSessionFromDatabase(ctx context.Context, server mcp.MessageHandler, id string) (*mcp.ServerSession, bool, error) {
+	storedSession, err := m.DB.Get(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, false, nil
 	} else if err != nil {
@@ -302,10 +221,12 @@ func (m *Manager) loadSessionFromDatabase(req *http.Request, id string) (*mcp.Se
 
 	if storedSession.State.Attributes == nil {
 		storedSession.State.Attributes = make(map[string]any)
+	} else {
+		storedSession.State.Attributes[".keys"] = slices.Collect(maps.Keys(storedSession.State.Attributes))
 	}
 
 	serverSession, err := mcp.NewExistingServerSession(m.ctx,
-		mcp.SessionState(storedSession.State), m.server)
+		mcp.SessionState(storedSession.State), server)
 	if err != nil {
 		return nil, false, err
 	}
@@ -314,13 +235,14 @@ func (m *Manager) loadSessionFromDatabase(req *http.Request, id string) (*mcp.Se
 	return serverSession, true, nil
 }
 
-func (m *Manager) LoadAndDelete(request *http.Request, id string) (*mcp.ServerSession, bool, error) {
-	session, found, err := m.Load(request, id)
+func (m *Manager) LoadAndDelete(ctx context.Context, server mcp.MessageHandler, id string) (*mcp.ServerSession, bool, error) {
+	session, found, err := m.Acquire(ctx, server, id)
 	if !found || err != nil {
 		return session, found, err
 	}
-	_, _, _ = m.inMemory.LoadAndDelete(request, id)
-	err = m.store.Delete(request.Context(), id)
+	defer m.Release(session)
+
+	err = m.DB.Delete(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, false, nil
 	} else if err != nil {

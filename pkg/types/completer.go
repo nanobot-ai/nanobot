@@ -65,6 +65,7 @@ type CompletionProgress struct {
 	Model     string         `json:"model,omitempty"`
 	Agent     string         `json:"agent,omitempty"`
 	MessageID string         `json:"messageID,omitempty"`
+	Role      string         `json:"role,omitempty"`
 	Item      CompletionItem `json:"item,omitempty"`
 }
 
@@ -75,6 +76,7 @@ type Message struct {
 	Created *time.Time       `json:"created,omitempty"`
 	Role    string           `json:"role,omitempty"`
 	Items   []CompletionItem `json:"items,omitempty"`
+	HasMore bool             `json:"hasMore,omitempty"`
 }
 
 type CompletionItem struct {
@@ -249,6 +251,17 @@ type CompletionResponse struct {
 	ChatResponse     bool      `json:"chatResponse,omitempty"`
 	Agent            string    `json:"agent,omitempty"`
 	Model            string    `json:"model,omitempty"`
+	HasMore          bool      `json:"hasMore,omitempty"`
+	Error            string    `json:"error,omitempty"`
+	ProgressToken    any       `json:"progressToken,omitempty"`
+}
+
+func (c *CompletionResponse) Serialize() (any, error) {
+	return c, nil
+}
+
+func (c *CompletionResponse) Deserialize(data any) (any, error) {
+	return c, mcp.JSONCoerce(data, &c)
 }
 
 type ToolCallResult struct {
@@ -274,4 +287,12 @@ type CallResult struct {
 	Agent        string        `json:"agent,omitempty"`
 	Model        string        `json:"model,omitempty"`
 	StopReason   string        `json:"stopReason,omitempty"`
+}
+
+type AsyncCallResult struct {
+	IsError       bool          `json:"isError"`
+	Content       []mcp.Content `json:"content,omitzero"`
+	InProgress    bool          `json:"inProgress,omitempty"`
+	ToolName      string        `json:"toolName,omitempty"`
+	ProgressToken any           `json:"progressToken,omitempty"`
 }

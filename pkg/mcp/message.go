@@ -41,6 +41,18 @@ func (r *Message) IsRequest() bool {
 	return len(r.Params) > 0 && !bytes.Equal(r.Params, []byte("null"))
 }
 
+func (r *Message) Meta() map[string]any {
+	meta := map[string]any{}
+	if err := json.Unmarshal(r.Params, &struct {
+		Meta map[string]any `json:"_meta"`
+	}{
+		Meta: meta,
+	}); err != nil {
+		return nil
+	}
+	return meta
+}
+
 func (r *Message) SetProgressToken(token any) error {
 	params := map[string]any{}
 	if len(r.Params) > 0 {

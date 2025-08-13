@@ -3,77 +3,171 @@ package meta
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
-type ChatsData struct {
-	Chats []ChatDescription `json:"chats"`
+func (s *Server) deleteChat(ctx context.Context, data struct {
+	ID string `json:"chatId"`
+}) (*types.Chat, error) {
+	mcpSession := mcp.SessionFromContext(ctx)
+	manager, accountID, err := s.getManagerAndAccountID(mcpSession)
+	if err != nil {
+		return nil, err
+	}
+
+	chatSession, err := manager.DB.GetByIDByAccountID(ctx, data.ID, accountID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := manager.DB.Delete(ctx, data.ID); err != nil {
+		return nil, err
+	}
+
+	chat := chatFromSession(chatSession, accountID)
+	return &chat, nil
 }
 
-type ChatDescription struct {
-	ID         string    `json:"id"`
-	Title      string    `json:"title"`
-	Created    time.Time `json:"created"`
-	ReadOnly   bool      `json:"readonly,omitempty"`
-	Visibility string    `json:"visibility,omitempty"`
-}
-
-func (s *Server) listChats(ctx context.Context, _ struct{}) (*ChatsData, error) {
+func (s *Server) createChat(ctx context.Context, _ struct{}) (*types.Chat, error) {
 	mcpSession := mcp.SessionFromContext(ctx)
 	var (
-		store     session.Store
+		manager   session.Manager
 		accountID string
 	)
 
-	if !mcpSession.Get(session.StoreSessionKey, &store) || !mcpSession.Get(types.AccountIDSessionKey, &accountID) {
-		return &ChatsData{
-			Chats: []ChatDescription{},
-		}, nil
+	if !mcpSession.Get(session.ManagerSessionKey, &manager) || !mcpSession.Get(types.AccountIDSessionKey, &accountID) {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("session store or account not found")
 	}
 
-	session, err := store.Get(ctx, mcpSession.Parent.ID())
+	var newSession = session.Session{
+		Type:      "thread",
+		SessionID: uuid.String(),
+		AccountID: accountID,
+	}
+	if err := manager.DB.Create(ctx, &newSession); err != nil {
+		return nil, err
+	}
+
+	return &types.Chat{
+		ID:         newSession.SessionID,
+		Title:      newSession.Description,
+		Created:    newSession.CreatedAt,
+		ReadOnly:   newSession.AccountID != accountID,
+		Visibility: visibility(newSession.IsPublic),
+	}, nil
+}
+
+func (s *Server) updateChat(ctx context.Context, data struct {
+	ID    string `json:"chatId"`
+	Title string `json:"title"`
+}) (*types.Chat, error) {
+	mcpSession := mcp.SessionFromContext(ctx)
+	manager, accountID, err := s.getManagerAndAccountID(mcpSession)
 	if err != nil {
 		return nil, err
 	}
 
-	sessions, err := store.FindByAccount(ctx, accountID)
+	chatSession, err := manager.DB.GetByIDByAccountID(ctx, data.ID, accountID)
 	if err != nil {
 		return nil, err
 	}
 
-	found := false
-	chats := make([]ChatDescription, 0, len(sessions))
-	for _, s := range sessions {
-		if s.ID == session.ID {
-			found = true
+	if data.Title != "" && chatSession.Description != data.Title {
+		session, err := manager.DB.Get(ctx, data.ID)
+		if err != nil {
+			return nil, err
 		}
-		chats = append(chats, ChatDescription{
-			ID:         s.SessionID,
-			Title:      s.Description,
-			Created:    s.CreatedAt,
-			Visibility: visibility(s.IsPublic),
+
+		session.Description = data.Title
+		if err := manager.DB.Update(ctx, session); err != nil {
+			return nil, err
+		}
+		chatSession.Description = data.Title
+	}
+
+	chat := chatFromSession(chatSession, accountID)
+	return &chat, nil
+}
+
+func (s *Server) getManagerAndAccountID(mcpSession *mcp.Session) (*session.Manager, string, error) {
+	var (
+		manager   session.Manager
+		accountID string
+	)
+
+	if !mcpSession.Get(session.ManagerSessionKey, &manager) || !mcpSession.Get(types.AccountIDSessionKey, &accountID) {
+		return nil, "", mcp.ErrRPCInvalidParams.WithMessage("session store or account not found")
+	}
+	return &manager, accountID, nil
+}
+
+func (s *Server) listChats(ctx context.Context, _ struct{}) (*types.ChatList, error) {
+	mcpSession := mcp.SessionFromContext(ctx)
+
+	manager, accountID, err := s.getManagerAndAccountID(mcpSession)
+	if err != nil {
+		return nil, err
+	}
+
+	sessions, err := manager.DB.FindByAccount(ctx, "thread", accountID)
+	if err != nil {
+		return nil, err
+	}
+
+	chats := make([]types.Chat, 0, len(sessions))
+	for _, s := range sessions {
+		chats = append(chats, chatFromSession(&s, accountID))
+	}
+
+	return &types.ChatList{
+		Chats: chats,
+	}, nil
+}
+
+func (s *Server) getConfig(ctx context.Context, _ struct{}) (ret types.ProjectConfig, _ error) {
+	session := mcp.SessionFromContext(ctx)
+	session.Get("project", &ret)
+
+	agents, err := s.data.Agents(ctx)
+	if err != nil {
+		return
+	}
+
+	ret.DefaultAgent = ""
+	ret.Agents = make([]types.AgentDisplay, 0, len(agents))
+
+	for id, agent := range agents {
+		ret.Agents = append(ret.Agents, types.AgentDisplay{
+			ID:          id,
+			Name:        agent.Name,
+			ShortName:   agent.ShortName,
+			Description: agent.Description,
 		})
 	}
 
-	if !found {
-		chats = append([]ChatDescription{
-			{
-				ID:         session.SessionID,
-				Title:      session.Description,
-				Created:    session.CreatedAt,
-				ReadOnly:   session.AccountID != accountID,
-				Visibility: visibility(session.IsPublic),
-			},
-		}, chats...)
-	}
+	ret.DefaultAgent = s.data.CurrentAgent(ctx)
+	return
+}
 
-	return &ChatsData{
-		Chats: chats,
-	}, nil
+func (s *Server) updateConfig(ctx context.Context, cfg types.ProjectConfig) (types.ProjectConfig, error) {
+	session := mcp.SessionFromContext(ctx)
+	session = session.Parent
+	session.Set("project", &cfg)
+	return cfg, nil
+}
+
+func chatFromSession(session *session.Session, currentAccountID string) types.Chat {
+	return types.Chat{
+		ID:         session.SessionID,
+		Title:      session.Description,
+		Created:    session.CreatedAt,
+		ReadOnly:   session.AccountID != currentAccountID,
+		Visibility: visibility(session.IsPublic),
+	}
 }
 
 func visibility(isPublic bool) string {
@@ -85,7 +179,7 @@ func visibility(isPublic bool) string {
 
 func (s *Server) clone(ctx context.Context, _ struct{}) (string, error) {
 	var (
-		store     session.Store
+		manager   session.Manager
 		accountID string
 	)
 
@@ -94,7 +188,7 @@ func (s *Server) clone(ctx context.Context, _ struct{}) (string, error) {
 		mcpSession = mcpSession.Parent
 	}
 
-	if !mcpSession.Get(session.StoreSessionKey, &store) {
+	if !mcpSession.Get(session.ManagerSessionKey, &manager) {
 		return "", fmt.Errorf("session store not found")
 	}
 
@@ -102,13 +196,13 @@ func (s *Server) clone(ctx context.Context, _ struct{}) (string, error) {
 		return "", fmt.Errorf("account ID not found in session")
 	}
 
-	stored, err := store.Get(ctx, mcpSession.ID())
+	stored, err := manager.DB.Get(ctx, mcpSession.ID())
 	if err != nil {
 		return "", fmt.Errorf("failed to get session: %w", err)
 	}
 
 	stored = stored.Clone(accountID)
-	if err := store.Create(ctx, stored); err != nil {
+	if err := manager.DB.Create(ctx, stored); err != nil {
 		return "", fmt.Errorf("failed to create cloned session: %w", err)
 	}
 

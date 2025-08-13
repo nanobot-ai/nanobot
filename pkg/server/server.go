@@ -12,6 +12,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/expr"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
+	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
 	"github.com/nanobot-ai/nanobot/pkg/tools"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -21,14 +22,16 @@ type Server struct {
 	handlers []handler
 	runtime  *runtime.Runtime
 	data     *sessiondata.Data
-	config   types.Config
+	config   types.ConfigFactory
+	manager  *session.Manager
 }
 
-func NewServer(runtime *runtime.Runtime, config types.Config) *Server {
+func NewServer(runtime *runtime.Runtime, config types.ConfigFactory, manager *session.Manager) *Server {
 	s := &Server{
 		runtime: runtime,
 		data:    sessiondata.NewData(runtime),
 		config:  config,
+		manager: manager,
 	}
 	s.init()
 	return s
@@ -63,7 +66,28 @@ func (s *Server) init() {
 		handle[mcp.ListResourceTemplatesRequest]("resources/templates/list", s.handleListResourceTemplates),
 		handle[mcp.ListResourcesRequest]("resources/list", s.handleListResources),
 		handle[mcp.ReadResourceRequest]("resources/read", s.handleReadResource),
+		handle[mcp.SubscribeRequest]("resources/subscribe", s.handleResourcesSubscribe),
+		handle[mcp.UnsubscribeRequest]("resources/unsubscribe", s.handleResourcesUnsubscribe),
 	}
+}
+
+func (s *Server) handleResourcesUnsubscribe(ctx context.Context, msg mcp.Message, payload mcp.UnsubscribeRequest) error {
+	session := mcp.SessionFromContext(ctx)
+	resourceSubscriptions := map[string]struct{}{}
+	if session.Get(types.ResourceSubscriptionsSessionKey, &resourceSubscriptions) {
+		delete(resourceSubscriptions, payload.URI)
+		session.Set(types.ResourceSubscriptionsSessionKey, resourceSubscriptions)
+	}
+	return nil
+}
+
+func (s *Server) handleResourcesSubscribe(ctx context.Context, msg mcp.Message, payload mcp.SubscribeRequest) error {
+	session := mcp.SessionFromContext(ctx)
+	resourceSubscriptions := map[string]struct{}{}
+	session.Get(types.ResourceSubscriptionsSessionKey, &resourceSubscriptions)
+	resourceSubscriptions[payload.URI] = struct{}{}
+	session.Set(types.ResourceSubscriptionsSessionKey, resourceSubscriptions)
+	return nil
 }
 
 func (s *Server) handleListResourceTemplates(ctx context.Context, msg mcp.Message, _ mcp.ListResourceTemplatesRequest) error {
@@ -130,7 +154,7 @@ func (s *Server) handleReadResource(ctx context.Context, msg mcp.Message, payloa
 }
 
 func (s *Server) handleGetPrompt(ctx context.Context, msg mcp.Message, payload mcp.GetPromptRequest) error {
-	promptMappings, err := s.data.PromptMappings(ctx)
+	promptMappings, err := s.data.PublishedPromptMappings(ctx)
 	if err != nil {
 		return err
 	}
@@ -166,7 +190,8 @@ func (s *Server) handleListResources(ctx context.Context, msg mcp.Message, _ mcp
 }
 
 func (s *Server) handleListPrompts(ctx context.Context, msg mcp.Message, _ mcp.ListPromptsRequest) error {
-	promptMappings, err := s.data.PromptMappings(ctx)
+	s.data.Refresh(ctx)
+	promptMappings, err := s.data.PublishedPromptMappings(ctx)
 	if err != nil {
 		return err
 	}
@@ -190,7 +215,15 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 
 	toolMapping, ok := toolMappings[payload.Name]
 	if !ok {
-		return fmt.Errorf("tool %s not found", payload.Name)
+		s.data.Refresh(ctx)
+		toolMappings, err = s.data.ToolMapping(ctx)
+		if err != nil {
+			return err
+		}
+		toolMapping, ok = toolMappings[payload.Name]
+		if !ok {
+			return fmt.Errorf("tool %s not found", payload.Name)
+		}
 	}
 
 	result, err := s.runtime.Call(ctx, toolMapping.MCPServer, toolMapping.TargetName, payload.Arguments, tools.CallOptions{
@@ -198,6 +231,7 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 		LogData: map[string]any{
 			"mcpToolName": payload.Name,
 		},
+		Meta: msg.Meta(),
 	})
 	if err != nil {
 		return err
@@ -258,7 +292,7 @@ func getEnvVal(envMap map[string]string, envKey string, envDef types.EnvDef) str
 }
 
 func reconcileEnv(session *mcp.Session, c types.Config) error {
-	envMap := session.EnvMap()
+	envMap := session.GetEnvMap()
 	var missing []string
 	for envKey, envDef := range c.Env {
 		envVal := getEnvVal(envMap, envKey, envDef)
@@ -301,9 +335,6 @@ func (s *Server) handleInitialized(ctx context.Context, msg mcp.Message, payload
 func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload mcp.InitializeRequest) error {
 	session := mcp.SessionFromContext(ctx)
 	c := types.ConfigFromContext(ctx)
-	if !mcp.SessionFromContext(ctx).Get(types.ConfigSessionKey, &c) {
-		c = s.config
-	}
 
 	if err := reconcileEnv(session, c); err != nil {
 		return err
@@ -326,10 +357,12 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 		ProtocolVersion: payload.ProtocolVersion,
 		Capabilities: mcp.ServerCapabilities{
 			Experimental: experimental,
-			Logging:      &struct{}{},
-			Prompts:      &mcp.PromptsServerCapability{},
-			Resources:    &mcp.ResourcesServerCapability{},
-			Tools:        &mcp.ToolsServerCapability{},
+			//Logging:      &struct{}{},
+			Prompts: &mcp.PromptsServerCapability{},
+			Resources: &mcp.ResourcesServerCapability{
+				Subscribe: true,
+			},
+			Tools: &mcp.ToolsServerCapability{},
 		},
 		ServerInfo: mcp.ServerInfo{
 			Name:    c.Publish.Name,
@@ -340,6 +373,13 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 }
 
 func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
+	if err := s.data.Sync(ctx, s.config); err != nil {
+		msg.SendError(ctx, err)
+		return
+	}
+
+	mcp.SessionFromContext(ctx).Set(session.ManagerSessionKey, s.manager)
+
 	for _, h := range s.handlers {
 		ok, err := h(ctx, msg)
 		if err != nil {

@@ -2,9 +2,14 @@ package sessiondata
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
+	"github.com/nanobot-ai/nanobot/pkg/config"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/schema"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -49,64 +54,34 @@ func WithAllowMissing() GetOption {
 	}
 }
 
-func (d *Data) SetCurrentAgent(ctx context.Context, currentAgent string) error {
+func (d *Data) getEntrypoints(ctx context.Context) []string {
+	c := types.ConfigFromContext(ctx)
+	return c.Publish.Entrypoint
+}
+
+func (d *Data) SetCurrentAgent(ctx context.Context, newAgent string) error {
+	if newAgent == d.CurrentAgent(ctx) {
+		return nil
+	}
+
+	entrypoints := d.getEntrypoints(ctx)
 	session := mcp.SessionFromContext(ctx)
 	for session.Parent != nil {
 		session = session.Parent
 	}
+
 	d.Refresh(ctx)
-	if currentAgent == "" {
+	if newAgent == "" {
 		session.Delete(types.CurrentAgentSessionKey)
-	} else {
-		mappings, err := d.getEntrypointMapping(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to build tool mappings: %w", err)
-		}
-		if _, ok := mappings[currentAgent]; !ok {
-			return fmt.Errorf("current agent %s not found in tool mappings", currentAgent)
-		}
-		session.Set(types.CurrentAgentSessionKey, mcp.SavedString(currentAgent))
+		return nil
 	}
+
+	if !slices.Contains(entrypoints, newAgent) {
+		return fmt.Errorf("agent %s not found in entrypoints", newAgent)
+	}
+
+	session.Set(types.CurrentAgentSessionKey, mcp.SavedString(newAgent))
 	return nil
-}
-
-func (d *Data) GetCurrentAgentTargetMapping(ctx context.Context) (target types.TargetMapping[mcp.Tool], _ error) {
-	session := mcp.SessionFromContext(ctx)
-	if found := session.Get(currentAgentTargetSessionKey, &target); found {
-		return target, nil
-	}
-
-	mappings, err := d.getEntrypointMapping(ctx)
-	if err != nil {
-		return target, fmt.Errorf("failed to build tool mappings: %w", err)
-	}
-
-	currentAgent := d.CurrentAgent(ctx)
-
-	target, ok := mappings[currentAgent]
-	if !ok {
-		return target, fmt.Errorf("current agent %s not found in tool mappings", currentAgent)
-	}
-
-	session.Set(currentAgentTargetSessionKey, &target)
-	return target, nil
-}
-
-func (d *Data) getEntrypointMapping(ctx context.Context) (types.ToolMappings, error) {
-	var (
-		session = mcp.SessionFromContext(ctx)
-		c       types.Config
-	)
-
-	session.Get(types.ConfigSessionKey, &c)
-	entrypoints := c.Publish.Entrypoint
-	if _, ok := c.Agents[types.DefaultAgentName]; ok && len(entrypoints) == 0 {
-		entrypoints = []string{types.DefaultAgentName}
-	}
-
-	return d.runtime.BuildToolMappings(ctx, entrypoints, types.BuildToolMappingsOptions{
-		DefaultAsToServer: true,
-	})
 }
 
 func (d *Data) Agents(ctx context.Context) (types.Agents, error) {
@@ -122,15 +97,9 @@ func (d *Data) Agents(ctx context.Context) (types.Agents, error) {
 
 	session.Get(types.ConfigSessionKey, &c)
 
-	mapping, err := d.getEntrypointMapping(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build tool mappings: %w", err)
-	}
-
-	for agentKey, target := range mapping {
+	for _, key := range d.getEntrypoints(ctx) {
 		var (
 			agentDisplay types.AgentDisplay
-			key          = target.MCPServer
 		)
 
 		if agent, ok := c.Agents[key]; ok {
@@ -150,12 +119,12 @@ func (d *Data) Agents(ctx context.Context) (types.Agents, error) {
 			agentDisplay = types.AgentDisplay{
 				Name:        complete.First(c.Session.InitializeResult.ServerInfo.Name, mcpServer.Name, mcpServer.ShortName, key),
 				ShortName:   complete.First(mcpServer.ShortName, c.Session.InitializeResult.ServerInfo.Name, mcpServer.Name, key),
-				Description: target.Target.Description,
+				Description: strings.TrimSpace(mcpServer.Description),
 			}
 		} else {
 			continue
 		}
-		agents[agentKey] = agentDisplay
+		agents[key] = agentDisplay
 	}
 
 	session.Set(agentsSessionKey, &agents)
@@ -172,15 +141,116 @@ func (d *Data) CurrentAgent(ctx context.Context) string {
 		session.Get(types.ConfigSessionKey, &c)
 		if len(c.Publish.Entrypoint) > 0 {
 			currentAgent = c.Publish.Entrypoint[0]
-		} else if _, ok := c.Agents[types.DefaultAgentName]; ok {
-			currentAgent = types.DefaultAgentName
 		}
 	}
-	ref := types.ParseToolRef(currentAgent)
-	if ref.As != "" {
-		return ref.As
+	return currentAgent
+}
+
+func (d *Data) getAndSetConfig(ctx context.Context, defaultConfig types.ConfigFactory) (types.Config, error) {
+	var (
+		c        types.Config
+		nctx     = types.NanobotContext(ctx)
+		session  = mcp.SessionFromContext(ctx)
+		profiles string
+		err      error
+	)
+
+	if len(nctx.Profile) > 0 {
+		profiles = strings.Join(nctx.Profile, ",")
+	} else if req := mcp.RequestFromContext(ctx); req != nil && strings.Contains(req.URL.Path, "/profile/") {
+		_, v, ok := strings.Cut(req.URL.Path, "/profile/")
+		if ok {
+			profiles = strings.TrimSpace(v)
+		}
 	}
-	return ref.Server
+
+	if nctx.Config != nil {
+		c, err = nctx.Config(ctx, profiles)
+		if err != nil {
+			return c, fmt.Errorf("failed to load config: %w", err)
+		}
+	} else {
+		c, err = defaultConfig(ctx, profiles)
+		if err != nil {
+			return c, fmt.Errorf("failed to load default config: %w", err)
+		}
+	}
+
+	if req := mcp.RequestFromContext(ctx); req != nil && req.URL.Path == "/mcp/ui" {
+		uiConfig, _, err := config.Load(ctx, "nanobot.ui")
+		if err != nil {
+			return c, fmt.Errorf("failed to load ui config: %w", err)
+		}
+		c, err = config.Merge(c, *uiConfig)
+		if err != nil {
+			return c, fmt.Errorf("failed to merge ui config: %w", err)
+		}
+	}
+
+	session.Set(types.ConfigSessionKey, &c)
+	return c, nil
+}
+
+func initSubscriptions(session *mcp.Session) {
+	var set bool
+	if session.Get("_subscriptions_initialized", &set) {
+		return
+	}
+
+	session.AddFilter(func(ctx context.Context, msg *mcp.Message) (*mcp.Message, error) {
+		if msg.Method != "notifications/resources/updated" {
+			return msg, nil
+		}
+
+		var uri string
+		err := json.Unmarshal(msg.Params, &struct {
+			URI *string `json:"uri"`
+		}{
+			URI: &uri,
+		})
+		if err != nil {
+			return msg, nil
+		}
+
+		subs := map[string]struct{}{}
+		if session.Get(types.ResourceSubscriptionsSessionKey, &subs) {
+			_, ok := subs[uri]
+			if ok {
+				return msg, nil
+			}
+		}
+
+		return nil, nil
+	})
+
+	session.Set("_subscriptions_initialized", true)
+}
+
+func (d *Data) Sync(ctx context.Context, defaultConfig types.ConfigFactory) error {
+	var (
+		session      = mcp.SessionFromContext(ctx)
+		existingHash string
+	)
+
+	//initSubscriptions(session)
+
+	config, err := d.getAndSetConfig(ctx, defaultConfig)
+	if err != nil {
+		return err
+	}
+
+	session.Get(types.ConfigHashSessionKey, &existingHash)
+
+	digest := sha256.New()
+	_ = json.NewEncoder(digest).Encode(config)
+	hash := fmt.Sprintf("%x", digest.Sum(nil))
+
+	if hash != existingHash {
+		d.Refresh(ctx)
+	}
+
+	session.Set(types.ConfigHashSessionKey, mcp.SavedString(hash))
+	return nil
 }
 
 func (d *Data) Refresh(ctx context.Context) {
@@ -192,6 +262,21 @@ func (d *Data) Refresh(ctx context.Context) {
 	session.Delete(resourceTemplateMappingKey)
 	session.Delete(agentsSessionKey)
 	session.Delete(currentAgentTargetSessionKey)
+}
+
+func (d *Data) getPublishedMCPServers(ctx context.Context) (result []string) {
+	var (
+		c       types.Config
+		session = mcp.SessionFromContext(ctx)
+	)
+	session.Get(types.ConfigSessionKey, &c)
+
+	if currentAgent := d.CurrentAgent(ctx); currentAgent != "" {
+		result = append(result, currentAgent)
+	}
+
+	result = append(result, c.Publish.MCPServers...)
+	return result
 }
 
 func (d *Data) ToolMapping(ctx context.Context, opts ...GetOption) (types.ToolMappings, error) {
@@ -209,7 +294,7 @@ func (d *Data) ToolMapping(ctx context.Context, opts ...GetOption) (types.ToolMa
 	var c types.Config
 	session.Get(types.ConfigSessionKey, &c)
 
-	toolMappings, err := d.runtime.BuildToolMappings(ctx, append(c.Publish.Tools, c.Publish.MCPServers...))
+	toolMappings, err := d.runtime.BuildToolMappings(ctx, append(d.getPublishedMCPServers(ctx), c.Publish.Tools...))
 	if err != nil {
 		return nil, err
 	}
@@ -260,10 +345,11 @@ func (d *Data) ResourceMappings(ctx context.Context, opts ...GetOption) (types.R
 	return resourceMappings, nil
 }
 
-func (d *Data) PromptMappings(ctx context.Context, opts ...GetOption) (types.PromptMappings, error) {
+func (d *Data) PublishedPromptMappings(ctx context.Context, opts ...GetOption) (types.PromptMappings, error) {
 	var (
 		prompts = types.PromptMappings{}
 		session = mcp.SessionFromContext(ctx)
+		c       = types.ConfigFromContext(ctx)
 	)
 
 	if found := session.Get(promptMappingKey, &prompts); !found && complete.Complete(opts...).AllowMissing {
@@ -272,7 +358,7 @@ func (d *Data) PromptMappings(ctx context.Context, opts ...GetOption) (types.Pro
 		return prompts, nil
 	}
 
-	promptMappings, err := d.buildPromptMappings(ctx)
+	promptMappings, err := d.BuildPromptMappings(ctx, append(d.getPublishedMCPServers(ctx), c.Publish.Prompts...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -281,14 +367,14 @@ func (d *Data) PromptMappings(ctx context.Context, opts ...GetOption) (types.Pro
 	return promptMappings, nil
 }
 
-func (d *Data) buildPromptMappings(ctx context.Context) (types.PromptMappings, error) {
+func (d *Data) BuildPromptMappings(ctx context.Context, refs ...string) (types.PromptMappings, error) {
 	var (
 		serverPrompts = map[string]*mcp.ListPromptsResult{}
 		result        = types.PromptMappings{}
 		c             = types.ConfigFromContext(ctx)
 	)
 
-	for _, ref := range append(c.Publish.Prompts, c.Publish.MCPServers...) {
+	for _, ref := range refs {
 		toolRef := types.ParseToolRef(ref)
 		if toolRef.Server == "" {
 			continue
@@ -333,7 +419,7 @@ func (d *Data) buildPromptMappings(ctx context.Context) (types.PromptMappings, e
 
 func (d *Data) buildResourceMappings(ctx context.Context, config types.Config) (types.ResourceMappings, error) {
 	resourceMappings := types.ResourceMappings{}
-	for _, ref := range append(config.Publish.Resources, config.Publish.MCPServers...) {
+	for _, ref := range append(d.getPublishedMCPServers(ctx), config.Publish.Resources...) {
 		toolRef := types.ParseToolRef(ref)
 		if toolRef.Server == "" {
 			continue
@@ -362,7 +448,7 @@ func (d *Data) buildResourceMappings(ctx context.Context, config types.Config) (
 
 func (d *Data) buildResourceTemplateMappings(ctx context.Context, config types.Config) (types.ResourceTemplateMappings, error) {
 	resourceTemplateMappings := types.ResourceTemplateMappings{}
-	for _, ref := range append(config.Publish.ResourceTemplates, config.Publish.MCPServers...) {
+	for _, ref := range append(d.getPublishedMCPServers(ctx), config.Publish.ResourceTemplates...) {
 		toolRef := types.ParseToolRef(ref)
 		if toolRef.Server == "" {
 			continue
