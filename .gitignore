@@ -2,6 +2,7 @@
 .cursorrules
 .envrc
 .idea
+.zed
 .venv
 .vscode
 bin/*
