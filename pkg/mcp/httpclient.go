@@ -263,6 +263,12 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID an
 			if initResp.StatusCode != http.StatusOK && initResp.StatusCode != http.StatusAccepted {
 				return fmt.Errorf("failed to POST initialize message got status: %s: %s", initResp.Status, body), true
 			}
+
+			// Mark this client as initialized.
+			s.initializeLock.Lock()
+			s.sessionID = new(string)
+			s.initializeRequest = msg
+			s.initializeLock.Unlock()
 		}
 
 		close(gotResponse)
@@ -364,12 +370,8 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 			return errors.Join(streamError, err)
 		}
 
-		// Mark this client as initialized.
-		s.initializeLock.Lock()
-		defer s.initializeLock.Unlock()
-		s.sessionID = new(string)
-		s.initializeRequest = &msg
-
+		// The client is marked as initialized in ensureSSE after it receives a successful response to the initialize request
+		// to avoid a race with marking the client as initialized here and sending the notifications/initialized message.
 		return nil
 	}
 
@@ -463,7 +465,7 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 
 	if !initialized {
 		if msg.Method != "initialize" && initializeMessage == nil {
-			return fmt.Errorf("client not initialized, must send InitializeRequest first")
+			return fmt.Errorf("cannot send %s message because client is not initialized, must send InitializeRequest first", msg.Method)
 		}
 
 		if initializeMessage == nil {
