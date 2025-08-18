@@ -126,7 +126,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			h.healthMu.RUnlock()
 
 			if healthErr == nil {
-				http.Error(rw, "waiting for startup", http.StatusServiceUnavailable)
+				http.Error(rw, "waiting for startup", http.StatusTooEarly)
 			} else if *healthErr != nil {
 				http.Error(rw, (*healthErr).Error(), http.StatusServiceUnavailable)
 			} else {
