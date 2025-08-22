@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
@@ -76,7 +77,37 @@ func (s *HTTPClient) SessionID() string {
 	return *s.sessionID
 }
 
-func (s *HTTPClient) Close() {
+func (s *HTTPClient) Close(deleteSession bool) {
+	if deleteSession {
+		s.initializeLock.RLock()
+		sessionID := s.sessionID
+		s.initializeLock.RUnlock()
+
+		if sessionID != nil && *sessionID != "" {
+			// If we have a session ID, then we need to send a close message to
+			// the server to clean up the session.
+			s.clientLock.RLock()
+			httpClient := s.httpClient
+			s.clientLock.RUnlock()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			req, err := s.newRequest(ctx, http.MethodDelete, nil)
+			if err != nil {
+				log.Errorf(ctx, "failed to create close request: %v", err)
+				return
+			}
+
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				// Best effort
+				log.Errorf(ctx, "failed to send close request: %v", err)
+				return
+			}
+			resp.Body.Close()
+		}
+	}
+
 	if s.cancel != nil {
 		s.cancel()
 	}

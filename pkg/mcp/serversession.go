@@ -139,11 +139,17 @@ func (s *ServerSession) Send(ctx context.Context, req Message) error {
 	return nil
 }
 
-func (s *ServerSession) Close() {
-	if s == nil || s.session == nil {
+func (s *ServerSession) Close(deleteSession bool) {
+	if s == nil {
 		return
 	}
-	s.session.Close()
+
+	if s.session == nil {
+		s.session.Close(deleteSession)
+	}
+	if s.wire != nil {
+		s.wire.Close(deleteSession)
+	}
 }
 
 type serverWire struct {
@@ -188,7 +194,7 @@ func (s *serverWire) exchange(ctx context.Context, msg Message) (Message, error)
 	}
 }
 
-func (s *serverWire) Close() {
+func (s *serverWire) Close(bool) {
 	s.cancel()
 }
 
