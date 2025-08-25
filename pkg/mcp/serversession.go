@@ -48,7 +48,7 @@ type ServerSession struct {
 }
 
 func (s *ServerSession) Wait() {
-	if s.session == nil {
+	if s == nil || s.session == nil {
 		return
 	}
 	s.session.Wait()

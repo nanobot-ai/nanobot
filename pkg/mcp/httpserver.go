@@ -270,6 +270,37 @@ func (h *HTTPServer) runHealthTicker() {
 	h.healthErr = &err
 	h.healthMu.Unlock()
 
+	go func() {
+		for {
+			h.healthMu.RLock()
+			s := h.internalSession
+			h.healthMu.RUnlock()
+
+			if s == nil {
+				// If the session has not been created yet, wait and try again.
+				// Wait for the healthz check interval before trying again.
+				time.Sleep(time.Minute)
+				continue
+			}
+
+			s.Wait()
+
+			select {
+			case <-h.ctx.Done():
+				return
+			default:
+				h.healthMu.Lock()
+				h.internalSession = nil
+				h.healthMu.Unlock()
+
+				_, err := h.ensureInternalSession(h.ctx)
+				h.healthMu.Lock()
+				h.healthErr = &err
+				h.healthMu.Unlock()
+			}
+		}
+	}()
+
 	timer := time.NewTimer(time.Minute)
 	for {
 		ctx, cancel := context.WithTimeout(h.ctx, 30*time.Second)
