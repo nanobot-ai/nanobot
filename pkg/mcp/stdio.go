@@ -77,17 +77,17 @@ func (s *Stdio) Wait() {
 	s.waiter.Wait()
 }
 
-func (s *Stdio) Close() {
+func (s *Stdio) Close(bool) {
 	s.closer()
 	s.waiter.Close()
 }
 
 func (s *Stdio) Start(ctx context.Context, handler WireHandler) error {
 	context.AfterFunc(ctx, func() {
-		s.Close()
+		s.Close(false)
 	})
 	go func() {
-		defer s.Close()
+		defer s.Close(false)
 		err := s.start(ctx, handler)
 		if err != nil {
 			log2.Fatal(err)
@@ -97,7 +97,7 @@ func (s *Stdio) Start(ctx context.Context, handler WireHandler) error {
 }
 
 func (s *Stdio) start(ctx context.Context, handler WireHandler) error {
-	defer s.Close()
+	defer s.Close(false)
 
 	buf := bufio.NewScanner(s.stdout)
 	buf.Buffer(make([]byte, 0, 1024), 10*1024*1024)

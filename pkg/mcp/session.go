@@ -26,7 +26,7 @@ func (f MessageHandlerFunc) OnMessage(ctx context.Context, msg Message) {
 }
 
 type Wire interface {
-	Close()
+	Close(deleteSession bool)
 	Wait()
 	Start(ctx context.Context, handler WireHandler) error
 	Send(ctx context.Context, req Message) error
@@ -254,9 +254,9 @@ func (s *Session) Attributes() map[string]any {
 	return maps.Clone(s.attributes)
 }
 
-func (s *Session) Close() {
+func (s *Session) Close(deleteSession bool) {
 	if s.wire != nil {
-		s.wire.Close()
+		s.wire.Close(deleteSession)
 	}
 	s.pendingRequest.Close()
 	s.cancel()
@@ -490,7 +490,7 @@ func newSession(ctx context.Context, wire Wire, handler MessageHandler, session 
 
 	go func() {
 		wire.Wait()
-		s.Close()
+		s.Close(false)
 	}()
 
 	return s, nil

@@ -39,7 +39,8 @@ func New() *cobra.Command {
 		NewTargets(n),
 		NewSessions(n),
 		NewUI(n),
-		NewRun(n))
+		NewRun(n),
+	)
 	return root
 }
 

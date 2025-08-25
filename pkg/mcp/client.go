@@ -19,6 +19,10 @@ type Client struct {
 	Session *Session
 }
 
+func (c *Client) Close(deleteSession bool) {
+	c.Session.Close(deleteSession)
+}
+
 type SessionState struct {
 	ID                string            `json:"id,omitempty"`
 	InitializeResult  InitializeResult  `json:"initializeResult,omitempty"`

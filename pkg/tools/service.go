@@ -216,7 +216,7 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 		case <-abortCtx.Done():
 		case <-ctx.Done():
 			// Abort the session if the ctx closes while creating the clients
-			session.Close()
+			session.Close(false)
 		}
 	}()
 

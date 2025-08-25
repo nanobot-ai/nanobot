@@ -62,7 +62,7 @@ func NewHTTPServer(env map[string]string, handler MessageHandler, opts ...HTTPSe
 	}
 
 	if h.healthzPath != "" {
-		h.startHealthTicker()
+		go h.runHealthTicker()
 	}
 
 	return h
@@ -153,7 +153,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		sseSession.Close()
+		sseSession.Close(true)
 		rw.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -261,27 +261,33 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (h *HTTPServer) startHealthTicker() {
-	go func() {
-		timer := time.NewTimer(time.Minute)
-		for {
-			ctx, cancel := context.WithTimeout(h.ctx, 30*time.Second)
-			err := h.checkTools(ctx)
-			cancel()
+func (h *HTTPServer) runHealthTicker() {
+	ctx, cancel := context.WithTimeout(h.ctx, 2*time.Minute)
+	defer cancel()
+	err := h.checkTools(ctx)
 
-			h.healthMu.Lock()
-			h.healthErr = &err
-			h.healthMu.Unlock()
+	h.healthMu.Lock()
+	h.healthErr = &err
+	h.healthMu.Unlock()
 
-			timer.Reset(time.Minute)
-			select {
-			case <-h.ctx.Done():
-				timer.Stop()
-				return
-			case <-timer.C:
-			}
+	timer := time.NewTimer(time.Minute)
+	for {
+		ctx, cancel := context.WithTimeout(h.ctx, 30*time.Second)
+		err := h.checkTools(ctx)
+		cancel()
+
+		h.healthMu.Lock()
+		h.healthErr = &err
+		h.healthMu.Unlock()
+
+		timer.Reset(time.Minute)
+		select {
+		case <-h.ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
 		}
-	}()
+	}
 }
 
 func (h *HTTPServer) ensureInternalSession(ctx context.Context) (*ServerSession, error) {
@@ -306,7 +312,7 @@ func (h *HTTPServer) ensureInternalSession(ctx context.Context) (*ServerSession,
 		Method:  "initialize",
 		Params:  []byte(`{"capabilities":{},"clientInfo":{"name":"nanobot-internal"},"protocolVersion":"2025-06-18"}`),
 	}); err != nil {
-		session.Close()
+		session.Close(true)
 		return nil, fmt.Errorf("initialize failed: %w", err)
 	}
 
@@ -320,7 +326,7 @@ func (h *HTTPServer) ensureInternalSession(ctx context.Context) (*ServerSession,
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "/mcp", nil)
 	if err != nil {
-		session.Close()
+		session.Close(true)
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	h.sessions.Store(req, session.ID(), session)
@@ -329,7 +335,7 @@ func (h *HTTPServer) ensureInternalSession(ctx context.Context) (*ServerSession,
 	if s = h.internalSession; s != nil {
 		h.healthMu.Unlock()
 		// If another goroutine already set the internal session, close this one.
-		session.Close()
+		session.Close(true)
 		return s, nil
 	}
 	h.internalSession = session

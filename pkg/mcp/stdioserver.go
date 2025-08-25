@@ -55,7 +55,7 @@ func (s *StdioServer) Start(ctx context.Context, in io.ReadCloser, out io.WriteC
 
 	go func() {
 		s.stdio.Wait()
-		session.Close()
+		session.Close(false)
 	}()
 
 	return nil
