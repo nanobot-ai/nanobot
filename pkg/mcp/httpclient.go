@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/log"
-	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
 const SessionIDHeader = "Mcp-Session-Id"
@@ -227,7 +226,9 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID st
 		_ = resp.Body.Close()
 		// If msg is nil, then this is an SSE request for HTTP streaming.
 		// If the server doesn't support a separate SSE endpoint, then we can just return.
-		if !s.sse && resp.StatusCode == http.StatusMethodNotAllowed {
+		// The spec indicates that a server should return 405 if the request method is not allowed.
+		// However, some servers return a 404.
+		if !s.sse && (resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusNotFound) {
 			s.needReconnect = false
 			return nil
 		}
@@ -326,7 +327,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID st
 					return s.ctx.Err(), false
 				default:
 					if msg != nil {
-						msg.ID = uuid.String()
+						msg.ID = float64(time.Now().Unix())
 					}
 					s.sseLock.Lock()
 					if !s.needReconnect {
@@ -505,7 +506,7 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 		if initializeMessage == nil {
 			initializeMessage = &msg
 		} else {
-			initializeMessage.ID = uuid.String()
+			initializeMessage.ID = float64(time.Now().Unix())
 		}
 		if err := s.initialize(ctx, *initializeMessage); err != nil {
 			return fmt.Errorf("failed to initialize client: %w", err)

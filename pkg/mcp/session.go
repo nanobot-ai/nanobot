@@ -9,9 +9,9 @@ import (
 	"reflect"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
 var ErrNoResult = errors.New("no result in response")
@@ -483,8 +483,8 @@ func (s *Session) toRequest(method string, in any, opt ExchangeOption) (*Message
 		}
 	}
 
-	if req.ID == nil || req.ID == "" {
-		req.ID = uuid.String()
+	if req.ID == nil || req.ID == "" || req.ID == 0 || req.ID == 0.0 {
+		req.ID = float64(time.Now().Unix())
 	}
 	if opt.ProgressToken != nil {
 		if err := req.SetProgressToken(opt.ProgressToken); err != nil {
