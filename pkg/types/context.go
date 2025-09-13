@@ -3,14 +3,17 @@ package types
 import (
 	"context"
 
-	apitypes "github.com/obot-platform/obot/apiclient/types"
+	"github.com/obot-platform/mcp-oauth-proxy/pkg/providers"
 )
 
 type Context struct {
-	User    apitypes.User
+	User    User
 	Config  ConfigFactory
 	Profile []string
 }
+
+type User providers.UserInfo
+
 type contextKey struct{}
 
 func WithNanobotContext(ctx context.Context, nc Context) context.Context {

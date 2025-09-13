@@ -2,6 +2,7 @@ package envvar
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -17,6 +18,17 @@ func ReplaceString(envs map[string]string, str string) string {
 		return str
 	}
 	return r
+}
+
+func ReplaceObject(envs map[string]string, obj any) error {
+	text, err := json.Marshal(obj)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(
+		[]byte(ReplaceString(envs, string(text))),
+		obj,
+	)
 }
 
 func ReplaceMap(envs map[string]string, m map[string]string) map[string]string {

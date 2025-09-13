@@ -34,7 +34,6 @@ type CompletionRequest struct {
 	Input             []Message            `json:"input,omitzero"`
 	ModelPreferences  mcp.ModelPreferences `json:"modelPreferences,omitzero"`
 	SystemPrompt      string               `json:"systemPrompt,omitzero"`
-	IncludeContext    string               `json:"includeContext,omitempty"`
 	MaxTokens         int                  `json:"maxTokens,omitempty"`
 	ToolChoice        string               `json:"toolChoice,omitempty"`
 	OutputSchema      *OutputSchema        `json:"outputSchema,omitempty"`

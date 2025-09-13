@@ -2,11 +2,13 @@ package sampling
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -191,18 +193,21 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 		result.Agent = request.Model
 	}
 
-	return CompletionResponseToCallResult(resp)
+	return CompletionResponseToCallResult(resp, false)
 }
 
-func CompletionResponseToCallResult(resp *types.CompletionResponse) (*types.CallResult, error) {
+func CompletionResponseToCallResult(resp *types.CompletionResponse, includeMessages bool) (*types.CallResult, error) {
 	result := &types.CallResult{
 		Model:        resp.Model,
 		ChatResponse: resp.ChatResponse,
+		IsError:      resp.Error != "",
 	}
 
 	for _, output := range resp.Output.Items {
 		if output.ToolCallResult != nil {
-			return &output.ToolCallResult.Output, nil
+			cp := output.ToolCallResult.Output
+			result = &cp
+			break
 		}
 		if output.Content == nil {
 			continue
@@ -225,20 +230,57 @@ func CompletionResponseToCallResult(resp *types.CompletionResponse) (*types.Call
 		})
 	}
 
-	for _, msg := range append(resp.InternalMessages, resp.Output) {
-		textData, err := json.Marshal(msg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal message: %w", err)
+	if includeMessages {
+		outputMessages := append(resp.InternalMessages, resp.Output)
+		if resp.Error != "" {
+			outputMessages = append(outputMessages, types.Message{
+				ID:   fmt.Sprintf("%x", sha256.Sum256([]byte(resp.Error)))[:12],
+				Role: "assistant",
+				Items: []types.CompletionItem{
+					{
+						Content: &mcp.Content{
+							Type: "resource",
+							Resource: &mcp.EmbeddedResource{
+								MIMEType: types.ErrorMimeType,
+								Text:     resp.Error,
+							},
+						},
+					},
+				},
+			})
 		}
 
-		result.Content = append(result.Content, mcp.Content{
-			Type: "resource",
-			Resource: &mcp.EmbeddedResource{
-				URI:      fmt.Sprintf(types.MessageURI, msg.ID),
-				MIMEType: types.MessageMimeType,
-				Text:     string(textData),
-			},
-		})
+		for _, msg := range outputMessages {
+			if len(msg.Items) == 0 {
+				// Empty message, typically happens in there is an error
+				continue
+			}
+			textData, err := json.Marshal(msg)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal message: %w", err)
+			}
+
+			result.Content = append(result.Content, mcp.Content{
+				Type: "resource",
+				Resource: &mcp.EmbeddedResource{
+					URI:      fmt.Sprintf(types.MessageURI, msg.ID),
+					MIMEType: types.MessageMimeType,
+					Text:     string(textData),
+				},
+			})
+		}
+	} else {
+		for _, msg := range append(resp.InternalMessages, resp.Output) {
+			for _, item := range msg.Items {
+				if item.ToolCallResult != nil {
+					for _, content := range item.ToolCallResult.Output.Content {
+						if strings.HasPrefix(content.MIMEType, "ui://") {
+							result.Content = append(result.Content, content)
+						}
+					}
+				}
+			}
+		}
 	}
 
 	return result, nil

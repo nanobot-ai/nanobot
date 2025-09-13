@@ -191,7 +191,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	// Redirect user to consent page to ask for permission
 	// for the scopes specified above.
 	authURL := conf.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier), oauth2.SetAuthURLParam("resource", connectURL))
-	handled, err := o.callbackHandler.HandleAuthURL(ctx, c.serverName, authURL)
+	handled, err := o.callbackHandler.HandleAuthURL(ctx, c.displayName, authURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to handle auth url %s: %w", authURL, err)
 	} else if !handled {

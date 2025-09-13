@@ -4,6 +4,7 @@
 	import type { ChatMessageItemToolCall } from '$lib/types';
 	import '@mcp-ui/client/ui-resource-renderer.wc.js';
 	import MessageItemUI from '$lib/components/MessageItemUI.svelte';
+	import { isUIResource } from '@mcp-ui/client';
 
 	interface Props {
 		item: ChatMessageItemToolCall;
@@ -11,6 +12,12 @@
 	}
 
 	let { item, onSend }: Props = $props();
+	let singleUIResource = $derived(
+		item.output?.content &&
+			item.output?.content?.filter((i) => {
+				return isUIResource(i) && !i.resource?._meta?.['ai.nanobo.meta/workspace'];
+			}).length === 1
+	);
 
 	function parseToolInput(input: string) {
 		try {
@@ -37,16 +44,18 @@
 	}
 </script>
 
-<div class="collapse-arrow collapse mt-3 w-full border border-base-300 bg-base-100">
+<div
+	class="text collapse mt-3 mb-2 w-full border border-base-100 bg-base-100 hover:collapse-arrow hover:border-base-300"
+>
 	<input type="checkbox" />
 	<div class="collapse-title">
 		<div class="flex items-center gap-2">
 			{#if item.output}
-				<Settings class="h-4 w-4 text-primary" />
+				<Settings class="h-4 w-4 text-primary/60" />
 			{:else}
 				<span class="loading loading-xs loading-spinner"></span>
 			{/if}
-			<span class="text-sm font-medium text-primary">Tool: {item.name}</span>
+			<span class="text-sm font-medium text-primary/60">Tool call: {item.name}</span>
 		</div>
 	</div>
 	<div class="collapse-content">
@@ -72,6 +81,11 @@
 											</td>
 										</tr>
 									{/each}
+									{#if Object.keys(parseToolInput(item.arguments).data).length === 0}
+										<tr>
+											<td class="font-mono text-xs">No arguments</td>
+										</tr>
+									{/if}
 								</tbody>
 							</table>
 						</div>
@@ -89,7 +103,8 @@
 						<div class="alert alert-error">
 							<span>Tool execution failed</span>
 						</div>
-					{:else if item.output.content}
+					{/if}
+					{#if item.output.content}
 						<!-- Render tool output content items -->
 						{#each item.output.content as contentItem, i (i)}
 							<div
@@ -122,8 +137,8 @@
 <div class="flex w-full flex-wrap items-start justify-start gap-2">
 	{#if item.output && item.output.content}
 		{#each item.output.content as contentItem, i (i)}
-			{#if contentItem.type === 'resource' && contentItem.resource}
-				<MessageItemUI item={contentItem} {onSend} />
+			{#if contentItem.type === 'resource' && contentItem.resource && !contentItem.resource._meta?.['ai.nanobot.meta/workspace']}
+				<MessageItemUI item={contentItem} {onSend} width={singleUIResource ? '100%' : ''} />
 			{/if}
 			{#if contentItem.type === 'image'}
 				<img

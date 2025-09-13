@@ -79,6 +79,7 @@ export interface ChatMessageItemResource extends ChatMessageItemBase {
 			priority?: number;
 			lastModified?: string;
 		};
+		_meta?: { [key: string]: unknown };
 	};
 }
 
@@ -166,6 +167,7 @@ export interface Elicitation {
 		};
 		required?: string[];
 	};
+	_meta?: { [key: string]: unknown };
 }
 
 export interface ElicitationResult {

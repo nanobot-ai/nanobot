@@ -46,15 +46,36 @@ func (s *Service) getPrompt(ctx context.Context, prompt string, args map[string]
 
 func (s *Service) newGlobals(ctx context.Context, vars map[string]any, opt ...CallOptions) map[string]any {
 	session := mcp.SessionFromContext(ctx)
+	attr := session.Attributes()
 	data := map[string]any{}
 	data["prompt"] = func(target string, args map[string]string) (string, error) {
 		return s.getPrompt(ctx, target, args)
 	}
-	data["nanobot"] = session.Attributes()
+	data["nanobot"] = attr
 	data["call"] = func(target string, args map[string]any) (map[string]any, error) {
 		return s.callFromScript(ctx, target, args, CallOptions{
 			ProgressToken: complete.Complete(opt...).ProgressToken,
 		})
+	}
+	servers := map[string]any{}
+	data["servers"] = servers
+
+	for k, v := range attr {
+		cf, ok := v.(*clientFactory)
+		if !ok {
+			continue
+		}
+		serverName, ok := strings.CutPrefix(k, "clients/")
+		if !ok {
+			continue
+		}
+		var instructions string
+		if cf.client != nil && cf.client.Session != nil {
+			instructions = cf.client.Session.InitializeResult.Instructions
+		}
+		servers[serverName] = map[string]any{
+			"instructions": instructions,
+		}
 	}
 	maps.Copy(data, vars)
 	return data

@@ -17,9 +17,10 @@
 	interface Props {
 		item: ChatMessageItemResource;
 		onSend?: (message: string) => void;
+		width?: string;
 	}
 
-	let { item, onSend }: Props = $props();
+	let { item, onSend, width }: Props = $props();
 	let container: HTMLDivElement;
 	const iFrameRef = $state<{
 		current: HTMLIFrameElement | null;
@@ -35,6 +36,9 @@
 	});
 
 	async function onUIAction(e: UIActionResult) {
+		const x = JSON.stringify(e);
+		console.log(x);
+		console.log('UI Action', e);
 		switch (e.type) {
 			case 'intent':
 				if (
@@ -65,7 +69,7 @@
 		root.render(
 			React.createElement(UIResourceRenderer, {
 				onUIAction,
-				resource: item.resource,
+				resource: $state.snapshot(item.resource),
 				remoteDomProps: {
 					library: basicComponentLibrary,
 					remoteElements: [
@@ -78,10 +82,10 @@
 				},
 				htmlProps: {
 					autoResizeIframe: true,
-					style: {
-						width: 'fit',
-						height: '400px'
-					},
+					// style: {
+					// 	width: width || 'fit-content',
+					// 	height: '1024px'
+					// },
 					iframeProps: {
 						ref: iFrameRef
 					}

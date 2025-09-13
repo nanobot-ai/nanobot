@@ -143,7 +143,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 				}
 			case "input_json_delta":
 				partialJSON += delta.Delta.PartialJSON
-				if contentIndex >= 0 && partialJSON != "" {
+				if contentIndex >= 0 {
 					progress.Send(ctx, &types.CompletionProgress{
 						Model:     resp.Model,
 						Agent:     agentName,

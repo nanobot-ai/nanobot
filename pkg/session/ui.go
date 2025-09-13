@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nanobot-ai/nanobot/pkg/complete"
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 	"github.com/nanobot-ai/nanobot/ui"
@@ -33,11 +35,12 @@ func UISession(next http.Handler, sessionStore *Manager) http.Handler {
 			return
 		}
 
-		user := types.NanobotContext(req.Context()).User
+		nctx := types.NanobotContext(req.Context())
+		user := nctx.User
 		id := getCookieID(req)
 
 		if id != "" {
-			session, err := sessionStore.DB.GetByIDByAccountID(req.Context(), id, user.ID)
+			session, err := sessionStore.DB.GetByIDByAccountID(req.Context(), id, complete.First(user.ID, id))
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				id = ""
 			} else if err != nil {
@@ -52,7 +55,15 @@ func UISession(next http.Handler, sessionStore *Manager) http.Handler {
 			err := sessionStore.DB.Create(req.Context(), &Session{
 				Type:      "ui",
 				SessionID: id,
-				AccountID: user.ID,
+				AccountID: complete.First(user.ID, id),
+				State: State{
+					InitializeResult: mcp.InitializeResult{},
+					InitializeRequest: mcp.InitializeRequest{
+						Capabilities: mcp.ClientCapabilities{
+							Elicitation: &struct{}{},
+						},
+					},
+				},
 			})
 			if err != nil {
 				http.Error(rw, "Failed to create session: "+err.Error(), http.StatusInternalServerError)
@@ -63,9 +74,16 @@ func UISession(next http.Handler, sessionStore *Manager) http.Handler {
 				Name:     "nanobot-session-id",
 				Value:    id,
 				Secure:   false,
+				Path:     "/",
 				HttpOnly: true,
 			}
-			rw.Header().Add("Set-Cookie", cookie.String())
+			http.SetCookie(rw, &cookie)
+		}
+
+		if user.ID == "" {
+			user.ID = id
+			nctx.User = user
+			req = req.WithContext(types.WithNanobotContext(req.Context(), nctx))
 		}
 
 		req.Header.Set("Mcp-Session-Id", id)

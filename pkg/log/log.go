@@ -16,12 +16,17 @@ var (
 	debugs            = strings.Split(os.Getenv("NANOBOT_DEBUG"), ",")
 	EnableMessages    = slices.Contains(debugs, "messages")
 	EnableProgress    = slices.Contains(debugs, "progress")
+	EnableUI          = slices.Contains(debugs, "ui")
 	DebugLog          = slices.Contains(debugs, "log")
 	Base64Replace     = regexp.MustCompile(`((;base64,|")[a-zA-Z0-9+/=]{60})[a-zA-Z0-9+/=]+"`)
 	Base64Replacement = []byte(`$1..."`)
 )
 
 func Messages(_ context.Context, server string, out bool, data []byte) {
+	if !EnableUI && server == "nanobot.ui" {
+		return
+	}
+
 	if EnableProgress && bytes.Contains(data, []byte(`"notifications/progress"`)) {
 	} else if EnableMessages && !bytes.Contains(data, []byte(`"notifications/progress"`)) {
 	} else if slices.Contains(debugs, server) {

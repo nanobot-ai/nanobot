@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/confirm"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/schema"
@@ -21,9 +20,8 @@ import (
 )
 
 type Agents struct {
-	completer     types.Completer
-	registry      *tools.Service
-	confirmations *confirm.Service
+	completer types.Completer
+	registry  *tools.Service
 }
 
 type ToolListOptions struct {
@@ -33,9 +31,8 @@ type ToolListOptions struct {
 
 func New(completer types.Completer, registry *tools.Service) *Agents {
 	return &Agents{
-		completer:     completer,
-		registry:      registry,
-		confirmations: confirm.New(),
+		completer: completer,
+		registry:  registry,
 	}
 }
 
@@ -355,7 +352,7 @@ func (a *Agents) handleUIAction(ctx context.Context, config types.Config, req ty
 				Role: "assistant",
 				Items: []types.CompletionItem{
 					{
-						ID: uuid.String(),
+						ID: "fc_" + uuid.String(),
 						ToolCall: &types.ToolCall{
 							Arguments: string(args),
 							CallID:    uuid.String(),
@@ -499,6 +496,14 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 	}
 }
 
+func (a *Agents) runBefore(ctx context.Context, config types.Config, req types.CompletionRequest) (types.CompletionRequest, *types.CompletionResponse, error) {
+	return req, nil, nil
+}
+
+func (a *Agents) runAfter(ctx context.Context, config types.Config, req types.CompletionRequest, resp *types.CompletionResponse) (*types.CompletionResponse, error) {
+	return resp, nil
+}
+
 func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execution, prev *types.Execution, opts []types.CompletionOptions) error {
 	completionRequest, toolMapping, err := a.populateRequest(ctx, config, run, prev)
 	if err != nil {
@@ -513,9 +518,18 @@ func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execut
 	}
 	maps.Copy(allToolMappings, toolMapping)
 
-	// Save the populated request to the Execution status
-	run.PopulatedRequest = &completionRequest
 	run.ToolToMCPServer = allToolMappings
+
+	completionRequest, resp, err := a.runBefore(ctx, config, completionRequest)
+	if err != nil {
+		return fmt.Errorf("failed to run before agent: %w", err)
+	} else if resp != nil {
+		run.PopulatedRequest = &completionRequest
+		run.Response = resp
+		return nil
+	}
+
+	run.PopulatedRequest = &completionRequest
 
 	modifiedRequest, resp, err := a.handleUIAction(ctx, config, completionRequest, opts)
 	if err != nil {
@@ -528,6 +542,11 @@ func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execut
 	resp, err = a.completer.Complete(ctx, modifiedRequest, opts...)
 	if err != nil {
 		return err
+	}
+
+	resp, err = a.runAfter(ctx, config, completionRequest, resp)
+	if err != nil {
+		return fmt.Errorf("failed to run after agent: %w", err)
 	}
 
 	run.Response = resp

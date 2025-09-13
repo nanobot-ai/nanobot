@@ -256,6 +256,15 @@ definitions:
       the Nanobot can use.
     additionalProperties: false
     properties:
+      name:
+        type: string
+        description: |
+          The name of the MCP Server. This is show to the user as the name of the MCP Server.
+      shortName:
+        type: string
+        description: |
+          A short form of the name of the name of the server. This is used to refer to the MCP Server
+          in a shorter form because the typical name might be too long to display.
       command:
         type: string
         description: |
@@ -759,9 +768,54 @@ definitions:
         description: |
           A map of input field names to their definitions.
 
+  Auth:
+    type: object
+    description: |
+      Configuration for the authentication of the Nanobot.
+    additionalProperties: false
+    properties:
+      remoteHeaders:
+        type: boolean
+        description: |
+          Read X-Forward-User, X-Forward-Email, and X-Forward-Name headers from the
+          request and set them as the user, email, and role of the current request.
+          This is useful for authenticating requests from a reverse proxy.
+      oauthClientId:
+        type: string
+        description: |
+          The OAuth client ID to use for authenticating requests.
+      oauthClientSecret:
+        type: string
+        description: |
+          The OAuth client secret to use for authenticating requests.
+      oauthAuthorizeUrl:
+        type: string
+        description: |
+          The OAuth authorize URL to use for authenticating requests.
+      oauthScopes:
+        $ref: "#/definitions/StringOrStringList"
+        description: |
+          The OAuth scopes to request when authenticating requests.
+      oauthAuthorizationServerMetadata:
+        type: object
+        description: |
+          Custom OAuth authorization server metadata that overrides the builtin well-known value. The jwks_uri
+          field must be set if you want to valid the resulting JWT token.
+        additionalProperties: true
+      encryptionKey:
+        type: string
+        description: |
+          The encryption key to use for encrypting and decrypting data.
+
+
 type: object
 additionalProperties: false
 properties:
+  auth:
+    $ref: "#/definitions/Auth"
+    description: |
+      Configuration for the authentication of the Nanobot.
+
   publish:
     $ref: "#/definitions/Publish"
     description: |

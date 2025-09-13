@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -24,6 +25,7 @@ type Service struct {
 	runner           mcp.Runner
 	callbackHandler  mcp.CallbackHandler
 	oauthRedirectURL string
+	tokenStorage     mcp.TokenStorage
 	concurrency      int
 	serverFactories  map[string]func(name string) mcp.MessageHandler
 }
@@ -32,35 +34,38 @@ type Sampler interface {
 	Sample(ctx context.Context, sampling mcp.CreateMessageRequest, opts ...sampling.SamplerOptions) (*types.CallResult, error)
 }
 
-type RegistryOptions struct {
+type Options struct {
 	Roots            []mcp.Root
 	Concurrency      int
 	CallbackHandler  mcp.CallbackHandler
 	OAuthRedirectURL string
+	TokenStorage     mcp.TokenStorage
 }
 
-func (r RegistryOptions) Merge(other RegistryOptions) (result RegistryOptions) {
+func (r Options) Merge(other Options) (result Options) {
 	result.Roots = append(r.Roots, other.Roots...)
 	result.Concurrency = complete.Last(r.Concurrency, other.Concurrency)
 	result.CallbackHandler = complete.Last(r.CallbackHandler, other.CallbackHandler)
 	result.OAuthRedirectURL = complete.Last(r.OAuthRedirectURL, other.OAuthRedirectURL)
+	result.TokenStorage = complete.Last(r.TokenStorage, other.TokenStorage)
 	return result
 }
 
-func (r RegistryOptions) Complete() RegistryOptions {
+func (r Options) Complete() Options {
 	if r.Concurrency == 0 {
 		r.Concurrency = 10
 	}
 	return r
 }
 
-func NewToolsService(opts ...RegistryOptions) *Service {
+func NewToolsService(opts ...Options) *Service {
 	opt := complete.Complete(opts...)
 	return &Service{
 		roots:            opt.Roots,
 		concurrency:      opt.Concurrency,
 		oauthRedirectURL: opt.OAuthRedirectURL,
 		callbackHandler:  opt.CallbackHandler,
+		tokenStorage:     opt.TokenStorage,
 	}
 }
 
@@ -270,6 +275,17 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 		return roots.Roots, nil
 	}
 
+	var oauthRedirectURL string
+	if session.Get(types.PublicURLSessionKey, &oauthRedirectURL) {
+		u, err := url.Parse(oauthRedirectURL)
+		if err == nil {
+			oauthRedirectURL = u.Scheme + "://" + u.Host
+		}
+		oauthRedirectURL = strings.TrimSuffix(oauthRedirectURL, "/") + "/oauth/callback"
+	} else {
+		oauthRedirectURL = s.oauthRedirectURL
+	}
+
 	clientOpts := mcp.ClientOption{
 		Roots:         roots,
 		Env:           session.GetEnvMap(),
@@ -308,19 +324,20 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 		},
 		Runner:           &s.runner,
 		CallbackHandler:  s.callbackHandler,
-		OAuthRedirectURL: s.oauthRedirectURL,
+		OAuthRedirectURL: oauthRedirectURL,
 		Wire:             wire,
 		SessionState:     state,
+		TokenStorage:     s.tokenStorage,
 	}
 
 	if session.InitializeRequest.Capabilities.Elicitation == nil {
-		clientOpts.OnElicit = func(ctx context.Context, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {
+		clientOpts.OnElicit = func(ctx context.Context, _ mcp.Message, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {
 			return mcp.ElicitResult{
 				Action: "cancel",
 			}, nil
 		}
 	} else {
-		clientOpts.OnElicit = func(ctx context.Context, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {
+		clientOpts.OnElicit = func(ctx context.Context, _ mcp.Message, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {
 			err := session.Exchange(ctx, "elicitation/create", elicitation, &result)
 			return result, err
 		}
@@ -615,7 +632,7 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 		return ret, err
 	}
 
-	if _, ok := config.Agents[server]; ok {
+	if _, ok := config.Agents[server]; ok && tool != types.AgentTool {
 		return s.SampleCall(ctx, server, args, SampleCallOptions{
 			ProgressToken: opt.ProgressToken,
 			AgentOverride: opt.AgentOverride,
@@ -716,7 +733,7 @@ func (s *Service) ListTools(ctx context.Context, opts ...ListToolsOptions) (resu
 		tools := filterTools(&mcp.ListToolsResult{
 			Tools: []mcp.Tool{
 				{
-					Name:        agentName,
+					Name:        types.AgentTool,
 					Description: agent.Description,
 					InputSchema: types.ChatInputSchema,
 				},

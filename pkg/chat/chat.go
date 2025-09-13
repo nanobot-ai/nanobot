@@ -31,7 +31,7 @@ func Chat(ctx context.Context, listenAddress string,
 		OnLogging: func(ctx context.Context, logMsg mcp.LoggingMessage) error {
 			return handleLog(logMsg)
 		},
-		OnElicit: func(ctx context.Context, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {
+		OnElicit: func(ctx context.Context, _ mcp.Message, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {
 			return elicit.Answer(elicitation, autoConfirm)
 		},
 		OnNotify: func(ctx context.Context, msg mcp.Message) error {

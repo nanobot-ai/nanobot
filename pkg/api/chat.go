@@ -4,35 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
-	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
-
-func Invoke(rw http.ResponseWriter, req *http.Request) error {
-	content, err := io.ReadAll(io.LimitReader(req.Body, 1_000_000))
-	if err != nil {
-		return err
-	}
-
-	apiContext := getContext(req.Context())
-	ret, err := apiContext.ChatClient.Call(req.Context(), "chat", map[string]any{
-		"prompt": string(content),
-	}, mcp.CallOption{
-		ProgressToken: uuid.String(),
-		Meta: map[string]any{
-			types.AsyncMetaKey: true,
-		},
-	})
-	if err != nil {
-		return err
-	}
-
-	return JSON(rw, ret)
-}
 
 func writeEvent(rw http.ResponseWriter, id any, name string, textOrData any) error {
 	asMap := make(map[string]any)
@@ -73,7 +49,7 @@ func writeEvent(rw http.ResponseWriter, id any, name string, textOrData any) err
 	return nil
 }
 
-func printHistory(rw http.ResponseWriter, req *http.Request, client *mcp.Client) error {
+func printHistory(rw http.ResponseWriter, req *http.Request, client *mcp.Client, printedIDs map[string]struct{}) error {
 	resources, err := client.ListResources(req.Context())
 	if err != nil {
 		return fmt.Errorf("failed to list resources: %w", err)
@@ -97,6 +73,17 @@ func printHistory(rw http.ResponseWriter, req *http.Request, client *mcp.Client)
 				if err := writeEvent(rw, nil, "message", message.Text); err != nil {
 					return err
 				}
+				var id string
+				if err := json.Unmarshal([]byte(message.Text), &struct {
+					ID *string `json:"id"`
+				}{
+					ID: &id,
+				}); err != nil {
+					return fmt.Errorf("failed to unmarshal message: %w", err)
+				}
+				if id != "" {
+					printedIDs[id] = struct{}{}
+				}
 			}
 			if err := writeEvent(rw, nil, "history-end", nil); err != nil {
 				return fmt.Errorf("failed to write history-start: %w", err)
@@ -107,7 +94,7 @@ func printHistory(rw http.ResponseWriter, req *http.Request, client *mcp.Client)
 	}
 
 	if progressURI != "" {
-		if err := printProgressURI(rw, req, client, progressURI); err != nil {
+		if err := printProgressURI(rw, req, client, progressURI, printedIDs); err != nil {
 			return err
 		}
 	}
@@ -115,7 +102,8 @@ func printHistory(rw http.ResponseWriter, req *http.Request, client *mcp.Client)
 	return nil
 }
 
-func printProgressURI(rw http.ResponseWriter, req *http.Request, client *mcp.Client, progressURI string) error {
+func printProgressURI(rw http.ResponseWriter, req *http.Request, client *mcp.Client, progressURI string,
+	printedIDs map[string]struct{}) error {
 	messages, err := client.ReadResource(req.Context(), progressURI)
 	if err != nil {
 		return fmt.Errorf("failed to read history: %w", err)
@@ -130,7 +118,7 @@ func printProgressURI(rw http.ResponseWriter, req *http.Request, client *mcp.Cli
 			return fmt.Errorf("failed to unmarshal tool result: %w", err)
 		}
 
-		if callResult.ToolName != "chat" {
+		if callResult.ToolName != types.AgentTool {
 			continue
 		}
 
@@ -142,6 +130,15 @@ func printProgressURI(rw http.ResponseWriter, req *http.Request, client *mcp.Cli
 
 		for _, progressMessage := range callResult.Content {
 			if progressMessage.Resource != nil && progressMessage.Resource.MIMEType == types.MessageMimeType {
+				var id string
+				_ = json.Unmarshal([]byte(progressMessage.Resource.Text), &struct {
+					ID *string `json:"id"`
+				}{
+					ID: &id,
+				})
+				if _, ok := printedIDs[id]; ok {
+					continue
+				}
 				if err := writeEvent(rw, nil, "message", progressMessage.Resource.Text); err != nil {
 					return err
 				}
@@ -167,7 +164,20 @@ func Events(rw http.ResponseWriter, req *http.Request) error {
 	}
 
 	events := make(chan mcp.Message)
-	subClient, err := mcp.NewClient(req.Context(), "ui", apiContext.MCPServer, mcp.ClientOption{
+	subClient, err := mcp.NewClient(req.Context(), "nanobot.ui", apiContext.MCPServer, mcp.ClientOption{
+		OnElicit: func(ctx context.Context, msg mcp.Message, _ mcp.ElicitRequest) (mcp.ElicitResult, error) {
+			select {
+			case events <- msg:
+				return mcp.ElicitResult{
+					Action: "handled",
+				}, nil
+			case <-req.Context().Done():
+				return mcp.ElicitResult{}, req.Context().Err()
+			case <-ctx.Done():
+				// I'm pretty sure ctx and req.Context() are the same, but just in case...
+				return mcp.ElicitResult{}, ctx.Err()
+			}
+		},
 		OnNotify: func(ctx context.Context, msg mcp.Message) error {
 			select {
 			case events <- msg:
@@ -186,19 +196,23 @@ func Events(rw http.ResponseWriter, req *http.Request) error {
 	}
 	defer subClient.Close(false)
 
+	_, _ = subClient.SubscribeResource(req.Context(), types.ProgressURI)
+
 	rw.Header().Set("Content-Type", "text/event-stream")
 	rw.WriteHeader(200)
 	if _, f := rw.(http.Flusher); f {
 		rw.(http.Flusher).Flush()
 	}
 
+	ids := map[string]struct{}{}
+
 	// Transform chat messages into SSE events
-	if err := printHistory(rw, req, subClient); err != nil {
+	if err := printHistory(rw, req, subClient, ids); err != nil {
 		return err
 	}
 
 	for msg := range events {
-		err := printProgressMessage(rw, req, msg, subClient)
+		err := printProgressMessage(rw, req, msg, subClient, ids)
 		if err != nil {
 			return err
 		}
@@ -207,7 +221,7 @@ func Events(rw http.ResponseWriter, req *http.Request) error {
 	return nil
 }
 
-func printProgressMessage(rw http.ResponseWriter, req *http.Request, msg mcp.Message, client *mcp.Client) error {
+func printProgressMessage(rw http.ResponseWriter, req *http.Request, msg mcp.Message, client *mcp.Client, printedIDs map[string]struct{}) error {
 	defer func() {
 		if f, ok := rw.(http.Flusher); ok {
 			f.Flush()
@@ -222,7 +236,7 @@ func printProgressMessage(rw http.ResponseWriter, req *http.Request, msg mcp.Mes
 			return fmt.Errorf("failed to unmarshal params: %w", err)
 		}
 		if data.URI != "" {
-			return printProgressURI(rw, req, client, data.URI)
+			return printProgressURI(rw, req, client, data.URI, printedIDs)
 		}
 	}
 

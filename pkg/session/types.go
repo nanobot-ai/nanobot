@@ -67,6 +67,13 @@ type Session struct {
 	IsPublic    bool          `json:"isPublic"`
 }
 
+type Token struct {
+	gorm.Model
+	AccountID string `json:"accountID,omitempty"`
+	URL       string `json:"url,omitempty"`
+	Data      string `json:"data,omitempty"`
+}
+
 func (s *Session) Clone(accountID string) *Session {
 	newSession := *s
 	newSession.SessionID = uuid.String()

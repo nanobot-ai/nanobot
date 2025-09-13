@@ -48,13 +48,14 @@ type liveSession struct {
 	count   int
 }
 
-func (m *Manager) newRecord(parent *Session, id string) *Session {
+func (m *Manager) newRecord(id, accountID string) *Session {
 	cwd, err := os.Getwd()
 	if err != nil {
 		cwd = ""
 	}
 	return &Session{
 		SessionID: id,
+		AccountID: accountID,
 		Cwd:       cwd,
 	}
 }
@@ -81,17 +82,17 @@ func (m *Manager) Store(ctx context.Context, id string, session *mcp.ServerSessi
 		return nil
 	}
 
+	var accountID string
+	session.GetSession().Get(types.AccountIDSessionKey, &accountID)
+
 	var create bool
 	stored, err := m.DB.Get(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		stored = m.newRecord(m.root, id)
+		stored = m.newRecord(id, accountID)
 		create = true
 	} else if err != nil {
 		return err
 	}
-
-	var accountID string
-	session.GetSession().Get(types.AccountIDSessionKey, &accountID)
 
 	if stored.AccountID != accountID {
 		return fmt.Errorf("session %s not found for account %s", id, accountID)

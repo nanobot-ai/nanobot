@@ -17,6 +17,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/servers/agentui"
 	"github.com/nanobot-ai/nanobot/pkg/servers/meta"
 	"github.com/nanobot-ai/nanobot/pkg/servers/resources"
+	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
 	"github.com/nanobot-ai/nanobot/pkg/tools"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -33,6 +34,7 @@ type Options struct {
 	Profiles         []string
 	MaxConcurrency   int
 	CallbackHandler  mcp.CallbackHandler
+	TokenStorage     mcp.TokenStorage
 	OAuthRedirectURL string
 	DSN              string
 }
@@ -43,18 +45,29 @@ func (o Options) Merge(other Options) (result Options) {
 	result.Roots = append(o.Roots, other.Roots...)
 	result.CallbackHandler = complete.Last(o.CallbackHandler, other.CallbackHandler)
 	result.OAuthRedirectURL = complete.Last(o.OAuthRedirectURL, other.OAuthRedirectURL)
+	result.TokenStorage = complete.Last(o.TokenStorage, other.TokenStorage)
 	result.DSN = complete.Last(o.DSN, other.DSN)
 	return
 }
 
-func NewRuntime(cfg llm.Config, opts ...Options) *Runtime {
+func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 	opt := complete.Complete(opts...)
+
+	if opt.TokenStorage == nil && opt.DSN != "" {
+		var err error
+		opt.TokenStorage, err = session.NewStoreFromDSN(opt.DSN)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create session store: %w", err)
+		}
+	}
+
 	completer := llm.NewClient(cfg)
-	registry := tools.NewToolsService(tools.RegistryOptions{
+	registry := tools.NewToolsService(tools.Options{
 		Roots:            opt.Roots,
 		Concurrency:      opt.MaxConcurrency,
 		CallbackHandler:  opt.CallbackHandler,
 		OAuthRedirectURL: opt.OAuthRedirectURL,
+		TokenStorage:     opt.TokenStorage,
 	})
 	agents := agents.New(completer, registry)
 	sampler := sampling.NewSampler(agents)
@@ -97,7 +110,7 @@ func NewRuntime(cfg llm.Config, opts ...Options) *Runtime {
 		})
 	}
 
-	return r
+	return r, nil
 }
 
 func (r *Runtime) WithTempSession(ctx context.Context, config *types.Config) context.Context {

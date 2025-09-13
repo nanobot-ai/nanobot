@@ -46,7 +46,7 @@ func NewCallbackServer(authURLHandler AuthURLHandler) CallbackServer {
 
 func (s *callbackHandler) NewState(_ context.Context, conf *oauth2.Config, _ string) (string, <-chan CallbackPayload, error) {
 	state := strings.ToLower(rand.Text())
-	ch := make(chan CallbackPayload)
+	ch := make(chan CallbackPayload, 1)
 	s.lock.Lock()
 	s.state[state] = callback{
 		conf: conf,

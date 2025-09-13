@@ -169,6 +169,9 @@ type Content struct {
 
 	// Resource is set when type is "resource"
 	Resource *EmbeddedResource `json:"resource,omitempty"`
+
+	// Meta is used for all types and contains arbitrary metadata.
+	Meta map[string]any `json:"_meta,omitempty"`
 }
 
 func (c Content) MarshalJSON() ([]byte, error) {
@@ -204,6 +207,7 @@ type EmbeddedResource struct {
 	Text        string               `json:"text,omitempty"`
 	Blob        string               `json:"blob,omitempty"`
 	Annotations *ResourceAnnotations `json:"annotations,omitempty"`
+	Meta        map[string]any       `json:"_meta,omitempty"`
 }
 
 type ResourceAnnotations struct {
@@ -312,8 +316,14 @@ type SubscribeRequest struct {
 	URI string `json:"uri"`
 }
 
+type SubscribeResult struct {
+}
+
 type UnsubscribeRequest struct {
 	URI string `json:"uri"`
+}
+
+type UnsubscribeResult struct {
 }
 
 type ResourceTemplate struct {

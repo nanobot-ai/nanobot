@@ -22,6 +22,7 @@ func NewTargets(n *Nanobot) *Targets {
 }
 
 func (t *Targets) Customize(cmd *cobra.Command) {
+	cmd.Hidden = true
 	cmd.Use = "targets [flags] NANOBOT"
 	cmd.Short = "List the available tools, agents, flows that can be called using \"nanobot call\"."
 	cmd.Aliases = []string{"target", "t"}

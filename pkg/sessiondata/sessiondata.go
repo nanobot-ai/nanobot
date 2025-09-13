@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 
@@ -146,6 +147,45 @@ func (d *Data) CurrentAgent(ctx context.Context) string {
 	return currentAgent
 }
 
+func (d *Data) setURL(ctx context.Context) {
+	var (
+		session = mcp.SessionFromContext(ctx)
+	)
+
+	req := mcp.RequestFromContext(ctx)
+	if req == nil {
+		return
+	}
+
+	url := getHostURL(req)
+	session.Set(types.PublicURLSessionKey, mcp.SavedString(url))
+}
+
+func getHostURL(req *http.Request) string {
+	scheme := req.Header.Get("X-Forwarded-Proto")
+	if scheme == "" {
+		if req.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+
+	host := req.Header.Get("X-Forwarded-Host")
+	if host == "" {
+		host = req.Host
+	}
+
+	if originalURL := req.Header.Get("X-Original-URL"); originalURL != "" {
+		if strings.HasPrefix(originalURL, "http://") || strings.HasPrefix(originalURL, "https://") {
+			return originalURL
+		}
+		return fmt.Sprintf("%s://%s%s", scheme, host, originalURL)
+	}
+
+	return fmt.Sprintf("%s://%s%s", scheme, host, req.URL.Path)
+}
+
 func (d *Data) getAndSetConfig(ctx context.Context, defaultConfig types.ConfigFactory) (types.Config, error) {
 	var (
 		c        types.Config
@@ -212,7 +252,7 @@ func initSubscriptions(session *mcp.Session) {
 			return msg, nil
 		}
 
-		subs := map[string]struct{}{}
+		subs := resourceSubscriptions{}
 		if session.Get(types.ResourceSubscriptionsSessionKey, &subs) {
 			_, ok := subs[uri]
 			if ok {
@@ -226,13 +266,64 @@ func initSubscriptions(session *mcp.Session) {
 	session.Set("_subscriptions_initialized", true)
 }
 
+type resourceSubscriptions map[string]struct{}
+
+func (r resourceSubscriptions) Deserialize(v any) (any, error) {
+	r = resourceSubscriptions{}
+	return r, mcp.JSONCoerce(v, &r)
+}
+
+func (r resourceSubscriptions) Serialize() (any, error) {
+	return (map[string]struct{})(r), nil
+}
+
+func (d *Data) UnsubscribeFromResources(ctx context.Context, uris ...string) error {
+	var (
+		session = mcp.SessionFromContext(ctx)
+		subs    resourceSubscriptions
+	)
+	session.Get(types.ResourceSubscriptionsSessionKey, &subs)
+	if subs == nil {
+		subs = resourceSubscriptions{}
+	}
+	for _, uri := range uris {
+		delete(subs, uri)
+	}
+
+	session.Set(types.ResourceSubscriptionsSessionKey, subs)
+	return nil
+}
+
+func (d *Data) SubscribeToResources(ctx context.Context, uris ...string) error {
+	var (
+		session = mcp.SessionFromContext(ctx)
+		subs    resourceSubscriptions
+	)
+	session.Get(types.ResourceSubscriptionsSessionKey, &subs)
+	if subs == nil {
+		subs = resourceSubscriptions{}
+	}
+
+	for _, uri := range uris {
+		subs[uri] = struct{}{}
+	}
+
+	session.Set(types.ResourceSubscriptionsSessionKey, subs)
+	return nil
+}
+
 func (d *Data) Sync(ctx context.Context, defaultConfig types.ConfigFactory) error {
 	var (
 		session      = mcp.SessionFromContext(ctx)
 		existingHash string
+		nctx         = types.NanobotContext(ctx)
 	)
 
-	//initSubscriptions(session)
+	session.Set(types.AccountIDSessionKey, nctx.User.ID)
+
+	initSubscriptions(session)
+
+	d.setURL(ctx)
 
 	config, err := d.getAndSetConfig(ctx, defaultConfig)
 	if err != nil {

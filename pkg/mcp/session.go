@@ -60,7 +60,7 @@ func WithSession(ctx context.Context, s *Session) context.Context {
 
 type Session struct {
 	ctx               context.Context
-	cancel            context.CancelFunc
+	cancel            context.CancelCauseFunc
 	wire              Wire
 	handler           MessageHandler
 	pendingRequest    PendingRequests
@@ -120,6 +120,9 @@ func (s *Session) State() (*SessionState, error) {
 	if s == nil {
 		return nil, nil
 	}
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	keys, _ := s.attributes[".keys"].([]string)
 	attr := make(map[string]any, len(s.attributes))
@@ -337,7 +340,7 @@ func (s *Session) Close(deleteSession bool) {
 		s.wire.Close(deleteSession)
 	}
 	s.pendingRequest.Close()
-	s.cancel()
+	s.cancel(fmt.Errorf("session closed: %s, delete=%v", s.ID(), deleteSession))
 }
 
 func (s *Session) Wait() {
@@ -557,22 +560,23 @@ func (s *Session) onWire(ctx context.Context, message Message) {
 
 func NewEmptySession(ctx context.Context) *Session {
 	s := &Session{}
-	s.ctx, s.cancel = context.WithCancel(WithSession(ctx, s))
+	s.ctx, s.cancel = context.WithCancelCause(WithSession(ctx, s))
 	return s
 }
 
-func newSession(ctx context.Context, wire Wire, handler MessageHandler, session *SessionState, r *recorder) (*Session, error) {
+func newSession(ctx context.Context, wire Wire, handler MessageHandler, session *SessionState, r *recorder, parentSession *Session) (*Session, error) {
 	s := &Session{
 		wire:     wire,
 		handler:  handler,
 		recorder: r,
+		Parent:   parentSession,
 	}
 	if session != nil {
 		s.InitializeRequest = session.InitializeRequest
 		s.InitializeResult = session.InitializeResult
 	}
 	withSession := WithSession(ctx, s)
-	s.ctx, s.cancel = context.WithCancel(withSession)
+	s.ctx, s.cancel = context.WithCancelCause(withSession)
 
 	if err := wire.Start(s.ctx, s.onWire); err != nil {
 		return nil, err

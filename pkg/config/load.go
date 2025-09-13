@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -109,10 +110,12 @@ func loadResource(ctx context.Context, configResource *resource, profiles ...str
 }
 
 func rewriteCwd(cfg types.Config, cwd string) types.Config {
+	newMCPServers := map[string]mcp.Server{}
 	for name, mcpServer := range cfg.MCPServers {
 		mcpServer.Cwd = filepath.Join(cwd, mcpServer.Cwd)
-		cfg.MCPServers[name] = mcpServer
+		newMCPServers[name] = mcpServer
 	}
+	cfg.MCPServers = newMCPServers
 	return cfg
 }
 
