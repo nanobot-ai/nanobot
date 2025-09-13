@@ -53,6 +53,7 @@ func appendProgress(ctx context.Context, session *mcp.Session, progressMessage *
 		event    progressPayload
 		response types.CompletionResponse
 	)
+
 	if err := json.Unmarshal(progressMessage.Params, &event); err != nil {
 		return progressMessage, nil
 	}
@@ -178,7 +179,9 @@ func (c chatCall) Invoke(ctx context.Context, msg mcp.Message, payload mcp.CallT
 func (c chatCall) chatInvoke(ctx context.Context, msg mcp.Message, payload mcp.CallToolRequest) (_ *mcp.CallToolResult, retErr error) {
 	session := mcp.SessionFromContext(ctx).Parent
 
-	defer closeProgress(ctx, session, retErr)
+	defer func() {
+		closeProgress(ctx, session, retErr)
+	}()
 	defer session.AddFilter(func(ctx context.Context, msg *mcp.Message) (*mcp.Message, error) {
 		return appendProgress(ctx, session, msg)
 	})()
@@ -187,7 +190,7 @@ func (c chatCall) chatInvoke(ctx context.Context, msg mcp.Message, payload mcp.C
 		ProgressToken: msg.ProgressToken(),
 	})
 
-	result, err := c.s.runtime.Call(ctx, c.s.agentName, "chat", payload.Arguments, tools.CallOptions{
+	result, err := c.s.runtime.Call(ctx, c.s.agentName, c.s.agentName, payload.Arguments, tools.CallOptions{
 		ProgressToken: msg.ProgressToken(),
 		LogData: map[string]any{
 			"mcpToolName": payload.Name,

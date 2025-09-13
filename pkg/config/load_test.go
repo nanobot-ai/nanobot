@@ -33,6 +33,17 @@ func TestSchema(t *testing.T) {
 	obj := map[string]any{}
 	err = json.Unmarshal([]byte(`
 {
+	"auth": {
+		"oauthClientId": "clientid",
+		"oauthClientSecret": "clientsecret",
+		"oauthAuthorizeUrl": "http://localhost:8080/oauth/authorize",
+		"oauthScopes": ["scope1", "scope2"],
+		"oauthAuthorizationServerMetadata": {
+			"authorizationEndpoint": "http://localhost:8080/oauth/authorize",
+			"tokenEndpoint": "http://localhost:8080/oauth/token"
+		},
+		"encryptionKey": "encryptionkey"
+	},
 	"mcpServers": {
 		"server1": {
 			"command": "command1",

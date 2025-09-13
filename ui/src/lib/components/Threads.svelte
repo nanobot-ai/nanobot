@@ -8,15 +8,17 @@
 		onRename: (threadId: string, newTitle: string) => void;
 		onDelete: (threadId: string) => void;
 		isLoading?: boolean;
+		onThreadClick?: () => void;
 	}
 
-	let { threads, onRename, onDelete, isLoading = false }: Props = $props();
+	let { threads, onRename, onDelete, isLoading = false, onThreadClick }: Props = $props();
 
 	let editingThreadId = $state<string | null>(null);
 	let editTitle = $state('');
 
 	function navigateToThread(threadId: string) {
 		goto(`/c/${threadId}`);
+		onThreadClick?.();
 	}
 
 	function formatTime(timestamp: string): string {
@@ -34,7 +36,7 @@
 
 	function startRename(threadId: string, currentTitle: string) {
 		editingThreadId = threadId;
-		editTitle = currentTitle;
+		editTitle = currentTitle || '';
 	}
 
 	function saveRename() {
@@ -65,8 +67,8 @@
 
 <div class="flex h-full flex-col">
 	<!-- Header -->
-	<div class="flex-shrink-0 border-b border-base-300 p-4">
-		<h2 class="text-lg font-semibold">Chats</h2>
+	<div class="flex-shrink-0 p-2">
+		<h2 class="font-semibold text-base-content/60">Conversations</h2>
 	</div>
 
 	<!-- Thread list -->
@@ -89,10 +91,10 @@
 			{/each}
 		{:else}
 			{#each threads as thread (thread.id)}
-				<div class="flex items-center border-b border-base-200 hover:bg-base-100">
+				<div class="group flex items-center border-b border-base-200 hover:bg-base-100">
 					<!-- Thread title area (clickable) -->
 					<button
-						class="flex-1 p-3 text-left transition-colors focus:outline-none"
+						class="flex-1 truncate p-3 text-left transition-colors focus:outline-none"
 						onclick={() => navigateToThread(thread.id)}
 					>
 						<div class="flex items-center justify-between gap-2">
@@ -107,7 +109,7 @@
 										onfocus={(e) => (e.target as HTMLInputElement).select()}
 									/>
 								{:else}
-									<h3 class="truncate text-sm font-medium">{thread.title}</h3>
+									<h3 class="truncate text-sm font-medium">{thread.title || 'Untitled'}</h3>
 								{/if}
 							</div>
 							{#if editingThreadId !== thread.id}
@@ -139,8 +141,8 @@
 					{/if}
 
 					{#if editingThreadId !== thread.id}
-						<!-- Dropdown menu -->
-						<div class="dropdown dropdown-end">
+						<!-- Dropdown menu - only show on hover -->
+						<div class="dropdown dropdown-end opacity-0 transition-opacity group-hover:opacity-100">
 							<div tabindex="0" role="button" class="btn btn-square btn-ghost btn-sm">
 								<MoreVertical class="h-4 w-4" />
 							</div>

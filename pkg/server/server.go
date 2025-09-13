@@ -72,22 +72,19 @@ func (s *Server) init() {
 }
 
 func (s *Server) handleResourcesUnsubscribe(ctx context.Context, msg mcp.Message, payload mcp.UnsubscribeRequest) error {
-	session := mcp.SessionFromContext(ctx)
-	resourceSubscriptions := map[string]struct{}{}
-	if session.Get(types.ResourceSubscriptionsSessionKey, &resourceSubscriptions) {
-		delete(resourceSubscriptions, payload.URI)
-		session.Set(types.ResourceSubscriptionsSessionKey, resourceSubscriptions)
+	err := s.data.UnsubscribeFromResources(ctx, payload.URI)
+	if err != nil {
+		return err
 	}
-	return nil
+	return msg.Reply(ctx, map[string]any{})
 }
 
 func (s *Server) handleResourcesSubscribe(ctx context.Context, msg mcp.Message, payload mcp.SubscribeRequest) error {
-	session := mcp.SessionFromContext(ctx)
-	resourceSubscriptions := map[string]struct{}{}
-	session.Get(types.ResourceSubscriptionsSessionKey, &resourceSubscriptions)
-	resourceSubscriptions[payload.URI] = struct{}{}
-	session.Set(types.ResourceSubscriptionsSessionKey, resourceSubscriptions)
-	return nil
+	err := s.data.SubscribeToResources(ctx, payload.URI)
+	if err != nil {
+		return err
+	}
+	return msg.Reply(ctx, map[string]any{})
 }
 
 func (s *Server) handleListResourceTemplates(ctx context.Context, msg mcp.Message, _ mcp.ListResourceTemplatesRequest) error {

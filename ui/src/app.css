@@ -2,29 +2,31 @@
 @import 'highlight.js/styles/atom-one-dark.css';
 @plugin "@tailwindcss/typography";
 @plugin "daisyui" {
-	themes: all;
+	themes:
+		lofi --default,
+		black --prefersdark;
 }
 
 /* Enhanced code block styling */
-.prose pre {
-	@apply !overflow-x-auto !rounded-lg !bg-gray-900 !p-4;
-}
+/*.prose pre {*/
+/*	@apply !overflow-x-auto !rounded-lg !bg-gray-900 !p-4;*/
+/*}*/
 
-.prose code {
-	@apply !rounded !bg-gray-800 !px-2 !py-1 !text-green-400;
-}
+/*.prose code {*/
+/*	@apply !rounded !bg-gray-800 !px-2 !py-1 !text-green-400;*/
+/*}*/
 
-.prose pre code {
-	@apply !bg-transparent !p-0 !text-gray-100;
-}
+/*.prose pre code {*/
+/*	@apply !bg-transparent !p-0 !text-gray-100;*/
+/*}*/
 
-/* Ensure highlight.js styles work properly */
-.hljs {
-	background: #282c34 !important;
-	color: #abb2bf !important;
-	padding: 1rem !important;
-	border-radius: 0.5rem !important;
-}
+/*!* Ensure highlight.js styles work properly *!*/
+/*.hljs {*/
+/*	background: #282c34 !important;*/
+/*	color: #abb2bf !important;*/
+/*	padding: 1rem !important;*/
+/*	border-radius: 0.5rem !important;*/
+/*}*/
 
 /* Prevent page scrolling and ensure full height layout */
 html,

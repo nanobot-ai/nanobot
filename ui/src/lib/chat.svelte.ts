@@ -44,17 +44,25 @@ export class ChatAPI {
 			})
 		});
 
-		const data = await resp.json();
-		if (data.error?.message) {
-			// Try to get notification context and show error
-			try {
-				const notifications = getNotificationContext();
-				notifications.error('API Error', data.error.message);
-			} catch {
-				// If context is not available (e.g., during SSR), just log
-				console.error('MCP Tool Error:', data.error.message);
+		// We expect a 204 No Content response
+		if (resp.status == 204) {
+			return;
+		}
+
+		if (!resp.ok) {
+			const text = await resp.text();
+			logError(`response: ${resp.status}: ${resp.statusText}: ${text}`);
+			throw new Error(text);
+		}
+
+		try {
+			// check for a protocol error
+			const data = await resp.json();
+			if (data.error?.message) {
+				logError(data.error.message);
 			}
-			throw new Error(data.error.message);
+		} catch (e) {
+			console.debug('Error parsing JSON:', e);
 		}
 	}
 
@@ -73,19 +81,19 @@ export class ChatAPI {
 			})
 		});
 
-		const data = await resp.json();
-		if (data.error?.message) {
-			// Try to get notification context and show error
-			try {
-				const notifications = getNotificationContext();
-				notifications.error('API Error', data.error.message);
-			} catch {
-				// If context is not available (e.g., during SSR), just log
-				console.error('MCP Tool Error:', data.error.message);
+		let toThrow = null;
+		try {
+			const data = await resp.json();
+			if (data.error?.message) {
+				logError(data.error.message);
+				toThrow = new Error(data.error.message);
 			}
-			throw new Error(data.error.message);
+			return data.result;
+		} catch (e) {
+			logError(e);
+			toThrow = e;
 		}
-		return data.result;
+		throw toThrow;
 	}
 
 	private async callMCPTool<T>(
@@ -212,7 +220,13 @@ export class ChatAPI {
 			eventSource.addEventListener(type, (e) => {
 				onEvent({
 					id: e.lastEventId,
-					type: type as 'history-start' | 'history-end' | 'chat-in-progress' | 'chat-done',
+					type: type as
+						| 'history-start'
+						| 'history-end'
+						| 'chat-in-progress'
+						| 'chat-done'
+						| 'elicitation/create'
+						| 'error',
 					data: JSON.parse(e.data)
 				});
 			});
@@ -300,7 +314,13 @@ export class ChatService {
 	};
 
 	listPrompts = async () => {
-		return (await this.api.exchange('prompts/list', {})) as Prompts;
+		return (await this.api.exchange(
+			'prompts/list',
+			{},
+			{
+				sessionId: this.chatId
+			}
+		)) as Prompts;
 	};
 
 	private subscribe(chatId: string) {
@@ -350,7 +370,10 @@ export class ChatService {
 	}
 
 	replyToElicitation = async (elicitation: Elicitation, result: ElicitationResult) => {
-		await this.api.reply(elicitation.id, result);
+		console.log('replyToElicitation', elicitation.id, result);
+		await this.api.reply(elicitation.id, result, {
+			sessionId: this.chatId
+		});
 		this.elicitations = this.elicitations.filter((e) => e.id !== elicitation.id);
 	};
 
@@ -394,4 +417,15 @@ export class ChatService {
 
 function now(): string {
 	return new Date().toISOString();
+}
+
+function logError(error: unknown) {
+	try {
+		const notifications = getNotificationContext();
+		notifications.error('API Error', error?.toString());
+	} catch {
+		// If context is not available (e.g., during SSR), just log
+		console.error('MCP Tool Error:', error);
+	}
+	console.error('Error:', error);
 }

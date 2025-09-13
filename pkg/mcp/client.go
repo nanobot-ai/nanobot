@@ -35,7 +35,7 @@ type SessionState struct {
 type ClientOption struct {
 	Roots            func(ctx context.Context) ([]Root, error)
 	OnSampling       func(ctx context.Context, sampling CreateMessageRequest) (CreateMessageResult, error)
-	OnElicit         func(ctx context.Context, req ElicitRequest) (ElicitResult, error)
+	OnElicit         func(ctx context.Context, msg Message, req ElicitRequest) (ElicitResult, error)
 	OnRoots          func(ctx context.Context, msg Message) error
 	OnLogging        func(ctx context.Context, logMsg LoggingMessage) error
 	OnMessage        func(ctx context.Context, msg Message) error
@@ -207,7 +207,7 @@ func toHandler(opts ClientOption) MessageHandler {
 				return
 			}
 			go func() {
-				resp, err := opts.OnElicit(ctx, param)
+				resp, err := opts.OnElicit(ctx, msg, param)
 				if err != nil {
 					if errors.Is(err, ErrNoReader) {
 						msg.SendError(ctx, ErrRPCMethodNotFound.RPCError().WithMessage("%s", msg.Method))
@@ -217,7 +217,7 @@ func toHandler(opts ClientOption) MessageHandler {
 					return
 				}
 				// Give the client caller a way to handle the elicitation out of bounds
-				if resp.Action != "ignore" {
+				if resp.Action != "handled" {
 					err = msg.Reply(ctx, resp)
 					if err != nil {
 						log.Errorf(ctx, "failed to reply to elicitation/create: %v", err)
@@ -310,7 +310,7 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 			}
 			headers["Mcp-Session-Id"] = opt.SessionState.ID
 		}
-		wire = newHTTPClient(serverName, config.BaseURL, opt.OAuthClientName, opt.OAuthRedirectURL, opt.CallbackHandler, opt.ClientCredLookup, opt.TokenStorage, headers, !opt.ignoreEvents)
+		wire = newHTTPClient(serverName, config, opt.OAuthClientName, opt.OAuthRedirectURL, opt.CallbackHandler, opt.ClientCredLookup, opt.TokenStorage, headers, !opt.ignoreEvents)
 	} else {
 		wire, err = newStdioClient(ctx, opt.Roots, opt.Env, serverName, config, opt.Runner)
 		if err != nil {
@@ -318,12 +318,7 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 		}
 	}
 
-	session, err := newSession(ctx, wire, toHandler(opt), opt.SessionState, nil)
-	if err != nil {
-		return nil, err
-	}
-	session.Parent = opt.ParentSession
-	return session, nil
+	return newSession(ctx, wire, toHandler(opt), opt.SessionState, nil, opt.ParentSession)
 }
 
 func NewClient(ctx context.Context, serverName string, config Server, opts ...ClientOption) (*Client, error) {
@@ -408,6 +403,22 @@ func (c *Client) ListResources(ctx context.Context) (*ListResourcesResult, error
 		return &result, nil
 	}
 	err := c.Session.Exchange(ctx, "resources/list", struct{}{}, &result)
+	return &result, err
+}
+
+func (c *Client) SubscribeResource(ctx context.Context, uri string) (*SubscribeResult, error) {
+	var result SubscribeResult
+	err := c.Session.Exchange(ctx, "resources/subscribe", SubscribeRequest{
+		URI: uri,
+	}, &result)
+	return &result, err
+}
+
+func (c *Client) UnsubscribeResource(ctx context.Context, uri string) (*UnsubscribeResult, error) {
+	var result UnsubscribeResult
+	err := c.Session.Exchange(ctx, "resources/unsubscribe", UnsubscribeRequest{
+		URI: uri,
+	}, &result)
 	return &result, err
 }
 

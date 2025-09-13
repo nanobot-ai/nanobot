@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/api"
+	"github.com/nanobot-ai/nanobot/pkg/auth"
 	"github.com/nanobot-ai/nanobot/pkg/cmd"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/config"
@@ -235,7 +236,7 @@ func (n *Nanobot) ReadConfigType(ctx context.Context, cfg *types.Config, opts ..
 }
 
 func (n *Nanobot) GetRuntime(opts ...runtime.Options) (*runtime.Runtime, error) {
-	return runtime.NewRuntime(n.llmConfig(), opts...), nil
+	return runtime.NewRuntime(n.llmConfig(), opts...)
 }
 
 func (n *Nanobot) Run(cmd *cobra.Command, _ []string) error {
@@ -288,9 +289,19 @@ func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *
 		mux.Handle("/", httpServer)
 	}
 
+	authCfg, err := config(ctx, "")
+	if err != nil {
+		return err
+	}
+
+	handler, err := auth.Wrap(env, authCfg, n.DSN(), mux)
+	if err != nil {
+		return fmt.Errorf("failed to setup auth: %w", err)
+	}
+
 	s := &http.Server{
 		Addr:    address,
-		Handler: mux,
+		Handler: handler,
 	}
 
 	context.AfterFunc(ctx, func() {

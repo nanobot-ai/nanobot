@@ -20,6 +20,7 @@ const (
 	DescriptionSessionKey           = "description"
 	PublicSessionKey                = "public"
 	ResourceSubscriptionsSessionKey = "resourceSubscriptions"
+	PublicURLSessionKey             = "publicURL"
 )
 
 func ConfigFromContext(ctx context.Context) (result Config) {
@@ -28,6 +29,7 @@ func ConfigFromContext(ctx context.Context) (result Config) {
 }
 
 type Config struct {
+	Auth       *Auth                 `json:"auth,omitempty"`
 	Extends    StringList            `json:"extends,omitempty"`
 	Env        map[string]EnvDef     `json:"env,omitempty"`
 	Publish    Publish               `json:"publish,omitempty"`
@@ -122,6 +124,15 @@ func (p Prompt) ToPrompt(name string) mcp.Prompt {
 		})
 	}
 	return result
+}
+
+type Auth struct {
+	OAuthClientID                    string         `json:"oauthClientId"`
+	OAuthClientSecret                string         `json:"oauthClientSecret"`
+	OAuthAuthorizeURL                string         `json:"oauthAuthorizeUrl"`
+	OAuthScopes                      StringList     `json:"oauthScopes"`
+	OAuthAuthorizationServerMetadata map[string]any `json:"oauthAuthorizationServerMetadata"`
+	EncryptionKey                    string         `json:"encryptionKey"`
 }
 
 type EnvDef struct {
@@ -449,6 +460,8 @@ type Agent struct {
 	Description    string                    `json:"description,omitempty"`
 	Instructions   DynamicInstructions       `json:"instructions,omitempty"`
 	Model          string                    `json:"model,omitempty"`
+	Before         StringList                `json:"before,omitempty"`
+	After          StringList                `json:"after,omitempty"`
 	MCPServers     StringList                `json:"mcpServers,omitempty"`
 	Tools          StringList                `json:"tools,omitempty"`
 	Agents         StringList                `json:"agents,omitempty"`
@@ -546,6 +559,10 @@ func validateReferences(c Config, tools, agents, flows StringList) (bool, map[st
 
 func (a Agent) validate(agentName string, c Config) error {
 	unknownNames, resolvedToolNames, errs := validateReferences(c, a.Tools, a.Agents, a.Flows)
+
+	if agentName == AgentTool {
+		errs = append(errs, fmt.Errorf("agent can not be named \"chat\""))
+	}
 
 	if a.Instructions.IsSet() && a.Instructions.IsPrompt() {
 		_, ok := c.MCPServers[a.Instructions.MCPServer]

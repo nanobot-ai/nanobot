@@ -4,14 +4,20 @@
 	import Thread from '$lib/components/Thread.svelte';
 	import { ChatService } from '$lib/chat.svelte';
 	import { onDestroy } from 'svelte';
+	import { getNotificationContext } from '$lib/context/notifications.svelte';
+	import Workspace from '$lib/components/Workspace.svelte';
 
 	// The existing chat might have been set by / so don't recreate it because that will
 	// loose the event stream.
 	const chat = page.data.chat || new ChatService();
+	const notification = getNotificationContext();
 
 	$effect(() => {
 		if (!page.params.id) return;
-		chat.setChatId(page.params.id);
+		chat.setChatId(page.params.id).catch((e) => {
+			console.error('Error setting chat ID:', e);
+			notification.error(e.message);
+		});
 	});
 
 	onDestroy(() => {
@@ -19,11 +25,15 @@
 	});
 </script>
 
-<Thread
-	messages={chat.messages}
-	isLoading={chat.isLoading}
-	onSendMessage={chat.sendMessage}
-	prompts={chat.prompts}
-	elicitations={chat.elicitations}
-	onElicitationResult={chat.replyToElicitation}
-/>
+<div class="flex">
+	<Workspace messages={chat.messages} onSendMessage={chat.sendMessage} />
+
+	<Thread
+		messages={chat.messages}
+		isLoading={chat.isLoading}
+		onSendMessage={chat.sendMessage}
+		prompts={chat.prompts}
+		elicitations={chat.elicitations}
+		onElicitationResult={chat.replyToElicitation}
+	/>
+</div>

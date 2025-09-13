@@ -12,6 +12,15 @@
 	const renderedContent = $derived(role === 'assistant' ? renderMarkdown(item.text) : item.text);
 </script>
 
-<div class="prose mb-3 w-full max-w-none rounded-lg bg-base-200 p-3 prose-invert">
+<div
+	class={[
+		'prose w-full max-w-none rounded-box p-2 text-base-content',
+		{
+			'mb-3': role === 'assistant',
+			'p-4': role === 'assistant',
+			'bg-base-200': role === 'user'
+		}
+	]}
+>
 	{@html renderedContent}
 </div>

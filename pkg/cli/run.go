@@ -22,7 +22,7 @@ type Run struct {
 	MCP           bool     `usage:"Run the nanobot as an MCP server" default:"false" short:"m" env:"NANOBOT_MCP"`
 	AutoConfirm   bool     `usage:"Automatically confirm all tool calls" default:"false" short:"y"`
 	Output        string   `usage:"Output file for the result. Use - for stdout" default:"" short:"o"`
-	ListenAddress string   `usage:"Address to listen on (ex: localhost:8099) (implies -m)" default:"stdio" short:"a"`
+	ListenAddress string   `usage:"Address to listen on (ex: localhost:8080) (implies -m)" default:"localhost:8080" short:"a"`
 	DisableUI     bool     `usage:"Disable the UI"`
 	Port          string   `usage:"Port to listen on for stdio" default:"8099" hidden:"true"`
 	HealthzPath   string   `usage:"Path to serve healthz on"`

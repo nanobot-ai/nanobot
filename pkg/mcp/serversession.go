@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
@@ -28,14 +29,13 @@ func NewExistingServerSession(ctx context.Context, state SessionState, handler M
 	}
 	s.stopReading()
 
-	session, err := newSession(ctx, s, handler, &state, nil)
+	session, err := newSession(ctx, s, handler, &state, nil, SessionFromContext(ctx))
 	if err != nil {
 		return nil, err
 	}
 	for k, v := range state.Attributes {
 		session.Set(k, v)
 	}
-	session.Parent = SessionFromContext(ctx)
 	return &ServerSession{
 		session: session,
 		wire:    s,
@@ -154,7 +154,7 @@ func (s *ServerSession) Close(deleteSession bool) {
 
 type serverWire struct {
 	ctx        context.Context
-	cancel     context.CancelFunc
+	cancel     context.CancelCauseFunc
 	pending    PendingRequests
 	read       chan Message
 	readerLock sync.RWMutex
@@ -195,7 +195,7 @@ func (s *serverWire) exchange(ctx context.Context, msg Message) (Message, error)
 }
 
 func (s *serverWire) Close(bool) {
-	s.cancel()
+	s.cancel(fmt.Errorf("session %s closed", s.sessionID))
 }
 
 func (s *serverWire) Wait() {
@@ -203,7 +203,7 @@ func (s *serverWire) Wait() {
 }
 
 func (s *serverWire) Start(ctx context.Context, handler WireHandler) error {
-	s.ctx, s.cancel = context.WithCancel(ctx)
+	s.ctx, s.cancel = context.WithCancelCause(ctx)
 	s.handler = handler
 	return nil
 }

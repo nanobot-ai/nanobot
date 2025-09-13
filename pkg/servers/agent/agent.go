@@ -102,7 +102,7 @@ func (s *Server) readProgress(ctx context.Context) (ret []mcp.ResourceContent, _
 		return nil, nil
 	}
 
-	callResult, err := sampling.CompletionResponseToCallResult(&progress)
+	callResult, err := sampling.CompletionResponseToCallResult(&progress, true)
 	if err != nil {
 		return nil, err
 	}
@@ -111,20 +111,32 @@ func (s *Server) readProgress(ctx context.Context) (ret []mcp.ResourceContent, _
 		IsError:       callResult.IsError,
 		Content:       callResult.Content,
 		InProgress:    progress.HasMore,
-		ToolName:      "chat",
+		ToolName:      types.AgentTool,
 		ProgressToken: progress.ProgressToken,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return []mcp.ResourceContent{
+	result := []mcp.ResourceContent{
 		{
 			URI:      types.ProgressURI,
 			MIMEType: types.ToolResultMimeType,
 			Text:     string(data),
 		},
-	}, nil
+	}
+	for _, content := range callResult.Content {
+		if content.Resource != nil && content.Resource.MIMEType == types.MessageMimeType {
+			result = append(result, mcp.ResourceContent{
+				URI:      content.Resource.URI,
+				Name:     content.Name,
+				MIMEType: content.Resource.MIMEType,
+				Text:     content.Resource.Text,
+			})
+		}
+	}
+
+	return result, nil
 }
 
 func (s *Server) promptGet(ctx context.Context, _ mcp.Message, payload mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {

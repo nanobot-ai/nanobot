@@ -21,6 +21,7 @@ func NewCall(n *Nanobot) *Call {
 }
 
 func (e *Call) Customize(cmd *cobra.Command) {
+	cmd.Hidden = true
 	cmd.Use = "call [flags] NANOBOT_CONFIG TARGET_NAME [INPUT...]"
 	cmd.Short = "Call a single tool, agent, or flow in the nanobot. Use \"nanobot targets\" to list available targets."
 	cmd.Example = `

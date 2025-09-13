@@ -9,9 +9,5 @@
 </script>
 
 <div class="mb-3 rounded-lg bg-base-200 p-3">
-	<img
-		src="data:{item.mimeType};base64,{item.data}"
-		alt=""
-		class="max-w-full rounded"
-	/>
+	<img src="data:{item.mimeType};base64,{item.data}" alt="" class="max-w-full rounded" />
 </div>

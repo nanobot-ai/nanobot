@@ -51,8 +51,13 @@ func (s *server) setupContext(_ http.ResponseWriter, req *http.Request) (Context
 		err        error
 	)
 
+	currentServer := s.server
+	currentServer.Headers = map[string]string{
+		"Cookie": req.Header.Get("Cookie"),
+	}
+
 	if threadID != "" {
-		chatClient, err = mcp.NewClient(req.Context(), "ui", s.server, mcp.ClientOption{
+		chatClient, err = mcp.NewClient(req.Context(), "nanobot.ui", currentServer, mcp.ClientOption{
 			SessionState: &mcp.SessionState{
 				ID: threadID,
 				InitializeResult: mcp.InitializeResult{
@@ -79,7 +84,7 @@ func (s *server) setupContext(_ http.ResponseWriter, req *http.Request) (Context
 	return Context{
 		ChatClient:     chatClient,
 		SessionManager: s.sessionManager,
-		MCPServer:      s.server,
+		MCPServer:      currentServer,
 	}, nil
 }
 
@@ -134,13 +139,8 @@ type Server struct {
 	cfg    types.Config
 }
 
-func Version(rw http.ResponseWriter, req *http.Request) error {
+func Version(rw http.ResponseWriter, _ *http.Request) error {
 	return json.NewEncoder(rw).Encode(
 		map[string]any{},
 	)
-}
-
-func JSON(rw http.ResponseWriter, obj any) error {
-	rw.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(rw).Encode(obj)
 }

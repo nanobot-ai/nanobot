@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 )
 
@@ -22,7 +23,7 @@ const SessionIDHeader = "Mcp-Session-Id"
 
 type HTTPClient struct {
 	ctx          context.Context
-	cancel       context.CancelFunc
+	cancel       context.CancelCauseFunc
 	clientLock   sync.RWMutex
 	httpClient   *http.Client
 	handler      WireHandler
@@ -30,6 +31,7 @@ type HTTPClient struct {
 	baseURL      string
 	messageURL   string
 	serverName   string
+	displayName  string
 	headers      map[string]string
 	waiter       *waiter
 	sse          bool
@@ -42,7 +44,7 @@ type HTTPClient struct {
 	needReconnect bool
 }
 
-func newHTTPClient(serverName, baseURL, oauthClientName, oauthRedirectURL string, callbackHandler CallbackHandler, clientCredLookup ClientCredLookup, tokenStorage TokenStorage, headers map[string]string, watchesEvents bool) *HTTPClient {
+func newHTTPClient(serverName string, config Server, oauthClientName, oauthRedirectURL string, callbackHandler CallbackHandler, clientCredLookup ClientCredLookup, tokenStorage TokenStorage, headers map[string]string, watchesEvents bool) *HTTPClient {
 	var sessionID *string
 	if id := headers[SessionIDHeader]; id != "" {
 		sessionID = &id
@@ -50,9 +52,10 @@ func newHTTPClient(serverName, baseURL, oauthClientName, oauthRedirectURL string
 	h := &HTTPClient{
 		httpClient:    http.DefaultClient,
 		oauthHandler:  newOAuth(callbackHandler, clientCredLookup, tokenStorage, oauthClientName, oauthRedirectURL),
-		baseURL:       baseURL,
-		messageURL:    baseURL,
+		baseURL:       config.BaseURL,
+		messageURL:    config.BaseURL,
 		serverName:    serverName,
+		displayName:   complete.First(config.Name, config.ShortName, serverName),
 		headers:       maps.Clone(headers),
 		waiter:        newWaiter(),
 		needReconnect: watchesEvents,
@@ -108,7 +111,11 @@ func (s *HTTPClient) Close(deleteSession bool) {
 	}
 
 	if s.cancel != nil {
-		s.cancel()
+		sid := ""
+		if s.sessionID != nil {
+			sid = *s.sessionID
+		}
+		s.cancel(fmt.Errorf("http client closed session: %v, deleteSession=%v", sid, deleteSession))
 	}
 	s.waiter.Close()
 }
@@ -357,7 +364,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID st
 }
 
 func (s *HTTPClient) Start(ctx context.Context, handler WireHandler) error {
-	s.ctx, s.cancel = context.WithCancel(ctx)
+	s.ctx, s.cancel = context.WithCancelCause(ctx)
 	s.handler = handler
 
 	if httpClient := s.oauthHandler.loadFromStorage(s.ctx, s.baseURL); httpClient != nil {

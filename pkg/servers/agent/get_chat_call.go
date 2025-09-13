@@ -47,7 +47,6 @@ func (c getChatCall) getChatLocal(ctx context.Context) (*types.ChatData, error) 
 		if err != nil {
 			return nil, fmt.Errorf("failed to get agents: %w", err)
 		}
-
 	}
 
 	return &types.ChatData{

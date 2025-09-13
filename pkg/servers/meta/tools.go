@@ -47,6 +47,15 @@ func (s *Server) createChat(ctx context.Context, _ struct{}) (*types.Chat, error
 		Type:      "thread",
 		SessionID: uuid.String(),
 		AccountID: accountID,
+		State: session.State{
+			InitializeResult: mcp.InitializeResult{},
+			InitializeRequest: mcp.InitializeRequest{
+				Capabilities: mcp.ClientCapabilities{
+					Elicitation: &struct{}{},
+				},
+			},
+			Attributes: nil,
+		},
 	}
 	if err := manager.DB.Create(ctx, &newSession); err != nil {
 		return nil, err

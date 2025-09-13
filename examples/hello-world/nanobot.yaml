@@ -1,7 +1,0 @@
-publish:
-  entrypoint: hello
-
-agents:
-  hello:
-    model: gpt-4o-mini
-    instructions: Every response must include "Hello World" in it.
