@@ -206,7 +206,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			response = Message{
 				JSONRPC: msg.JSONRPC,
 				ID:      msg.ID,
-				Error:   ErrRPCInternal.WithMessage(err.Error()),
+				Error:   ErrRPCInternal.WithMessage("%v", err),
 			}
 		}
 

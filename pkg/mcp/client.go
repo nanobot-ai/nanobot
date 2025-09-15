@@ -189,7 +189,7 @@ func toHandler(opts ClientOption) MessageHandler {
 				resp, err := opts.OnSampling(ctx, param)
 				if err != nil {
 					if errors.Is(err, ErrNoReader) {
-						msg.SendError(ctx, ErrRPCMethodNotFound)
+						msg.SendError(ctx, ErrRPCMethodNotFound.RPCError().WithMessage("%s", msg.Method))
 					} else {
 						msg.SendError(ctx, fmt.Errorf("failed to handle sampling/createMessage: %w", err))
 					}
@@ -210,7 +210,7 @@ func toHandler(opts ClientOption) MessageHandler {
 				resp, err := opts.OnElicit(ctx, param)
 				if err != nil {
 					if errors.Is(err, ErrNoReader) {
-						msg.SendError(ctx, ErrRPCMethodNotFound)
+						msg.SendError(ctx, ErrRPCMethodNotFound.RPCError().WithMessage("%s", msg.Method))
 					} else {
 						msg.SendError(ctx, fmt.Errorf("failed to handle elicitation/create: %w", err))
 					}
@@ -256,7 +256,7 @@ func waitForURL(ctx context.Context, serverName, baseURL string) error {
 		return fmt.Errorf("base URL is empty for server %s", serverName)
 	}
 
-	for i := 0; i < 120; i++ {
+	for i := range 120 {
 		if i%20 == 0 {
 			log.Infof(ctx, "Waiting for server %s at %s to be ready...", serverName, baseURL)
 		}

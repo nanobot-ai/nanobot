@@ -390,5 +390,5 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 		}
 	}
 
-	msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage(msg.Method))
+	msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage("%s", msg.Method))
 }
