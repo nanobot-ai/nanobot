@@ -114,7 +114,7 @@ func (r *Message) SendError(ctx context.Context, err error) {
 	if rpcError := (JSONRPCError)(nil); errors.As(err, &rpcError) {
 		data = rpcError.RPCError()
 	} else {
-		data = ErrRPCInternal.WithMessage(err.Error())
+		data = ErrRPCInternal.WithMessage("%v", err)
 	}
 
 	resp := Message{
