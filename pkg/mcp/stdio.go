@@ -87,7 +87,6 @@ func (s *Stdio) Start(ctx context.Context, handler WireHandler) error {
 		s.Close(false)
 	})
 	go func() {
-		defer s.Close(false)
 		err := s.start(ctx, handler)
 		if err != nil {
 			log2.Fatal(err)

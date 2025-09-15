@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -110,6 +111,24 @@ func (m *Manager) Store(ctx context.Context, id string, session *mcp.ServerSessi
 		if err := m.DB.Create(ctx, stored); err != nil {
 			return fmt.Errorf("failed to create session record: %w", err)
 		}
+
+		m.liveSessionsLock.Lock()
+		live, ok := m.liveSessions[id]
+		if ok {
+			if live.session != nil {
+				live.session.Close(false)
+			}
+			live.count++
+			live.session = session
+
+			m.liveSessions[id] = live
+		} else {
+			m.liveSessions[id] = liveSession{
+				session: session,
+				count:   1,
+			}
+		}
+		m.liveSessionsLock.Unlock()
 	} else {
 		if err := m.DB.Update(ctx, stored); err != nil {
 			return err
@@ -203,11 +222,23 @@ func (m *Manager) Release(session *mcp.ServerSession) {
 	if ok {
 		live.count--
 		if live.count == 0 {
-			delete(m.liveSessions, session.ID())
-			live.session.Close(false)
-		} else {
-			m.liveSessions[session.ID()] = live
+			go func(sessionID string) {
+				time.Sleep(10 * time.Second)
+
+				m.liveSessionsLock.Lock()
+				defer m.liveSessionsLock.Unlock()
+
+				live, ok := m.liveSessions[sessionID]
+				if ok && live.count == 0 {
+					delete(m.liveSessions, sessionID)
+					live.session.Close(false)
+				}
+			}(session.ID())
 		}
+
+		m.liveSessions[session.ID()] = live
+	} else {
+		session.Close(false)
 	}
 }
 
