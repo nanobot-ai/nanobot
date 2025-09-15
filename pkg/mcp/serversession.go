@@ -144,7 +144,7 @@ func (s *ServerSession) Close(deleteSession bool) {
 		return
 	}
 
-	if s.session == nil {
+	if s.session != nil {
 		s.session.Close(deleteSession)
 	}
 	if s.wire != nil {

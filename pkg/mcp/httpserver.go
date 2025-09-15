@@ -236,16 +236,20 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	defer h.sessions.Release(session)
+
 	session.session.sessionManager = h.sessions
 	session.session.AddEnv(h.getEnv(req))
 
 	resp, err := session.Exchange(req.Context(), msg)
 	if err != nil {
+		session.Close(true)
 		http.Error(rw, "Failed to handle message: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if err := h.sessions.Store(req.Context(), session.ID(), session); err != nil {
+		session.Close(true)
 		http.Error(rw, "Failed to store session: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
