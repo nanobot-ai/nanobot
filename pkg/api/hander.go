@@ -53,7 +53,9 @@ func (s *server) setupContext(_ http.ResponseWriter, req *http.Request) (Context
 
 	currentServer := s.server
 	currentServer.Headers = map[string]string{
-		"Cookie": req.Header.Get("Cookie"),
+		"User-Agent":    req.Header.Get("User-Agent"),
+		"Authorization": req.Header.Get("Authorization"),
+		"Cookie":        req.Header.Get("Cookie"),
 	}
 
 	if threadID != "" {

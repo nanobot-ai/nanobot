@@ -1,0 +1,11 @@
+agents:
+  dealer:
+    name: Blackjack Dealer
+    instructions: |
+      You play blackjack
+    model: gpt-4.1
+    mcpServers: blackjackmcp
+
+mcpServers:
+  blackjackmcp:
+    url: https://blackjackmcp.nanobot.ai/mcp

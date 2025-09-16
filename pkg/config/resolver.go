@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -22,7 +24,79 @@ type resource struct {
 	static       *types.Config
 }
 
+var (
+	httpCache map[string]struct {
+		data []byte
+		last time.Time
+	}
+	httpCacheLock sync.Mutex
+	refreshTime   = time.Minute * 15
+)
+
+func httpRefresh() {
+	for {
+		time.Sleep(refreshTime)
+		var toRefresh []string
+		httpCacheLock.Lock()
+		for k, v := range httpCache {
+			if time.Since(v.last) > refreshTime {
+				toRefresh = append(toRefresh, k)
+			}
+		}
+		httpCacheLock.Unlock()
+		for _, k := range toRefresh {
+			newData, err := httpGetRaw(context.Background(), k)
+			if err != nil {
+				continue
+			}
+			httpCacheLock.Lock()
+			httpCache[k] = struct {
+				data []byte
+				last time.Time
+			}{
+				data: newData,
+			}
+		}
+	}
+}
+
 func httpGet(ctx context.Context, url string) ([]byte, error) {
+	httpCacheLock.Lock()
+	defer httpCacheLock.Unlock()
+
+	data, ok := httpCache[url]
+	if ok {
+		return data.data, nil
+	}
+
+	httpCacheLock.Unlock()
+	newContent, err := httpGetRaw(ctx, url)
+	httpCacheLock.Lock()
+
+	if err != nil {
+		return nil, err
+	}
+
+	if httpCache == nil {
+		httpCache = map[string]struct {
+			data []byte
+			last time.Time
+		}{}
+		go httpRefresh()
+	}
+
+	httpCache[url] = struct {
+		data []byte
+		last time.Time
+	}{
+		data: newContent,
+		last: time.Now(),
+	}
+
+	return newContent, nil
+}
+
+func httpGetRaw(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request for %s: %w", url, err)

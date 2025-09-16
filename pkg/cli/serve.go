@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/confirm"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/printer"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/spf13/cobra"
@@ -118,10 +120,13 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		return *cfg, nil
 	})
 
-	_, err = cfgFactory(cmd.Context(), "")
+	once, err := cfgFactory(cmd.Context(), "")
 	if err != nil {
 		return fmt.Errorf("failed to read config file %q: %w", args[0], err)
 	}
+
+	cfg, _ := json.MarshalIndent(once, "", "  ")
+	printer.Prefix("config", string(cfg))
 
 	runtime, err := r.n.GetRuntime(runtimeOpt, runtime.Options{
 		OAuthRedirectURL: "http://" + strings.Replace(r.ListenAddress, "127.0.0.1", "localhost", 1) + "/oauth/callback",
