@@ -2,7 +2,6 @@ package cli
 
 import (
 	"os"
-	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 type Sessions struct {
 	Nanobot *Nanobot
 	Output  string `usage:"Output format (json, yaml, table)" short:"o" default:"table"`
-	Long    bool   `usage:"Show long output with full session description" short:"l"`
 }
 
 func NewSessions(n *Nanobot) *Sessions {
@@ -41,17 +39,15 @@ func (t *Sessions) Run(cmd *cobra.Command, args []string) error {
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, err = tw.Write([]byte("ID\tDATE\tDESCRIPTION\n"))
+	_, err = tw.Write([]byte("ID\tDATE\tACCT\tDESCRIPTION\n"))
 	if err != nil {
 		return err
 	}
 
 	for _, session := range sessions {
-		id := session.SessionID
-		if !t.Long {
-			id = strings.Split(id, "-")[0] // Trim the session ID to 8 characters
-		}
-		_, _ = tw.Write([]byte(id + "\t" + session.UpdatedAt.Format(time.RFC3339) + "\t" + trim(session.Description) + "\n"))
+		_, _ = tw.Write([]byte(session.SessionID + "\t" + session.UpdatedAt.Format(time.RFC3339) +
+			"\t" + trim(session.AccountID) +
+			"\t" + trim(session.Description) + "\n"))
 	}
 
 	return tw.Flush()

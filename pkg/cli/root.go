@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -56,7 +55,7 @@ type Nanobot struct {
 	AnthropicAPIKey  string            `usage:"Anthropic API key" env:"ANTHROPIC_API_KEY" name:"anthropic-api-key"`
 	AnthropicBaseURL string            `usage:"Anthropic API URL" env:"ANTHROPIC_BASE_URL" name:"anthropic-base-url"`
 	AnthropicHeaders map[string]string `usage:"Anthropic API headers" env:"ANTHROPIC_HEADERS" name:"anthropic-headers"`
-	MaxConcurrency   int               `usage:"The maximum number of concurrent tasks in a parallel loop" default:"10"`
+	MaxConcurrency   int               `usage:"The maximum number of concurrent tasks in a parallel loop" default:"10" hidden:"true"`
 	Chdir            string            `usage:"Change directory to this path before running the nanobot" default:"." short:"C"`
 	State            string            `usage:"Path to the state file" default:"${XDG_CONFIG_HOME}/nanobot/state.db"`
 
@@ -85,11 +84,11 @@ func ensureDirectoryForDSN(dsn string) error {
 func (n *Nanobot) DSN() string {
 	dsn := os.Expand(n.State, func(s string) string {
 		if s == "XDG_CONFIG_HOME" {
-			config, err := os.UserConfigDir()
+			userConfigDir, err := os.UserConfigDir()
 			if err != nil {
 				log.Fatalf(context.Background(), "Failed to get user config directory: %v", err)
 			}
-			return config
+			return userConfigDir
 		}
 		return os.Getenv(s)
 	})
@@ -102,11 +101,7 @@ func (n *Nanobot) DSN() string {
 }
 
 func (n *Nanobot) Customize(cmd *cobra.Command) {
-	cmd.Short = "Nanobot: Build, Run, Share AI Agents"
-	cmd.Example = `
-	# Run the Welcome bot
-	nanobot run nanobot-ai/welcome
-`
+	cmd.Short = "Nanobot: Build MCP Agents"
 	cmd.CompletionOptions.HiddenDefaultCmd = true
 	cmd.Version = version.Get().String()
 }
@@ -243,7 +238,8 @@ func (n *Nanobot) Run(cmd *cobra.Command, _ []string) error {
 	return cmd.Help()
 }
 
-func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, l net.Listener, listenAddress string, healthzPath string, startUI bool) error {
+func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *runtime.Runtime,
+	oauthCallbackHandler mcp.CallbackServer, listenAddress string, healthzPath string, startUI bool) error {
 	env, err := n.loadEnv()
 	if err != nil {
 		return fmt.Errorf("failed to load environment: %w", err)
@@ -288,6 +284,9 @@ func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *
 	} else {
 		mux.Handle("/", httpServer)
 	}
+	if healthzPath != "" {
+		mux.Handle("GET "+healthzPath, httpServer)
+	}
 
 	authCfg, err := config(ctx, "")
 	if err != nil {
@@ -310,12 +309,8 @@ func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *
 		_ = s.Shutdown(ctx)
 	})
 
-	if l == nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Starting server on http://%s\n", address)
-		err = s.ListenAndServe()
-	} else {
-		err = s.Serve(l)
-	}
+	_, _ = fmt.Fprintf(os.Stderr, "Starting server on http://%s\n", address)
+	err = s.ListenAndServe()
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}

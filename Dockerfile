@@ -22,3 +22,4 @@ ENV NANOBOT_STATE=/data/nanobot.db
 VOLUME ["/data"]
 
 ENTRYPOINT ["/usr/local/bin/nanobot"]
+CMD ["serve"]
