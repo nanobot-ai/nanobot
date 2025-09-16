@@ -45,6 +45,7 @@ func New() *cobra.Command {
 type Nanobot struct {
 	Debug            bool              `usage:"Enable debug logging"`
 	Trace            bool              `usage:"Enable trace logging"`
+	Quiet            bool              `usage:"Disable most output" short:"q"`
 	Env              []string          `usage:"Environment variables to set in the form of KEY=VALUE, or KEY to load from current environ" short:"e"`
 	EnvFile          string            `usage:"Path to the environment file (default: ./nanobot.env)"`
 	EmptyEnv         bool              `usage:"Do not load environment variables from the environment by default"`
@@ -57,7 +58,7 @@ type Nanobot struct {
 	AnthropicHeaders map[string]string `usage:"Anthropic API headers" env:"ANTHROPIC_HEADERS" name:"anthropic-headers"`
 	MaxConcurrency   int               `usage:"The maximum number of concurrent tasks in a parallel loop" default:"10" hidden:"true"`
 	Chdir            string            `usage:"Change directory to this path before running the nanobot" default:"." short:"C"`
-	State            string            `usage:"Path to the state file" default:"${XDG_CONFIG_HOME}/nanobot/state.db"`
+	State            string            `usage:"Path to the state file" default:"./nanobot.db"`
 
 	env map[string]string
 }
@@ -114,15 +115,15 @@ func (n *Nanobot) PersistentPre(cmd *cobra.Command, _ []string) error {
 	}
 
 	if n.Debug {
-		log.EnableMessages = true
 		log.DebugLog = true
 	}
 
 	if n.Trace {
-		log.EnableMessages = true
 		log.EnableProgress = true
 		log.DebugLog = true
 	}
+
+	log.EnableMessages = n.Debug || n.Trace || !n.Quiet
 
 	for _, sub := range cmd.Commands() {
 		if sub.Name() == "help" {
@@ -130,8 +131,6 @@ func (n *Nanobot) PersistentPre(cmd *cobra.Command, _ []string) error {
 			sub.Use = " help"
 		}
 	}
-	// Don't need to do anything here, this is just to ensure the env vars get parsed and set always.
-	// To be honest don't know why this is needed, but it is.
 	return nil
 }
 
