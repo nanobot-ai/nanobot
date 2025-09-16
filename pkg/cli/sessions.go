@@ -25,6 +25,7 @@ func (t *Sessions) Customize(cmd *cobra.Command) {
 	cmd.Short = "List all existing sessions"
 	cmd.Aliases = []string{"session", "s"}
 	cmd.Args = cobra.NoArgs
+	cmd.Hidden = true
 }
 
 func (t *Sessions) Run(cmd *cobra.Command, args []string) error {

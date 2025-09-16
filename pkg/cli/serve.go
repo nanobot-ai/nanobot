@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type Serve struct {
+type Run struct {
 	ListenAddress string   `usage:"Address to listen on" default:"localhost:8080" short:"a"`
 	DisableUI     bool     `usage:"Disable the UI"`
 	HealthzPath   string   `usage:"Path to serve healthz on"`
@@ -22,28 +22,28 @@ type Serve struct {
 	n             *Nanobot
 }
 
-func NewRun(n *Nanobot) *Serve {
-	return &Serve{
+func NewRun(n *Nanobot) *Run {
+	return &Run{
 		n: n,
 	}
 }
 
-func (r *Serve) Customize(cmd *cobra.Command) {
+func (r *Run) Customize(cmd *cobra.Command) {
 	cmd.Use = "run [flags] NANOBOT [PROMPT]"
-	cmd.Short = "Serve the nanobot with the specified config file"
+	cmd.Short = "Run the nanobot with the specified config file"
 	cmd.Example = `
-  # Serve the nanobot.yaml in the current directory
-  nanobot serve .
+  # Run the nanobot.yaml in the current directory
+  nanobot run .
 
-  # Serve the nanobot.yaml in the GitHub repo github.com/example/nanobot
-  nanobot serve example/nanobot
+  # Run the nanobot.yaml in the GitHub repo github.com/example/nanobot
+  nanobot run example/nanobot
 
-  # Serve the nanobot.yaml at the URL
-  nanobot serve https://....
+  # Run the nanobot.yaml at the URL
+  nanobot run https://....
 `
 }
 
-func (r *Serve) getRoots() ([]mcp.Root, error) {
+func (r *Run) getRoots() ([]mcp.Root, error) {
 	var (
 		rootDefs = r.Roots
 		roots    []mcp.Root
@@ -79,7 +79,7 @@ func (r *Serve) getRoots() ([]mcp.Root, error) {
 	return roots, nil
 }
 
-func (r *Serve) reload(ctx context.Context, client *mcp.Client, cfgPath string, runtimeOpt runtime.Options) error {
+func (r *Run) reload(ctx context.Context, client *mcp.Client, cfgPath string, runtimeOpt runtime.Options) error {
 	_, err := r.n.ReadConfig(ctx, cfgPath, runtimeOpt)
 	if err != nil {
 		return fmt.Errorf("failed to reload config: %w", err)
@@ -88,7 +88,7 @@ func (r *Serve) reload(ctx context.Context, client *mcp.Client, cfgPath string, 
 	return client.Session.Exchange(ctx, "initialize", mcp.InitializeRequest{}, &mcp.InitializeResult{})
 }
 
-func (r *Serve) Run(cmd *cobra.Command, args []string) (err error) {
+func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 	roots, err := r.getRoots()
 	if err != nil {
 		return err
