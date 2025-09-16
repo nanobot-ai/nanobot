@@ -161,10 +161,38 @@ func (m *Manager) ExtractID(req *http.Request) string {
 	return ""
 }
 
+func checkAccount(ctx context.Context, serverSession *mcp.ServerSession) bool {
+	var (
+		account        string
+		nanobotContext = types.NanobotContext(ctx)
+	)
+	serverSession.GetSession().Get(types.AccountIDSessionKey, &account)
+	if account != nanobotContext.User.ID {
+		var isPublic bool
+		serverSession.GetSession().Get(types.PublicSessionKey, &isPublic)
+		if !isPublic {
+			return false
+		}
+	}
+	return true
+}
+
 func (m *Manager) Acquire(ctx context.Context, server mcp.MessageHandler, id string) (ret *mcp.ServerSession, found bool, retErr error) {
 	m.liveSessionsLock.Lock()
 	live, ok := m.liveSessions[id]
 	if ok {
+		select {
+		case <-live.session.GetSession().Context().Done():
+			m.liveSessionsLock.Unlock()
+			return nil, false, nil
+		default:
+		}
+
+		if !checkAccount(ctx, live.session) {
+			m.liveSessionsLock.Unlock()
+			return nil, false, nil
+		}
+
 		live.count++
 		m.liveSessions[id] = live
 		m.liveSessionsLock.Unlock()
@@ -177,24 +205,8 @@ func (m *Manager) Acquire(ctx context.Context, server mcp.MessageHandler, id str
 		return nil, false, err
 	}
 
-	select {
-	case <-serverSession.GetSession().Context().Done():
+	if !checkAccount(ctx, serverSession) {
 		return nil, false, nil
-	default:
-	}
-
-	var (
-		account        string
-		nanobotContext = types.NanobotContext(ctx)
-	)
-
-	serverSession.GetSession().Get(types.AccountIDSessionKey, &account)
-	if account != nanobotContext.User.ID {
-		var isPublic bool
-		serverSession.GetSession().Get(types.PublicSessionKey, &isPublic)
-		if !isPublic {
-			return nil, false, nil
-		}
 	}
 
 	m.liveSessionsLock.Lock()

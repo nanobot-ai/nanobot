@@ -224,11 +224,6 @@ func (n *Nanobot) ReadConfig(ctx context.Context, cfgPath string, opts ...runtim
 	return cfg, err
 }
 
-func (n *Nanobot) ReadConfigType(ctx context.Context, cfg *types.Config, opts ...runtime.Options) (*types.Config, error) {
-	cfg, _, err := config.LoadFromConfig(ctx, *cfg, complete.Complete(opts...).Profiles...)
-	return cfg, err
-}
-
 func (n *Nanobot) GetRuntime(opts ...runtime.Options) (*runtime.Runtime, error) {
 	return runtime.NewRuntime(n.llmConfig(), opts...)
 }
@@ -278,8 +273,7 @@ func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *
 		mux.Handle("/oauth/callback", oauthCallbackHandler)
 	}
 	if startUI {
-		mux.Handle("/api/", api.Handler(sessionManager))
-		mux.Handle("/", session.UISession(httpServer, sessionManager))
+		mux.Handle("/", session.UISession(httpServer, sessionManager, api.Handler(sessionManager)))
 	} else {
 		mux.Handle("/", httpServer)
 	}
@@ -308,7 +302,7 @@ func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *
 		_ = s.Shutdown(ctx)
 	})
 
-	_, _ = fmt.Fprintf(os.Stderr, "Starting server on http://%s\n", address)
+	log.Infof(ctx, "Starting server on http://%s\n", address)
 	err = s.ListenAndServe()
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil

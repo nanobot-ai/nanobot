@@ -28,34 +28,34 @@ func getCookieID(req *http.Request) string {
 	return ""
 }
 
-func UISession(next http.Handler, sessionStore *Manager) http.Handler {
+func UISession(next http.Handler, sessionStore *Manager, apiHandler http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		if !strings.Contains(strings.ToLower(req.UserAgent()), "mozilla") || req.Header.Get("Mcp-Session-Id") != "" {
+		if !strings.Contains(strings.ToLower(req.UserAgent()), "mozilla") {
 			next.ServeHTTP(rw, req)
 			return
 		}
 
 		nctx := types.NanobotContext(req.Context())
 		user := nctx.User
-		id := getCookieID(req)
+		nanobotSessionID := getCookieID(req)
 
-		if id != "" {
-			session, err := sessionStore.DB.GetByIDByAccountID(req.Context(), id, complete.First(user.ID, id))
+		if nanobotSessionID != "" {
+			session, err := sessionStore.DB.GetByIDByAccountID(req.Context(), nanobotSessionID, complete.First(user.ID, nanobotSessionID))
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				id = ""
+				nanobotSessionID = ""
 			} else if err != nil {
 				http.Error(rw, "Failed to load session: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
-			id = session.SessionID
+			nanobotSessionID = session.SessionID
 		}
 
-		if id == "" {
-			id = uuid.String()
+		if nanobotSessionID == "" {
+			nanobotSessionID = uuid.String()
 			err := sessionStore.DB.Create(req.Context(), &Session{
 				Type:      "ui",
-				SessionID: id,
-				AccountID: complete.First(user.ID, id),
+				SessionID: nanobotSessionID,
+				AccountID: complete.First(user.ID, nanobotSessionID),
 				State: State{
 					InitializeResult: mcp.InitializeResult{},
 					InitializeRequest: mcp.InitializeRequest{
@@ -72,7 +72,7 @@ func UISession(next http.Handler, sessionStore *Manager) http.Handler {
 
 			cookie := http.Cookie{
 				Name:     "nanobot-session-id",
-				Value:    id,
+				Value:    nanobotSessionID,
 				Secure:   false,
 				Path:     "/",
 				HttpOnly: true,
@@ -81,15 +81,22 @@ func UISession(next http.Handler, sessionStore *Manager) http.Handler {
 		}
 
 		if user.ID == "" {
-			user.ID = id
+			user.ID = nanobotSessionID
 			nctx.User = user
 			req = req.WithContext(types.WithNanobotContext(req.Context(), nctx))
 		}
 
-		req.Header.Set("Mcp-Session-Id", id)
+		if req.Header.Get("Mcp-Session-Id") == "" {
+			req.Header.Set("Mcp-Session-Id", nanobotSessionID)
+		}
 
 		if strings.HasPrefix(req.URL.Path, "/mcp") {
 			next.ServeHTTP(rw, req)
+			return
+		}
+
+		if strings.HasPrefix(req.URL.Path, "/api") {
+			apiHandler.ServeHTTP(rw, req)
 			return
 		}
 

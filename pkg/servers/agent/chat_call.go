@@ -155,7 +155,9 @@ func appendProgress(ctx context.Context, session *mcp.Session, progressMessage *
 func (c chatCall) Invoke(ctx context.Context, msg mcp.Message, payload mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	async := msg.Meta()[types.AsyncMetaKey]
 	if (async == "true" || async == true) && msg.ProgressToken() != nil {
-		mcp.SessionFromContext(ctx).Go(ctx, func(ctx context.Context) {
+		nctx := types.NanobotContext(ctx)
+		session := mcp.SessionFromContext(ctx)
+		mcp.SessionFromContext(ctx).Go(types.WithNanobotContext(session.Context(), nctx), func(ctx context.Context) {
 			_, _ = c.chatInvoke(ctx, msg, payload)
 		})
 		return &mcp.CallToolResult{

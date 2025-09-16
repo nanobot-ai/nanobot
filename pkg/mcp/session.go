@@ -96,11 +96,11 @@ func (s *Session) Go(ctx context.Context, f func(ctx context.Context)) {
 	id := parentSession.ID()
 
 	if sm != nil && id != "" {
-		tempSession, ok, sessionErr := sm.Acquire(s.ctx, nil, id)
+		tempSession, ok, sessionErr := sm.Acquire(ctx, nil, id)
 		if sessionErr == nil && ok {
 			go func() {
 				defer sm.Release(tempSession)
-				f(WithSession(context.Background(), s))
+				f(WithSession(ctx, s))
 			}()
 			return
 		}
