@@ -54,6 +54,17 @@ release:
     owner: nanobot-ai
     name: nanobot
   prerelease: auto
+dockers_v2:
+  - images: ["ghcr.io/nanobot-ai/nanobot"]
+    tags: ["v{{ .Version }}", "latest"]
+    dockerfile: Dockerfile
+    labels:
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.title": "{{.ProjectName}}"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "{{.Version}}"
+      "org.opencontainers.image.source": "{{.GitURL}}"
+      "org.opencontainers.image.description": "Nanobot CLI"
 brews:
   - name: nanobot
     description: 'Nanobot cli'
