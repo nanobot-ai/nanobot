@@ -10,3 +10,4 @@ nanobot
 node_modules/
 releases/*
 examples/customer/tools/travel2.sqlite
+ui/dist
