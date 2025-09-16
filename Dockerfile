@@ -12,11 +12,13 @@ RUN mkdir -p /data && chown nanobot:nanobot /data
 
 USER nanobot
 
-# Set environment variable for database location
+# Set common env vars
 ENV NANOBOT_STATE=/data/nanobot.db
+ENV NANOBOT_RUN_HEALTHZ_PATH=/api/healthz
+ENV NANOBOT_RUN_LISTEN_ADDRESS=0.0.0.0:8080
 
 # Define volume for persistent data
 VOLUME ["/data"]
 
 ENTRYPOINT ["/usr/local/bin/nanobot"]
-CMD ["serve"]
+CMD ["run"]
