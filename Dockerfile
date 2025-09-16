@@ -1,9 +1,6 @@
 # syntax=docker/dockerfile:1
 FROM cgr.dev/chainguard/wolfi-base:latest
 
-# Install ca-certificates and glibc
-RUN apk add -U --no-cache ca-certificates glibc
-
 # Copy the binary
 COPY nanobot /usr/local/bin/nanobot
 
