@@ -338,6 +338,17 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 		return nil, err
 	}
 
+	abortCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		select {
+		case <-abortCtx.Done():
+		case <-ctx.Done():
+			// Abort the session if the ctx closes while creating the clients
+			session.Close(false)
+		}
+	}()
+
 	c := &Client{
 		Session: session,
 	}

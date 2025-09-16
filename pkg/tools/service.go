@@ -209,17 +209,6 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 		session = session.Parent
 	}
 
-	abortCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	go func() {
-		select {
-		case <-abortCtx.Done():
-		case <-ctx.Done():
-			// Abort the session if the ctx closes while creating the clients
-			session.Close(false)
-		}
-	}()
-
 	config := types.ConfigFromContext(ctx)
 
 	var (
