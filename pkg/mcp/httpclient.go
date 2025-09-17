@@ -372,7 +372,12 @@ func (s *HTTPClient) Start(ctx context.Context, handler WireHandler) error {
 	}
 
 	if s.sessionID != nil {
-		_ = s.ensureSSE(ctx, nil, "")
+		go func() {
+			err := s.ensureSSE(ctx, nil, "")
+			if err != nil {
+				log.Errorf(ctx, "failed to re-initialize SSE: %v", err)
+			}
+		}()
 	}
 
 	return nil
