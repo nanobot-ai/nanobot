@@ -87,7 +87,7 @@
 					autoResizeIframe: true,
 					iframeProps: {
 						ref: iFrameRef
-					},
+					}
 				}
 			})
 		);

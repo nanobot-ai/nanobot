@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Paperclip, X, Send } from '@lucide/svelte';
-	import { onMount } from 'svelte';
 
 	interface Props {
 		onSend?: (message: string) => void;
@@ -117,7 +116,7 @@
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
 			if (disabled || isUploading) {
-				return
+				return;
 			}
 			handleSubmit(e);
 		}

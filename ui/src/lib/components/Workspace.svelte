@@ -9,7 +9,7 @@
 		isLoading?: boolean;
 	}
 
-	let { messages, onSendMessage, isLoading = false }: Props = $props();
+	let { messages, onSendMessage }: Props = $props();
 
 	let sidecar = $derived.by(() => {
 		for (const message of messages.toReversed()) {

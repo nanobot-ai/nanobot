@@ -218,7 +218,7 @@ export class ChatAPI {
 		};
 		for (const type of opts?.events ?? []) {
 			eventSource.addEventListener(type, (e) => {
-				const idInt = parseInt(e.lastEventId)
+				const idInt = parseInt(e.lastEventId);
 				onEvent({
 					id: idInt || e.lastEventId,
 					type: type as

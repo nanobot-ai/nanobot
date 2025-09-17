@@ -26,6 +26,9 @@ importers:
       marked:
         specifier: ^16.2.1
         version: 16.2.1
+      marked-highlight:
+        specifier: ^2.2.2
+        version: 2.2.2(marked@16.2.1)
       react:
         specifier: ^18
         version: 18.3.1
@@ -1309,6 +1312,11 @@ packages:
 
   magic-string@0.30.19:
     resolution: {integrity: sha512-2N21sPY9Ws53PZvsEpVtNuSW+ScYbQdp4b9qUaL+9QkHUrGFKo56Lg9Emg5s9V/qrtNBmiR01sYhUOwu3H+VOw==}
+
+  marked-highlight@2.2.2:
+    resolution: {integrity: sha512-KlHOP31DatbtPPXPaI8nx1KTrG3EW0Z5zewCwpUj65swbtKOTStteK3sNAjBqV75Pgo3fNEVNHeptg18mDuWgw==}
+    peerDependencies:
+      marked: '>=4 <17'
 
   marked@16.2.1:
     resolution: {integrity: sha512-r3UrXED9lMlHF97jJByry90cwrZBBvZmjG1L68oYfuPMW+uDTnuMbyJDymCWwbTE+f+3LhpNDKfpR3a3saFyjA==}
@@ -2997,6 +3005,10 @@ snapshots:
   magic-string@0.30.19:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  marked-highlight@2.2.2(marked@16.2.1):
+    dependencies:
+      marked: 16.2.1
 
   marked@16.2.1: {}
 

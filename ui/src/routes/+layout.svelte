@@ -9,7 +9,7 @@
 	import { setNotificationContext } from '$lib/context/notifications.svelte';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
-	import { Menu, X, SidebarOpen, SidebarClose, Sun, Moon, SquarePen} from '@lucide/svelte';
+	import { Menu, X, SidebarOpen, SidebarClose, Sun, Moon, SquarePen } from '@lucide/svelte';
 	import type { Chat } from '$lib/types';
 
 	let { children } = $props();
@@ -123,11 +123,7 @@
 					<img src={nanobotLogo} alt="Nanobot" class="h-12" />
 				</a>
 				<div class="flex items-center gap-1">
-					<a
-						href="/"
-						class="btn p-1 btn-ghost btn-sm"
-						aria-label="New thread"
-					>
+					<a href="/" class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
 						<SquarePen class="h-5 w-5" />
 					</a>
 					<button
@@ -203,11 +199,7 @@
 				<a href="/" class="flex items-center gap-2 text-xl font-bold hover:opacity-80">
 					<img src={nanobotLogo} alt="Nanobot" class="h-12" />
 				</a>
-				<a
-					href="/"
-					class="btn p-1 btn-ghost btn-sm"
-					aria-label="New thread"
-				>
+				<a href="/" class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
 					<SquarePen class="h-4 w-4" />
 				</a>
 				<button

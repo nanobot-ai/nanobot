@@ -14,9 +14,9 @@
 	let { item, onSend }: Props = $props();
 	let singleUIResource = $derived(
 		item.output?.content &&
-		item.output?.content?.filter((i) => {
-			return isUIResource(i) && !i.resource?._meta?.['ai.nanobo.meta/workspace'];
-		}).length === 1
+			item.output?.content?.filter((i) => {
+				return isUIResource(i) && !i.resource?._meta?.['ai.nanobo.meta/workspace'];
+			}).length === 1
 	);
 
 	function parseToolInput(input: string) {
@@ -67,25 +67,25 @@
 						<div class="overflow-x-auto rounded bg-base-200 p-3">
 							<table class="table w-full table-zebra table-xs">
 								<thead>
-								<tr>
-									<th class="text-xs">Key</th>
-									<th class="text-xs">Value</th>
-								</tr>
+									<tr>
+										<th class="text-xs">Key</th>
+										<th class="text-xs">Value</th>
+									</tr>
 								</thead>
 								<tbody>
-								{#each Object.entries(parseToolInput(item.arguments).data) as [key, value] (key)}
-									<tr>
-										<td class="font-mono text-xs">{key}</td>
-										<td class="font-mono text-xs break-all">
-											{typeof value === 'object' ? JSON.stringify(value) : String(value)}
-										</td>
-									</tr>
-								{/each}
-								{#if Object.keys(parseToolInput(item.arguments).data).length === 0}
-									<tr>
-										<td class="font-mono text-xs">No arguments</td>
-									</tr>
-								{/if}
+									{#each Object.entries(parseToolInput(item.arguments).data) as [key, value] (key)}
+										<tr>
+											<td class="font-mono text-xs">{key}</td>
+											<td class="font-mono text-xs break-all">
+												{typeof value === 'object' ? JSON.stringify(value) : String(value)}
+											</td>
+										</tr>
+									{/each}
+									{#if Object.keys(parseToolInput(item.arguments).data).length === 0}
+										<tr>
+											<td class="font-mono text-xs">No arguments</td>
+										</tr>
+									{/if}
 								</tbody>
 							</table>
 						</div>
@@ -134,15 +134,20 @@
 	</div>
 </div>
 
-<div class="flex w-full overflow-y-auto items-start justify-start gap-2 p-2">
+<div class="flex w-full items-start justify-start gap-2 overflow-y-auto p-2">
 	{#if item.output && item.output.content}
 		{#each item.output.content as contentItem, i (i)}
 			{#if contentItem.type === 'resource' && contentItem.resource && isUIResource(contentItem) && !contentItem.resource._meta?.['ai.nanobot.meta/workspace']}
-				<MessageItemUI item={contentItem} {onSend} style={singleUIResource ? {
-				} : {
-					width: '300px',
-					height: '400px',
-				}} />
+				<MessageItemUI
+					item={contentItem}
+					{onSend}
+					style={singleUIResource
+						? {}
+						: {
+								width: '300px',
+								height: '400px'
+							}}
+				/>
 			{/if}
 			{#if contentItem.type === 'image'}
 				<img

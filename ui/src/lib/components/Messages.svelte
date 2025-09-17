@@ -16,9 +16,14 @@
 
 	// Check if any messages have content (text items)
 	let hasMessageContent = $derived(
-		messagesAfterIncludingLastUser.some(message =>
-				message.role === 'assistant' && message.items && message.items.some(item =>
-					item.type === 'tool' || (item.type === 'text' && item.text && item.text.trim().length > 0)
+		messagesAfterIncludingLastUser.some(
+			(message) =>
+				message.role === 'assistant' &&
+				message.items &&
+				message.items.some(
+					(item) =>
+						item.type === 'tool' ||
+						(item.type === 'text' && item.text && item.text.trim().length > 0)
 				)
 		)
 	);
@@ -39,7 +44,7 @@
 			<div class="flex w-full items-start gap-3">
 				<div class="flex min-w-0 flex-1 flex-col items-start">
 					<div class="flex items-center justify-center p-8">
-						<span class="text-base-content/30 loading loading-spinner loading-lg"></span>
+						<span class="loading loading-lg loading-spinner text-base-content/30"></span>
 					</div>
 				</div>
 			</div>
