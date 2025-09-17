@@ -23,4 +23,4 @@ agents:
 
 mcpServers:
   blackjackmcp:
-    url: http://localhost:3000/mcp
+    url: https://blackjackmcp.nanobot.ai/mcp
