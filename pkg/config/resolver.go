@@ -37,6 +37,7 @@ func httpRefresh() {
 	for {
 		time.Sleep(refreshTime)
 		var toRefresh []string
+
 		httpCacheLock.Lock()
 		for k, v := range httpCache {
 			if time.Since(v.last) > refreshTime {
@@ -44,6 +45,7 @@ func httpRefresh() {
 			}
 		}
 		httpCacheLock.Unlock()
+
 		for _, k := range toRefresh {
 			newData, err := httpGetRaw(context.Background(), k)
 			if err != nil {
@@ -56,6 +58,7 @@ func httpRefresh() {
 			}{
 				data: newData,
 			}
+			httpCacheLock.Unlock()
 		}
 	}
 }

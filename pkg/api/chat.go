@@ -195,6 +195,9 @@ func Events(rw http.ResponseWriter, req *http.Request) error {
 		return err
 	}
 	defer subClient.Close(false)
+	context.AfterFunc(req.Context(), func() {
+		subClient.Close(false)
+	})
 
 	_, _ = subClient.SubscribeResource(req.Context(), types.ProgressURI)
 
