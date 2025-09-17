@@ -21,6 +21,8 @@ an agent.
 
 Here are some examples of Nanobots in action:
 - [Blackjack Game](https://blackjack.nanobot.ai) [(source)](./examples/blackjack.yaml)
+- [Hugging Face MCP](https://huggingface.nanobot.ai) [(source)](./examples/huggingface.yaml)
+- [Shopping/Shopify](https://shopping.nanobot.ai) [(source)](./examples/shopping.yaml)
 
 ## Installation
 
