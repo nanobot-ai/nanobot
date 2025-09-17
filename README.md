@@ -20,7 +20,7 @@ an agent.
 ## Examples
 
 Here are some examples of Nanobots in action:
-- [Blackjack Game](https://blackjack.nanobot.ai)
+- [Blackjack Game](https://blackjack.nanobot.ai) [Nanobot Config](./examples/blackjack.yaml)
 
 ## Installation
 
