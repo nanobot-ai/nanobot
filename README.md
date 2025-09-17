@@ -2,8 +2,8 @@
 
 # Nanobot - Build MCP Agents
 
-Nanobot is a way to build agents with MCP and MCP-UI by providing a flexible MCP host.
-Existing applications like VSCode, Claude, Cursor, ChatGPT, and Goose all include an MCP host.
+Nanobot enables building agents with MCP and MCP-UI by providing a flexible MCP host.
+While existing applications like VSCode, Claude, Cursor, ChatGPT, and Goose all include an MCP host,
 Nanobot is designed to be a standalone, open-source MCP host that can be easily deployed or integrated into
 your applications. You can use Nanobot to create your own dedicated MCP and MCP-UI powered chatbot.
 
@@ -43,7 +43,7 @@ Create a configuration file (e.g. `nanobot.yaml`) that defines your agents and M
 ```yaml
 agents:
   main:
-    model: gpt-4
+    model: gpt-4.1
     instructions: "You are a helpful assistant."
     mcpServers: myserver
 
