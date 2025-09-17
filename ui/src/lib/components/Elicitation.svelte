@@ -88,6 +88,7 @@
 	function openOAuthLink() {
 		const url = getOAuthUrl();
 		window.open(url, '_blank');
+		handleAccept();
 	}
 
 	async function copyToClipboard() {
@@ -140,16 +141,12 @@
 							</div>
 						{/if}
 					</div>
-
-					<button type="button" class="btn btn-block btn-primary" onclick={openOAuthLink}>
-						Open Authentication Link
-					</button>
 				</div>
 
 				<div class="modal-action">
 					<button type="button" class="btn btn-error" onclick={handleDecline}> Decline </button>
-					<button type="button" class="btn btn-success" onclick={handleAccept}>
-						Authentication Complete
+					<button type="button" class="btn btn-success" onclick={openOAuthLink}>
+						Authenticate
 					</button>
 				</div>
 			{:else}
