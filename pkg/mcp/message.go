@@ -7,9 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/log"
 )
+
+var messageID = time.Now().Unix()
 
 type Message struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -35,6 +39,11 @@ func NewMessage(method string, params any) (*Message, error) {
 		msg.Params = data
 	}
 	return msg, nil
+}
+
+func nextMessageID() float64 {
+	x := atomic.AddInt64(&messageID, 1)
+	return float64(x)
 }
 
 func (r *Message) IsRequest() bool {

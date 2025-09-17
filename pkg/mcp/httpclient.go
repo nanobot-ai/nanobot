@@ -334,7 +334,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID st
 					return s.ctx.Err(), false
 				default:
 					if msg != nil {
-						msg.ID = float64(time.Now().Unix())
+						msg.ID = nextMessageID()
 					}
 					s.sseLock.Lock()
 					if !s.needReconnect {
@@ -518,7 +518,7 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 		if initializeMessage == nil {
 			initializeMessage = &msg
 		} else {
-			initializeMessage.ID = float64(time.Now().Unix())
+			initializeMessage.ID = nextMessageID()
 		}
 		if err := s.initialize(ctx, *initializeMessage); err != nil {
 			return fmt.Errorf("failed to initialize client: %w", err)
@@ -607,7 +607,6 @@ func (s *HTTPClient) readResponse(resp *http.Response) (bool, error) {
 	var seen bool
 	handle := func(message *Message) {
 		seen = true
-		log.Messages(s.ctx, s.serverName, false, message.Result)
 		go s.handler(s.ctx, *message)
 	}
 
@@ -624,6 +623,7 @@ func (s *HTTPClient) readResponse(resp *http.Response) (bool, error) {
 				return seen, fmt.Errorf("failed to decode response: %w", err)
 			}
 
+			log.Messages(s.ctx, s.serverName, false, []byte(data))
 			handle(&message)
 		}
 	}
@@ -646,6 +646,7 @@ func (s *HTTPClient) readResponse(resp *http.Response) (bool, error) {
 		return false, fmt.Errorf("failed to decode response: %w", err)
 	}
 
+	log.Messages(s.ctx, s.serverName, false, data)
 	handle(&message)
 	return seen, nil
 }

@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"slices"
 	"sync"
-	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 )
@@ -487,7 +486,7 @@ func (s *Session) toRequest(method string, in any, opt ExchangeOption) (*Message
 	}
 
 	if req.ID == nil || req.ID == "" || req.ID == 0 || req.ID == 0.0 {
-		req.ID = float64(time.Now().Unix())
+		req.ID = nextMessageID()
 	}
 	if opt.ProgressToken != nil {
 		if err := req.SetProgressToken(opt.ProgressToken); err != nil {
