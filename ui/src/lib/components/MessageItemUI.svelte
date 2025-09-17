@@ -17,10 +17,10 @@
 	interface Props {
 		item: ChatMessageItemResource;
 		onSend?: (message: string) => void;
-		width?: string;
+		style?: Record<string, string>;
 	}
 
-	let { item, onSend, width }: Props = $props();
+	let { item, onSend, style = {} }: Props = $props();
 	let container: HTMLDivElement;
 	const iFrameRef = $state<{
 		current: HTMLIFrameElement | null;
@@ -30,8 +30,8 @@
 
 	$effect(() => {
 		if (iFrameRef.current) {
-			iFrameRef.current.classList.add('mx-auto');
-			console.log('Iframe ref:', iFrameRef.current);
+			// iFrameRef.current.classList.add('mx-auto');
+			// console.log('Iframe ref:', iFrameRef.current);
 		}
 	});
 
@@ -81,14 +81,13 @@
 					]
 				},
 				htmlProps: {
+					style: {
+						...style
+					},
 					autoResizeIframe: true,
-					// style: {
-					// 	width: width || 'fit-content',
-					// 	height: '1024px'
-					// },
 					iframeProps: {
 						ref: iFrameRef
-					}
+					},
 				}
 			})
 		);

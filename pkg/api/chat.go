@@ -25,7 +25,11 @@ func writeEvent(rw http.ResponseWriter, id any, name string, textOrData any) err
 	}
 
 	if id != nil {
-		_, err = rw.Write([]byte(fmt.Sprintf("id: %s\n", id)))
+		if _, ok := id.(string); !ok {
+			v, _ := json.Marshal(id)
+			id = string(v)
+		}
+		_, err = rw.Write([]byte(fmt.Sprintf("id: %v\n", id)))
 		if err != nil {
 			return fmt.Errorf("failed to write id line: %w", err)
 		}

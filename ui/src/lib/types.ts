@@ -113,7 +113,7 @@ export interface ChatResult {
 }
 
 export interface Event {
-	id?: string;
+	id?: string | number;
 	type:
 		| 'message'
 		| 'history-start'

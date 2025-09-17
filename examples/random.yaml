@@ -1,0 +1,8 @@
+agents:
+  main:
+    name: Random Testing Tools
+    mcpServers: random
+
+mcpServers:
+  random:
+    url: https://mcp-aharvard.netlify.app/mcp

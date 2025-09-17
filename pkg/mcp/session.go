@@ -328,10 +328,16 @@ func (s *Session) Attributes() map[string]any {
 		return nil
 	}
 
+	attributes := make(map[string]any)
+	if s.Parent != nil {
+		maps.Copy(attributes, s.Parent.Attributes())
+	}
+
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return maps.Clone(s.attributes)
+	maps.Copy(attributes, s.attributes)
+	return attributes
 }
 
 func (s *Session) Close(deleteSession bool) {

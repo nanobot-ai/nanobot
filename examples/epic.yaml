@@ -1,0 +1,10 @@
+agents:
+  main:
+    name: Something Epic
+    instructions: |
+      ${servers.epic.instructions}
+    mcpServers: epic
+
+mcpServers:
+  epic:
+    url: https://epic-me-mcp.kentcdodds.workers.dev/mcp

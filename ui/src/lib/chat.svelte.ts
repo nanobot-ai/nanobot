@@ -44,8 +44,8 @@ export class ChatAPI {
 			})
 		});
 
-		// We expect a 204 No Content response
-		if (resp.status == 204) {
+		// We expect a 204 No Content response or 202
+		if (resp.status == 204 || resp.status == 202) {
 			return;
 		}
 
@@ -218,8 +218,9 @@ export class ChatAPI {
 		};
 		for (const type of opts?.events ?? []) {
 			eventSource.addEventListener(type, (e) => {
+				const idInt = parseInt(e.lastEventId)
 				onEvent({
-					id: e.lastEventId,
+					id: idInt || e.lastEventId,
 					type: type as
 						| 'history-start'
 						| 'history-end'
@@ -370,7 +371,7 @@ export class ChatService {
 	}
 
 	replyToElicitation = async (elicitation: Elicitation, result: ElicitationResult) => {
-		console.log('replyToElicitation', elicitation.id, result);
+		console.log('replyToElicitation', typeof elicitation.id, elicitation.id, result);
 		await this.api.reply(elicitation.id, result, {
 			sessionId: this.chatId
 		});

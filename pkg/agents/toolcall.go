@@ -71,7 +71,15 @@ func (a *Agents) invoke(ctx context.Context, config types.Config, target types.T
 		ToolCallInvocation: &funcCall,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to invoke tool %s on mcp server %s: %w", target.TargetName, target.MCPServer, err)
+		response = &types.CallResult{
+			Content: []mcp.Content{
+				{
+					Type: "text",
+					Text: fmt.Sprintf("Error calling %s: %v", target.TargetName, err),
+				},
+			},
+			IsError: true,
+		}
 	}
 	return &types.Message{
 		Role: "user",
