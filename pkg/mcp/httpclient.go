@@ -158,6 +158,7 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 	s.initializeLock.RUnlock()
 
 	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Accept-Encoding", "identity") // Disable compression
 	if method != http.MethodGet {
 		// Don't add because some *cough* CloudFront *cough* proxies don't like it
 		req.Header.Set("Accept", "application/json, text/event-stream")
