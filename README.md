@@ -20,9 +20,7 @@ an agent.
 ## Examples
 
 Here are some examples of Nanobots in action:
-- [Example 1](https://example.com)
-- [Example 2](https://example.com)
-- [Example 3](https://example.com)
+- [Blackjack Game](https://blackjack.nanobot.ai)
 
 ## Installation
 

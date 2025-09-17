@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Paperclip, X, Send } from '@lucide/svelte';
+	import { onMount } from 'svelte';
 
 	interface Props {
 		onSend?: (message: string) => void;
@@ -40,6 +41,8 @@
 			message = '';
 			// Clear uploaded files after sending
 			uploadedFiles = [];
+			// Keep focus on textarea after submission
+			textareaRef?.focus();
 		}
 	}
 
@@ -113,6 +116,9 @@
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
+			if (disabled || isUploading) {
+				return
+			}
 			handleSubmit(e);
 		}
 	}
@@ -173,11 +179,11 @@
 		>
 			<!-- Top row: Full-width input -->
 			<textarea
+				autofocus
 				bind:value={message}
 				onkeydown={handleKeydown}
 				oninput={autoResize}
 				{placeholder}
-				disabled={disabled || isUploading}
 				class="max-h-32 min-h-[2.5rem] w-full resize-none bg-transparent p-1 text-sm leading-6 outline-none placeholder:text-base-content/50"
 				rows="1"
 				bind:this={textareaRef}
@@ -221,7 +227,11 @@
 						disabled={disabled || isUploading || !message.trim()}
 						aria-label="Send message"
 					>
-						<Send class="h-4 w-4" />
+						{#if disabled && !isUploading}
+							<span class="loading loading-xs loading-spinner"></span>
+						{:else}
+							<Send class="h-4 w-4" />
+						{/if}
 					</button>
 				</div>
 			</div>

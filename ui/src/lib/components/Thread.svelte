@@ -89,7 +89,7 @@
 				</div>
 			{/if}
 
-			<Messages {messages} onSend={onSendMessage} />
+			<Messages {messages} onSend={onSendMessage} {isLoading} />
 		</div>
 	</div>
 

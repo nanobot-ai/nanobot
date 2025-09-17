@@ -9,7 +9,7 @@
 	import { setNotificationContext } from '$lib/context/notifications.svelte';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
-	import { Menu, X, SidebarOpen, SidebarClose, Sun, Moon } from '@lucide/svelte';
+	import { Menu, X, SidebarOpen, SidebarClose, Sun, Moon, SquarePen} from '@lucide/svelte';
 	import type { Chat } from '$lib/types';
 
 	let { children } = $props();
@@ -122,30 +122,39 @@
 				<a href="/" class="flex items-center gap-2 text-xl font-bold hover:opacity-80">
 					<img src={nanobotLogo} alt="Nanobot" class="h-12" />
 				</a>
-				<button
-					onclick={() => {
-						if (window.innerWidth >= 1024) {
-							toggleDesktopSidebar();
-						} else {
-							closeMobileSidebar();
-						}
-					}}
-					class="btn p-1 btn-ghost btn-sm"
-					aria-label={isSidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
-				>
-					<!-- Desktop collapsed state -->
-					<span class="hidden lg:inline">
-						{#if isSidebarCollapsed}
-							<SidebarOpen class="h-5 w-5" />
-						{:else}
-							<SidebarClose class="h-5 w-5" />
-						{/if}
-					</span>
-					<!-- Mobile state -->
-					<span class="lg:hidden">
-						<X class="h-5 w-5" />
-					</span>
-				</button>
+				<div class="flex items-center gap-1">
+					<a
+						href="/"
+						class="btn p-1 btn-ghost btn-sm"
+						aria-label="New thread"
+					>
+						<SquarePen class="h-5 w-5" />
+					</a>
+					<button
+						onclick={() => {
+							if (window.innerWidth >= 1024) {
+								toggleDesktopSidebar();
+							} else {
+								closeMobileSidebar();
+							}
+						}}
+						class="btn p-1 btn-ghost btn-sm"
+						aria-label={isSidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
+					>
+						<!-- Desktop collapsed state -->
+						<span class="hidden lg:inline">
+							{#if isSidebarCollapsed}
+								<SidebarOpen class="h-5 w-5" />
+							{:else}
+								<SidebarClose class="h-5 w-5" />
+							{/if}
+						</span>
+						<!-- Mobile state -->
+						<span class="lg:hidden">
+							<X class="h-5 w-5" />
+						</span>
+					</button>
+				</div>
 			</div>
 
 			<!-- Threads list -->
@@ -194,6 +203,13 @@
 				<a href="/" class="flex items-center gap-2 text-xl font-bold hover:opacity-80">
 					<img src={nanobotLogo} alt="Nanobot" class="h-12" />
 				</a>
+				<a
+					href="/"
+					class="btn p-1 btn-ghost btn-sm"
+					aria-label="New thread"
+				>
+					<SquarePen class="h-4 w-4" />
+				</a>
 				<button
 					onclick={toggleDesktopSidebar}
 					class="btn p-1 btn-ghost btn-sm"
@@ -207,7 +223,14 @@
 
 	<!-- Mobile menu button -->
 	{#if !isMobileSidebarOpen}
-		<div class="absolute top-4 left-4 z-50 lg:hidden">
+		<div class="absolute top-4 left-4 z-50 flex gap-2 lg:hidden">
+			<a
+				href="/"
+				class="btn border border-base-300 bg-base-100/80 btn-ghost backdrop-blur-sm btn-sm"
+				aria-label="New thread"
+			>
+				<SquarePen class="h-5 w-5" />
+			</a>
 			<button
 				onclick={toggleMobileSidebar}
 				class="btn border border-base-300 bg-base-100/80 btn-ghost backdrop-blur-sm btn-sm"
