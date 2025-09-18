@@ -28,7 +28,7 @@ agents:
     starterMessages:
       - "Let's play a game of blackjack!"
       - "Explain the rules of blackjack to me."
-      - "Tell me story."
+      - "Tell me a story."
     model: gpt-4.1
     mcpServers: blackjackmcp
 
