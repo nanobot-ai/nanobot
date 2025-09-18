@@ -100,7 +100,7 @@
 	<div
 		class="absolute right-0 bottom-0 left-0 flex flex-col transition-all duration-500 ease-in-out {hasMessages
 			? 'bg-base-100/80 backdrop-blur-sm'
-			: 'md:top-1/2 md:bottom-auto md:-translate-y-1/2'}"
+			: '[@media(min-height:900px)]:md:top-1/2 [@media(min-height:900px)]:md:bottom-auto md:-translate-y-1/2'}"
 	>
 		<!-- Scroll to bottom button -->
 		{#if showScrollButton && hasMessages}
