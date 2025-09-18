@@ -28,7 +28,6 @@ func NewServer(d *sessiondata.Data, r Caller) *Server {
 	}
 
 	s.tools = mcp.NewServerTools(
-		getChatCall{s: s},
 		setCurrentAgentCall{s: s},
 		chatCall{s: s},
 	)

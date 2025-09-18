@@ -1,6 +1,7 @@
 <script lang="ts">
 	import MessageItem from './MessageItem.svelte';
 	import type { ChatMessage } from '$lib/types';
+	import MessageItemText from '$lib/components/MessageItemText.svelte';
 
 	interface Props {
 		message: ChatMessage;
@@ -13,9 +14,30 @@
 	const displayTime = $derived(
 		timestamp || (message.created ? new Date(message.created) : new Date())
 	);
+	const toolCall = $derived.by(() => {
+		try {
+			return message.role === 'user' &&
+				message.items?.length === 1 &&
+				message.items[0].type === 'text'
+				? JSON.parse(message.items[0].text)
+				: null;
+		} catch {
+			// ignore parse error
+			return null;
+		}
+	});
 </script>
 
-{#if message.role === 'user'}
+{#if message.role === 'user' && toolCall?.type === 'prompt' && toolCall.payload?.prompt}
+	<MessageItemText
+		item={{
+			type: 'text',
+			text: toolCall.payload?.prompt
+		}}
+	/>
+{:else if message.role === 'user' && toolCall?.type === 'tool' && toolCall.payload?.toolName}
+	<!-- Don't print anything for tool calls -->
+{:else if message.role === 'user'}
 	<div class="group flex w-full justify-end">
 		<div class="max-w-md">
 			<div class="flex flex-col items-end">

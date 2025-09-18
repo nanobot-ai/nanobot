@@ -85,10 +85,10 @@ func (d *Data) SetCurrentAgent(ctx context.Context, newAgent string) error {
 	return nil
 }
 
-func (d *Data) Agents(ctx context.Context) (types.Agents, error) {
+func (d *Data) Agents(ctx context.Context) ([]types.AgentDisplay, error) {
 	var (
 		session = mcp.SessionFromContext(ctx)
-		agents  = types.Agents{}
+		agents  []types.AgentDisplay
 		c       types.Config
 	)
 
@@ -117,15 +117,23 @@ func (d *Data) Agents(ctx context.Context) (types.Agents, error) {
 				name = key
 			}
 
+			icon, _ := c.Session.InitializeResult.Capabilities.Experimental["ai.nanobot.meta/icon"].(string)
+			iconDark, _ := c.Session.InitializeResult.Capabilities.Experimental["ai.nanobot.meta/icon"].(string)
+			starterMessages, _ := c.Session.InitializeResult.Capabilities.Experimental["ai.nanobot.meta/starter-messages"].(string)
+
 			agentDisplay = types.AgentDisplay{
-				Name:        complete.First(c.Session.InitializeResult.ServerInfo.Name, mcpServer.Name, mcpServer.ShortName, key),
-				ShortName:   complete.First(mcpServer.ShortName, c.Session.InitializeResult.ServerInfo.Name, mcpServer.Name, key),
-				Description: strings.TrimSpace(mcpServer.Description),
+				Name:            complete.First(c.Session.InitializeResult.ServerInfo.Name, mcpServer.Name, mcpServer.ShortName, key),
+				ShortName:       complete.First(mcpServer.ShortName, c.Session.InitializeResult.ServerInfo.Name, mcpServer.Name, key),
+				Description:     strings.TrimSpace(mcpServer.Description),
+				Icon:            icon,
+				IconDark:        iconDark,
+				StarterMessages: strings.Split(starterMessages, ","),
 			}
 		} else {
 			continue
 		}
-		agents[key] = agentDisplay
+
+		agents = append(agents, agentDisplay)
 	}
 
 	session.Set(agentsSessionKey, &agents)
@@ -221,6 +229,7 @@ func (d *Data) getAndSetConfig(ctx context.Context, defaultConfig types.ConfigFa
 		if err != nil {
 			return c, fmt.Errorf("failed to load ui config: %w", err)
 		}
+		uiConfig.Publish.Entrypoint = nil
 		c, err = config.Merge(c, *uiConfig)
 		if err != nil {
 			return c, fmt.Errorf("failed to merge ui config: %w", err)

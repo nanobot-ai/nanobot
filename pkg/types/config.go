@@ -445,39 +445,33 @@ func (s *StringList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type Agents map[string]AgentDisplay
-
-type AgentDisplay struct {
-	ID          string `json:"id,omitempty"`
-	Name        string `json:"name,omitempty"`
-	ShortName   string `json:"shortName,omitempty"`
-	Description string `json:"description,omitempty"`
-}
-
 type Agent struct {
-	Name           string                    `json:"name,omitempty"`
-	ShortName      string                    `json:"shortName,omitempty"`
-	Description    string                    `json:"description,omitempty"`
-	Instructions   DynamicInstructions       `json:"instructions,omitempty"`
-	Model          string                    `json:"model,omitempty"`
-	Before         StringList                `json:"before,omitempty"`
-	After          StringList                `json:"after,omitempty"`
-	MCPServers     StringList                `json:"mcpServers,omitempty"`
-	Tools          StringList                `json:"tools,omitempty"`
-	Agents         StringList                `json:"agents,omitempty"`
-	Flows          StringList                `json:"flows,omitempty"`
-	Prompts        StringList                `json:"prompts,omitzero"`
-	Reasoning      *AgentReasoning           `json:"reasoning,omitempty"`
-	ThreadName     string                    `json:"threadName,omitempty"`
-	Chat           *bool                     `json:"chat,omitempty"`
-	ToolExtensions map[string]map[string]any `json:"toolExtensions,omitempty"`
-	ToolChoice     string                    `json:"toolChoice,omitempty"`
-	Temperature    *json.Number              `json:"temperature,omitempty"`
-	TopP           *json.Number              `json:"topP,omitempty"`
-	Output         *OutputSchema             `json:"output,omitempty"`
-	Truncation     string                    `json:"truncation,omitempty"`
-	MaxTokens      int                       `json:"maxTokens,omitempty"`
-	MimeTypes      []string                  `json:"mimeTypes,omitempty"`
+	Name            string                    `json:"name,omitempty"`
+	ShortName       string                    `json:"shortName,omitempty"`
+	Description     string                    `json:"description,omitempty"`
+	Icon            string                    `json:"icon,omitempty"`
+	IconDark        string                    `json:"iconDark,omitempty"`
+	StarterMessages StringList                `json:"starterMessages,omitempty"`
+	Instructions    DynamicInstructions       `json:"instructions,omitempty"`
+	Model           string                    `json:"model,omitempty"`
+	Before          StringList                `json:"before,omitempty"`
+	After           StringList                `json:"after,omitempty"`
+	MCPServers      StringList                `json:"mcpServers,omitempty"`
+	Tools           StringList                `json:"tools,omitempty"`
+	Agents          StringList                `json:"agents,omitempty"`
+	Flows           StringList                `json:"flows,omitempty"`
+	Prompts         StringList                `json:"prompts,omitzero"`
+	Reasoning       *AgentReasoning           `json:"reasoning,omitempty"`
+	ThreadName      string                    `json:"threadName,omitempty"`
+	Chat            *bool                     `json:"chat,omitempty"`
+	ToolExtensions  map[string]map[string]any `json:"toolExtensions,omitempty"`
+	ToolChoice      string                    `json:"toolChoice,omitempty"`
+	Temperature     *json.Number              `json:"temperature,omitempty"`
+	TopP            *json.Number              `json:"topP,omitempty"`
+	Output          *OutputSchema             `json:"output,omitempty"`
+	Truncation      string                    `json:"truncation,omitempty"`
+	MaxTokens       int                       `json:"maxTokens,omitempty"`
+	MimeTypes       []string                  `json:"mimeTypes,omitempty"`
 
 	// Selection criteria fields
 
@@ -494,9 +488,12 @@ type AgentReasoning struct {
 
 func (a Agent) ToDisplay() AgentDisplay {
 	return AgentDisplay{
-		Name:        a.Name,
-		ShortName:   a.ShortName,
-		Description: a.Description,
+		Name:            a.Name,
+		ShortName:       a.ShortName,
+		Description:     a.Description,
+		Icon:            a.Icon,
+		IconDark:        a.IconDark,
+		StarterMessages: a.StarterMessages,
 	}
 }
 

@@ -25,7 +25,7 @@
 	});
 </script>
 
-<div class="flex">
+<div class="grid grid-cols-1 md:flex md:flex-row">
 	<Workspace messages={chat.messages} onSendMessage={chat.sendMessage} />
 
 	<Thread
@@ -34,6 +34,7 @@
 		onSendMessage={chat.sendMessage}
 		prompts={chat.prompts}
 		elicitations={chat.elicitations}
+		agent={chat.agent}
 		onElicitationResult={chat.replyToElicitation}
 	/>
 </div>

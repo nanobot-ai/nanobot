@@ -137,7 +137,6 @@ func getContext(ctx context.Context) Context {
 
 type Server struct {
 	client *mcp.Client
-	chat   *types.ChatData
 	cfg    types.Config
 }
 

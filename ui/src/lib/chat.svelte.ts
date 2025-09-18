@@ -8,7 +8,9 @@ import {
 	type Elicitation,
 	type ElicitationResult,
 	type Prompts,
-	type Prompt
+	type Prompt,
+	type Agent,
+	type Agents
 } from './types';
 import { getNotificationContext } from './context/notifications.svelte';
 
@@ -163,6 +165,10 @@ export class ChatAPI {
 		});
 	}
 
+	async listAgents(opts?: { sessionId?: string }): Promise<Agents> {
+		return await this.callMCPTool<Agents>('list_agents', opts);
+	}
+
 	async getThreads(): Promise<Chat[]> {
 		return (
 			await this.callMCPTool<{
@@ -268,6 +274,7 @@ export const chatApi = new ChatAPI();
 export class ChatService {
 	messages: ChatMessage[];
 	prompts: Prompt[];
+	agent: Agent;
 	elicitations: Elicitation[];
 	isLoading: boolean;
 	chatId: string;
@@ -284,8 +291,11 @@ export class ChatService {
 		this.elicitations = $state<Elicitation[]>([]);
 		this.prompts = $state<Prompt[]>([]);
 		this.chatId = $state('');
+		this.agent = $state<Agent>({});
 		if (opts?.chatId) {
 			this.setChatId(opts.chatId);
+		} else {
+			this.reloadAgent();
 		}
 	}
 
@@ -311,6 +321,15 @@ export class ChatService {
 			if (prompts.prompts) {
 				this.prompts = prompts.prompts;
 			}
+		}
+
+		await this.reloadAgent();
+	};
+
+	private reloadAgent = async () => {
+		const agents = await this.api.listAgents({ sessionId: this.chatId });
+		if (agents.agents?.length > 0) {
+			this.agent = agents.agents[0];
 		}
 	};
 
@@ -371,7 +390,7 @@ export class ChatService {
 	}
 
 	replyToElicitation = async (elicitation: Elicitation, result: ElicitationResult) => {
-		console.log('replyToElicitation', typeof elicitation.id, elicitation.id, result);
+		console.log('!!!!!!replyToElicitation', typeof elicitation.id, elicitation.id, result);
 		await this.api.reply(elicitation.id, result, {
 			sessionId: this.chatId
 		});

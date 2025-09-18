@@ -346,7 +346,7 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 			return fmt.Errorf("failed to get introduction: %w", err)
 		}
 		experimental = map[string]any{
-			"nanobot/intro": intro,
+			"ai.nanobot.meta/intro": intro,
 		}
 	}
 

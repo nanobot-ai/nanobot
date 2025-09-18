@@ -19,14 +19,13 @@ func NewServer(data *sessiondata.Data) *Server {
 	}
 
 	s.tools = mcp.NewServerTools(
-		mcp.NewServerTool("get_config", "Get current project configuration", s.getConfig),
-		mcp.NewServerTool("update_config", "Update project configuration", s.updateConfig),
 		mcp.NewServerTool("list_chats", "Returns all previous chat threads", s.listChats),
 		mcp.NewServerTool("update_chat", "Update fields of a give chat thread", s.updateChat),
 		mcp.NewServerTool("create_chat", "Create a new chat thread", s.createChat),
 		mcp.NewServerTool("delete_chat", "Delete an existing chat thread", s.deleteChat),
-		mcp.NewServerTool("set_visibility", "Make the current thread public or private", s.setVisibility),
-		mcp.NewServerTool("clone", "Clone the current session and return a new session ID", s.clone),
+		mcp.NewServerTool("list_agents", "List available agents and their meta data", s.listAgents),
+		//mcp.NewServerTool("set_visibility", "Make the current thread public or private", s.setVisibility),
+		//mcp.NewServerTool("clone", "Clone the current session and return a new session ID", s.clone),
 	)
 
 	return s

@@ -614,11 +614,23 @@ definitions:
         description: |
           A short name for the agent that will be used in the UI. If not set, the
           name will be used.
+      icon:
+        type: string
+        description: |
+          An icon to represent the agent in the UI. This should be a URL to an image.
+      iconDark:
+        type: string
+        description: |
+          An icon to represent the agent in the UI when the UI is in dark mode. This should be a URL to an image.
       description:
         type: string
         description: |
           A human-readable description that will be used by the LLM to determine when
           to use this agent when this agent is given to another agent as a tool.
+      starterMessages:
+        $ref: "#/definitions/StringOrStringList"
+        description: |
+          A list of starter messages that will be presented to the user to at chat start
       model:
         type: string
         description: |
