@@ -125,23 +125,7 @@ The Nanobot UI lives in the `./ui` directory. To develop against it:
 
 ---
 
-## Features & Roadmap
-
-Nanobot aims to be a **fully compliant MCP Host** and support all MCP + MCP-UI features.
-
-| Feature Category           | Feature | Status        |
-| -------------------------- |---------| ------------- |
-| **MCP Core**               | TODO    | ✅ Implemented |
-|                            | TODO    | 🚧 Partial    |
-|                            | TODO    | ❌ Not yet     |
-|                            | TODO    | ✅ Implemented |
-| **MCP-UI**                 | TODO    | 🚧 Partial    |
-|                            | TODO    | ✅ Implemented |
-|                            | TODO    | ❌ Not yet     |
-
-✅ = Implemented 🚧 = Partial / WIP ❌ = Not yet ⏳ = Planned
-
-### Roadmap
+## Roadmap
 
 - Full MCP + MCP-UI compliance
 - More robust multi-agent support
