@@ -318,7 +318,7 @@ export class ChatService {
 
 		if (chatId) {
 			const prompts = await this.listPrompts();
-			if (prompts.prompts) {
+			if (prompts && prompts.prompts) {
 				this.prompts = prompts.prompts;
 			}
 		}

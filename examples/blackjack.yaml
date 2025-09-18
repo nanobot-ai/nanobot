@@ -34,4 +34,4 @@ agents:
 
 mcpServers:
   blackjackmcp:
-    url: https://blackjack.nanobot.ai/mcp
+    url: https://blackjackmcp.nanobot.ai/mcp
