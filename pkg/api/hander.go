@@ -3,17 +3,22 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func Handler(sessionManager *session.Manager) http.Handler {
+func Handler(sessionManager *session.Manager, callBackAddress string) http.Handler {
+	callBackAddress = strings.ReplaceAll(callBackAddress, "127.0.0.1", "localhost")
+	callBackAddress = strings.ReplaceAll(callBackAddress, "0.0.0.0", "localhost")
+
 	s := &server{
 		server: mcp.Server{
-			BaseURL: "http://localhost:8080/mcp",
+			BaseURL: fmt.Sprintf("http://%s/mcp", callBackAddress),
 		},
 		sessionManager: sessionManager,
 	}
