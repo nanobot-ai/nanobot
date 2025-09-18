@@ -30,5 +30,6 @@
 	onSendMessage={chat.sendMessage}
 	prompts={chat.prompts}
 	elicitations={chat.elicitations}
+	agent={chat.agent}
 	onElicitationResult={chat.replyToElicitation}
 />

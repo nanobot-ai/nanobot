@@ -6,7 +6,6 @@
 	interface Props {
 		messages: ChatMessage[];
 		onSendMessage?: (message: string) => void;
-		isLoading?: boolean;
 	}
 
 	let { messages, onSendMessage }: Props = $props();
@@ -31,7 +30,9 @@
 
 {#if key}
 	{#key key}
-		<div class="workspace peer h-dvh w-3/4">
+		<div
+			class="workspace peer m-3 h-[60vh] border-2 border-base-100/30 md:m-0 md:h-dvh md:max-h-dvh md:w-3/4"
+		>
 			<MessageItemUI item={sidecar} onSend={onSendMessage} />
 		</div>
 	{/key}

@@ -141,7 +141,7 @@
 	});
 </script>
 
-<div class="p-4">
+<div class="p-0 md:p-4">
 	<!-- Uploaded files display -->
 	{#if uploadedFiles.length > 0}
 		<div class="mb-3 flex flex-wrap gap-2">
@@ -174,7 +174,7 @@
 
 	<form onsubmit={handleSubmit}>
 		<div
-			class="space-y-3 rounded-2xl border-2 border-base-200 bg-base-100 p-3 transition-colors focus-within:border-primary"
+			class="space-y-3 rounded-t-2xl border-2 border-base-200 bg-base-100 p-3 transition-colors focus-within:border-primary md:rounded-2xl"
 		>
 			<!-- Top row: Full-width input -->
 			<textarea

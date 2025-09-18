@@ -20,9 +20,9 @@ an agent.
 ## Examples
 
 Here are some examples of Nanobots in action:
-- [Blackjack Game](https://blackjack.nanobot.ai) [(source)](./examples/blackjack.yaml)
-- [Hugging Face MCP](https://huggingface.nanobot.ai) [(source)](./examples/huggingface.yaml)
-- [Shopping/Shopify](https://shopping.nanobot.ai) [(source)](./examples/shopping.yaml)
+- [Blackjack Game](https://blackjack.nanobot.ai) [(config)](./examples/blackjack.yaml) [(mcp source)](https://github.com/nanobot-ai/blackjack)
+- [Hugging Face MCP](https://huggingface.nanobot.ai) [(config)](./examples/huggingface.yaml)
+- [Shopping/Shopify](https://shopping.nanobot.ai) [(config)](./examples/shopping.yaml)
 
 ## Installation
 
@@ -37,30 +37,6 @@ This will give you the `nanobot` CLI, which you can use to run and manage your M
 ---
 
 ## Getting Started
-
-Create a configuration file (e.g. `nanobot.yaml`) that defines your agents and MCP servers.
-
-**Example:**
-
-```yaml
-agents:
-  main:
-    model: gpt-4.1
-    instructions: "You are a helpful assistant."
-    mcpServers: myserver
-
-mcpServers:
-  myserver:
-    url: http://my-mcp-server.example.com/mcp
-```
-
-Start Nanobot with:
-
-```bash
-nanobot run ./nanobot.yaml
-```
-
-The UI will be available at [http://localhost:8080](http://localhost:8080).
 
 ---
 
@@ -82,6 +58,32 @@ export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 Nanobot automatically selects the correct provider based on the model specified.
+
+---
+
+Create a configuration file (e.g. `nanobot.yaml`) that defines your agents and MCP servers.
+
+**Example:**
+
+```yaml
+agents:
+  dealer:
+    name: Blackjack Dealer
+    model: gpt-4.1
+    mcpServers: blackjackmcp
+
+mcpServers:
+  blackjackmcp:
+    url: https://blackjack.nanobot.ai/mcp
+```
+
+Start Nanobot with:
+
+```bash
+nanobot run ./nanobot.yaml
+```
+
+The UI will be available at [http://localhost:8080](http://localhost:8080).
 
 ---
 

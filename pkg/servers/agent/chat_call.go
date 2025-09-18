@@ -215,6 +215,25 @@ func (c chatCall) chatInvoke(ctx context.Context, msg mcp.Message, payload mcp.C
 	return &mcpResult, err
 }
 
+func getMessages(ctx context.Context) ([]types.Message, error) {
+	var (
+		run         types.Execution
+		allMessages []types.Message
+	)
+
+	session := mcp.SessionFromContext(ctx)
+	session.Get(types.PreviousExecutionKey, &run)
+
+	if run.PopulatedRequest != nil {
+		allMessages = run.PopulatedRequest.Input
+	}
+	if run.Response != nil {
+		allMessages = append(allMessages, run.Response.Output)
+	}
+
+	return types.ConsolidateTools(allMessages), nil
+}
+
 type progressPayload struct {
 	Meta progressPayloadMeta `json:"_meta"`
 }

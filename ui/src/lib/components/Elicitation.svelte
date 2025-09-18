@@ -288,9 +288,5 @@
 				</div>
 			{/if}
 		</div>
-
-		<form method="dialog" class="modal-backdrop">
-			<button onclick={handleCancel}>close</button>
-		</form>
 	</dialog>
 {/if}

@@ -5,7 +5,8 @@
 		ChatMessage,
 		Elicitation as ElicitationType,
 		ElicitationResult,
-		Prompt as PromptType
+		Prompt as PromptType,
+		Agent
 	} from '$lib/types';
 	import Elicitation from '$lib/components/Elicitation.svelte';
 	import Prompt from '$lib/components/Prompt.svelte';
@@ -19,6 +20,7 @@
 		onSendMessage?: (message: string) => void;
 		onFileUpload?: (file: File, url: string) => void;
 		isLoading?: boolean;
+		agent?: Agent;
 	}
 
 	let {
@@ -28,6 +30,7 @@
 		onFileUpload,
 		elicitations,
 		onElicitationResult,
+		agent,
 		isLoading = false
 	}: Props = $props();
 
@@ -73,7 +76,7 @@
 	}
 </script>
 
-<div class="relative flex h-dvh w-full flex-col peer-[.workspace]:w-1/4">
+<div class="flex h-dvh w-full flex-col md:relative peer-[.workspace]:md:w-1/4">
 	<!-- Messages area - full height scrollable with bottom padding for floating input -->
 	<div class="w-full overflow-y-auto" bind:this={messagesContainer} onscroll={handleScroll}>
 		<div class="mx-auto max-w-4xl">
@@ -89,15 +92,15 @@
 				</div>
 			{/if}
 
-			<Messages {messages} onSend={onSendMessage} {isLoading} />
+			<Messages {messages} onSend={onSendMessage} {isLoading} {agent} />
 		</div>
 	</div>
 
 	<!-- Message input - centered when no messages, bottom when messages exist -->
 	<div
-		class="absolute right-0 left-0 flex flex-col transition-all duration-500 ease-in-out {hasMessages
-			? 'bottom-0 bg-base-100/80 backdrop-blur-sm'
-			: 'top-1/2 -translate-y-1/2'}"
+		class="absolute right-0 bottom-0 left-0 flex flex-col transition-all duration-500 ease-in-out {hasMessages
+			? 'bg-base-100/80 backdrop-blur-sm'
+			: 'md:top-1/2 md:bottom-auto md:-translate-y-1/2'}"
 	>
 		<!-- Scroll to bottom button -->
 		{#if showScrollButton && hasMessages}

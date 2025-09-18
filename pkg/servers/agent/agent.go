@@ -82,14 +82,11 @@ func messagesToResourceContents(messages []types.Message) ([]mcp.ResourceContent
 }
 
 func (s *Server) readHistory(ctx context.Context) (ret []mcp.ResourceContent, _ error) {
-	chatData, err := getChatCall{
-		s: s,
-	}.getChatLocal(ctx)
+	messages, err := getMessages(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	return messagesToResourceContents(chatData.Messages)
+	return messagesToResourceContents(messages)
 }
 
 func (s *Server) readProgress(ctx context.Context) (ret []mcp.ResourceContent, _ error) {
@@ -219,10 +216,19 @@ func (s *Server) initialize(ctx context.Context, _ mcp.Message, params mcp.Initi
 		return nil, err
 	}
 
+	var (
+		agent           types.AgentDisplay
+		starterMessages []byte
+	)
 	if len(agents) <= 1 {
 		delete(s.tools, "set_current_agent")
 	} else {
+		agent = agents[0]
 		s.multiAgent = true
+	}
+
+	if len(agent.StarterMessages) > 0 {
+		starterMessages, _ = json.Marshal(agent.StarterMessages)
 	}
 
 	return &mcp.InitializeResult{
@@ -231,6 +237,13 @@ func (s *Server) initialize(ctx context.Context, _ mcp.Message, params mcp.Initi
 			Tools:     &mcp.ToolsServerCapability{},
 			Prompts:   &mcp.PromptsServerCapability{},
 			Resources: &mcp.ResourcesServerCapability{},
+			Experimental: map[string]any{
+				"ai.nanobot.meta/name":             agent.Name,
+				"ai.nanobot.meta/icon":             agent.Icon,
+				"ai.nanobot.meta/icon-dark":        agent.IconDark,
+				"ai.nanobot.meta/description":      agent.Description,
+				"ai.nanobot.meta/starter-messages": string(starterMessages),
+			},
 		},
 		ServerInfo: mcp.ServerInfo{
 			Name:    version.Name,

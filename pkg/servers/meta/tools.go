@@ -114,6 +114,16 @@ func (s *Server) getManagerAndAccountID(mcpSession *mcp.Session) (*session.Manag
 	return &manager, accountID, nil
 }
 
+func (s *Server) listAgents(ctx context.Context, _ struct{}) (*types.AgentList, error) {
+	agents, err := s.data.Agents(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &types.AgentList{
+		Agents: agents,
+	}, nil
+}
+
 func (s *Server) listChats(ctx context.Context, _ struct{}) (*types.ChatList, error) {
 	mcpSession := mcp.SessionFromContext(ctx)
 
@@ -135,38 +145,6 @@ func (s *Server) listChats(ctx context.Context, _ struct{}) (*types.ChatList, er
 	return &types.ChatList{
 		Chats: chats,
 	}, nil
-}
-
-func (s *Server) getConfig(ctx context.Context, _ struct{}) (ret types.ProjectConfig, _ error) {
-	session := mcp.SessionFromContext(ctx)
-	session.Get("project", &ret)
-
-	agents, err := s.data.Agents(ctx)
-	if err != nil {
-		return
-	}
-
-	ret.DefaultAgent = ""
-	ret.Agents = make([]types.AgentDisplay, 0, len(agents))
-
-	for id, agent := range agents {
-		ret.Agents = append(ret.Agents, types.AgentDisplay{
-			ID:          id,
-			Name:        agent.Name,
-			ShortName:   agent.ShortName,
-			Description: agent.Description,
-		})
-	}
-
-	ret.DefaultAgent = s.data.CurrentAgent(ctx)
-	return
-}
-
-func (s *Server) updateConfig(ctx context.Context, cfg types.ProjectConfig) (types.ProjectConfig, error) {
-	session := mcp.SessionFromContext(ctx)
-	session = session.Parent
-	session.Set("project", &cfg)
-	return cfg, nil
 }
 
 func chatFromSession(session *session.Session, currentAccountID string) types.Chat {
