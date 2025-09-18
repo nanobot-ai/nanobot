@@ -178,7 +178,6 @@
 		>
 			<!-- Top row: Full-width input -->
 			<textarea
-				autofocus
 				bind:value={message}
 				onkeydown={handleKeydown}
 				oninput={autoResize}
