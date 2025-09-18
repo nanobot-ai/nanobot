@@ -73,9 +73,12 @@ func UISession(next http.Handler, sessionStore *Manager, apiHandler http.Handler
 			cookie := http.Cookie{
 				Name:     "nanobot-session-id",
 				Value:    nanobotSessionID,
-				Secure:   false,
+				Secure:   isSecureRequest(req),
 				Path:     "/",
 				HttpOnly: true,
+			}
+			if cookie.Secure {
+				cookie.SameSite = http.SameSiteNoneMode
 			}
 			http.SetCookie(rw, &cookie)
 		}
@@ -117,6 +120,10 @@ func UISession(next http.Handler, sessionStore *Manager, apiHandler http.Handler
 			httputil.NewSingleHostReverseProxy(url).ServeHTTP(rw, req)
 		}
 	})
+}
+
+func isSecureRequest(req *http.Request) bool {
+	return req.TLS != nil || req.Header.Get("X-Forwarded-Proto") == "https"
 }
 
 func serveGzipAndCached(req *http.Request, rw http.ResponseWriter, fs fs.FS) {
