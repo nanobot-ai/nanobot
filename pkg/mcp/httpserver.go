@@ -335,6 +335,8 @@ func (h *HTTPServer) ensureInternalSession(ctx context.Context) (*ServerSession,
 		return nil, err
 	}
 
+	session.session.Set("accountID", "healthcheck")
+
 	// Set base environment on the internal session
 	session.session.AddEnv(h.env)
 

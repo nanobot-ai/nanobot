@@ -363,7 +363,7 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 	return mcp.NewClient(session.Context(), name, mcpConfig, clientOpts)
 }
 
-func (s *Service) SampleCall(ctx context.Context, agent string, args any, opts ...SampleCallOptions) (*types.CallResult, error) {
+func (s *Service) sampleCall(ctx context.Context, agent string, args any, opts ...SampleCallOptions) (*types.CallResult, error) {
 	config := types.ConfigFromContext(ctx)
 	createMessageRequest, err := s.convertToSampleRequest(config, agent, args)
 	if err != nil {
@@ -622,7 +622,7 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 	}
 
 	if _, ok := config.Agents[server]; ok && tool != types.AgentTool {
-		return s.SampleCall(ctx, server, args, SampleCallOptions{
+		return s.sampleCall(ctx, server, args, SampleCallOptions{
 			ProgressToken: opt.ProgressToken,
 			AgentOverride: opt.AgentOverride,
 		})
@@ -904,30 +904,39 @@ func (s *Service) convertToSampleRequest(config types.Config, agent string, args
 	}
 
 	for _, attachment := range sampleArgs.Attachments {
-		if strings.HasPrefix(attachment.URL, "data:") {
+		if !strings.HasPrefix(attachment.URL, "data:") {
 			return nil, fmt.Errorf("invalid attachment URL: %s, only data URI are supported", attachment.URL)
 		}
-		parts := strings.Split(strings.TrimPrefix(attachment.URL, "data:"), ",")
+		parts := strings.Split(strings.TrimPrefix(attachment.URL, "data:"), "base64,")
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("invalid attachment URL: %s, only data URI are supported", attachment.URL)
 		}
-		mimeType := parts[0]
+		mimeType := strings.Split(parts[0], ";")[0]
 		if mimeType == "" {
 			mimeType = attachment.MimeType
 		}
 		data := parts[1]
-		data, ok := strings.CutPrefix(data, "base64,")
-		if !ok {
-			return nil, fmt.Errorf("invalid attachment URL: %s, only base64 data URI are supported", attachment.URL)
+		if mimeType == "" || strings.HasPrefix(mimeType, "image/") {
+			sampleRequest.Messages = append(sampleRequest.Messages, mcp.SamplingMessage{
+				Role: "user",
+				Content: mcp.Content{
+					Type:     "image",
+					Data:     data,
+					MIMEType: mimeType,
+				},
+			})
+		} else {
+			sampleRequest.Messages = append(sampleRequest.Messages, mcp.SamplingMessage{
+				Role: "user",
+				Content: mcp.Content{
+					Type: "resource",
+					Resource: &mcp.EmbeddedResource{
+						MIMEType: mimeType,
+						Blob:     data,
+					},
+				},
+			})
 		}
-		sampleRequest.Messages = append(sampleRequest.Messages, mcp.SamplingMessage{
-			Role: "user",
-			Content: mcp.Content{
-				Type:     "image",
-				Data:     data,
-				MIMEType: mimeType,
-			},
-		})
 	}
 
 	return &sampleRequest, nil

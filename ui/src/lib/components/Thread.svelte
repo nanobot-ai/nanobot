@@ -2,11 +2,14 @@
 	import Messages from './Messages.svelte';
 	import MessageInput from './MessageInput.svelte';
 	import type {
+		Attachment,
 		ChatMessage,
 		Elicitation as ElicitationType,
 		ElicitationResult,
 		Prompt as PromptType,
-		Agent
+		Agent,
+		UploadingFile,
+		UploadedFile
 	} from '$lib/types';
 	import Elicitation from '$lib/components/Elicitation.svelte';
 	import Prompt from '$lib/components/Prompt.svelte';
@@ -17,8 +20,11 @@
 		prompts: PromptType[];
 		elicitations?: ElicitationType[];
 		onElicitationResult?: (elicitation: ElicitationType, result: ElicitationResult) => void;
-		onSendMessage?: (message: string) => void;
-		onFileUpload?: (file: File, url: string) => void;
+		onSendMessage?: (message: string, attachments?: Array<{ uri: string }>) => void;
+		onFileUpload?: (file: File, opts?: { controller?: AbortController }) => Promise<Attachment>;
+		cancelUpload?: (fileId: string) => void;
+		uploadingFiles?: UploadingFile[];
+		uploadedFiles?: UploadedFile[];
 		isLoading?: boolean;
 		agent?: Agent;
 	}
@@ -28,6 +34,9 @@
 		prompts,
 		onSendMessage,
 		onFileUpload,
+		cancelUpload,
+		uploadingFiles,
+		uploadedFiles,
 		elicitations,
 		onElicitationResult,
 		agent,
@@ -100,7 +109,7 @@
 	<div
 		class="absolute right-0 bottom-0 left-0 flex flex-col transition-all duration-500 ease-in-out {hasMessages
 			? 'bg-base-100/80 backdrop-blur-sm'
-			: '[@media(min-height:900px)]:md:top-1/2 [@media(min-height:900px)]:md:bottom-auto md:-translate-y-1/2'}"
+			: 'md:-translate-y-1/2 [@media(min-height:900px)]:md:top-1/2 [@media(min-height:900px)]:md:bottom-auto'}"
 	>
 		<!-- Scroll to bottom button -->
 		{#if showScrollButton && hasMessages}
@@ -113,7 +122,14 @@
 			</button>
 		{/if}
 		<div class="mx-auto w-full max-w-4xl">
-			<MessageInput onSend={onSendMessage} {onFileUpload} disabled={isLoading} />
+			<MessageInput
+				onSend={onSendMessage}
+				{onFileUpload}
+				disabled={isLoading}
+				{cancelUpload}
+				{uploadingFiles}
+				{uploadedFiles}
+			/>
 		</div>
 	</div>
 

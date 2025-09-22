@@ -105,7 +105,7 @@ func (d *Data) Agents(ctx context.Context) ([]types.AgentDisplay, error) {
 
 		if agent, ok := c.Agents[key]; ok {
 			agentDisplay = agent.ToDisplay()
-			agentDisplay.Name = complete.First(agentDisplay.Name, agentDisplay.ShortName, key)
+			agentDisplay.Name = complete.First(agentDisplay.Name, agentDisplay.ShortName)
 		} else if mcpServer, ok := c.MCPServers[key]; ok {
 			c, err := d.runtime.GetClient(ctx, key)
 			if err != nil {
@@ -328,7 +328,9 @@ func (d *Data) Sync(ctx context.Context, defaultConfig types.ConfigFactory) erro
 		nctx         = types.NanobotContext(ctx)
 	)
 
-	session.Set(types.AccountIDSessionKey, nctx.User.ID)
+	if nctx.User.ID != "" {
+		session.Set(types.AccountIDSessionKey, nctx.User.ID)
+	}
 
 	initSubscriptions(session)
 

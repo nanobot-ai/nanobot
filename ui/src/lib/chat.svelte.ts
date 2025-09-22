@@ -10,12 +10,15 @@ import {
 	type Prompts,
 	type Prompt,
 	type Agent,
-	type Agents
+	type Agents,
+	type Attachment,
+	type UploadedFile,
+	type UploadingFile
 } from './types';
 import { getNotificationContext } from './context/notifications.svelte';
 
 interface CallToolResult {
-	Content?: ToolOutputItem[];
+	content?: ToolOutputItem[];
 }
 
 export class ChatAPI {
@@ -105,6 +108,8 @@ export class ChatAPI {
 			sessionId?: string;
 			progressToken?: string;
 			async?: boolean;
+			abort?: AbortController;
+			parseResponse?: (data: CallToolResult) => T;
 		}
 	): Promise<T> {
 		const resp = await this.fetcher(`${this.baseUrl}/mcp/ui`, {
@@ -113,6 +118,7 @@ export class ChatAPI {
 				'Content-Type': 'application/json',
 				...(opts?.sessionId && { 'Mcp-Session-Id': opts.sessionId })
 			},
+			signal: opts?.abort?.signal,
 			body: JSON.stringify({
 				id: crypto.randomUUID(),
 				jsonrpc: '2.0',
@@ -141,6 +147,9 @@ export class ChatAPI {
 				console.error('MCP Tool Error:', data.error.message);
 			}
 			throw new Error(data.error.message);
+		}
+		if (opts?.parseResponse) {
+			return opts.parseResponse(data.result as CallToolResult);
 		}
 		if (data.result?.content?.[0]?.structuredContent) {
 			return data.result.content[0].structuredContent as T;
@@ -181,10 +190,47 @@ export class ChatAPI {
 		return await this.callMCPTool<Chat>('create_chat');
 	}
 
+	async createResource(
+		name: string,
+		mimeType: string,
+		blob: string,
+		opts?: {
+			description?: string;
+			sessionId?: string;
+			abort?: AbortController;
+		}
+	): Promise<Attachment> {
+		return await this.callMCPTool<Attachment>('create_resource', {
+			payload: {
+				blob,
+				mimeType,
+				name
+			},
+			sessionId: opts?.sessionId,
+			abort: opts?.abort,
+			parseResponse: (resp: CallToolResult) => {
+				if (resp.content?.[0]?.type === 'resource_link') {
+					return {
+						uri: resp.content[0].uri
+					};
+				}
+				return {
+					uri: ''
+				};
+			}
+		});
+	}
+
 	async sendMessage(request: ChatRequest): Promise<ChatResult> {
 		await this.callMCPTool<CallToolResult>('chat_ui', {
 			payload: {
-				prompt: request.message
+				prompt: request.message,
+				attachments: request.attachments?.map((a) => {
+					return {
+						url: a.uri,
+						mimeType: a.mimeType
+					};
+				})
 			},
 			sessionId: request.threadId,
 			progressToken: request.id,
@@ -278,6 +324,8 @@ export class ChatService {
 	elicitations: Elicitation[];
 	isLoading: boolean;
 	chatId: string;
+	uploadedFiles: UploadedFile[];
+	uploadingFiles: UploadingFile[];
 
 	private api: ChatAPI;
 	private closer = () => {};
@@ -292,6 +340,8 @@ export class ChatService {
 		this.prompts = $state<Prompt[]>([]);
 		this.chatId = $state('');
 		this.agent = $state<Agent>({});
+		this.uploadedFiles = $state([]);
+		this.uploadingFiles = $state([]);
 		if (opts?.chatId) {
 			this.setChatId(opts.chatId);
 		} else {
@@ -314,6 +364,8 @@ export class ChatService {
 		this.elicitations = [];
 		this.history = undefined;
 		this.isLoading = false;
+		this.uploadedFiles = [];
+		this.uploadingFiles = [];
 		this.subscribe(chatId);
 
 		if (chatId) {
@@ -390,7 +442,6 @@ export class ChatService {
 	}
 
 	replyToElicitation = async (elicitation: Elicitation, result: ElicitationResult) => {
-		console.log('!!!!!!replyToElicitation', typeof elicitation.id, elicitation.id, result);
 		await this.api.reply(elicitation.id, result, {
 			sessionId: this.chatId
 		});
@@ -412,8 +463,10 @@ export class ChatService {
 			const response = await this.api.sendMessage({
 				id: crypto.randomUUID(),
 				threadId: this.chatId,
-				message: message
+				message: message,
+				attachments: this.uploadedFiles
 			});
+			this.uploadedFiles = [];
 
 			this.messages = appendMessage(this.messages, response.message);
 		} catch (error) {
@@ -432,6 +485,75 @@ export class ChatService {
 		} finally {
 			this.isLoading = false;
 		}
+	};
+
+	cancelUpload = (fileId: string) => {
+		this.uploadingFiles = this.uploadingFiles.filter((f) => {
+			if (f.id !== fileId) {
+				return true;
+			}
+			if (f.controller) {
+				f.controller.abort();
+			}
+			return false;
+		});
+		this.uploadedFiles = this.uploadedFiles.filter((f) => f.id !== fileId);
+	};
+
+	uploadFile = async (
+		file: File,
+		opts?: {
+			controller?: AbortController;
+		}
+	): Promise<Attachment> => {
+		// Create thread if it doesn't exist
+		if (!this.chatId) {
+			const thread = await this.api.createThread();
+			await this.setChatId(thread.id);
+		}
+
+		const fileId = crypto.randomUUID();
+		const controller = opts?.controller || new AbortController();
+
+		this.uploadingFiles.push({
+			file,
+			id: fileId,
+			controller
+		});
+
+		try {
+			const result = await this.doUploadFile(file, controller);
+			this.uploadedFiles.push({
+				file,
+				uri: result.uri,
+				id: fileId,
+				mimeType: result.mimeType
+			});
+			return result;
+		} finally {
+			this.uploadingFiles = this.uploadingFiles.filter((f) => f.id !== fileId);
+		}
+	};
+
+	private doUploadFile = async (file: File, controller: AbortController): Promise<Attachment> => {
+		// convert file to base64 string
+		const reader = new FileReader();
+		reader.readAsDataURL(file);
+		await new Promise((resolve, reject) => {
+			reader.onloadend = resolve;
+			reader.onerror = reject;
+		});
+		const base64 = (reader.result as string).split(',')[1];
+
+		if (!this.chatId) {
+			throw new Error('Chat ID not set');
+		}
+
+		return await this.api.createResource(file.name, file.type, base64, {
+			description: file.name,
+			sessionId: this.chatId,
+			abort: controller
+		});
 	};
 }
 

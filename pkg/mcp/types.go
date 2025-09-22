@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"time"
 )
@@ -164,7 +165,8 @@ type Content struct {
 
 	// Data is set when type is "image" or "audio"
 	Data string `json:"data,omitempty"`
-	// MIMEType is set when type is "image" or "audio"
+
+	// MIMEType is set when type is "image" or "audio" or "resource_link"
 	MIMEType string `json:"mimeType,omitempty"`
 
 	// Resource is set when type is "resource"
@@ -303,6 +305,13 @@ type ResourceContent struct {
 	MIMEType string `json:"mimeType"`
 	Text     string `json:"text,omitempty"`
 	Blob     string `json:"blob,omitempty"`
+}
+
+func (r ResourceContent) ToDataURI() string {
+	if r.Text != "" {
+		return "data:" + r.MIMEType + ";base64," + base64.StdEncoding.EncodeToString([]byte(r.Text))
+	}
+	return "data:" + r.MIMEType + ";base64," + r.Blob
 }
 
 type ListResourceTemplatesRequest struct {

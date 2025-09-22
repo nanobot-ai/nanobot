@@ -1,13 +1,16 @@
 <script lang="ts">
 	import { Paperclip, X, Send } from '@lucide/svelte';
+	import type { Attachment, UploadedFile, UploadingFile } from '$lib/types';
 
 	interface Props {
-		onSend?: (message: string) => void;
-		onFileUpload?: (file: File, url: string) => void;
+		onSend?: (message: string, attachments?: Attachment[]) => void;
+		onFileUpload?: (file: File, opts?: { controller?: AbortController }) => Promise<Attachment>;
+		cancelUpload?: (fileId: string) => void;
+		uploadingFiles?: UploadingFile[];
+		uploadedFiles?: UploadedFile[];
 		placeholder?: string;
 		disabled?: boolean;
 		supportedMimeTypes?: string[];
-		uploadUrl?: string;
 	}
 
 	let {
@@ -15,6 +18,9 @@
 		onFileUpload,
 		placeholder = 'Type a message...',
 		disabled = false,
+		uploadingFiles = [],
+		uploadedFiles = [],
+		cancelUpload,
 		supportedMimeTypes = [
 			'image/*',
 			'text/plain',
@@ -23,15 +29,13 @@
 			'text/csv',
 			'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 			'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-		],
-		uploadUrl = '/api/upload'
+		]
 	}: Props = $props();
 
 	let message = $state('');
 	let fileInput: HTMLInputElement;
 	let textareaRef: HTMLTextAreaElement;
 	let isUploading = $state(false);
-	let uploadedFiles = $state<Array<{ file: File; url: string; id: string }>>([]);
 
 	function handleSubmit(e: Event) {
 		e.preventDefault();
@@ -39,7 +43,6 @@
 			onSend(message.trim());
 			message = '';
 			// Clear uploaded files after sending
-			uploadedFiles = [];
 			// Keep focus on textarea after submission
 			textareaRef?.focus();
 		}
@@ -53,48 +56,18 @@
 		const target = e.target as HTMLInputElement;
 		const file = target.files?.[0];
 
-		if (!file) return;
+		if (!file || !onFileUpload) return;
+
+		const controller = new AbortController();
 
 		isUploading = true;
 
 		try {
-			const formData = new FormData();
-			formData.append('file', file);
-
-			const response = await fetch(uploadUrl, {
-				method: 'POST',
-				body: formData
-			});
-
-			if (response.ok) {
-				const result = await response.json();
-				const fileId = crypto.randomUUID();
-				const fileUrl = result.url || uploadUrl;
-
-				// Add to uploaded files list
-				uploadedFiles.push({
-					file,
-					url: fileUrl,
-					id: fileId
-				});
-
-				if (onFileUpload) {
-					onFileUpload(file, fileUrl);
-				}
-				console.log('File uploaded successfully:', result);
-			} else {
-				console.error('Upload failed:', response.statusText);
-			}
-		} catch (error) {
-			console.error('Upload error:', error);
+			await onFileUpload(file, { controller });
 		} finally {
 			isUploading = false;
 			target.value = '';
 		}
-	}
-
-	function removeFile(fileId: string) {
-		uploadedFiles = uploadedFiles.filter((f) => f.id !== fileId);
 	}
 
 	function getFileIcon(file: File) {
@@ -142,26 +115,6 @@
 </script>
 
 <div class="p-0 md:p-4">
-	<!-- Uploaded files display -->
-	{#if uploadedFiles.length > 0}
-		<div class="mb-3 flex flex-wrap gap-2">
-			{#each uploadedFiles as uploadedFile (uploadedFile.id)}
-				<div class="flex items-center gap-2 rounded-xl bg-base-200 px-3 py-2 text-sm">
-					<span>{getFileIcon(uploadedFile.file)}</span>
-					<span class="max-w-32 truncate">{uploadedFile.file.name}</span>
-					<button
-						type="button"
-						onclick={() => removeFile(uploadedFile.id)}
-						class="btn h-5 w-5 rounded-full p-0 btn-ghost btn-xs"
-						aria-label="Remove file"
-					>
-						<X class="h-3 w-3" />
-					</button>
-				</div>
-			{/each}
-		</div>
-	{/if}
-
 	<!-- Hidden file input -->
 	<input
 		bind:this={fileInput}
@@ -188,7 +141,11 @@
 			></textarea>
 
 			<!-- Bottom row: Model select on left, buttons on right -->
-			<div class="flex items-center justify-end">
+			<div
+				class="flex items-center {uploadedFiles.length > 0 || uploadingFiles.length > 0
+					? 'justify-between'
+					: 'justify-end'}"
+			>
 				<!-- Model selector -->
 				<select
 					class="select hidden w-48 select-ghost select-sm"
@@ -200,6 +157,41 @@
 					<option value="claude-3-sonnet">Claude 3 Sonnet</option>
 					<option value="gemini-pro">Gemini Pro</option>
 				</select>
+
+				{#if uploadedFiles.length > 0 || uploadingFiles.length > 0}
+					<div class="flex flex-wrap gap-2">
+						<!-- Uploading files with spinner -->
+						{#each uploadingFiles as uploadingFile (uploadingFile.id)}
+							<div class="flex items-center gap-2 rounded-xl bg-base-200 px-3 py-2 text-sm">
+								<span class="loading loading-xs loading-spinner"></span>
+								<span class="max-w-32 truncate">{uploadingFile.file.name}</span>
+								<button
+									type="button"
+									onclick={() => cancelUpload?.(uploadingFile.id)}
+									class="btn h-5 w-5 rounded-full p-0 btn-ghost btn-xs"
+									aria-label="Cancel upload"
+								>
+									<X class="h-3 w-3" />
+								</button>
+							</div>
+						{/each}
+						<!-- Uploaded files -->
+						{#each uploadedFiles as uploadedFile (uploadedFile.id)}
+							<div class="flex items-center gap-2 rounded-xl bg-base-200 px-3 py-2 text-sm">
+								<span>{getFileIcon(uploadedFile.file)}</span>
+								<span class="max-w-32 truncate">{uploadedFile.file.name}</span>
+								<button
+									type="button"
+									onclick={() => cancelUpload?.(uploadedFile.id)}
+									class="btn h-5 w-5 rounded-full p-0 btn-ghost btn-xs"
+									aria-label="Remove file"
+								>
+									<X class="h-3 w-3" />
+								</button>
+							</div>
+						{/each}
+					</div>
+				{/if}
 
 				<!-- Action buttons -->
 				<div class="flex gap-2">

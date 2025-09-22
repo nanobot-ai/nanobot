@@ -29,7 +29,7 @@
 
 	function updateLogo() {
 		const isDark = document.documentElement.getAttribute('data-theme') === 'black';
-		const url = isDark ? (agent?.iconDark || agent?.icon) : agent?.icon;
+		const url = isDark ? agent?.iconDark || agent?.icon : agent?.icon;
 		if (url && imgRef) {
 			imgRef.src = url;
 		}

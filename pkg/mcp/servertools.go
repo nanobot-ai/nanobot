@@ -145,6 +145,32 @@ func callResult(object any, err error) (*CallToolResult, error) {
 		// If the object is already a CallToolResult, we can return it directly
 		return object.(*CallToolResult), nil
 	}
+	if res, ok := object.(*Resource); ok {
+		return &CallToolResult{
+			Content: []Content{
+				{
+					Type:        "resource_link",
+					Name:        res.Name,
+					Description: res.Description,
+					URI:         res.URI,
+					MIMEType:    res.MimeType,
+				},
+			},
+		}, nil
+	}
+	if res, ok := object.(Resource); ok {
+		return &CallToolResult{
+			Content: []Content{
+				{
+					Type:        "resource_link",
+					Name:        res.Name,
+					Description: res.Description,
+					URI:         res.URI,
+					MIMEType:    res.MimeType,
+				},
+			},
+		}, nil
+	}
 
 	dataBytes, err := json.Marshal(object)
 	if err != nil {

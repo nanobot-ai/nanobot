@@ -114,10 +114,12 @@ export interface ChatRequest {
 	threadId: string;
 	message: string;
 	agent?: string;
-	attachments?: Array<{
-		file: File;
-		url: string;
-	}>;
+	attachments?: Attachment[];
+}
+
+export interface Attachment {
+	uri: string;
+	mimeType?: string;
 }
 
 export interface ChatResult {
@@ -224,3 +226,16 @@ export interface EnumSchema {
 export const MessageMimeType = 'application/vnd.nanobot.chat.message+json';
 export const HistoryMimeType = 'application/vnd.nanobot.chat.history+json';
 export const ToolResultMimeType = 'application/vnd.nanobot.tool.result+json';
+
+export interface UploadedFile {
+	id: string;
+	file: File;
+	uri: string;
+	mimeType?: string;
+}
+
+export interface UploadingFile {
+	id: string;
+	file: File;
+	controller?: AbortController;
+}

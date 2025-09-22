@@ -36,8 +36,6 @@
 	});
 
 	async function onUIAction(e: UIActionResult) {
-		const x = JSON.stringify(e);
-		console.log(x);
 		console.log('UI Action', e);
 		switch (e.type) {
 			case 'intent':
