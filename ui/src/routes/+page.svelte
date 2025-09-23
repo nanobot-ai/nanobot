@@ -31,6 +31,14 @@
 	});
 </script>
 
+<svelte:head>
+	{#if chat.agent?.name}
+		<title>{chat.agent.name}</title>
+	{:else}
+		<title>Nanobot</title>
+	{/if}
+</svelte:head>
+
 <Thread
 	messages={chat.messages}
 	isLoading={chat.isLoading}

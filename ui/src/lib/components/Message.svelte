@@ -6,7 +6,7 @@
 	interface Props {
 		message: ChatMessage;
 		timestamp?: Date;
-		onSend?: (message: string) => void;
+		onSend?: (message: string) => Promise<ChatMessage>;
 	}
 
 	let { message, timestamp, onSend }: Props = $props();

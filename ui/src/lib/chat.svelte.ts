@@ -330,6 +330,7 @@ export class ChatService {
 	private api: ChatAPI;
 	private closer = () => {};
 	private history: ChatMessage[] | undefined;
+	private onChatDone: (() => void)[] = [];
 
 	constructor(opts?: { api?: ChatAPI; chatId?: string }) {
 		this.api = opts?.api || chatApi;
@@ -418,6 +419,10 @@ export class ChatService {
 					this.isLoading = true;
 				} else if (event.type == 'chat-done') {
 					this.isLoading = false;
+					for (const waiting of this.onChatDone) {
+						waiting();
+					}
+					this.onChatDone = [];
 				} else if (event.type == 'elicitation/create') {
 					this.elicitations = [
 						...this.elicitations,
@@ -427,7 +432,7 @@ export class ChatService {
 						} as Elicitation
 					];
 				}
-				console.log('Received event:', event);
+				console.debug('Received event:', event);
 			},
 			{
 				events: [
@@ -472,6 +477,18 @@ export class ChatService {
 			this.uploadedFiles = [];
 
 			this.messages = appendMessage(this.messages, response.message);
+			return new Promise<ChatResult | void>((resolve) => {
+				this.onChatDone.push(() => {
+					const i = this.messages.findIndex((m) => m.id === response.message.id);
+					if (i !== -1 && i <= this.messages.length) {
+						resolve({
+							message: this.messages[i + 1]
+						});
+					} else {
+						resolve();
+					}
+				});
+			});
 		} catch (error) {
 			this.messages = appendMessage(this.messages, {
 				id: crypto.randomUUID(),

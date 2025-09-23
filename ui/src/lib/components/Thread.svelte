@@ -20,7 +20,7 @@
 		prompts: PromptType[];
 		elicitations?: ElicitationType[];
 		onElicitationResult?: (elicitation: ElicitationType, result: ElicitationResult) => void;
-		onSendMessage?: (message: string) => void;
+		onSendMessage?: (message: string) => Promise<ChatMessage>;
 		onFileUpload?: (file: File, opts?: { controller?: AbortController }) => Promise<Attachment>;
 		cancelUpload?: (fileId: string) => void;
 		uploadingFiles?: UploadingFile[];
@@ -58,9 +58,6 @@
 
 		const lastDiv = messagesContainer.querySelector('#message-groups > :last-child');
 		const currentLastMessageId = lastDiv?.getAttribute('data-message-id');
-
-		console.log('lastDiv', lastDiv);
-		console.log('currentLastMessageId', currentLastMessageId);
 
 		if (currentLastMessageId && currentLastMessageId !== previousLastMessageId) {
 			// Wait for DOM update, then scroll to bottom
@@ -102,8 +99,8 @@
 								<Prompt
 									{prompt}
 									onSend={(m) => {
-										onSendMessage(m);
 										selectedPrompt = null;
+										return onSendMessage(m);
 									}}
 									onCancel={() => (selectedPrompt = null)}
 									open

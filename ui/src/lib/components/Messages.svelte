@@ -5,7 +5,7 @@
 
 	interface Props {
 		messages: ChatMessage[];
-		onSend?: (message: string) => void;
+		onSend?: (message: string) => Promise<ChatMessage>;
 		isLoading?: boolean;
 		agent?: Agent;
 	}
@@ -41,7 +41,7 @@
 </script>
 
 <div id="message-groups" class="flex flex-col space-y-4 pt-4">
-	{#if messages.length === 0 && agent?.name}
+	{#if messages.length === 0}
 		<AgentHeader {agent} {onSend} />
 	{:else}
 		{@const lastIndex = messageGroups.length - 1}

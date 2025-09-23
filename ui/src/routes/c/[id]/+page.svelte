@@ -25,6 +25,14 @@
 	});
 </script>
 
+<svelte:head>
+	{#if chat.agent?.name}
+		<title>{chat.agent.name}</title>
+	{:else}
+		<title>Nanobot</title>
+	{/if}
+</svelte:head>
+
 <div class="grid grid-cols-1 md:flex md:flex-row">
 	<Workspace messages={chat.messages} onSendMessage={chat.sendMessage} />
 
