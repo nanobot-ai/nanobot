@@ -448,15 +448,18 @@ export class ChatService {
 		this.elicitations = this.elicitations.filter((e) => e.id !== elicitation.id);
 	};
 
+	newChat = async () => {
+		const thread = await this.api.createThread();
+		await this.setChatId(thread.id);
+	};
+
 	sendMessage = async (message: string) => {
 		if (!message.trim() || this.isLoading) return;
 
 		this.isLoading = true;
 
 		if (!this.chatId) {
-			// Create a new thread if it doesn'c exist
-			const thread = await this.api.createThread();
-			await this.setChatId(thread.id);
+			await this.newChat();
 		}
 
 		try {

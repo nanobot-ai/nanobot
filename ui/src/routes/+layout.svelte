@@ -11,6 +11,7 @@
 	import { browser } from '$app/environment';
 	import { Menu, X, SidebarOpen, SidebarClose, Sun, Moon, SquarePen } from '@lucide/svelte';
 	import type { Chat } from '$lib/types';
+	import { resolve } from '$app/paths';
 
 	let { children } = $props();
 
@@ -19,6 +20,8 @@
 	let isSidebarCollapsed = $state(false);
 	let isMobileSidebarOpen = $state(false);
 	let currentTheme = $state('lofi');
+	const root = resolve('/');
+	const newThread = resolve('/');
 
 	// Set notification context for global access
 	setNotificationContext(notifications);
@@ -119,11 +122,11 @@
 			<div
 				class="flex h-15 items-center justify-between p-2 {!isSidebarCollapsed ? 'min-w-80' : ''}"
 			>
-				<a href="/" class="flex items-center gap-2 text-xl font-bold hover:opacity-80">
+				<a href={root} class="flex items-center gap-2 text-xl font-bold hover:opacity-80">
 					<img src={nanobotLogo} alt="Nanobot" class="h-12" />
 				</a>
 				<div class="flex items-center gap-1">
-					<a href="/" class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
+					<a href={newThread} class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
 						<SquarePen class="h-5 w-5" />
 					</a>
 					<button
@@ -196,10 +199,10 @@
 	{#if isSidebarCollapsed}
 		<div class="absolute top-0 left-0 z-10 hidden h-15 items-center bg-transparent p-2 lg:flex">
 			<div class="flex items-center gap-2">
-				<a href="/" class="flex items-center gap-2 text-xl font-bold hover:opacity-80">
+				<a href={root} class="flex items-center gap-2 text-xl font-bold hover:opacity-80">
 					<img src={nanobotLogo} alt="Nanobot" class="h-12" />
 				</a>
-				<a href="/" class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
+				<a href={newThread} class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
 					<SquarePen class="h-4 w-4" />
 				</a>
 				<button
@@ -217,7 +220,7 @@
 	{#if !isMobileSidebarOpen}
 		<div class="absolute top-4 left-4 z-50 flex gap-2 lg:hidden">
 			<a
-				href="/"
+				href={newThread}
 				class="btn border border-base-300 bg-base-100/80 btn-ghost backdrop-blur-sm btn-sm"
 				aria-label="New thread"
 			>

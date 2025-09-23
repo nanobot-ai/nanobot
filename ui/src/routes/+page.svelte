@@ -2,9 +2,10 @@
 	import '$lib/../app.css';
 	import Thread from '$lib/components/Thread.svelte';
 	import { ChatService } from '$lib/chat.svelte';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 
 	const chat = new ChatService();
 	let doClose = true;
@@ -13,7 +14,13 @@
 		if (chat.chatId) {
 			doClose = false;
 			page.data.chat = chat;
-			goto(`/c/${chat.chatId}`);
+			goto(resolve(`/c/${chat.chatId}`));
+		}
+	});
+
+	onMount(() => {
+		if (window.location.search.includes('new')) {
+			chat.newChat();
 		}
 	});
 

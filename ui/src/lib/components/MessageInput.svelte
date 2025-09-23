@@ -1,9 +1,12 @@
 <script lang="ts">
 	import { Paperclip, X, Send } from '@lucide/svelte';
-	import type { Attachment, UploadedFile, UploadingFile } from '$lib/types';
+	import type { Attachment, UploadedFile, UploadingFile, Prompt } from '$lib/types';
+	import type MessageSlashPromptsType from '$lib/components/MessageSlashPrompts.svelte';
+	import MessageSlashPrompts from '$lib/components/MessageSlashPrompts.svelte';
 
 	interface Props {
 		onSend?: (message: string, attachments?: Attachment[]) => void;
+		onPrompt?: (promptName: string) => void;
 		onFileUpload?: (file: File, opts?: { controller?: AbortController }) => Promise<Attachment>;
 		cancelUpload?: (fileId: string) => void;
 		uploadingFiles?: UploadingFile[];
@@ -11,16 +14,19 @@
 		placeholder?: string;
 		disabled?: boolean;
 		supportedMimeTypes?: string[];
+		prompts?: Prompt[];
 	}
 
 	let {
 		onSend,
 		onFileUpload,
+		onPrompt,
 		placeholder = 'Type a message...',
 		disabled = false,
 		uploadingFiles = [],
 		uploadedFiles = [],
 		cancelUpload,
+		prompts = [],
 		supportedMimeTypes = [
 			'image/*',
 			'text/plain',
@@ -35,6 +41,7 @@
 	let message = $state('');
 	let fileInput: HTMLInputElement;
 	let textareaRef: HTMLTextAreaElement;
+	let slashInput: MessageSlashPromptsType;
 	let isUploading = $state(false);
 
 	function handleSubmit(e: Event) {
@@ -86,6 +93,14 @@
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
+		if (slashInput.handleKeydown(e)) {
+			return;
+		}
+
+		if (e.key === 'Escape' && message.trim().startsWith('/')) {
+			message = '';
+		}
+
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
 			if (disabled || isUploading) {
@@ -115,6 +130,16 @@
 </script>
 
 <div class="p-0 md:p-4">
+	<MessageSlashPrompts
+		bind:this={slashInput}
+		{prompts}
+		{message}
+		onPrompt={(p) => {
+			message = '';
+			onPrompt?.(p);
+		}}
+	/>
+
 	<!-- Hidden file input -->
 	<input
 		bind:this={fileInput}

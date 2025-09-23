@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { MoreVertical, Edit, Trash2, X, Check } from '@lucide/svelte';
 	import type { Chat } from '$lib/types';
+	import { resolve } from '$app/paths';
 
 	interface Props {
 		threads: Chat[];
@@ -17,7 +18,7 @@
 	let editTitle = $state('');
 
 	function navigateToThread(threadId: string) {
-		goto(`/c/${threadId}`);
+		goto(resolve(`/c/${threadId}`));
 		onThreadClick?.();
 	}
 

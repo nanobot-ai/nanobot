@@ -4,11 +4,13 @@
 	interface Props {
 		prompt: Prompt;
 		onSend?: (message: string) => void;
+		onCancel?: () => void;
+		open?: boolean;
 	}
 
-	let { prompt, onSend }: Props = $props();
+	let { prompt, onSend, onCancel, open = false }: Props = $props();
 
-	let showDialog = $state(false);
+	let showDialog = $state(open);
 	let formData = $state<{ [key: string]: string }>({});
 
 	// Initialize form data when dialog opens
@@ -19,6 +21,8 @@
 				newFormData[arg.name] = '';
 			}
 			formData = newFormData;
+		} else if (showDialog) {
+			executePrompt({});
 		}
 	});
 
@@ -55,6 +59,7 @@
 
 	function handleCancel() {
 		showDialog = false;
+		onCancel?.();
 	}
 
 	function isRequired(arg: PromptArgument): boolean {
@@ -73,27 +78,29 @@
 	}
 </script>
 
-<div
-	class="card cursor-pointer bg-base-100 shadow-md transition-shadow hover:shadow-lg"
-	onclick={handleClick}
-	onkeydown={handleKeyDown}
-	role="button"
-	tabindex="0"
->
-	<div class="card-body">
-		<h3 class="card-title text-lg">
-			{prompt.title || prompt.name}
-		</h3>
-		{#if prompt.description}
-			<p class="text-sm text-base-content/70">{prompt.description}</p>
-		{/if}
-		{#if prompt.arguments && prompt.arguments.length > 0}
-			<div class="badge badge-sm badge-primary">
-				{prompt.arguments.length} argument{prompt.arguments.length === 1 ? '' : 's'}
-			</div>
-		{/if}
+{#if !open}
+	<div
+		class="card cursor-pointer bg-base-100 shadow-md transition-shadow hover:shadow-lg"
+		onclick={handleClick}
+		onkeydown={handleKeyDown}
+		role="button"
+		tabindex="0"
+	>
+		<div class="card-body">
+			<h3 class="card-title text-lg">
+				{prompt.title || prompt.name}
+			</h3>
+			{#if prompt.description}
+				<p class="text-sm text-base-content/70">{prompt.description}</p>
+			{/if}
+			{#if prompt.arguments && prompt.arguments.length > 0}
+				<div class="badge badge-sm badge-primary">
+					{prompt.arguments.length} argument{prompt.arguments.length === 1 ? '' : 's'}
+				</div>
+			{/if}
+		</div>
 	</div>
-</div>
+{/if}
 
 {#if showDialog}
 	<dialog class="modal-open modal">
@@ -101,8 +108,9 @@
 			<form method="dialog">
 				<button
 					class="btn absolute top-2 right-2 btn-circle btn-ghost btn-sm"
-					onclick={handleCancel}>✕</button
-				>
+					onclick={handleCancel}
+					>✕
+				</button>
 			</form>
 
 			<h3 class="mb-4 text-lg font-bold">

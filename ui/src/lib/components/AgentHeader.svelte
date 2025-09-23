@@ -9,7 +9,7 @@
 
 	let { onSend, agent }: Props = $props();
 
-	let imgRef: HTMLImageElement;
+	let imgRef = $state<HTMLImageElement>();
 
 	onMount(() => {
 		const target = document.documentElement;

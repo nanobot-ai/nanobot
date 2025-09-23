@@ -20,7 +20,7 @@
 		prompts: PromptType[];
 		elicitations?: ElicitationType[];
 		onElicitationResult?: (elicitation: ElicitationType, result: ElicitationResult) => void;
-		onSendMessage?: (message: string, attachments?: Array<{ uri: string }>) => void;
+		onSendMessage?: (message: string) => void;
 		onFileUpload?: (file: File, opts?: { controller?: AbortController }) => Promise<Attachment>;
 		cancelUpload?: (fileId: string) => void;
 		uploadingFiles?: UploadingFile[];
@@ -47,6 +47,7 @@
 	let showScrollButton = $state(false);
 	let previousLastMessageId = $state<string | null>(null);
 	let hasMessages = $derived(messages && messages.length > 0);
+	let selectedPrompt = $state<string>();
 
 	// Watch for changes to the last message ID and scroll to bottom
 	$effect(() => {
@@ -55,8 +56,11 @@
 		// Make this reactive to changes in messages
 		void messages.length;
 
-		const lastDiv = messagesContainer.querySelector('#last');
+		const lastDiv = messagesContainer.querySelector('#message-groups > :last-child');
 		const currentLastMessageId = lastDiv?.getAttribute('data-message-id');
+
+		console.log('lastDiv', lastDiv);
+		console.log('currentLastMessageId', currentLastMessageId);
 
 		if (currentLastMessageId && currentLastMessageId !== previousLastMessageId) {
 			// Wait for DOM update, then scroll to bottom
@@ -92,10 +96,19 @@
 			<!-- Prompts section - show when prompts available and no messages -->
 			{#if prompts && prompts.length > 0}
 				<div class="mb-6">
-					<h2 class="mb-4 text-xl font-semibold">Available Prompts</h2>
 					<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
 						{#each prompts as prompt (prompt.name)}
-							<Prompt {prompt} onSend={onSendMessage} />
+							{#if selectedPrompt === prompt.name}
+								<Prompt
+									{prompt}
+									onSend={(m) => {
+										onSendMessage(m);
+										selectedPrompt = null;
+									}}
+									onCancel={() => (selectedPrompt = null)}
+									open
+								/>
+							{/if}
 						{/each}
 					</div>
 				</div>
@@ -123,9 +136,12 @@
 		{/if}
 		<div class="mx-auto w-full max-w-4xl">
 			<MessageInput
+				placeholder={`Type your message...${prompts && prompts.length > 0 ? ' or / for prompts' : ''}`}
 				onSend={onSendMessage}
+				onPrompt={(p) => (selectedPrompt = p)}
 				{onFileUpload}
 				disabled={isLoading}
+				{prompts}
 				{cancelUpload}
 				{uploadingFiles}
 				{uploadedFiles}
