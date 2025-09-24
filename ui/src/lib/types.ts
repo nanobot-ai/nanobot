@@ -43,6 +43,7 @@ export interface ChatMessageItemToolCall extends ChatMessageItemBase {
 	output?: {
 		isError?: boolean;
 		content?: ToolOutputItem[];
+		structuredContent?: unknown;
 	};
 }
 
@@ -61,7 +62,6 @@ export interface ChatMessageItemAudio extends ChatMessageItemBase {
 export interface ChatMessageItemText extends ChatMessageItemBase {
 	type: 'text';
 	text: string;
-	structuredContent?: unknown;
 }
 
 export interface ChatMessageItemResourceLink extends ChatMessageItemBase {

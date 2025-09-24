@@ -159,10 +159,6 @@ type Content struct {
 	// Text is set when type is "text"
 	Text string `json:"text,omitempty"`
 
-	// StructuredContent is set when the content is structured. The spec isn't clear when, but it's
-	// likely to only be set when type is "text".
-	StructuredContent any `json:"structuredContent,omitempty"`
-
 	// Data is set when type is "image" or "audio"
 	Data string `json:"data,omitempty"`
 
@@ -181,7 +177,7 @@ func (c Content) MarshalJSON() ([]byte, error) {
 	if c.Type == "" {
 		if c.Resource != nil {
 			c.Type = "resource"
-		} else if c.Text != "" || c.StructuredContent != nil {
+		} else if c.Text != "" {
 			c.Type = "text"
 		} else if c.Data != "" {
 			c.Type = "image"
@@ -249,8 +245,9 @@ func (t ToolAnnotations) IsDestructive() bool {
 }
 
 type CallToolResult struct {
-	IsError bool      `json:"isError"`
-	Content []Content `json:"content,omitzero"`
+	IsError           bool      `json:"isError"`
+	Content           []Content `json:"content,omitzero"`
+	StructuredContent any       `json:"structuredContent,omitempty"`
 }
 
 type CallToolRequest struct {

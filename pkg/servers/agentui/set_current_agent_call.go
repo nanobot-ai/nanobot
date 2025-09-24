@@ -49,8 +49,9 @@ func (c setCurrentAgentCall) Invoke(ctx context.Context, msg mcp.Message, payloa
 	}
 
 	return &mcp.CallToolResult{
-		IsError: result.IsError,
-		Content: result.Content,
+		StructuredContent: result.StructuredContent,
+		IsError:           result.IsError,
+		Content:           result.Content,
 	}, nil
 }
 
@@ -60,11 +61,11 @@ func (c setCurrentAgentCall) setRemote(ctx context.Context, _ mcp.Message, paylo
 		return nil, err
 	}
 	return &types.CallResult{
-		IsError: false,
+		IsError:           false,
+		StructuredContent: agentName,
 		Content: []mcp.Content{
 			{
-				Text:              fmt.Sprintf("Current agent has been set to %s", agentName),
-				StructuredContent: agentName,
+				Text: fmt.Sprintf("Current agent has been set to %s", agentName),
 			},
 		},
 	}, nil

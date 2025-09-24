@@ -89,8 +89,9 @@ func (c chatCall) Invoke(ctx context.Context, msg mcp.Message, payload mcp.CallT
 	}
 
 	mcpResult := mcp.CallToolResult{
-		IsError: result.IsError,
-		Content: result.Content,
+		StructuredContent: result.StructuredContent,
+		IsError:           result.IsError,
+		Content:           result.Content,
 	}
 
 	if description != nil {

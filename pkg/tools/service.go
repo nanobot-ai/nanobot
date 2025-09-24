@@ -453,7 +453,7 @@ func (s *Service) runAfter(ctx context.Context, config types.Config, target, ser
 				return nil, fmt.Errorf("after flow %s returned empty content", flowName)
 			}
 
-			if retType, ok := ret.Content[0].StructuredContent.(*types.CallResult); ok {
+			if retType, ok := ret.StructuredContent.(*types.CallResult); ok {
 				ret = retType
 			} else {
 				var callResult types.CallResult
@@ -490,7 +490,7 @@ func (s *Service) runBefore(ctx context.Context, config types.Config, target, se
 			if ret.IsError {
 				return nil, ret, nil
 			}
-			args = ret.Content[0].StructuredContent
+			args = ret.StructuredContent
 		}
 	}
 
@@ -502,12 +502,10 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 		if ret == nil {
 			return
 		}
-		for i, content := range ret.Content {
-			if content.Text != "" {
-				var obj any
-				if err := json.Unmarshal([]byte(content.Text), &obj); err == nil {
-					ret.Content[i].StructuredContent = obj
-				}
+		if ret.StructuredContent == nil && len(ret.Content) == 1 && ret.Content[0].Text != "" {
+			var obj any
+			if err := json.Unmarshal([]byte(ret.Content[0].Text), &obj); err == nil {
+				ret.StructuredContent = obj
 			}
 		}
 	}()
@@ -645,8 +643,9 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 		return nil, err
 	}
 	return &types.CallResult{
-		Content: mcpCallResult.Content,
-		IsError: mcpCallResult.IsError,
+		StructuredContent: mcpCallResult.StructuredContent,
+		Content:           mcpCallResult.Content,
+		IsError:           mcpCallResult.IsError,
 	}, nil
 }
 

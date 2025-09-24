@@ -208,7 +208,8 @@ func (r *Runtime) CallFromCLI(ctx context.Context, serverRef string, args ...str
 		return nil, err
 	}
 	return &mcp.CallToolResult{
-		IsError: callResult.IsError,
-		Content: callResult.Content,
+		StructuredContent: callResult.StructuredContent,
+		IsError:           callResult.IsError,
+		Content:           callResult.Content,
 	}, nil
 }

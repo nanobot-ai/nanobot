@@ -235,8 +235,9 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 	}
 
 	mcpResult := mcp.CallToolResult{
-		IsError: result.IsError,
-		Content: result.Content,
+		StructuredContent: result.StructuredContent,
+		IsError:           result.IsError,
+		Content:           result.Content,
 	}
 
 	return msg.Reply(ctx, mcpResult)

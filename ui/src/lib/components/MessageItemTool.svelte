@@ -104,15 +104,20 @@
 							<span>Tool execution failed</span>
 						</div>
 					{/if}
+					{#if item.output.structuredContent}
+						<div
+							class="prose overflow-x-auto rounded border border-success/20 bg-success/10 p-3 prose-invert"
+						>
+							{@html parseToolOutput(JSON.stringify(item.output.structuredContent)).data}
+						</div>
+					{/if}
 					{#if item.output.content}
 						<!-- Render tool output content items -->
 						{#each item.output.content as contentItem, i (i)}
 							<div
 								class="prose overflow-x-auto rounded border border-success/20 bg-success/10 p-3 prose-invert"
 							>
-								{#if contentItem.structuredContent}
-									{@html parseToolOutput(JSON.stringify(contentItem.structuredContent)).data}
-								{:else if parseToolOutput(contentItem.text).success}
+								{#if parseToolOutput(contentItem.text).success}
 									<!-- JSON Syntax Highlighted Display -->
 									{@html parseToolOutput(contentItem.text).data}
 								{:else if contentItem.type === 'text' && contentItem.text}

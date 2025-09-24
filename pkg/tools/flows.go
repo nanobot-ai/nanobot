@@ -263,11 +263,7 @@ func (s *Service) runStepEach(ctx flowContext, step types.Step, forEachData iter
 	}
 
 	return &types.CallResult{
-		Content: []mcp.Content{
-			{
-				StructuredContent: results,
-			},
-		},
+		StructuredContent: results,
 	}, nil
 }
 
@@ -290,8 +286,9 @@ func toOutput(ret *types.CallResult) map[string]any {
 	}
 
 	output := map[string]any{
-		"content": ret.Content,
-		"isError": ret.IsError,
+		"content":           ret.Content,
+		"isError":           ret.IsError,
+		"structuredContent": ret.StructuredContent,
 	}
 	if ret.Content == nil {
 		output["content"] = make([]mcp.Content, 0)
@@ -300,8 +297,8 @@ func toOutput(ret *types.CallResult) map[string]any {
 		if ret.Content[i].Text != "" {
 			output["output"] = ret.Content[i].Text
 		}
-		if ret.Content[i].StructuredContent != nil {
-			output["output"] = ret.Content[i].StructuredContent
+		if ret.StructuredContent != nil {
+			output["output"] = ret.StructuredContent
 		}
 	}
 	return output
@@ -394,10 +391,10 @@ func objectToResult(val any) (*types.CallResult, error) {
 		return nil, fmt.Errorf("failed to marshal result value: %w", err)
 	}
 	return &types.CallResult{
+		StructuredContent: val,
 		Content: []mcp.Content{
 			{
-				Text:              string(text),
-				StructuredContent: val,
+				Text: string(text),
 			},
 		},
 	}, nil

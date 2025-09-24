@@ -207,8 +207,9 @@ func (c chatCall) chatInvoke(ctx context.Context, msg mcp.Message, payload mcp.C
 	}
 
 	mcpResult := mcp.CallToolResult{
-		IsError: result.IsError,
-		Content: result.Content,
+		StructuredContent: result.StructuredContent,
+		IsError:           result.IsError,
+		Content:           result.Content,
 	}
 
 	err = msg.Reply(ctx, mcpResult)

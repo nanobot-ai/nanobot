@@ -178,12 +178,12 @@ func callResult(object any, err error) (*CallToolResult, error) {
 	}
 
 	return &CallToolResult{
-		IsError: false,
+		IsError:           false,
+		StructuredContent: object,
 		Content: []Content{
 			{
-				Type:              "text",
-				Text:              string(dataBytes),
-				StructuredContent: object,
+				Type: "text",
+				Text: string(dataBytes),
 			},
 		},
 	}, nil

@@ -151,8 +151,8 @@ export class ChatAPI {
 		if (opts?.parseResponse) {
 			return opts.parseResponse(data.result as CallToolResult);
 		}
-		if (data.result?.content?.[0]?.structuredContent) {
-			return data.result.content[0].structuredContent as T;
+		if (data.result?.structuredContent) {
+			return data.result.structuredContent as T;
 		}
 		return {} as T;
 	}
