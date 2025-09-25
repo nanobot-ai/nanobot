@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Settings } from '@lucide/svelte';
 	import { renderMarkdown } from '$lib/markdown';
-	import type { ChatMessage, ChatMessageItemToolCall } from '$lib/types';
+	import type { ChatMessage, ChatMessageItemToolCall, ToolOutputItem } from '$lib/types';
 	import '@mcp-ui/client/ui-resource-renderer.wc.js';
 	import MessageItemUI from '$lib/components/MessageItemUI.svelte';
 	import { isUIResource } from '@mcp-ui/client';
@@ -29,6 +29,30 @@
 			// JSON parsing failed, fall back to string display
 		}
 		return { success: false, data: input };
+	}
+
+	function getStyle(item: ToolOutputItem, singleUIResource: boolean = false) {
+		if (singleUIResource) {
+			return {};
+		}
+		if (isUIResource(item) && item.resource._meta?.['mcpui.dev/ui-preferred-frame-size']) {
+			const coords = item.resource._meta?.['mcpui.dev/ui-preferred-frame-size'];
+			if (coords[0] && coords[1]) {
+				return {
+					width: `${coords[0]}`,
+					height: `${coords[0]}`
+				};
+			} else if ('height' in coords && 'width' in coords) {
+				return {
+					width: `${coords.width}`,
+					height: `${coords.height}`
+				};
+			}
+		}
+		return {
+			width: '300px',
+			height: '400px'
+		};
 	}
 
 	function parseToolOutput(output: string) {
@@ -139,19 +163,14 @@
 	</div>
 </div>
 
-<div class="flex w-full items-start justify-start gap-2 overflow-y-auto p-2">
+<div class="flex w-full flex-wrap items-start justify-start gap-2 p-2">
 	{#if item.output && item.output.content}
 		{#each item.output.content as contentItem, i (i)}
 			{#if contentItem.type === 'resource' && contentItem.resource && isUIResource(contentItem) && !contentItem.resource._meta?.['ai.nanobot.meta/workspace']}
 				<MessageItemUI
 					item={contentItem}
 					{onSend}
-					style={singleUIResource
-						? {}
-						: {
-								width: '300px',
-								height: '400px'
-							}}
+					style={getStyle(contentItem, singleUIResource)}
 				/>
 			{/if}
 			{#if contentItem.type === 'image'}
