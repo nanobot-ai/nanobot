@@ -1,12 +1,12 @@
 <script lang="ts">
 	import MessageItem from './MessageItem.svelte';
-	import type { ChatMessage } from '$lib/types';
+	import type { Attachment, ChatMessage, ChatResult } from '$lib/types';
 	import MessageItemText from '$lib/components/MessageItemText.svelte';
 
 	interface Props {
 		message: ChatMessage;
 		timestamp?: Date;
-		onSend?: (message: string) => Promise<ChatMessage>;
+		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
 	}
 
 	let { message, timestamp, onSend }: Props = $props();
@@ -16,11 +16,8 @@
 	);
 	const toolCall = $derived.by(() => {
 		try {
-			return message.role === 'user' &&
-				message.items?.length === 1 &&
-				message.items[0].type === 'text'
-				? JSON.parse(message.items[0].text)
-				: null;
+			const item = message.items?.[0];
+			return message.role === 'user' && item?.type === 'text' ? JSON.parse(item.text) : null;
 		} catch {
 			// ignore parse error
 			return null;

@@ -12,9 +12,7 @@
 <div class="mb-3 rounded-lg bg-base-200 p-3">
 	<div class="flex items-center gap-2 text-sm">
 		<ExternalLink class="h-4 w-4 text-primary" />
-		<a href={item.uri} class="link link-primary" target="_blank" rel="noopener noreferrer">
-			{item.name || item.uri}
-		</a>
+		<span>{item.name || item.uri}</span>
 	</div>
 	{#if item.description}
 		<p class="mt-1 text-xs opacity-70">{item.description}</p>

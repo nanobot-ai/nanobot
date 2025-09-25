@@ -109,6 +109,8 @@ func TestSchema(t *testing.T) {
 				"effort": "low",
 				"summary": "detailed"
 			},
+			"prompts": ["prompt1", "prompt2"],
+			"resources": ["prompt1", "prompt2"],
 			"agents": "atool",
 			"chat": true,
 			"instructions": "These are the instructions for the agent.",

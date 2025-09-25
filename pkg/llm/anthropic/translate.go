@@ -1,8 +1,11 @@
 package anthropic
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -62,7 +65,7 @@ func toRequest(req *types.CompletionRequest) (Request, error) {
 
 	result := Request{
 		Model:       req.Model,
-		System:      req.SystemPrompt,
+		System:      strings.TrimSpace(req.SystemPrompt),
 		MaxTokens:   req.MaxTokens,
 		Temperature: req.Temperature,
 		TopP:        req.TopP,
@@ -150,11 +153,45 @@ func contentToContent(content []mcp.Content) (result []Content) {
 		} else if item.Type == "image" {
 			result = append(result, Content{
 				Type: "image",
-				Source: ImageSource{
+				Source: ContentSource{
 					MediaType: item.MIMEType,
 					Data:      item.Data,
 				},
 			})
+		} else if item.Type == "resource" && item.Resource != nil && item.Resource.Annotations != nil && slices.Contains(item.Resource.Annotations.Audience, "assistant") {
+			if _, ok := types.ImageMimeTypes[item.Resource.MIMEType]; ok {
+				result = append(result, Content{
+					Type: "image",
+					Source: ContentSource{
+						MediaType: item.Resource.MIMEType,
+						Data:      item.Resource.Blob,
+					},
+				})
+				continue
+			} else if _, ok := types.TextMimeTypes[item.Resource.MIMEType]; ok {
+				if item.Resource.Blob != "" {
+					text, _ := base64.StdEncoding.DecodeString(item.Resource.Blob)
+					str := string(text)
+					result = append(result, Content{
+						Type: "text",
+						Text: &str,
+					})
+				} else if item.Resource.Text != "" {
+					result = append(result, Content{
+						Type: "text",
+						Text: &item.Resource.Text,
+					})
+				}
+			} else if _, ok := types.PDFMimeTypes[item.Resource.MIMEType]; ok {
+				result = append(result, Content{
+					Type: "document",
+					Source: ContentSource{
+						MediaType: item.Resource.MIMEType,
+						Data:      item.Resource.Blob,
+						Type:      "base64",
+					},
+				})
+			}
 		}
 	}
 	return

@@ -105,6 +105,12 @@ func (s *Server) getSessionAndAccountID(ctx context.Context) (string, string) {
 	return session.ID(), accountID
 }
 
+func (s *Server) listResourcesTemplates(_ context.Context, _ mcp.Message, _ mcp.ListResourceTemplatesRequest) (*mcp.ListResourceTemplatesResult, error) {
+	return &mcp.ListResourceTemplatesResult{
+		ResourceTemplates: make([]mcp.ResourceTemplate, 0),
+	}, nil
+}
+
 func (s *Server) listResources(ctx context.Context, _ mcp.Message, body mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
 	sessionID, _ := s.getSessionAndAccountID(ctx)
 
@@ -140,6 +146,8 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 		mcp.Invoke(ctx, msg, s.readResource)
 	case "resources/list":
 		mcp.Invoke(ctx, msg, s.listResources)
+	case "resources/templates/list":
+		mcp.Invoke(ctx, msg, s.listResourcesTemplates)
 	case "tools/list":
 		mcp.Invoke(ctx, msg, s.tools.List)
 	case "tools/call":

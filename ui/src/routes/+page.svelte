@@ -43,8 +43,12 @@
 	messages={chat.messages}
 	isLoading={chat.isLoading}
 	onSendMessage={chat.sendMessage}
+	onFileUpload={chat.uploadFile}
 	prompts={chat.prompts}
+	resources={chat.resources}
 	elicitations={chat.elicitations}
 	agent={chat.agent}
+	uploadingFiles={chat.uploadingFiles}
+	uploadedFiles={chat.uploadedFiles}
 	onElicitationResult={chat.replyToElicitation}
 />

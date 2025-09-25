@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -187,8 +188,11 @@ func toRequest(completion *types.CompletionRequest) (req Request, _ error) {
 	}
 
 	for _, msg := range completion.Input {
+		if msg.Role == "user" {
+			req.Input.Items = append(req.Input.Items, toUserMessageContent(msg)...)
+		}
 		for _, input := range msg.Items {
-			if input.Content != nil {
+			if msg.Role != "user" && input.Content != nil {
 				inputItem, ok := messageToInputItem(msg.Role, *input.Content)
 				if ok {
 					req.Input.Items = append(req.Input.Items, inputItem)
@@ -270,11 +274,31 @@ func contentToInputItem(content mcp.Content) (InputItemContent, bool) {
 				FileData: &content.Data,
 			},
 		}, true
-	case "resources":
-		if content.Resource != nil {
-			return InputItemContent{
-				InputFile: toInputFile(content.Resource),
-			}, true
+	case "resource":
+		if content.Resource != nil && content.Resource.Annotations != nil && slices.Contains(content.Resource.Annotations.Audience, "assistant") {
+			if _, ok := types.ImageMimeTypes[content.Resource.MIMEType]; ok {
+				url := fmt.Sprintf("data:%s;base64,%s", content.Resource.MIMEType, content.Resource.Blob)
+				return InputItemContent{
+					InputImage: &InputImage{
+						ImageURL: &url,
+					},
+				}, true
+			} else if _, ok := types.TextMimeTypes[content.Resource.MIMEType]; ok {
+				text := content.Resource.Text
+				if content.Resource.Blob != "" {
+					bytes, _ := base64.StdEncoding.DecodeString(content.Resource.Blob)
+					text = string(bytes)
+				}
+				return InputItemContent{
+					InputText: &InputText{
+						Text: text,
+					},
+				}, true
+			} else if _, ok := types.PDFMimeTypes[content.Resource.MIMEType]; ok {
+				return InputItemContent{
+					InputFile: toInputPDF(content.Resource),
+				}, true
+			}
 		}
 	}
 	return InputItemContent{}, false
@@ -391,6 +415,34 @@ func toolCallToInputItem(completion *types.CompletionRequest, id string, toolCal
 	}, nil
 }
 
+func toUserMessageContent(msg types.Message) (result []InputItem) {
+	var contents []InputItemContent
+	for _, item := range msg.Items {
+		if item.Content != nil {
+			content, ok := contentToInputItem(*item.Content)
+			if !ok {
+				continue
+			}
+			contents = append(contents, content)
+		}
+	}
+	if len(contents) == 0 {
+		return nil
+	}
+	return []InputItem{
+		{
+			Item: &Item{
+				InputMessage: &InputMessage{
+					Content: InputContent{
+						InputItemContent: contents,
+					},
+					Role: "user",
+				},
+			},
+		},
+	}
+}
+
 func messageToInputItem(role string, content mcp.Content) (InputItem, bool) {
 	if role == "assistant" && content.Type == "text" {
 		return InputItem{
@@ -428,19 +480,10 @@ func messageToInputItem(role string, content mcp.Content) (InputItem, bool) {
 	}, true
 }
 
-func toInputFile(file *mcp.EmbeddedResource) *InputFile {
-	if file.Text != "" {
-		fileData := base64.StdEncoding.EncodeToString([]byte(file.Text))
-		return &InputFile{
-			FileData: &fileData,
-			Filename: file.URI,
-		}
+func toInputPDF(file *mcp.EmbeddedResource) *InputFile {
+	data := fmt.Sprintf("data:%s;base64,%s", file.MIMEType, file.Blob)
+	return &InputFile{
+		FileData: &data,
+		Filename: file.URI,
 	}
-	if file.Blob != "" {
-		return &InputFile{
-			FileData: &file.Blob,
-			Filename: file.URI,
-		}
-	}
-	return &InputFile{}
 }

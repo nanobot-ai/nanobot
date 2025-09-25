@@ -82,6 +82,9 @@ export interface ChatMessageItemResource extends ChatMessageItemBase {
 	type: 'resource';
 	resource: {
 		uri: string;
+		name?: string;
+		description?: string;
+		title?: string;
 		mimeType: string;
 		size?: number;
 		text?: string;
@@ -153,6 +156,23 @@ export interface Notification {
 
 export interface Prompts {
 	prompts: Prompt[];
+}
+
+export interface Resources {
+	resources: Resource[];
+}
+
+export interface Resource extends BaseMetadata {
+	uri: string;
+	description?: string;
+	mimeType?: string;
+	annotations?: {
+		audience?: string[];
+		priority?: number;
+		lastModified?: string;
+	};
+	size?: number;
+	_meta?: { [key: string]: unknown };
 }
 
 export interface BaseMetadata {

@@ -216,7 +216,7 @@ func (c chatCall) chatInvoke(ctx context.Context, msg mcp.Message, payload mcp.C
 	return &mcpResult, err
 }
 
-func getMessages(ctx context.Context) ([]types.Message, error) {
+func GetMessages(ctx context.Context) ([]types.Message, error) {
 	var (
 		run         types.Execution
 		allMessages []types.Message

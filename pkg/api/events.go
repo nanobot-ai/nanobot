@@ -5,12 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 
+	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func writeEvent(rw http.ResponseWriter, id any, name string, textOrData any) error {
+func writeEvent(wl *sync.Mutex, rw http.ResponseWriter, id any, name string, textOrData any) error {
+	wl.Lock()
+	defer wl.Unlock()
+
 	asMap := make(map[string]any)
 	if textOrData != nil {
 		if err := mcp.JSONCoerce(textOrData, &asMap); err != nil {
@@ -53,7 +58,7 @@ func writeEvent(rw http.ResponseWriter, id any, name string, textOrData any) err
 	return nil
 }
 
-func printHistory(rw http.ResponseWriter, req *http.Request, client *mcp.Client, printedIDs map[string]struct{}) error {
+func printHistory(wl *sync.Mutex, rw http.ResponseWriter, req *http.Request, client *mcp.Client, printedIDs map[string]struct{}) error {
 	resources, err := client.ListResources(req.Context())
 	if err != nil {
 		return fmt.Errorf("failed to list resources: %w", err)
@@ -62,7 +67,7 @@ func printHistory(rw http.ResponseWriter, req *http.Request, client *mcp.Client,
 	var progressURI string
 	for _, resource := range resources.Resources {
 		if resource.MimeType == types.HistoryMimeType {
-			if err := writeEvent(rw, nil, "history-start", nil); err != nil {
+			if err := writeEvent(wl, rw, nil, "history-start", nil); err != nil {
 				return fmt.Errorf("failed to write history-start: %w", err)
 			}
 
@@ -74,7 +79,7 @@ func printHistory(rw http.ResponseWriter, req *http.Request, client *mcp.Client,
 				if message.MIMEType != types.MessageMimeType {
 					continue
 				}
-				if err := writeEvent(rw, nil, "message", message.Text); err != nil {
+				if err := writeEvent(wl, rw, nil, "message", message.Text); err != nil {
 					return err
 				}
 				var id string
@@ -89,7 +94,7 @@ func printHistory(rw http.ResponseWriter, req *http.Request, client *mcp.Client,
 					printedIDs[id] = struct{}{}
 				}
 			}
-			if err := writeEvent(rw, nil, "history-end", nil); err != nil {
+			if err := writeEvent(wl, rw, nil, "history-end", nil); err != nil {
 				return fmt.Errorf("failed to write history-start: %w", err)
 			}
 		} else if resource.MimeType == types.ToolResultMimeType {
@@ -98,7 +103,7 @@ func printHistory(rw http.ResponseWriter, req *http.Request, client *mcp.Client,
 	}
 
 	if progressURI != "" {
-		if err := printProgressURI(rw, req, client, progressURI, printedIDs); err != nil {
+		if err := printProgressURI(wl, rw, req, client, progressURI, printedIDs); err != nil {
 			return err
 		}
 	}
@@ -106,7 +111,7 @@ func printHistory(rw http.ResponseWriter, req *http.Request, client *mcp.Client,
 	return nil
 }
 
-func printProgressURI(rw http.ResponseWriter, req *http.Request, client *mcp.Client, progressURI string,
+func printProgressURI(wl *sync.Mutex, rw http.ResponseWriter, req *http.Request, client *mcp.Client, progressURI string,
 	printedIDs map[string]struct{}) error {
 	messages, err := client.ReadResource(req.Context(), progressURI)
 	if err != nil {
@@ -127,7 +132,7 @@ func printProgressURI(rw http.ResponseWriter, req *http.Request, client *mcp.Cli
 		}
 
 		if callResult.InProgress {
-			if err := writeEvent(rw, nil, "chat-in-progress", nil); err != nil {
+			if err := writeEvent(wl, rw, nil, "chat-in-progress", nil); err != nil {
 				return err
 			}
 		}
@@ -143,14 +148,14 @@ func printProgressURI(rw http.ResponseWriter, req *http.Request, client *mcp.Cli
 				if _, ok := printedIDs[id]; ok {
 					continue
 				}
-				if err := writeEvent(rw, nil, "message", progressMessage.Resource.Text); err != nil {
+				if err := writeEvent(wl, rw, nil, "message", progressMessage.Resource.Text); err != nil {
 					return err
 				}
 			}
 		}
 
 		if !callResult.InProgress {
-			if err := writeEvent(rw, nil, "chat-done", nil); err != nil {
+			if err := writeEvent(wl, rw, nil, "chat-done", nil); err != nil {
 				return err
 			}
 		}
@@ -212,14 +217,17 @@ func Events(rw http.ResponseWriter, req *http.Request) error {
 	}
 
 	ids := map[string]struct{}{}
+	wl := sync.Mutex{}
 
-	// Transform chat messages into SSE events
-	if err := printHistory(rw, req, subClient, ids); err != nil {
-		return err
-	}
+	go func() {
+		// Transform chat messages into SSE events
+		if err := printHistory(&wl, rw, req, subClient, ids); err != nil {
+			log.Errorf(req.Context(), "failed to print history: %v", err)
+		}
+	}()
 
 	for msg := range events {
-		err := printProgressMessage(rw, req, msg, subClient, ids)
+		err := printProgressMessage(&wl, rw, req, msg, subClient, ids)
 		if err != nil {
 			return err
 		}
@@ -228,7 +236,7 @@ func Events(rw http.ResponseWriter, req *http.Request) error {
 	return nil
 }
 
-func printProgressMessage(rw http.ResponseWriter, req *http.Request, msg mcp.Message, client *mcp.Client, printedIDs map[string]struct{}) error {
+func printProgressMessage(wl *sync.Mutex, rw http.ResponseWriter, req *http.Request, msg mcp.Message, client *mcp.Client, printedIDs map[string]struct{}) error {
 	defer func() {
 		if f, ok := rw.(http.Flusher); ok {
 			f.Flush()
@@ -243,14 +251,14 @@ func printProgressMessage(rw http.ResponseWriter, req *http.Request, msg mcp.Mes
 			return fmt.Errorf("failed to unmarshal params: %w", err)
 		}
 		if data.URI != "" {
-			return printProgressURI(rw, req, client, data.URI, printedIDs)
+			return printProgressURI(wl, rw, req, client, data.URI, printedIDs)
 		}
 	}
 
 	if msg.Error != nil {
-		return writeEvent(rw, nil, "error", msg.Error)
+		return writeEvent(wl, rw, nil, "error", msg.Error)
 	} else if msg.Method != "" && len(msg.Params) > 0 {
-		return writeEvent(rw, msg.ID, msg.Method, string(msg.Params))
+		return writeEvent(wl, rw, msg.ID, msg.Method, string(msg.Params))
 	}
 
 	return nil

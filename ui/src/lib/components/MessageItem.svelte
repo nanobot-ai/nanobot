@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ChatMessage, ChatMessageItem } from '$lib/types';
+	import type { Attachment, ChatResult, ChatMessageItem } from '$lib/types';
 	import MessageItemText from './MessageItemText.svelte';
 	import MessageItemImage from './MessageItemImage.svelte';
 	import MessageItemAudio from './MessageItemAudio.svelte';
@@ -11,7 +11,7 @@
 	interface Props {
 		item: ChatMessageItem;
 		role: 'user' | 'assistant';
-		onSend?: (message: string) => Promise<ChatMessage>;
+		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
 	}
 
 	let { item, role, onSend }: Props = $props();

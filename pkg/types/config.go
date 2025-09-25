@@ -461,6 +461,7 @@ type Agent struct {
 	Agents          StringList                `json:"agents,omitempty"`
 	Flows           StringList                `json:"flows,omitempty"`
 	Prompts         StringList                `json:"prompts,omitzero"`
+	Resources       StringList                `json:"resources,omitzero"`
 	Reasoning       *AgentReasoning           `json:"reasoning,omitempty"`
 	ThreadName      string                    `json:"threadName,omitempty"`
 	Chat            *bool                     `json:"chat,omitempty"`

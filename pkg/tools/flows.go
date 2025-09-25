@@ -77,6 +77,17 @@ func (s *Service) newGlobals(ctx context.Context, vars map[string]any, opt ...Ca
 			"instructions": instructions,
 		}
 	}
+
+	var c types.Config
+	session.Get(types.ConfigSessionKey, &c)
+	for serverName := range c.MCPServers {
+		if _, ok := servers[serverName]; !ok {
+			servers[serverName] = map[string]any{
+				"instructions": "",
+			}
+		}
+	}
+
 	maps.Copy(data, vars)
 	return data
 }

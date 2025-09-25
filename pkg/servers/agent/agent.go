@@ -54,6 +54,8 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 		mcp.Invoke(ctx, msg, s.tools.Call)
 	case "resources/list":
 		mcp.Invoke(ctx, msg, s.resourcesList)
+	case "resources/templates/list":
+		mcp.Invoke(ctx, msg, s.resourcesTemplatesList)
 	case "resources/read":
 		mcp.Invoke(ctx, msg, s.resourcesRead)
 	case "prompts/list":
@@ -82,7 +84,7 @@ func messagesToResourceContents(messages []types.Message) ([]mcp.ResourceContent
 }
 
 func (s *Server) readHistory(ctx context.Context) (ret []mcp.ResourceContent, _ error) {
-	messages, err := getMessages(ctx)
+	messages, err := GetMessages(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +142,7 @@ func (s *Server) promptGet(ctx context.Context, _ mcp.Message, payload mcp.GetPr
 	c := types.ConfigFromContext(ctx)
 	agent := c.Agents[s.agentName]
 
-	promptMappings, err := s.data.BuildPromptMappings(ctx, slices.Concat(agent.MCPServers, agent.Prompts)...)
+	promptMappings, err := s.data.BuildPromptMappings(ctx, slices.Concat(agent.MCPServers, agent.Prompts))
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +160,7 @@ func (s *Server) promptsList(ctx context.Context, _ mcp.Message, _ mcp.ListPromp
 	agent := c.Agents[s.agentName]
 	result := &mcp.ListPromptsResult{}
 
-	prompts, err := s.data.BuildPromptMappings(ctx, slices.Concat(agent.MCPServers, agent.Prompts)...)
+	prompts, err := s.data.BuildPromptMappings(ctx, slices.Concat(agent.MCPServers, agent.Prompts))
 	if err != nil {
 		return nil, err
 	}
@@ -175,39 +177,87 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 		contents []mcp.ResourceContent
 		err      error
 	)
+
 	switch request.URI {
 	case types.HistoryURI:
 		contents, err = s.readHistory(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return &mcp.ReadResourceResult{
+			Contents: contents,
+		}, nil
 	case types.ProgressURI:
 		contents, err = s.readProgress(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return &mcp.ReadResourceResult{
+			Contents: contents,
+		}, nil
 	}
+
+	c := types.ConfigFromContext(ctx)
+	agent := c.Agents[s.agentName]
+
+	server, resourceName, err := s.data.MatchResource(ctx, request.URI, slices.Concat(agent.MCPServers, agent.Resources))
 	if err != nil {
 		return nil, err
 	}
-	return &mcp.ReadResourceResult{
-		Contents: contents,
-	}, nil
+
+	client, err := s.runtime.GetClient(ctx, server)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.ReadResource(ctx, resourceName)
 }
 
-func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, request mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
-	return &mcp.ListResourcesResult{
-		Resources: []mcp.Resource{
-			{
-				URI:         types.HistoryURI,
-				Name:        "chat-history",
-				Title:       "Chat History",
-				Description: "The chat history for the current agent.",
-				MimeType:    types.HistoryMimeType,
-			},
-			{
-				URI:         types.ProgressURI,
-				Name:        "chat-progress",
-				Title:       "Chat Streaming Progress",
-				Description: "The streaming content of the current or last chat exchange.",
-				MimeType:    types.ToolResultMimeType,
-			},
-		},
-	}, nil
+func (s *Server) resourcesTemplatesList(ctx context.Context, _ mcp.Message, _ mcp.ListResourcesRequest) (*mcp.ListResourceTemplatesResult, error) {
+	c := types.ConfigFromContext(ctx)
+	agent := c.Agents[s.agentName]
+	result := &mcp.ListResourceTemplatesResult{}
+
+	resources, err := s.data.BuildResourceTemplateMappings(ctx, slices.Concat(agent.MCPServers, agent.Resources))
+	if err != nil {
+		return nil, err
+	}
+
+	for _, resource := range resources {
+		result.ResourceTemplates = append(result.ResourceTemplates, resource.Target.ResourceTemplate)
+	}
+
+	return result, nil
+}
+
+func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
+	c := types.ConfigFromContext(ctx)
+	agent := c.Agents[s.agentName]
+	result := &mcp.ListResourcesResult{}
+
+	resources, err := s.data.BuildResourceMappings(ctx, slices.Concat(agent.MCPServers, agent.Resources))
+	if err != nil {
+		return nil, err
+	}
+
+	for _, resource := range resources {
+		result.Resources = append(result.Resources, resource.Target)
+	}
+
+	result.Resources = append(result.Resources, mcp.Resource{
+		URI:         types.HistoryURI,
+		Name:        "chat-history",
+		Title:       "Chat History",
+		Description: "The chat history for the current agent.",
+		MimeType:    types.HistoryMimeType,
+	}, mcp.Resource{
+		URI:         types.ProgressURI,
+		Name:        "chat-progress",
+		Title:       "Chat Streaming Progress",
+		Description: "The streaming content of the current or last chat exchange.",
+		MimeType:    types.ToolResultMimeType,
+	})
+	return result, nil
 }
 
 func (s *Server) initialize(ctx context.Context, _ mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {

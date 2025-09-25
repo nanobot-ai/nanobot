@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ChatMessageItemResource, ChatResult } from '$lib/types';
+	import type { Attachment, ChatResult, ChatMessageItemResource } from '$lib/types';
 	import React from 'react';
 	import ReactDOM from 'react-dom/client';
 	import {
@@ -16,7 +16,7 @@
 
 	interface Props {
 		item: ChatMessageItemResource;
-		onSend?: (message: string) => Promise<ChatResult>;
+		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
 		style?: Record<string, string>;
 	}
 
@@ -54,10 +54,12 @@
 				console.log('UI Action:', e);
 				if (onSend) {
 					const reply = await onSend(JSON.stringify(e));
-					for (const item of reply.message?.items || []) {
-						if (item.type === 'tool' && item.output) {
-							console.log('Tool output:', $state.snapshot(item.output));
-							return $state.snapshot(item.output);
+					if (reply) {
+						for (const item of reply.message?.items || []) {
+							if (item.type === 'tool' && item.output) {
+								console.log('Tool output:', $state.snapshot(item.output));
+								return $state.snapshot(item.output);
+							}
 						}
 					}
 				}

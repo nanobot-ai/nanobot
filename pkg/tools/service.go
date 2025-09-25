@@ -932,6 +932,9 @@ func (s *Service) convertToSampleRequest(config types.Config, agent string, args
 					Resource: &mcp.EmbeddedResource{
 						MIMEType: mimeType,
 						Blob:     data,
+						Annotations: &mcp.ResourceAnnotations{
+							Audience: []string{"assistant"},
+						},
 					},
 				},
 			})

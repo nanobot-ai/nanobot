@@ -39,10 +39,14 @@
 	<Thread
 		messages={chat.messages}
 		isLoading={chat.isLoading}
+		onFileUpload={chat.uploadFile}
 		onSendMessage={chat.sendMessage}
 		prompts={chat.prompts}
+		resources={chat.resources}
 		elicitations={chat.elicitations}
 		agent={chat.agent}
+		uploadingFiles={chat.uploadingFiles}
+		uploadedFiles={chat.uploadedFiles}
 		onElicitationResult={chat.replyToElicitation}
 	/>
 </div>

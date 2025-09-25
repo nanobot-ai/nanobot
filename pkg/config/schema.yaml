@@ -645,6 +645,16 @@ definitions:
           A list of tools that this agent can use. Tools are from MCP Servers
           that provide additional functionality to the agent.
         $ref: "#/definitions/StringOrStringList"
+      prompts:
+        description: |
+          A list of prompts that this agent can use. Prompts are from MCP Servers
+          that provide predefined instructions or templates for the agent.
+        $ref: "#/definitions/StringOrStringList"
+      resources:
+        description: |
+          A list of resources that this agent can read from. Resources are from MCP Servers
+          that provide data or other information that the agent can access.
+        $ref: "#/definitions/StringOrStringList"
       threadName:
         type: string
         description: |

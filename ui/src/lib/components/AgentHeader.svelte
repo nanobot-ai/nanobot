@@ -1,9 +1,9 @@
 <script lang="ts">
-	import type { Agent } from '$lib/types';
+	import type { Agent, Attachment, ChatResult } from '$lib/types';
 	import { onMount } from 'svelte';
 
 	interface Props {
-		onSend?: (message: string) => void;
+		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult>;
 		agent?: Agent;
 	}
 
@@ -58,7 +58,6 @@
 				<div class="flex h-20 w-20 items-center justify-center rounded-full bg-primary/20">
 					<svg
 						class="h-10 w-10 text-primary"
-						fill="currentColor"
 						viewBox="0 0 20 20"
 						xmlns="http://www.w3.org/2000/svg"
 					>

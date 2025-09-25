@@ -13,7 +13,9 @@ import {
 	type Agents,
 	type Attachment,
 	type UploadedFile,
-	type UploadingFile
+	type UploadingFile,
+	type Resource,
+	type Resources
 } from './types';
 import { getNotificationContext } from './context/notifications.svelte';
 
@@ -92,8 +94,9 @@ export class ChatAPI {
 			if (data.error?.message) {
 				logError(data.error.message);
 				toThrow = new Error(data.error.message);
+			} else {
+				return data.result;
 			}
-			return data.result;
 		} catch (e) {
 			logError(e);
 			toThrow = e;
@@ -320,6 +323,7 @@ export const chatApi = new ChatAPI();
 export class ChatService {
 	messages: ChatMessage[];
 	prompts: Prompt[];
+	resources: Resource[];
 	agent: Agent;
 	elicitations: Elicitation[];
 	isLoading: boolean;
@@ -339,15 +343,12 @@ export class ChatService {
 		this.isLoading = $state(false);
 		this.elicitations = $state<Elicitation[]>([]);
 		this.prompts = $state<Prompt[]>([]);
+		this.resources = $state<Resource[]>([]);
 		this.chatId = $state('');
 		this.agent = $state<Agent>({});
 		this.uploadedFiles = $state([]);
 		this.uploadingFiles = $state([]);
-		if (opts?.chatId) {
-			this.setChatId(opts.chatId);
-		} else {
-			this.reloadAgent();
-		}
+		this.setChatId(opts?.chatId);
 	}
 
 	close = () => {
@@ -355,11 +356,11 @@ export class ChatService {
 		this.setChatId('');
 	};
 
-	setChatId = async (chatId: string) => {
+	setChatId = async (chatId?: string) => {
 		if (chatId === this.chatId) {
 			return;
 		}
-		this.chatId = chatId;
+
 		this.messages = [];
 		this.prompts = [];
 		this.elicitations = [];
@@ -367,14 +368,22 @@ export class ChatService {
 		this.isLoading = false;
 		this.uploadedFiles = [];
 		this.uploadingFiles = [];
-		this.subscribe(chatId);
 
 		if (chatId) {
-			const prompts = await this.listPrompts();
+			this.chatId = chatId;
+			this.subscribe(chatId);
+			this.listResources().then((r) => {
+				if (r && r.resources) {
+					this.resources = r.resources;
+				}
+			});
+		}
+
+		this.listPrompts().then((prompts) => {
 			if (prompts && prompts.prompts) {
 				this.prompts = prompts.prompts;
 			}
-		}
+		});
 
 		await this.reloadAgent();
 	};
@@ -394,6 +403,16 @@ export class ChatService {
 				sessionId: this.chatId
 			}
 		)) as Prompts;
+	};
+
+	listResources = async () => {
+		return (await this.api.exchange(
+			'resources/list',
+			{},
+			{
+				sessionId: this.chatId
+			}
+		)) as Resources;
 	};
 
 	private subscribe(chatId: string) {
@@ -458,7 +477,7 @@ export class ChatService {
 		await this.setChatId(thread.id);
 	};
 
-	sendMessage = async (message: string) => {
+	sendMessage = async (message: string, attachments?: Attachment[]) => {
 		if (!message.trim() || this.isLoading) return;
 
 		this.isLoading = true;
@@ -472,7 +491,7 @@ export class ChatService {
 				id: crypto.randomUUID(),
 				threadId: this.chatId,
 				message: message,
-				attachments: this.uploadedFiles
+				attachments: [...this.uploadedFiles, ...(attachments || [])]
 			});
 			this.uploadedFiles = [];
 

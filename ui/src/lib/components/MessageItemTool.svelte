@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { Settings } from '@lucide/svelte';
 	import { renderMarkdown } from '$lib/markdown';
-	import type { ChatMessage, ChatMessageItemToolCall, ToolOutputItem } from '$lib/types';
+	import type { Attachment, ChatResult, ChatMessageItemToolCall, ToolOutputItem } from '$lib/types';
 	import '@mcp-ui/client/ui-resource-renderer.wc.js';
 	import MessageItemUI from '$lib/components/MessageItemUI.svelte';
 	import { isUIResource } from '@mcp-ui/client';
 
 	interface Props {
 		item: ChatMessageItemToolCall;
-		onSend?: (message: string) => Promise<ChatMessage>;
+		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
 	}
 
 	let { item, onSend }: Props = $props();

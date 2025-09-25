@@ -2,9 +2,11 @@ package agentui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -23,6 +25,12 @@ func (c chatCall) Definition() mcp.Tool {
 func (c chatCall) inlineAttachments(ctx context.Context, attachments []any) ([]any, error) {
 	newAttachments := make([]any, 0, len(attachments))
 
+	messages, err := agent.GetMessages(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get messages: %w", err)
+	}
+
+attachmentsLoop:
 	for i, attachment := range attachments {
 		newAttachments = append(newAttachments, attachment)
 		data, ok := attachment.(map[string]any)
@@ -35,11 +43,34 @@ func (c chatCall) inlineAttachments(ctx context.Context, attachments []any) ([]a
 			continue
 		}
 
-		if !strings.HasPrefix(uri, "nanobot://") {
+		if strings.HasPrefix(uri, "data:") || strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
 			continue
 		}
 
-		client, err := c.s.runtime.GetClient(ctx, "nanobot.resources")
+		for mi := len(messages) - 1; mi >= 0; mi-- {
+			for j := len(messages[mi].Items) - 1; j >= 0; j-- {
+				item := messages[mi].Items[j]
+				if item.ToolCallResult != nil {
+					for _, content := range item.ToolCallResult.Output.Content {
+						if content.Resource != nil && content.Resource.URI == uri {
+							// Drop the attachment from the list
+							newAttachments = newAttachments[:i]
+							newAttachments = append(newAttachments, map[string]any{
+								"url": content.Resource.ToDataURI(),
+							})
+							continue attachmentsLoop
+						}
+					}
+				}
+			}
+		}
+
+		clientName := c.s.data.CurrentAgent(ctx)
+		if strings.HasPrefix(uri, "nanobot://") {
+			clientName = "nanobot.resources"
+		}
+
+		client, err := c.s.runtime.GetClient(ctx, clientName)
 		if err != nil {
 			return nil, err
 		}

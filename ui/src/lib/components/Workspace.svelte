@@ -1,11 +1,11 @@
 <script lang="ts">
-	import type { ChatMessage, ChatMessageItemResource } from '$lib/types';
+	import type { Attachment, ChatMessage, ChatResult, ChatMessageItemResource } from '$lib/types';
 	import { isUIResource } from '@mcp-ui/client';
 	import MessageItemUI from '$lib/components/MessageItemUI.svelte';
 
 	interface Props {
 		messages: ChatMessage[];
-		onSendMessage?: (message: string) => void;
+		onSendMessage?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
 	}
 
 	let { messages, onSendMessage }: Props = $props();

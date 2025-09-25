@@ -4,12 +4,14 @@
 	import type {
 		Attachment,
 		ChatMessage,
+		ChatResult,
 		Elicitation as ElicitationType,
 		ElicitationResult,
 		Prompt as PromptType,
 		Agent,
 		UploadingFile,
-		UploadedFile
+		UploadedFile,
+		Resource
 	} from '$lib/types';
 	import Elicitation from '$lib/components/Elicitation.svelte';
 	import Prompt from '$lib/components/Prompt.svelte';
@@ -18,9 +20,10 @@
 	interface Props {
 		messages: ChatMessage[];
 		prompts: PromptType[];
+		resources: Resource[];
 		elicitations?: ElicitationType[];
 		onElicitationResult?: (elicitation: ElicitationType, result: ElicitationResult) => void;
-		onSendMessage?: (message: string) => Promise<ChatMessage>;
+		onSendMessage?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
 		onFileUpload?: (file: File, opts?: { controller?: AbortController }) => Promise<Attachment>;
 		cancelUpload?: (fileId: string) => void;
 		uploadingFiles?: UploadingFile[];
@@ -32,6 +35,7 @@
 	let {
 		messages,
 		prompts,
+		resources,
 		onSendMessage,
 		onFileUpload,
 		cancelUpload,
@@ -135,6 +139,8 @@
 			<MessageInput
 				placeholder={`Type your message...${prompts && prompts.length > 0 ? ' or / for prompts' : ''}`}
 				onSend={onSendMessage}
+				{resources}
+				{messages}
 				onPrompt={(p) => (selectedPrompt = p)}
 				{onFileUpload}
 				disabled={isLoading}

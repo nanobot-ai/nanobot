@@ -201,11 +201,20 @@ func (c *Content) ToImageURL() string {
 
 type EmbeddedResource struct {
 	URI         string               `json:"uri,omitempty"`
+	Name        string               `json:"name,omitempty"`
+	Title       string               `json:"title,omitempty"`
 	MIMEType    string               `json:"mimeType,omitempty"`
 	Text        string               `json:"text,omitempty"`
 	Blob        string               `json:"blob,omitempty"`
 	Annotations *ResourceAnnotations `json:"annotations,omitempty"`
 	Meta        map[string]any       `json:"_meta,omitempty"`
+}
+
+func (e *EmbeddedResource) ToDataURI() string {
+	if e.Text != "" {
+		return "data:" + e.MIMEType + ";base64," + base64.StdEncoding.EncodeToString([]byte(e.Text))
+	}
+	return "data:" + e.MIMEType + ";base64," + e.Blob
 }
 
 type ResourceAnnotations struct {
@@ -348,18 +357,20 @@ type ListResourcesResult struct {
 }
 
 type Resource struct {
-	URI         string       `json:"uri"`
-	Name        string       `json:"name"`
-	Title       string       `json:"title,omitempty"`
-	Description string       `json:"description,omitempty"`
-	MimeType    string       `json:"mimeType,omitempty"`
-	Annotations *Annotations `json:"annotations,omitempty"`
-	Size        int64        `json:"size,omitempty"`
+	URI         string         `json:"uri"`
+	Name        string         `json:"name"`
+	Title       string         `json:"title,omitempty"`
+	Description string         `json:"description,omitempty"`
+	MimeType    string         `json:"mimeType,omitempty"`
+	Annotations *Annotations   `json:"annotations,omitempty"`
+	Size        int64          `json:"size,omitempty"`
+	Meta        map[string]any `json:"_meta,omitempty"`
 }
 
 type Annotations struct {
-	Audience []string    `json:"audience,omitempty"`
-	Priority json.Number `json:"priority,omitempty"`
+	Audience     []string    `json:"audience,omitempty"`
+	Priority     json.Number `json:"priority,omitempty"`
+	LastModified time.Time   `json:"lastModified,omitzero"`
 }
 
 type ListPromptsRequest struct {

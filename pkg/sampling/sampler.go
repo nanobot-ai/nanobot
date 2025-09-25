@@ -143,16 +143,17 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 		}
 
 		var id string
+		if opt.ProgressToken != nil {
+			id = fmt.Sprint(opt.ProgressToken)
+		}
+		if id != "" && len(request.Input) > 0 {
+			id = fmt.Sprintf("%s-%d", id, len(request.Input))
+		}
+		if id == "" {
+			id = uuid.String()
+		}
+
 		if role != currentRole {
-			if opt.ProgressToken != nil {
-				id = fmt.Sprint(opt.ProgressToken)
-			}
-			if id != "" && len(request.Input) > 0 {
-				id = fmt.Sprintf("%s-%d", id, len(request.Input))
-			}
-			if id == "" {
-				id = uuid.String()
-			}
 			now := time.Now()
 			request.Input = append(request.Input, types.Message{
 				ID:      id,

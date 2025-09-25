@@ -12,3 +12,21 @@ const (
 
 	AsyncMetaKey = "ai.nanobot.async"
 )
+
+var (
+	ImageMimeTypes = map[string]struct{}{
+		"image/png":  {},
+		"image/jpeg": {},
+		"image/webp": {},
+	}
+	TextMimeTypes = map[string]struct{}{
+		"text/plain":       {},
+		"text/markdown":    {},
+		"text/html":        {},
+		"text/csv":         {},
+		"application/json": {},
+	}
+	PDFMimeTypes = map[string]struct{}{
+		"application/pdf": {},
+	}
+)

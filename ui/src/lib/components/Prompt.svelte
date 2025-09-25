@@ -1,9 +1,9 @@
 <script lang="ts">
-	import type { Prompt, PromptArgument } from '$lib/types';
+	import type { Attachment, ChatResult, Prompt, PromptArgument } from '$lib/types';
 
 	interface Props {
 		prompt: Prompt;
-		onSend?: (message: string) => void;
+		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
 		onCancel?: () => void;
 		open?: boolean;
 	}

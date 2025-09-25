@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"regexp"
 	"slices"
 
 	"github.com/nanobot-ai/nanobot/pkg/expr"
@@ -88,7 +87,7 @@ func (s *Server) handleResourcesSubscribe(ctx context.Context, msg mcp.Message, 
 }
 
 func (s *Server) handleListResourceTemplates(ctx context.Context, msg mcp.Message, _ mcp.ListResourceTemplatesRequest) error {
-	resourceTemplateMappings, err := s.data.ResourceTemplateMappings(ctx)
+	resourceTemplateMappings, err := s.data.PublishedResourceTemplateMappings(ctx)
 	if err != nil {
 		return err
 	}
@@ -105,41 +104,15 @@ func (s *Server) handleListResourceTemplates(ctx context.Context, msg mcp.Messag
 	return msg.Reply(ctx, result)
 }
 
-func (s *Server) matchResourceURITemplate(resourceTemplateMappings types.ResourceTemplateMappings, uri string) (string, bool) {
-	keys := slices.Sorted(maps.Keys(resourceTemplateMappings))
-	for _, key := range keys {
-		mapping := resourceTemplateMappings[key]
-		match := mapping.Target
-		if match.Regexp.MatchString(uri) {
-			return uri, true
-		}
-	}
-	return "", false
-}
-
 func (s *Server) handleReadResource(ctx context.Context, msg mcp.Message, payload mcp.ReadResourceRequest) error {
-	resourceMappings, err := s.data.ResourceMappings(ctx)
+	target, resourceName, err := s.data.MatchPublishedResource(ctx, payload.URI)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read resource %s: %v", payload.URI, err)
 	}
 
-	resourceName := payload.URI
-	resourceMapping, ok := resourceMappings[payload.URI]
-	if !ok {
-		resourceTemplateMappings, err := s.data.ResourceTemplateMappings(ctx)
-		if err != nil {
-			return err
-		}
-
-		resourceName, ok = s.matchResourceURITemplate(resourceTemplateMappings, payload.URI)
-		if !ok {
-			return fmt.Errorf("resource %s not found", payload.URI)
-		}
-	}
-
-	c, err := s.runtime.GetClient(ctx, resourceMapping.MCPServer)
+	c, err := s.runtime.GetClient(ctx, target)
 	if err != nil {
-		return fmt.Errorf("failed to get client for server %s: %w", resourceMapping.MCPServer, err)
+		return fmt.Errorf("failed to get client for server %s: %w", target, err)
 	}
 
 	result, err := c.ReadResource(ctx, resourceName)
@@ -170,7 +143,7 @@ func (s *Server) handleGetPrompt(ctx context.Context, msg mcp.Message, payload m
 }
 
 func (s *Server) handleListResources(ctx context.Context, msg mcp.Message, _ mcp.ListResourcesRequest) error {
-	resourceMappings, err := s.data.ResourceMappings(ctx)
+	resourceMappings, err := s.data.PublishedResourceMappings(ctx)
 	if err != nil {
 		return err
 	}
@@ -262,11 +235,6 @@ func (s *Server) handleListTools(ctx context.Context, msg mcp.Message, _ mcp.Lis
 
 func (s *Server) handlePing(ctx context.Context, msg mcp.Message, _ mcp.PingRequest) error {
 	return msg.Reply(ctx, mcp.PingResult{})
-}
-
-type templateMatch struct {
-	regexp   *regexp.Regexp
-	resource mcp.ResourceTemplate
 }
 
 func getEnvVal(envMap map[string]string, envKey string, envDef types.EnvDef) string {

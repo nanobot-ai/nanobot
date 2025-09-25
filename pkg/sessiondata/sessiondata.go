@@ -4,25 +4,29 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/config"
+	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/schema"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
 const (
-	toolMappingKey               = "toolMapping"
-	promptMappingKey             = "promptMapping"
-	resourceMappingKey           = "resourceMapping"
-	resourceTemplateMappingKey   = "resourceTemplateMapping"
-	agentsSessionKey             = "agents"
-	currentAgentTargetSessionKey = "currentAgentTargetMapping"
+	toolMappingKey                  = "toolMapping"
+	promptMappingKey                = "promptMapping"
+	resourceMappingKey              = "resourceMapping"
+	resourceTemplateMappingKey      = "resourceTemplateMapping"
+	resourceTemplateMappingCacheKey = "resourceTemplateMappingCache"
+	agentsSessionKey                = "agents"
+	currentAgentTargetSessionKey    = "currentAgentTargetMapping"
 )
 
 type Data struct {
@@ -407,7 +411,7 @@ func (d *Data) ToolMapping(ctx context.Context, opts ...GetOption) (types.ToolMa
 	return toolMappings, nil
 }
 
-func (d *Data) ResourceTemplateMappings(ctx context.Context, opts ...GetOption) (types.ResourceTemplateMappings, error) {
+func (d *Data) PublishedResourceTemplateMappings(ctx context.Context, opts ...GetOption) (types.ResourceTemplateMappings, error) {
 	var (
 		resourceTemplates = types.ResourceTemplateMappings{}
 		session           = mcp.SessionFromContext(ctx)
@@ -422,7 +426,7 @@ func (d *Data) ResourceTemplateMappings(ctx context.Context, opts ...GetOption) 
 
 	session.Get(types.ConfigSessionKey, &c)
 
-	resourceTemplateMappings, err := d.buildResourceTemplateMappings(ctx, c)
+	resourceTemplateMappings, err := d.BuildResourceTemplateMappings(ctx, append(d.getPublishedMCPServers(ctx), c.Publish.ResourceTemplates...))
 	if err != nil {
 		return nil, err
 	}
@@ -431,7 +435,127 @@ func (d *Data) ResourceTemplateMappings(ctx context.Context, opts ...GetOption) 
 	return resourceTemplateMappings, nil
 }
 
-func (d *Data) ResourceMappings(ctx context.Context, opts ...GetOption) (types.ResourceMappings, error) {
+var ErrResourceNotFound = errors.New("resource not found")
+
+type resourceTemplateMatchCache map[string]struct {
+	MCPServer  string `json:"m,omitempty"`
+	TargetName string `json:"t,omitempty"`
+}
+
+func (r resourceTemplateMatchCache) Deserialize(v any) (any, error) {
+	r = resourceTemplateMatchCache{}
+	return r, mcp.JSONCoerce(v, &r)
+}
+
+func (r *resourceTemplateMatchCache) Serialize(v any) (any, error) {
+	return r, nil
+}
+
+func (d *Data) checkResourceMatch(ctx context.Context, uri string) (string, string, bool) {
+	var (
+		agent   = d.CurrentAgent(ctx)
+		session = mcp.SessionFromContext(ctx)
+		cache   = resourceTemplateMatchCache{}
+		key     = fmt.Sprintf("%s::%s", agent, uri)
+	)
+	session.Get(resourceTemplateMappingCacheKey, &cache)
+	if hit, ok := cache[key]; ok {
+		return hit.MCPServer, hit.TargetName, true
+	}
+	return "", "", false
+}
+
+func (d *Data) cacheResourceMatch(ctx context.Context, uri, server, resourceName string) {
+	var (
+		agent   = d.CurrentAgent(ctx)
+		session = mcp.SessionFromContext(ctx)
+		cache   = resourceTemplateMatchCache{}
+		key     = fmt.Sprintf("%s::%s", agent, uri)
+	)
+	session.Get(resourceTemplateMappingCacheKey, &cache)
+	cache[key] = struct {
+		MCPServer  string `json:"m,omitempty"`
+		TargetName string `json:"t,omitempty"`
+	}{
+		MCPServer:  server,
+		TargetName: resourceName,
+	}
+	session.Set(resourceTemplateMappingCacheKey, &cache)
+}
+
+func (d *Data) MatchPublishedResource(ctx context.Context, uri string) (retServer string, retResourceName string, retErr error) {
+	var ok bool
+	if retServer, retResourceName, ok = d.checkResourceMatch(ctx, uri); ok {
+		return
+	}
+
+	defer func() {
+		if retErr != nil {
+			return
+		}
+		d.cacheResourceMatch(ctx, uri, retServer, retResourceName)
+	}()
+
+	resourceMappings, err := d.PublishedResourceMappings(ctx)
+	if err != nil {
+		return "", "", err
+	}
+
+	resourceMapping, ok := resourceMappings[uri]
+	if ok {
+		return resourceMapping.MCPServer, uri, nil
+	}
+
+	resourceTemplateMappings, err := d.PublishedResourceTemplateMappings(ctx)
+	if err != nil {
+		return "", "", err
+	}
+
+	templateMatch, resourceName, ok := d.matchResourceURITemplate(resourceTemplateMappings, uri)
+	if !ok {
+		return "", "", fmt.Errorf("resource %q not found: %w", uri, ErrResourceNotFound)
+	}
+
+	return templateMatch.MCPServer, resourceName, nil
+}
+
+func (d *Data) MatchResource(ctx context.Context, uri string, refs []string) (retServer string, retResourceName string, retErr error) {
+	var ok bool
+	if retServer, retResourceName, ok = d.checkResourceMatch(ctx, uri); ok {
+		return
+	}
+
+	defer func() {
+		if retErr != nil {
+			return
+		}
+		d.cacheResourceMatch(ctx, uri, retServer, retResourceName)
+	}()
+
+	resourceMappings, err := d.BuildResourceMappings(ctx, refs)
+	if err != nil {
+		return "", "", err
+	}
+
+	resourceMapping, ok := resourceMappings[uri]
+	if ok {
+		return resourceMapping.MCPServer, uri, nil
+	}
+
+	resourceTemplateMappings, err := d.BuildResourceTemplateMappings(ctx, refs)
+	if err != nil {
+		return "", "", err
+	}
+
+	templateMatch, resourceName, ok := d.matchResourceURITemplate(resourceTemplateMappings, uri)
+	if !ok {
+		return "", "", fmt.Errorf("resource %q not found: %w", uri, ErrResourceNotFound)
+	}
+
+	return templateMatch.MCPServer, resourceName, nil
+}
+
+func (d *Data) PublishedResourceMappings(ctx context.Context) (types.ResourceMappings, error) {
 	var (
 		session = mcp.SessionFromContext(ctx)
 		c       types.Config
@@ -439,12 +563,7 @@ func (d *Data) ResourceMappings(ctx context.Context, opts ...GetOption) (types.R
 
 	session.Get(types.ConfigSessionKey, &c)
 
-	resourceMappings, err := d.buildResourceMappings(ctx, c)
-	if err != nil {
-		return nil, err
-	}
-
-	return resourceMappings, nil
+	return d.BuildResourceMappings(ctx, append(d.getPublishedMCPServers(ctx), c.Publish.Resources...))
 }
 
 func (d *Data) PublishedPromptMappings(ctx context.Context, opts ...GetOption) (types.PromptMappings, error) {
@@ -460,7 +579,7 @@ func (d *Data) PublishedPromptMappings(ctx context.Context, opts ...GetOption) (
 		return prompts, nil
 	}
 
-	promptMappings, err := d.BuildPromptMappings(ctx, append(d.getPublishedMCPServers(ctx), c.Publish.Prompts...)...)
+	promptMappings, err := d.BuildPromptMappings(ctx, append(d.getPublishedMCPServers(ctx), c.Publish.Prompts...))
 	if err != nil {
 		return nil, err
 	}
@@ -469,7 +588,7 @@ func (d *Data) PublishedPromptMappings(ctx context.Context, opts ...GetOption) (
 	return promptMappings, nil
 }
 
-func (d *Data) BuildPromptMappings(ctx context.Context, refs ...string) (types.PromptMappings, error) {
+func (d *Data) BuildPromptMappings(ctx context.Context, refs []string) (types.PromptMappings, error) {
 	var (
 		serverPrompts = map[string]*mcp.ListPromptsResult{}
 		result        = types.PromptMappings{}
@@ -519,9 +638,9 @@ func (d *Data) BuildPromptMappings(ctx context.Context, refs ...string) (types.P
 	return result, nil
 }
 
-func (d *Data) buildResourceMappings(ctx context.Context, config types.Config) (types.ResourceMappings, error) {
+func (d *Data) BuildResourceMappings(ctx context.Context, refs []string) (types.ResourceMappings, error) {
 	resourceMappings := types.ResourceMappings{}
-	for _, ref := range append(d.getPublishedMCPServers(ctx), config.Publish.Resources...) {
+	for _, ref := range refs {
 		toolRef := types.ParseToolRef(ref)
 		if toolRef.Server == "" {
 			continue
@@ -529,11 +648,13 @@ func (d *Data) buildResourceMappings(ctx context.Context, config types.Config) (
 
 		c, err := d.runtime.GetClient(ctx, toolRef.Server)
 		if err != nil {
-			return nil, err
+			log.Errorf(ctx, "failed to get client for server %s while building resource mappings, skipping: %v", toolRef, err)
+			continue
 		}
 		resources, err := c.ListResources(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get resources for server %s: %w", toolRef, err)
+			log.Errorf(ctx, "failed to get resources for server %s while building resource mappings, skipping: %v", toolRef, err)
+			continue
 		}
 
 		for _, resource := range resources.Resources {
@@ -548,9 +669,9 @@ func (d *Data) buildResourceMappings(ctx context.Context, config types.Config) (
 	return resourceMappings, nil
 }
 
-func (d *Data) buildResourceTemplateMappings(ctx context.Context, config types.Config) (types.ResourceTemplateMappings, error) {
+func (d *Data) BuildResourceTemplateMappings(ctx context.Context, refs []string) (types.ResourceTemplateMappings, error) {
 	resourceTemplateMappings := types.ResourceTemplateMappings{}
-	for _, ref := range append(d.getPublishedMCPServers(ctx), config.Publish.ResourceTemplates...) {
+	for _, ref := range refs {
 		toolRef := types.ParseToolRef(ref)
 		if toolRef.Server == "" {
 			continue
@@ -558,17 +679,19 @@ func (d *Data) buildResourceTemplateMappings(ctx context.Context, config types.C
 
 		c, err := d.runtime.GetClient(ctx, toolRef.Server)
 		if err != nil {
-			return nil, err
+			log.Errorf(ctx, "failed to get client for server %s while building resource template mappings, skipping: %v", toolRef, err)
+			continue
 		}
 		resources, err := c.ListResourceTemplates(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get resources for server %s: %w", toolRef, err)
+			log.Errorf(ctx, "failed to get resource templates for server %s while building resource template mappings, skipping: %v", toolRef, err)
 		}
 
 		for _, resource := range resources.ResourceTemplates {
 			re, err := uriToRegexp(resource.URITemplate)
 			if err != nil {
-				return nil, fmt.Errorf("failed to convert uri to regexp: %w", err)
+				log.Errorf(ctx, "failed to convert uri to regexp: %v", err)
+				continue
 			}
 			resourceTemplateMappings[toolRef.PublishedName(resource.URITemplate)] = types.TargetMapping[types.TemplateMatch]{
 				MCPServer:  toolRef.Server,
@@ -582,4 +705,15 @@ func (d *Data) buildResourceTemplateMappings(ctx context.Context, config types.C
 	}
 
 	return resourceTemplateMappings, nil
+}
+
+func (d *Data) matchResourceURITemplate(resourceTemplateMappings types.ResourceTemplateMappings, uri string) (*types.TargetMapping[types.TemplateMatch], string, bool) {
+	keys := slices.Sorted(maps.Keys(resourceTemplateMappings))
+	for _, key := range keys {
+		mapping := resourceTemplateMappings[key]
+		if mapping.Target.Regexp.MatchString(uri) {
+			return &mapping, uri, true
+		}
+	}
+	return nil, "", false
 }

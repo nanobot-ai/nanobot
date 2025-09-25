@@ -1,11 +1,21 @@
 <script lang="ts">
-	import { Paperclip, X, Send } from '@lucide/svelte';
-	import type { Attachment, UploadedFile, UploadingFile, Prompt } from '$lib/types';
+	import { Paperclip, Send } from '@lucide/svelte';
+	import type {
+		Attachment,
+		UploadedFile,
+		UploadingFile,
+		Prompt,
+		Resource,
+		ChatMessage,
+		ChatResult
+	} from '$lib/types';
 	import type MessageSlashPromptsType from '$lib/components/MessageSlashPrompts.svelte';
 	import MessageSlashPrompts from '$lib/components/MessageSlashPrompts.svelte';
+	import MessageAttachments from '$lib/components/MessageAttachments.svelte';
+	import MessageResources from '$lib/components/MessageResources.svelte';
 
 	interface Props {
-		onSend?: (message: string, attachments?: Attachment[]) => void;
+		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
 		onPrompt?: (promptName: string) => void;
 		onFileUpload?: (file: File, opts?: { controller?: AbortController }) => Promise<Attachment>;
 		cancelUpload?: (fileId: string) => void;
@@ -15,6 +25,8 @@
 		disabled?: boolean;
 		supportedMimeTypes?: string[];
 		prompts?: Prompt[];
+		resources?: Resource[];
+		messages?: ChatMessage[];
 	}
 
 	let {
@@ -27,14 +39,14 @@
 		uploadedFiles = [],
 		cancelUpload,
 		prompts = [],
+		resources = [],
+		messages = [],
 		supportedMimeTypes = [
 			'image/*',
 			'text/plain',
 			'application/pdf',
 			'application/json',
-			'text/csv',
-			'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-			'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+			'text/csv'
 		]
 	}: Props = $props();
 
@@ -44,14 +56,28 @@
 	let slashInput: MessageSlashPromptsType;
 	let isUploading = $state(false);
 
-	function handleSubmit(e: Event) {
+	let selectedResources = $state<Resource[]>([]);
+
+	async function handleSubmit(e: Event) {
 		e.preventDefault();
 		if (message.trim() && onSend) {
-			onSend(message.trim());
-			message = '';
-			// Clear uploaded files after sending
-			// Keep focus on textarea after submission
 			textareaRef?.focus();
+			onSend(message.trim(), selectedResources);
+			message = '';
+			selectedResources = [];
+		}
+	}
+
+	function removeSelectedResource(resource: Resource) {
+		selectedResources = selectedResources.filter((r) => r.uri !== resource.uri);
+	}
+
+	function toggleResource(resource: Resource) {
+		const isSelected = selectedResources.some((r) => r.uri === resource.uri);
+		if (isSelected) {
+			selectedResources = selectedResources.filter((r) => r.uri !== resource.uri);
+		} else {
+			selectedResources = [...selectedResources, resource];
 		}
 	}
 
@@ -63,6 +89,7 @@
 		const target = e.target as HTMLInputElement;
 		const file = target.files?.[0];
 
+		console.log('File selected:', e, file, onFileUpload);
 		if (!file || !onFileUpload) return;
 
 		const controller = new AbortController();
@@ -71,25 +98,11 @@
 
 		try {
 			await onFileUpload(file, { controller });
+			console.log('File uploaded:', file);
 		} finally {
 			isUploading = false;
 			target.value = '';
 		}
-	}
-
-	function getFileIcon(file: File) {
-		if (file.type.startsWith('image/')) {
-			return '🖼️';
-		} else if (file.type === 'application/pdf') {
-			return '📄';
-		} else if (file.type.includes('text/') || file.type.includes('json')) {
-			return '📝';
-		} else if (file.type.includes('spreadsheet') || file.type.includes('csv')) {
-			return '📊';
-		} else if (file.type.includes('document')) {
-			return '📋';
-		}
-		return '📎';
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -97,8 +110,10 @@
 			return;
 		}
 
-		if (e.key === 'Escape' && message.trim().startsWith('/')) {
-			message = '';
+		if (e.key === 'Escape') {
+			if (message.trim().startsWith('/')) {
+				message = '';
+			}
 		}
 
 		if (e.key === 'Enter' && !e.shiftKey) {
@@ -167,7 +182,9 @@
 
 			<!-- Bottom row: Model select on left, buttons on right -->
 			<div
-				class="flex items-center {uploadedFiles.length > 0 || uploadingFiles.length > 0
+				class="flex items-center {uploadedFiles.length > 0 ||
+				uploadingFiles.length > 0 ||
+				selectedResources.length > 0
 					? 'justify-between'
 					: 'justify-end'}"
 			>
@@ -183,40 +200,14 @@
 					<option value="gemini-pro">Gemini Pro</option>
 				</select>
 
-				{#if uploadedFiles.length > 0 || uploadingFiles.length > 0}
-					<div class="flex flex-wrap gap-2">
-						<!-- Uploading files with spinner -->
-						{#each uploadingFiles as uploadingFile (uploadingFile.id)}
-							<div class="flex items-center gap-2 rounded-xl bg-base-200 px-3 py-2 text-sm">
-								<span class="loading loading-xs loading-spinner"></span>
-								<span class="max-w-32 truncate">{uploadingFile.file.name}</span>
-								<button
-									type="button"
-									onclick={() => cancelUpload?.(uploadingFile.id)}
-									class="btn h-5 w-5 rounded-full p-0 btn-ghost btn-xs"
-									aria-label="Cancel upload"
-								>
-									<X class="h-3 w-3" />
-								</button>
-							</div>
-						{/each}
-						<!-- Uploaded files -->
-						{#each uploadedFiles as uploadedFile (uploadedFile.id)}
-							<div class="flex items-center gap-2 rounded-xl bg-base-200 px-3 py-2 text-sm">
-								<span>{getFileIcon(uploadedFile.file)}</span>
-								<span class="max-w-32 truncate">{uploadedFile.file.name}</span>
-								<button
-									type="button"
-									onclick={() => cancelUpload?.(uploadedFile.id)}
-									class="btn h-5 w-5 rounded-full p-0 btn-ghost btn-xs"
-									aria-label="Remove file"
-								>
-									<X class="h-3 w-3" />
-								</button>
-							</div>
-						{/each}
-					</div>
-				{/if}
+				<MessageAttachments
+					{disabled}
+					{selectedResources}
+					{uploadedFiles}
+					{uploadingFiles}
+					{removeSelectedResource}
+					{cancelUpload}
+				/>
 
 				<!-- Action buttons -->
 				<div class="flex gap-2">
@@ -234,6 +225,14 @@
 							<Paperclip class="h-4 w-4" />
 						{/if}
 					</button>
+
+					<MessageResources
+						{disabled}
+						{resources}
+						{selectedResources}
+						{toggleResource}
+						{messages}
+					/>
 
 					<!-- Submit button -->
 					<button

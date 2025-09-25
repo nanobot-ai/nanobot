@@ -424,7 +424,10 @@ func (s *Session) Send(ctx context.Context, req Message) error {
 
 	req.JSONRPC = "2.0"
 	s.recorder.save(ctx, s.wire.SessionID(), true, req)
-	return s.wire.Send(ctx, req)
+	if err := s.wire.Send(ctx, req); err != nil {
+		return err
+	}
+	return nil
 }
 
 type ExchangeOption struct {

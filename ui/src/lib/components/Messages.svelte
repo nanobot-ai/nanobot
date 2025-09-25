@@ -1,11 +1,11 @@
 <script lang="ts">
 	import Message from './Message.svelte';
-	import type { ChatMessage, Agent } from '$lib/types';
+	import type { ChatMessage, ChatResult, Agent, Attachment } from '$lib/types';
 	import AgentHeader from '$lib/components/AgentHeader.svelte';
 
 	interface Props {
 		messages: ChatMessage[];
-		onSend?: (message: string) => Promise<ChatMessage>;
+		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
 		isLoading?: boolean;
 		agent?: Agent;
 	}

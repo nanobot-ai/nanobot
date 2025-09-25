@@ -238,7 +238,7 @@ func (a *Agents) replacePrompt(ctx context.Context, agentConfig types.Agent, ite
 	} else if uiAction.Prompt != nil && len(uiAction.Prompt.RenderedMessages) > 0 {
 		return items, uiAction.Prompt.RenderedMessages, nil
 	} else if uiAction.Prompt != nil && uiAction.Prompt.PromptName != "" {
-		prompts, err := sessiondata.NewData(a.registry).BuildPromptMappings(ctx, slices.Concat(agentConfig.MCPServers, agentConfig.Prompts)...)
+		prompts, err := sessiondata.NewData(a.registry).BuildPromptMappings(ctx, slices.Concat(agentConfig.MCPServers, agentConfig.Prompts))
 		if err != nil {
 			return items, nil, nil
 		}

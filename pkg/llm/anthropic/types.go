@@ -59,7 +59,7 @@ type Content struct {
 	Text *string `json:"text,omitempty"`
 
 	// Type = image
-	Source ImageSource `json:"source,omitzero"`
+	Source ContentSource `json:"source,omitzero"`
 
 	// Type = tool_use
 	ID    string         `json:"id,omitempty"`
@@ -72,7 +72,7 @@ type Content struct {
 	IsError   bool      `json:"is_error,omitempty"`
 }
 
-type ImageSource struct {
+type ContentSource struct {
 	Type string `json:"type"`
 
 	// Type = base64
