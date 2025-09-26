@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/envvar"
@@ -140,17 +141,36 @@ func (s *Service) GetPrompt(ctx context.Context, target, prompt string, args map
 }
 
 type clientFactory struct {
-	client *mcp.Client
-	new    func(client *mcp.SessionState) (*mcp.Client, error)
+	clientLock *sync.Mutex
+	client     *mcp.Client
+	oldState   *mcp.SessionState
+	new        func(client *mcp.SessionState) (*mcp.Client, error)
 }
 
-func (c *clientFactory) init() (err error) {
-	c.client, err = c.new(nil)
-	return err
+func newClientFactory(f func(state *mcp.SessionState) (*mcp.Client, error)) clientFactory {
+	return clientFactory{
+		clientLock: &sync.Mutex{},
+		new:        f,
+	}
+}
+
+func (c *clientFactory) get() (*mcp.Client, error) {
+	c.clientLock.Lock()
+	defer c.clientLock.Unlock()
+
+	if c.client != nil {
+		return c.client, nil
+	}
+	newClient, err := c.new(c.oldState)
+	if err != nil {
+		return nil, err
+	}
+	c.client = newClient
+	return c.client, nil
 }
 
 func (c *clientFactory) Serialize() (any, error) {
-	if c.client.Session.ID() == "" {
+	if c.client == nil || c.client.Session.ID() == "" {
 		return nil, nil
 	}
 	return c.client.Session.State()
@@ -158,8 +178,10 @@ func (c *clientFactory) Serialize() (any, error) {
 
 func (c *clientFactory) Deserialize(data any) (_ any, err error) {
 	if data == nil {
-		c.client, err = c.new(nil)
-		return c, err
+		return &clientFactory{
+			clientLock: &sync.Mutex{},
+			new:        c.new,
+		}, nil
 	}
 
 	var (
@@ -169,12 +191,11 @@ func (c *clientFactory) Deserialize(data any) (_ any, err error) {
 		return nil, fmt.Errorf("failed to coerce session state data: %w", err)
 	}
 
-	c.client, err = c.new(&state)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client from state: %w", err)
-	}
-
-	return c, nil
+	return &clientFactory{
+		clientLock: &sync.Mutex{},
+		oldState:   &state,
+		new:        c.new,
+	}, nil
 }
 
 func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, error) {
@@ -187,22 +208,17 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 	}
 
 	sessionKey := "clients/" + name
-	factory := clientFactory{
-		new: func(state *mcp.SessionState) (*mcp.Client, error) {
-			return s.newClient(ctx, name, state)
-		},
-	}
-
+	factory := newClientFactory(func(state *mcp.SessionState) (*mcp.Client, error) {
+		return s.newClient(ctx, name, state)
+	})
 	if session.Get(sessionKey, &factory) {
-		return factory.client, nil
+		return factory.get()
 	}
 
-	if err := factory.init(); err != nil {
-		return nil, fmt.Errorf("failed to initialize client %q: %w", name, err)
-	}
-
+	// ensure we are holding the same object
 	session.Set(sessionKey, &factory)
-	return factory.client, nil
+	session.Get(sessionKey, &factory)
+	return factory.get()
 }
 
 func (s *Service) newClient(ctx context.Context, name string, state *mcp.SessionState) (*mcp.Client, error) {

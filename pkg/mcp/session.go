@@ -287,12 +287,11 @@ func (s *Session) Get(key string, out any) (ret bool) {
 	}()
 
 	s.lock.Lock()
+	defer s.lock.Unlock()
 	v, ok := s.attributes[key]
 	if !ok {
-		s.lock.Unlock()
 		return false
 	}
-	s.lock.Unlock()
 
 	if v == nil {
 		return false
@@ -309,15 +308,14 @@ func (s *Session) Get(key string, out any) (ret bool) {
 	if deserializable, ok := out.(Deserializable); ok {
 		newOut, err := deserializable.Deserialize(v)
 		if err != nil {
-			s.lock.Lock()
 			delete(s.attributes, key)
-			s.lock.Unlock()
 			return false
 		}
-		s.lock.Lock()
-		s.attributes[key] = newOut
-		s.lock.Unlock()
-		return true
+		if s.copyInto(out, newOut) {
+			s.attributes[key] = newOut
+			return true
+		}
+		return false
 	}
 
 	panic(fmt.Sprintf("can not marshal %T to type: %T", v, out))

@@ -76,130 +76,131 @@
 	}
 </script>
 
-<!-- Enhanced resource card -->
-<button
-	type="button"
-	class="card-compact card max-w-sm border border-base-300/50 bg-gradient-to-br from-base-100 to-base-200 shadow-md transition-all duration-200 hover:scale-[1.02] hover:shadow-lg"
-	onclick={openModal}
-	title="Click to view {getResourceDisplayName()}"
->
-	<div class="card-body">
-		<div class="flex items-start gap-3">
-			<!-- Large icon -->
-			<div class="flex-shrink-0">
-				<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-2xl">
-					{getFileIcon(item.resource.mimeType)}
-				</div>
-			</div>
-
-			<!-- Content -->
-			<div class="min-w-0 flex-1 text-left">
-				<h4 class="truncate text-sm font-semibold text-base-content">
-					{getResourceDisplayName()}
-				</h4>
-
-				<!-- Description if available -->
-				{#if item.resource.description}
-					<p
-						class="mt-1 text-xs text-base-content/60"
-						style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;"
-					>
-						{item.resource.description}
-					</p>
-				{/if}
-
-				<!-- Metadata row -->
-				<div class="mt-2 flex items-center gap-2">
-					<span class="badge badge-ghost badge-xs">{item.resource.mimeType}</span>
-					{#if item.resource.size}
-						<span class="text-xs text-base-content/50">
-							{formatFileSize(item.resource.size)}
-						</span>
-					{/if}
-				</div>
-			</div>
+{#if isError}
+	<div class="mb-3 rounded-lg border border-error/20 bg-error/10 p-3">
+		<div class="mb-2 flex items-center gap-2 text-sm">
+			<AlertTriangle class="h-4 w-4 text-error" />
+			<span class="font-medium text-error">Error</span>
 		</div>
-
-		{#if isError}
-			<div class="alert-sm mt-2 alert alert-error">
-				<AlertTriangle class="h-4 w-4" />
-				<span class="text-xs">Error Resource</span>
-			</div>
+		{#if item.resource.text}
+			<pre
+				class="mt-2 rounded bg-base-100 p-2 text-xs break-all whitespace-pre-wrap text-error">{item
+					.resource.text}</pre>
 		{/if}
 	</div>
-</button>
-
-<!-- DaisyUI Dialog Modal -->
-<dialog bind:this={modal} class="modal modal-bottom sm:modal-middle">
-	<div class="modal-box max-h-[80vh] max-w-4xl overflow-hidden">
-		<div class="mb-4 flex items-center justify-between">
-			<h3 class="flex items-center gap-3 text-lg font-bold">
-				<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-					<span class="text-xl">{getFileIcon(item.resource.mimeType)}</span>
+{:else}
+	<!-- Enhanced resource card -->
+	<div class="card-compact card max-w-sm border border-base-200/50 shadow-md">
+		<div class="card-body">
+			<div class="flex items-start gap-3">
+				<!-- Large icon -->
+				<div class="flex-shrink-0">
+					<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-2xl">
+						{getFileIcon(item.resource.mimeType)}
+					</div>
 				</div>
-				<div>
-					<div class="text-base-content">{getResourceDisplayName()}</div>
+
+				<!-- Content -->
+				<div class="min-w-0 flex-1">
+					<h4 class="truncate text-sm font-semibold text-base-content">
+						{getResourceDisplayName()}
+					</h4>
+
+					<!-- Description if available -->
 					{#if item.resource.description}
-						<div class="text-sm font-normal text-base-content/60">{item.resource.description}</div>
+						<p
+							class="mt-1 text-xs text-base-content/60"
+							style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;"
+						>
+							{item.resource.description}
+						</p>
 					{/if}
-				</div>
-			</h3>
-		</div>
 
-		<div class="mb-4 flex items-center gap-2">
-			<span class="badge badge-sm badge-primary">{item.resource.mimeType}</span>
-			{#if item.resource.size}
-				<span class="badge badge-ghost badge-sm">{formatFileSize(item.resource.size)}</span>
-			{/if}
-			{#if item.resource.annotations?.lastModified}
-				<span class="text-xs text-base-content/50">
-					Modified: {new Date(item.resource.annotations.lastModified).toLocaleDateString()}
-				</span>
-			{/if}
-		</div>
-
-		<div class="max-h-96 overflow-auto">
-			{#if isError}
-				<div class="alert alert-error">
-					<AlertTriangle class="h-5 w-5" />
-					<div>
-						<h4 class="font-bold">Error Resource</h4>
-						{#if item.resource.blob}
-							<pre class="mt-2 text-xs whitespace-pre-wrap">{getDecodedText()}</pre>
+					<!-- Metadata row -->
+					<div class="mt-2 flex items-center gap-2">
+						<span class="badge badge-ghost badge-xs">{item.resource.mimeType}</span>
+						{#if item.resource.size}
+							<span class="text-xs text-base-content/50">
+								{formatFileSize(item.resource.size)}
+							</span>
 						{/if}
 					</div>
 				</div>
-			{:else if isTextType(item.resource.mimeType) && item.resource.blob}
-				<div class="mockup-code">
-					<pre><code>{getDecodedText()}</code></pre>
-				</div>
-			{:else if isPdfType(item.resource.mimeType) && item.resource.blob}
-				<div class="w-full">
-					<iframe
-						src="data:application/pdf;base64,{item.resource.blob}"
-						class="h-96 w-full rounded border border-base-300"
-						title="PDF Viewer"
-					></iframe>
-				</div>
-			{:else}
-				<div class="py-8 text-center">
-					<div class="mb-4 text-6xl">{getFileIcon(item.resource.mimeType)}</div>
-					<p class="text-base-content/60">Preview not available for this resource type</p>
-					{#if item.resource.blob}
-						<p class="mt-2 text-sm text-base-content/40">
-							Resource data is available but cannot be previewed
-						</p>
-					{:else}
-						<p class="mt-2 text-sm text-base-content/40">No resource data available</p>
-					{/if}
-				</div>
-			{/if}
-		</div>
+			</div>
 
-		<div class="modal-action">
-			<form method="dialog">
-				<button class="btn">Close</button>
-			</form>
+			<!-- Card actions -->
+			<div class="mt-3 card-actions justify-end">
+				<button type="button" class="btn btn-sm btn-primary" onclick={openModal}>
+					View Content
+				</button>
+			</div>
 		</div>
 	</div>
-</dialog>
+
+	<!-- DaisyUI Dialog Modal -->
+	<dialog bind:this={modal} class="modal modal-bottom sm:modal-middle">
+		<div class="modal-box max-h-[80vh] max-w-4xl overflow-hidden">
+			<div class="mb-4 flex items-center justify-between">
+				<h3 class="flex items-center gap-3 text-lg font-bold">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+						<span class="text-xl">{getFileIcon(item.resource.mimeType)}</span>
+					</div>
+					<div>
+						<div class="text-base-content">{getResourceDisplayName()}</div>
+						{#if item.resource.description}
+							<div class="text-sm font-normal text-base-content/60">
+								{item.resource.description}
+							</div>
+						{/if}
+					</div>
+				</h3>
+			</div>
+
+			<div class="mb-4 flex items-center gap-2">
+				<span class="badge badge-sm badge-primary">{item.resource.mimeType}</span>
+				{#if item.resource.size}
+					<span class="badge badge-ghost badge-sm">{formatFileSize(item.resource.size)}</span>
+				{/if}
+				{#if item.resource.annotations?.lastModified}
+					<span class="text-xs text-base-content/50">
+						Modified: {new Date(item.resource.annotations.lastModified).toLocaleDateString()}
+					</span>
+				{/if}
+			</div>
+
+			<div class="max-h-96 overflow-auto">
+				{#if isTextType(item.resource.mimeType) && item.resource.blob}
+					<div class="mockup-code">
+						<pre><code>{getDecodedText()}</code></pre>
+					</div>
+				{:else if isPdfType(item.resource.mimeType) && item.resource.blob}
+					<div class="w-full">
+						<iframe
+							src="data:application/pdf;base64,{item.resource.blob}"
+							class="h-96 w-full rounded border border-base-300"
+							title="PDF Viewer"
+						></iframe>
+					</div>
+				{:else}
+					<div class="py-8 text-center">
+						<div class="mb-4 text-6xl">{getFileIcon(item.resource.mimeType)}</div>
+						<p class="text-base-content/60">Preview not available for this resource type</p>
+						{#if item.resource.blob}
+							<p class="mt-2 text-sm text-base-content/40">
+								Resource data is available but cannot be previewed
+							</p>
+						{:else}
+							<p class="mt-2 text-sm text-base-content/40">No resource data available</p>
+						{/if}
+					</div>
+				{/if}
+			</div>
+
+			<div class="modal-action">
+				<form method="dialog">
+					<button class="btn">Close</button>
+				</form>
+			</div>
+		</div>
+	</dialog>
+{/if}
