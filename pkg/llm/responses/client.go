@@ -18,9 +18,10 @@ type Client struct {
 }
 
 type Config struct {
-	APIKey  string
-	BaseURL string
-	Headers map[string]string
+	ChatCompletionAPI bool
+	APIKey            string
+	BaseURL           string
+	Headers           map[string]string
 }
 
 // NewClient creates a new OpenAI client with the provided API key and base URL.

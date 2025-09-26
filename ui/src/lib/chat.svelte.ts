@@ -372,12 +372,13 @@ export class ChatService {
 		if (chatId) {
 			this.chatId = chatId;
 			this.subscribe(chatId);
-			this.listResources().then((r) => {
-				if (r && r.resources) {
-					this.resources = r.resources;
-				}
-			});
 		}
+
+		this.listResources().then((r) => {
+			if (r && r.resources) {
+				this.resources = r.resources;
+			}
+		});
 
 		this.listPrompts().then((prompts) => {
 			if (prompts && prompts.prompts) {
@@ -498,6 +499,7 @@ export class ChatService {
 			this.messages = appendMessage(this.messages, response.message);
 			return new Promise<ChatResult | void>((resolve) => {
 				this.onChatDone.push(() => {
+					this.isLoading = false;
 					const i = this.messages.findIndex((m) => m.id === response.message.id);
 					if (i !== -1 && i <= this.messages.length) {
 						resolve({
@@ -509,6 +511,7 @@ export class ChatService {
 				});
 			});
 		} catch (error) {
+			this.isLoading = false;
 			this.messages = appendMessage(this.messages, {
 				id: crypto.randomUUID(),
 				role: 'assistant',
@@ -521,8 +524,6 @@ export class ChatService {
 					}
 				]
 			});
-		} finally {
-			this.isLoading = false;
 		}
 	};
 

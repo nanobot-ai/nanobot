@@ -43,22 +43,23 @@ func New() *cobra.Command {
 }
 
 type Nanobot struct {
-	Debug            bool              `usage:"Enable debug logging"`
-	Trace            bool              `usage:"Enable trace logging"`
-	Quiet            bool              `usage:"Disable most output" short:"q"`
-	Env              []string          `usage:"Environment variables to set in the form of KEY=VALUE, or KEY to load from current environ" short:"e"`
-	EnvFile          string            `usage:"Path to the environment file (default: ./nanobot.env)"`
-	EmptyEnv         bool              `usage:"Do not load environment variables from the environment by default"`
-	DefaultModel     string            `usage:"Default model to use for completions" default:"gpt-4.1" env:"NANOBOT_DEFAULT_MODEL" name:"default-model"`
-	OpenAIAPIKey     string            `usage:"OpenAI API key" env:"OPENAI_API_KEY" name:"openai-api-key"`
-	OpenAIBaseURL    string            `usage:"OpenAI API URL" env:"OPENAI_BASE_URL" name:"openai-base-url"`
-	OpenAIHeaders    map[string]string `usage:"OpenAI API headers" env:"OPENAI_HEADERS" name:"openai-headers"`
-	AnthropicAPIKey  string            `usage:"Anthropic API key" env:"ANTHROPIC_API_KEY" name:"anthropic-api-key"`
-	AnthropicBaseURL string            `usage:"Anthropic API URL" env:"ANTHROPIC_BASE_URL" name:"anthropic-base-url"`
-	AnthropicHeaders map[string]string `usage:"Anthropic API headers" env:"ANTHROPIC_HEADERS" name:"anthropic-headers"`
-	MaxConcurrency   int               `usage:"The maximum number of concurrent tasks in a parallel loop" default:"10" hidden:"true"`
-	Chdir            string            `usage:"Change directory to this path before running the nanobot" default:"." short:"C"`
-	State            string            `usage:"Path to the state file" default:"./nanobot.db"`
+	Debug                   bool              `usage:"Enable debug logging"`
+	Trace                   bool              `usage:"Enable trace logging"`
+	Quiet                   bool              `usage:"Disable most output" short:"q"`
+	Env                     []string          `usage:"Environment variables to set in the form of KEY=VALUE, or KEY to load from current environ" short:"e"`
+	EnvFile                 string            `usage:"Path to the environment file (default: ./nanobot.env)"`
+	EmptyEnv                bool              `usage:"Do not load environment variables from the environment by default"`
+	DefaultModel            string            `usage:"Default model to use for completions" default:"gpt-4.1" env:"NANOBOT_DEFAULT_MODEL" name:"default-model"`
+	OpenAIAPIKey            string            `usage:"OpenAI API key" env:"OPENAI_API_KEY" name:"openai-api-key"`
+	OpenAIBaseURL           string            `usage:"OpenAI API URL" env:"OPENAI_BASE_URL" name:"openai-base-url"`
+	OpenAIHeaders           map[string]string `usage:"OpenAI API headers" env:"OPENAI_HEADERS" name:"openai-headers"`
+	OpenAIChatCompletionAPI bool              `usage:"Use OpenAI Chat Completion API instead of the newer Responses API" env:"OPENAI_CHAT_COMPLETION_API" name:"openai-chat-completion-api"`
+	AnthropicAPIKey         string            `usage:"Anthropic API key" env:"ANTHROPIC_API_KEY" name:"anthropic-api-key"`
+	AnthropicBaseURL        string            `usage:"Anthropic API URL" env:"ANTHROPIC_BASE_URL" name:"anthropic-base-url"`
+	AnthropicHeaders        map[string]string `usage:"Anthropic API headers" env:"ANTHROPIC_HEADERS" name:"anthropic-headers"`
+	MaxConcurrency          int               `usage:"The maximum number of concurrent tasks in a parallel loop" default:"10" hidden:"true"`
+	Chdir                   string            `usage:"Change directory to this path before running the nanobot" default:"." short:"C"`
+	State                   string            `usage:"Path to the state file" default:"./nanobot.db"`
 
 	env map[string]string
 }
@@ -151,9 +152,10 @@ func (n *Nanobot) llmConfig() llm.Config {
 	return llm.Config{
 		DefaultModel: n.DefaultModel,
 		Responses: responses.Config{
-			APIKey:  n.OpenAIAPIKey,
-			BaseURL: n.OpenAIBaseURL,
-			Headers: n.OpenAIHeaders,
+			APIKey:            n.OpenAIAPIKey,
+			BaseURL:           n.OpenAIBaseURL,
+			Headers:           n.OpenAIHeaders,
+			ChatCompletionAPI: n.OpenAIChatCompletionAPI,
 		},
 		Anthropic: anthropic.Config{
 			APIKey:  n.AnthropicAPIKey,

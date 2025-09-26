@@ -44,6 +44,7 @@
 	isLoading={chat.isLoading}
 	onSendMessage={chat.sendMessage}
 	onFileUpload={chat.uploadFile}
+	cancelUpload={chat.cancelUpload}
 	prompts={chat.prompts}
 	resources={chat.resources}
 	elicitations={chat.elicitations}

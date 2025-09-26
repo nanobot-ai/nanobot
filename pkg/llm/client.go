@@ -6,6 +6,7 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/llm/anthropic"
+	"github.com/nanobot-ai/nanobot/pkg/llm/completions"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
 	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -23,16 +24,24 @@ type Config struct {
 
 func NewClient(cfg Config) *Client {
 	return &Client{
-		defaultModel: cfg.DefaultModel,
-		responses:    responses.NewClient(cfg.Responses),
-		anthropic:    anthropic.NewClient(cfg.Anthropic),
+		useCompletions: cfg.Responses.ChatCompletionAPI,
+		defaultModel:   cfg.DefaultModel,
+		completions: completions.NewClient(completions.Config{
+			APIKey:  cfg.Responses.APIKey,
+			BaseURL: cfg.Responses.BaseURL,
+			Headers: cfg.Responses.Headers,
+		}),
+		responses: responses.NewClient(cfg.Responses),
+		anthropic: anthropic.NewClient(cfg.Anthropic),
 	}
 }
 
 type Client struct {
-	defaultModel string
-	responses    *responses.Client
-	anthropic    *anthropic.Client
+	defaultModel   string
+	useCompletions bool
+	completions    *completions.Client
+	responses      *responses.Client
+	anthropic      *anthropic.Client
 }
 
 func (c *Client) handleAssistantRolesFromTools(req types.CompletionRequest) (_ types.CompletionRequest, resp *types.CompletionResponse) {
@@ -119,6 +128,9 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 
 	if strings.HasPrefix(req.Model, "claude") {
 		return c.anthropic.Complete(ctx, req, opts...)
+	}
+	if c.useCompletions {
+		return c.completions.Complete(ctx, req, opts...)
 	}
 	return c.responses.Complete(ctx, req, opts...)
 }

@@ -28,5 +28,6 @@ marked.use({
 });
 
 export function renderMarkdown(content: string): string {
+	if (!content) return '';
 	return marked.parse(content) as string;
 }

@@ -139,6 +139,8 @@ func appendProgress(ctx context.Context, session *mcp.Session, progressMessage *
 	// At this point Partial is always true
 	if progressItem.Content != nil {
 		currentItem.Content.Text += progressItem.Content.Text
+	} else if progressItem.ToolCall != nil && currentItem.ToolCall == nil {
+		currentItem.ToolCall = progressItem.ToolCall
 	} else if progressItem.ToolCall != nil {
 		currentItem.ToolCall.Arguments += progressItem.ToolCall.Arguments
 	} else if progressItem.Reasoning != nil && len(progressItem.Reasoning.Summary) > 0 {
