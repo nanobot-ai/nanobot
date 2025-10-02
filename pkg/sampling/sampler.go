@@ -275,7 +275,8 @@ func CompletionResponseToCallResult(resp *types.CompletionResponse, includeMessa
 			for _, item := range msg.Items {
 				if item.ToolCallResult != nil {
 					for _, content := range item.ToolCallResult.Output.Content {
-						if strings.HasPrefix(content.MIMEType, "ui://") {
+						if strings.HasPrefix(content.URI, "ui://") ||
+							(content.Resource != nil && strings.HasPrefix(content.Resource.URI, "ui://")) {
 							result.Content = append(result.Content, content)
 						}
 					}
