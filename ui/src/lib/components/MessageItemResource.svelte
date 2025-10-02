@@ -10,7 +10,7 @@
 	let { item }: Props = $props();
 
 	const isError = item.resource.mimeType === 'application/vnd.nanobot.error+json';
-	let modal: HTMLDialogElement;
+	let modal = $state<HTMLDialogElement>();
 
 	function openModal() {
 		modal?.showModal();

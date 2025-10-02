@@ -89,16 +89,12 @@
 		]}
 	>
 		{#each agent.starterMessages || [] as message (message)}
-			<div
+			<button
 				class="card-compact card cursor-pointer bg-base-200 shadow-sm transition-colors hover:bg-base-300"
 				onclick={() => onSend?.(message)}
-				role="button"
-				tabindex="0"
 			>
-				<div class="card-body">
-					<p class="text-sm">{message}</p>
-				</div>
-			</div>
+				<span class="card-body text-sm">{message}</span>
+			</button>
 		{/each}
 	</div>
 </div>
