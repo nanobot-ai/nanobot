@@ -2,9 +2,6 @@ version: 2
 dist: releases
 snapshot:
   version_template: '{{ .Summary }}'
-before:
-  hooks:
-    - go generate ./...
 builds:
   - id: default
     env:
