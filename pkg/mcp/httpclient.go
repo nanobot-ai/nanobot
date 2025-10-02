@@ -223,8 +223,12 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID st
 		s.initializeLock.RLock()
 		defer s.initializeLock.RUnlock()
 
+		id := ""
+		if s.sessionID != nil {
+			id = *s.sessionID
+		}
 		return SessionNotFoundErr{
-			SessionID: *s.sessionID,
+			SessionID: id,
 			Err:       fmt.Errorf("failed to connect to SSE server: %s: %s", resp.Status, body),
 		}
 	}
