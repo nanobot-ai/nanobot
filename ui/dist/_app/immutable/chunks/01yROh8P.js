@@ -1,0 +1,1 @@
+import{s as t,p as r}from"./BRSBkybi.js";const e={get data(){return r.data},get error(){return r.error},get params(){return r.params},get status(){return r.status}};t.updated.check;const s=e;export{s as p};

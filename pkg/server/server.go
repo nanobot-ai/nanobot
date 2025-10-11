@@ -55,18 +55,18 @@ func handle[T any](method string, handler func(ctx context.Context, req mcp.Mess
 
 func (s *Server) init() {
 	s.handlers = []handler{
-		handle[mcp.InitializeRequest]("initialize", s.handleInitialize),
-		handle[mcp.Notification]("notifications/initialized", s.handleInitialized),
-		handle[mcp.PingRequest]("ping", s.handlePing),
-		handle[mcp.ListToolsRequest]("tools/list", s.handleListTools),
-		handle[mcp.CallToolRequest]("tools/call", s.handleCallTool),
-		handle[mcp.ListPromptsRequest]("prompts/list", s.handleListPrompts),
-		handle[mcp.GetPromptRequest]("prompts/get", s.handleGetPrompt),
-		handle[mcp.ListResourceTemplatesRequest]("resources/templates/list", s.handleListResourceTemplates),
-		handle[mcp.ListResourcesRequest]("resources/list", s.handleListResources),
-		handle[mcp.ReadResourceRequest]("resources/read", s.handleReadResource),
-		handle[mcp.SubscribeRequest]("resources/subscribe", s.handleResourcesSubscribe),
-		handle[mcp.UnsubscribeRequest]("resources/unsubscribe", s.handleResourcesUnsubscribe),
+		handle("initialize", s.handleInitialize),
+		handle("notifications/initialized", s.handleInitialized),
+		handle("ping", s.handlePing),
+		handle("tools/list", s.handleListTools),
+		handle("tools/call", s.handleCallTool),
+		handle("prompts/list", s.handleListPrompts),
+		handle("prompts/get", s.handleGetPrompt),
+		handle("resources/templates/list", s.handleListResourceTemplates),
+		handle("resources/list", s.handleListResources),
+		handle("resources/read", s.handleReadResource),
+		handle("resources/subscribe", s.handleResourcesSubscribe),
+		handle("resources/unsubscribe", s.handleResourcesUnsubscribe),
 	}
 }
 

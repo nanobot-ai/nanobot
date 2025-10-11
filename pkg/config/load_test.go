@@ -118,7 +118,7 @@ func TestSchema(t *testing.T) {
 				"tool1": {
 					"extension1": "value1",
 					"extension2": true
-				}	
+				}
 			},
 			"toolChoice": "tool1",
             "temperature": 0.7,
@@ -133,7 +133,7 @@ func TestSchema(t *testing.T) {
 					"field3": {
 						"description": "description3",
 						"fields": {
-							"fields4": "description4",	
+							"fields4": "description4",
 							"fields5": "description5"
 						}
 					}
@@ -185,7 +185,7 @@ func TestSchema(t *testing.T) {
 					"field3": {
 						"description": "description3",
 						"fields": {
-							"fields4": "description4",	
+							"fields4": "description4",
 							"fields5": "description5"
 						}
 					}
@@ -247,13 +247,13 @@ func TestSchema(t *testing.T) {
 						"toolChoice": "tool1",
 						"inputAsToolResult": true,
 						"output": {
-							"description": "output1",	
+							"description": "output1",
 							"fields": {
 								"field1": "description1",
 								"field1": "description1"
 							}
 						}
-					}	
+					}
 				},
 				{
 					"id": "step1",
