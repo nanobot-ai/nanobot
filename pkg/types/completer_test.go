@@ -12,12 +12,9 @@ import (
 func TestCompletionItem_Text(t *testing.T) {
 	item := CompletionItem{
 		ID: "test-id",
-		Message: &mcp.SamplingMessage{
-			Role: "user",
-			Content: mcp.Content{
-				Type: "text",
-				Text: "Hello, world!",
-			},
+		Content: &mcp.Content{
+			Type: "text",
+			Text: "Hello, world!",
 		},
 	}
 
@@ -26,7 +23,7 @@ func TestCompletionItem_Text(t *testing.T) {
 		t.Fatalf("Failed to marshal CompletionItem: %v", err)
 	}
 
-	autogold.Expect(`{"id":"test-id","role":"user","type":"text","text":"Hello, world!"}`).Equal(t, string(data))
+	autogold.Expect(`{"hasMore":false,"id":"test-id","partial":false,"type":"text","text":"Hello, world!"}`).Equal(t, string(data))
 
 	var unmarshalledItem CompletionItem
 	if err := json.Unmarshal(data, &unmarshalledItem); err != nil {
@@ -41,12 +38,9 @@ func TestCompletionItem_Text(t *testing.T) {
 func TestCompletionItem_Image(t *testing.T) {
 	item := CompletionItem{
 		ID: "test-id",
-		Message: &mcp.SamplingMessage{
-			Role: "user",
-			Content: mcp.Content{
-				Type: "image",
-				Data: "base64-image-data",
-			},
+		Content: &mcp.Content{
+			Type: "image",
+			Data: "base64-image-data",
 		},
 	}
 
@@ -55,7 +49,7 @@ func TestCompletionItem_Image(t *testing.T) {
 		t.Fatalf("Failed to marshal CompletionItem: %v", err)
 	}
 
-	autogold.Expect(`{"id":"test-id","role":"user","type":"image","data":"base64-image-data"}`).Equal(t, string(data))
+	autogold.Expect(`{"hasMore":false,"id":"test-id","partial":false,"type":"image","data":"base64-image-data"}`).Equal(t, string(data))
 
 	var unmarshalledItem CompletionItem
 	if err := json.Unmarshal(data, &unmarshalledItem); err != nil {
@@ -74,7 +68,6 @@ func TestCompletionItem_Tool(t *testing.T) {
 			Arguments:  "test-arguments",
 			CallID:     "test-call-id",
 			Name:       "test-name",
-			ID:         "test-id",
 			Target:     "test-target",
 			TargetType: "test-target-type",
 		},
@@ -138,7 +131,6 @@ func TestCompletionItem_ToolBoth(t *testing.T) {
 			Arguments:  "test-arguments",
 			CallID:     "test-call-id",
 			Name:       "test-name",
-			ID:         "test-id",
 			Target:     "test-target",
 			TargetType: "test-target-type",
 		},

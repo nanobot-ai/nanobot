@@ -63,7 +63,7 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	case "prompts/get":
 		mcp.Invoke(ctx, msg, s.promptGet)
 	default:
-		msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage(msg.Method))
+		msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage("%v", msg.Method))
 	}
 }
 
