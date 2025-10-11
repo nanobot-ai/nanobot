@@ -42,7 +42,7 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	case "tools/call":
 		mcp.Invoke(ctx, msg, s.tools.Call)
 	default:
-		msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage(msg.Method))
+		msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage("%v", msg.Method))
 	}
 }
 
