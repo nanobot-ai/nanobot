@@ -61,7 +61,7 @@ func TestUIAction_Prompt_Marshal(t *testing.T) {
 		t.Fatalf("Failed to marshal UIAction with prompt: %v", err)
 	}
 
-	autogold.Expect(`{"payload":{"prompt":"What is the weather like?"},"type":"prompt"}`).Equal(t, string(data))
+	autogold.Expect(`{"payload":{"prompt":"What is the weather like?","params":null},"type":"prompt"}`).Equal(t, string(data))
 }
 
 func TestUIAction_Empty_Marshal(t *testing.T) {
@@ -79,7 +79,7 @@ func TestUIAction_Empty_Marshal(t *testing.T) {
 
 func TestUIAction_Intent_Unmarshal(t *testing.T) {
 	jsonData := `{"type":"intent","payload":{"intent":"test-intent","params":{"param1":"value1","param2":123}}}`
-	
+
 	var action UIAction
 	err := json.Unmarshal([]byte(jsonData), &action)
 	if err != nil {
@@ -104,7 +104,7 @@ func TestUIAction_Intent_Unmarshal(t *testing.T) {
 
 func TestUIAction_Tool_Unmarshal(t *testing.T) {
 	jsonData := `{"type":"tool","payload":{"toolName":"test-tool","params":{"input":"test-input","count":456}}}`
-	
+
 	var action UIAction
 	err := json.Unmarshal([]byte(jsonData), &action)
 	if err != nil {
@@ -129,7 +129,7 @@ func TestUIAction_Tool_Unmarshal(t *testing.T) {
 
 func TestUIAction_Prompt_Unmarshal(t *testing.T) {
 	jsonData := `{"type":"prompt","payload":{"prompt":"What is the weather like?"}}`
-	
+
 	var action UIAction
 	err := json.Unmarshal([]byte(jsonData), &action)
 	if err != nil {
@@ -150,7 +150,7 @@ func TestUIAction_Prompt_Unmarshal(t *testing.T) {
 
 func TestUIAction_UnknownType_Unmarshal(t *testing.T) {
 	jsonData := `{"type":"unknown","payload":{"something":"value"}}`
-	
+
 	var action UIAction
 	err := json.Unmarshal([]byte(jsonData), &action)
 	if err != nil {
@@ -264,12 +264,12 @@ func TestUIPrompt_EmptyPrompt(t *testing.T) {
 		t.Fatalf("Failed to marshal empty UIPrompt: %v", err)
 	}
 
-	autogold.Expect(`{}`).Equal(t, string(data))
+	autogold.Expect(`{"params":null}`).Equal(t, string(data))
 }
 
 func TestUIAction_InvalidJSON_Unmarshal(t *testing.T) {
 	invalidJSON := `{"type":"intent","payload":invalid}`
-	
+
 	var action UIAction
 	err := json.Unmarshal([]byte(invalidJSON), &action)
 	if err == nil {

@@ -229,10 +229,7 @@ func joinPath(url, path string) string {
 		url += "/"
 	}
 
-	if strings.HasPrefix(path, "./") {
-		path = strings.TrimPrefix(path, "./")
-	}
-	return url + path
+	return url + strings.TrimPrefix(path, "./")
 }
 
 func (r *resource) Cwd() (string, error) {

@@ -46,7 +46,7 @@ func (s *Server) createResource(ctx context.Context, params CreateArtifactParams
 
 	data, err := base64.StdEncoding.DecodeString(params.Blob)
 	if err != nil {
-		return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid base64 data: " + err.Error())
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid base64 data: %v", err)
 	}
 
 	uuid := uuid.String()
@@ -153,7 +153,7 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	case "tools/call":
 		mcp.Invoke(ctx, msg, s.tools.Call)
 	default:
-		msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage(msg.Method))
+		msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage("%v", msg.Method))
 	}
 }
 
