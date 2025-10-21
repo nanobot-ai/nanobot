@@ -26,12 +26,13 @@ type StreamOptions struct {
 }
 
 type Message struct {
-	Role         string        `json:"role"`
+	Role         string         `json:"role"`
 	Content      MessageContent `json:"content,omitempty"`
-	Name         string        `json:"name,omitempty"`
-	ToolCalls    []ToolCall    `json:"tool_calls,omitempty"`
-	ToolCallID   string        `json:"tool_call_id,omitempty"`
-	Refusal      *string       `json:"refusal,omitempty"`
+	Reasoning    *string        `json:"reasoning,omitempty"`
+	Name         string         `json:"name,omitempty"`
+	ToolCalls    []ToolCall     `json:"tool_calls,omitempty"`
+	ToolCallID   string         `json:"tool_call_id,omitempty"`
+	Refusal      *string        `json:"refusal,omitempty"`
 }
 
 type MessageContent struct {
@@ -158,6 +159,7 @@ type Choice struct {
 type ChoiceDelta struct {
 	Role         string        `json:"role,omitempty"`
 	Content      *string       `json:"content,omitempty"`
+	Reasoning    *string       `json:"reasoning,omitempty"`
 	ToolCalls    []ToolCall    `json:"tool_calls,omitempty"`
 	Refusal      *string       `json:"refusal,omitempty"`
 }

@@ -23,6 +23,20 @@ func toResponse(resp *Response, created time.Time) (*types.CompletionResponse, e
 	if len(resp.Choices) > 0 {
 		choice := resp.Choices[0]
 		if choice.Message != nil {
+			// Handle reasoning (for reasoning models)
+			if choice.Message.Reasoning != nil && *choice.Message.Reasoning != "" {
+				result.Output.Items = append(result.Output.Items, types.CompletionItem{
+					ID: fmt.Sprintf("%s-reasoning", resp.ID),
+					Reasoning: &types.Reasoning{
+						Summary: []types.SummaryText{
+							{
+								Text: *choice.Message.Reasoning,
+							},
+						},
+					},
+				})
+			}
+
 			// Handle content
 			if choice.Message.Content.Text != nil {
 				result.Output.Items = append(result.Output.Items, types.CompletionItem{
@@ -132,7 +146,7 @@ func toRequest(req *types.CompletionRequest) (Request, error) {
 		}
 
 		// Handle single text content case
-		if len(msg.Items) == 1 && msg.Items[0].Content != nil && msg.Items[0].Content.Type == "text" {
+		if len(msg.Items) == 1 && msg.Items[0].Content != nil && msg.Items[0].Content.Type == "text" && msg.Items[0].Content.Text != "" {
 			openAIMsg.Content.Text = &msg.Items[0].Content.Text
 		} else {
 			// Handle multi-part content
@@ -141,10 +155,13 @@ func toRequest(req *types.CompletionRequest) (Request, error) {
 				if item.Content != nil {
 					switch item.Content.Type {
 					case "text":
-						parts = append(parts, ContentPart{
-							Type: "text",
-							Text: item.Content.Text,
-						})
+						// Skip empty text content
+						if item.Content.Text != "" {
+							parts = append(parts, ContentPart{
+								Type: "text",
+								Text: item.Content.Text,
+							})
+						}
 					case "image":
 						parts = append(parts, ContentPart{
 							Type: "image_url",
