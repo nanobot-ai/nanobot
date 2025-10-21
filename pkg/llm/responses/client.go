@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/log"
@@ -29,6 +30,8 @@ func NewClient(cfg Config) *Client {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.openai.com/v1"
 	}
+	// Remove trailing slash from BaseURL to avoid double slashes in URL construction
+	cfg.BaseURL = strings.TrimSuffix(cfg.BaseURL, "/")
 	if cfg.Headers == nil {
 		cfg.Headers = map[string]string{}
 	}

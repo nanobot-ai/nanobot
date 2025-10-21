@@ -33,6 +33,8 @@ func NewClient(cfg Config) *Client {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.openai.com/v1"
 	}
+	// Remove trailing slash from BaseURL to avoid double slashes in URL construction
+	cfg.BaseURL = strings.TrimSuffix(cfg.BaseURL, "/")
 	if cfg.Headers == nil {
 		cfg.Headers = map[string]string{}
 	}
@@ -175,6 +177,32 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 						Content: &mcp.Content{
 							Type: "text",
 							Text: *delta.Content,
+						},
+					},
+				}, opt.ProgressToken)
+			}
+
+			// Handle reasoning (for reasoning models like DeepSeek-R1, QwQ, etc.)
+			if delta.Reasoning != nil {
+				if resp.Choices[choice.Index].Message.Reasoning == nil {
+					resp.Choices[choice.Index].Message.Reasoning = new(string)
+				}
+				*resp.Choices[choice.Index].Message.Reasoning += *delta.Reasoning
+
+				progress.Send(ctx, &types.CompletionProgress{
+					Model:     resp.Model,
+					Agent:     agentName,
+					MessageID: resp.ID,
+					Item: types.CompletionItem{
+						ID:      fmt.Sprintf("%s-reasoning-%d", resp.ID, choice.Index),
+						Partial: true,
+						HasMore: !isFinished,
+						Reasoning: &types.Reasoning{
+							Summary: []types.SummaryText{
+								{
+									Text: *delta.Reasoning,
+								},
+							},
 						},
 					},
 				}, opt.ProgressToken)
