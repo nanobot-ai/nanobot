@@ -35,6 +35,8 @@ func closeProgress(ctx context.Context, session *mcp.Session, err error) {
 	if len(response.InternalMessages) > 0 {
 		response.Output = response.InternalMessages[len(response.InternalMessages)-1]
 		response.InternalMessages = response.InternalMessages[:len(response.InternalMessages)-1]
+		// Sort items to ensure consistent display order: reasoning, content, tools
+		sortCompletionItems(&response.Output)
 	}
 	response.ProgressToken = nil
 	session.Set(progressSessionKey, &response)
@@ -42,6 +44,34 @@ func closeProgress(ctx context.Context, session *mcp.Session, err error) {
 	_ = session.SendPayload(ctx, "notifications/resources/updated", map[string]any{
 		"uri": types.ProgressURI,
 	})
+}
+
+// sortCompletionItems sorts items by type priority: reasoning first, then content, then tools
+func sortCompletionItems(msg *types.Message) {
+	if len(msg.Items) <= 1 {
+		return
+	}
+
+	// Define priority order
+	itemPriority := func(item types.CompletionItem) int {
+		if item.Reasoning != nil {
+			return 0 // Reasoning first
+		} else if item.Content != nil {
+			return 1 // Content second
+		} else if item.ToolCall != nil || item.ToolCallResult != nil {
+			return 2 // Tools last
+		}
+		return 99 // Unknown types at the end
+	}
+
+	// Sort using a stable sort to preserve relative order within same priority
+	for i := 0; i < len(msg.Items)-1; i++ {
+		for j := i + 1; j < len(msg.Items); j++ {
+			if itemPriority(msg.Items[i]) > itemPriority(msg.Items[j]) {
+				msg.Items[i], msg.Items[j] = msg.Items[j], msg.Items[i]
+			}
+		}
+	}
 }
 
 func appendProgress(ctx context.Context, session *mcp.Session, progressMessage *mcp.Message) (*mcp.Message, error) {
@@ -128,6 +158,8 @@ func appendProgress(ctx context.Context, session *mcp.Session, progressMessage *
 
 	if currentItemIndex == -1 {
 		response.InternalMessages[currentMessageIndex].Items = append(response.InternalMessages[currentMessageIndex].Items, progressItem)
+		// Sort items immediately to maintain correct display order during streaming
+		sortCompletionItems(&response.InternalMessages[currentMessageIndex])
 		return nil, nil
 	}
 
