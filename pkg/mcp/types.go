@@ -402,3 +402,10 @@ type NotificationProgressRequest struct {
 	Message       string         `json:"message,omitempty"`
 	Meta          map[string]any `json:"_meta,omitzero"`
 }
+
+type SetLogLevelRequest struct {
+	Level string `json:"level"`
+}
+
+type SetLogLevelResult struct {
+}

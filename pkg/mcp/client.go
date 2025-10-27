@@ -27,8 +27,8 @@ func (c *Client) Close(deleteSession bool) {
 
 type SessionState struct {
 	ID                string            `json:"id,omitempty"`
-	InitializeResult  InitializeResult  `json:"initializeResult,omitempty"`
-	InitializeRequest InitializeRequest `json:"initializeRequest,omitempty"`
+	InitializeResult  InitializeResult  `json:"initializeResult,omitzero"`
+	InitializeRequest InitializeRequest `json:"initializeRequest,omitzero"`
 	Attributes        map[string]any    `json:"attributes,omitempty"`
 }
 
@@ -328,7 +328,7 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 		err     error
 	)
 
-	session, err = NewSession(ctx, serverName, config, opts...)
+	session, err = NewSession(ctx, serverName, config, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -491,4 +491,15 @@ func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOp
 	})
 
 	return
+}
+
+func (c *Client) SetLogLevel(ctx context.Context, level string) error {
+	if c.Session.InitializeResult.Capabilities.Logging == nil {
+		// Logging is not supported, don't error.
+		return nil
+	}
+
+	return c.Session.Exchange(ctx, "logging/setLevel", SetLogLevelRequest{
+		Level: level,
+	}, &SetLogLevelResult{})
 }

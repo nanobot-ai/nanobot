@@ -58,6 +58,7 @@ func (s *Server) init() {
 		handle("initialize", s.handleInitialize),
 		handle("notifications/initialized", s.handleInitialized),
 		handle("ping", s.handlePing),
+		handle("logging/setLevel", s.handleSetLogLevel),
 		handle("tools/list", s.handleListTools),
 		handle("tools/call", s.handleCallTool),
 		handle("prompts/list", s.handleListPrompts),
@@ -323,8 +324,8 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 		ProtocolVersion: payload.ProtocolVersion,
 		Capabilities: mcp.ServerCapabilities{
 			Experimental: experimental,
-			//Logging:      &struct{}{},
-			Prompts: &mcp.PromptsServerCapability{},
+			Logging:      &struct{}{},
+			Prompts:      &mcp.PromptsServerCapability{},
 			Resources: &mcp.ResourcesServerCapability{
 				Subscribe: true,
 			},
@@ -336,6 +337,24 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 		},
 		Instructions: c.Publish.Instructions,
 	})
+}
+
+func (s *Server) handleSetLogLevel(ctx context.Context, msg mcp.Message, payload mcp.SetLogLevelRequest) error {
+	config := types.ConfigFromContext(ctx)
+
+	// Iterate through all MCP servers and set their log level
+	for serverName := range config.MCPServers {
+		c, err := s.runtime.GetClient(ctx, serverName)
+		if err != nil {
+			return fmt.Errorf("failed to get client for %s: %w", serverName, err)
+		}
+
+		if err := c.SetLogLevel(ctx, payload.Level); err != nil {
+			return fmt.Errorf("failed to set log level for %s: %w", serverName, err)
+		}
+	}
+
+	return msg.Reply(ctx, mcp.SetLogLevelResult{})
 }
 
 func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
