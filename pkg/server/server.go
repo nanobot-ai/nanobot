@@ -234,7 +234,7 @@ func (s *Server) handleListTools(ctx context.Context, msg mcp.Message, _ mcp.Lis
 	return msg.Reply(ctx, result)
 }
 
-func (s *Server) handlePing(ctx context.Context, msg mcp.Message, _ mcp.PingRequest) error {
+func (s *Server) handlePing(ctx context.Context, msg mcp.Message, _ struct{}) error {
 	return msg.Reply(ctx, mcp.PingResult{})
 }
 

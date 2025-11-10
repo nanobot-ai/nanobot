@@ -36,6 +36,10 @@ type HTTPClient struct {
 	waiter       *waiter
 	sse          bool
 
+	tokenExchangeEndpoint     string
+	tokenExchangeClientID     string
+	tokenExchangeClientSecret string
+
 	initializeLock    sync.RWMutex
 	initializeRequest *Message
 	sessionID         *string
@@ -44,14 +48,26 @@ type HTTPClient struct {
 	needReconnect bool
 }
 
-func newHTTPClient(serverName string, config Server, oauthClientName, oauthRedirectURL string, callbackHandler CallbackHandler, clientCredLookup ClientCredLookup, tokenStorage TokenStorage, headers map[string]string, watchesEvents bool) *HTTPClient {
+type HTTPClientOptions struct {
+	OAuthClientName           string
+	OAuthRedirectURL          string
+	CallbackHandler           CallbackHandler
+	ClientCredLookup          ClientCredLookup
+	TokenStorage              TokenStorage
+	TokenExchangeEndpoint     string
+	TokenExchangeClientID     string
+	TokenExchangeClientSecret string
+}
+
+func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, headers map[string]string, watchesEvents bool) *HTTPClient {
 	var sessionID *string
 	if id := headers[SessionIDHeader]; id != "" {
 		sessionID = &id
 	}
-	h := &HTTPClient{
+
+	return &HTTPClient{
 		httpClient:    http.DefaultClient,
-		oauthHandler:  newOAuth(callbackHandler, clientCredLookup, tokenStorage, oauthClientName, oauthRedirectURL),
+		oauthHandler:  newOAuth(opts.CallbackHandler, opts.ClientCredLookup, opts.TokenStorage, opts.OAuthClientName, opts.OAuthRedirectURL),
 		baseURL:       config.BaseURL,
 		messageURL:    config.BaseURL,
 		serverName:    serverName,
@@ -60,9 +76,11 @@ func newHTTPClient(serverName string, config Server, oauthClientName, oauthRedir
 		waiter:        newWaiter(),
 		needReconnect: watchesEvents,
 		sessionID:     sessionID,
-	}
 
-	return h
+		tokenExchangeClientID:     opts.TokenExchangeClientID,
+		tokenExchangeClientSecret: opts.TokenExchangeClientSecret,
+		tokenExchangeEndpoint:     opts.TokenExchangeEndpoint,
+	}
 }
 
 func (s *HTTPClient) SetOAuthCallbackHandler(handler CallbackHandler) {
@@ -149,6 +167,21 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 
 	for k, v := range s.headers {
 		req.Header.Set(k, v)
+	}
+
+	// Perform token exchange if configured and a token was parsed
+	// Check for a token on the context
+	token, ok := TokenFromContext(ctx)
+	if ok && token != "" {
+		// Exchange the token
+		exchangedToken, err := s.exchangeToken(ctx, token)
+		if err != nil {
+			return nil, fmt.Errorf("failed to exchange token: %w", err)
+		}
+
+		if exchangedToken != "" {
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", exchangedToken))
+		}
 	}
 
 	s.initializeLock.RLock()
@@ -560,7 +593,7 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 		// If not, then keep going. It will reconnect, if necessary.
 		go func() {
 			if err := <-errChan; err != nil {
-				log.Errorf(ctx, "failed to restart SSE: %v", err)
+				log.Errorf(ctx, "%v", err)
 			}
 		}()
 	}
@@ -682,7 +715,7 @@ func (s *SSEStream) readNextMessage(expectedEventName string) (string, string, b
 	for s.lines.Scan() {
 		line := s.lines.Text()
 		if len(line) == 0 {
-			if data != "" && (eventName == expectedEventName || (expectedEventName == "message" && eventName == "")) {
+			if data != "" && (eventName == expectedEventName || (eventName == "" && expectedEventName == "message")) {
 				return id, data[:len(data)-1], true
 			}
 			eventName = ""
@@ -715,4 +748,89 @@ func cutSSELine(line string) (string, string, bool) {
 		return "", "", false
 	}
 	return key, strings.TrimPrefix(value, " "), true
+}
+
+// exchangeToken performs OAuth 2.0 Token Exchange (RFC 8693) with the authorization server.
+// It exchanges the subject token for an access token.
+// Returns the exchanged access token or an error. If the endpoint returns 404, returns (empty string, nil).
+func (s *HTTPClient) exchangeToken(ctx context.Context, subjectToken string) (string, error) {
+	if s.tokenExchangeEndpoint == "" {
+		// Don't error. Maybe OAuth is configured.
+		return "", nil
+	}
+
+	// Build the token exchange request according to RFC 8693
+	data := url.Values{}
+	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
+	data.Set("subject_token", subjectToken)
+	data.Set("subject_token_type", "urn:ietf:params:oauth:token-type:jwt")
+	data.Set("requested_token_type", "urn:ietf:params:oauth:token-type:access_token")
+	data.Set("resource", s.baseURL)
+
+	// Create the HTTP request
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.tokenExchangeEndpoint, strings.NewReader(data.Encode()))
+	if err != nil {
+		return "", fmt.Errorf("failed to create token exchange request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	// Add HTTP Basic authentication if client credentials are configured
+	if s.tokenExchangeClientID != "" || s.tokenExchangeClientSecret != "" {
+		req.SetBasicAuth(s.tokenExchangeClientID, s.tokenExchangeClientSecret)
+	}
+
+	// Make the request
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to call token exchange endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Special handling for 404 - don't error, just continue with original token
+	if resp.StatusCode == http.StatusNotFound {
+		log.Infof(ctx, "Token exchange endpoint: %s returned 404", s.tokenExchangeEndpoint)
+		return "", nil
+	}
+
+	// Read the response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read token exchange response: %w", err)
+	}
+
+	// Handle error responses
+	if resp.StatusCode != http.StatusOK {
+		// Try to parse as OAuth error response
+		var errResp struct {
+			Error            string `json:"error"`
+			ErrorDescription string `json:"error_description"`
+		}
+		if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
+			if errResp.ErrorDescription != "" {
+				return "", fmt.Errorf("token exchange failed: %s - %s", errResp.Error, errResp.ErrorDescription)
+			}
+			return "", fmt.Errorf("token exchange failed: %s", errResp.Error)
+		}
+		return "", fmt.Errorf("token exchange failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse successful response
+	var tokenResp struct {
+		AccessToken     string `json:"access_token"`
+		IssuedTokenType string `json:"issued_token_type"`
+		TokenType       string `json:"token_type"`
+		ExpiresIn       int    `json:"expires_in"`
+		Scope           string `json:"scope"`
+		RefreshToken    string `json:"refresh_token"`
+	}
+	if err := json.Unmarshal(body, &tokenResp); err != nil {
+		return "", fmt.Errorf("failed to parse token exchange response: %w", err)
+	}
+
+	if tokenResp.AccessToken == "" {
+		return "", fmt.Errorf("token exchange response missing access_token")
+	}
+
+	return tokenResp.AccessToken, nil
 }

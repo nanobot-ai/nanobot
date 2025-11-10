@@ -60,9 +60,6 @@ type InitializeRequest struct {
 	ClientInfo      ClientInfo         `json:"clientInfo"`
 }
 
-type PingRequest struct {
-}
-
 type PingResult struct {
 }
 

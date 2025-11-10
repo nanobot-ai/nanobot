@@ -29,14 +29,14 @@ func (*Service) HandleAuthURL(ctx context.Context, mcpServerName, url string) (b
 		session = session.Parent
 	}
 
-	meta := map[string]interface{}{
+	meta := map[string]any{
 		types.MetaPrefix + "oauth-url":   url,
 		types.MetaPrefix + "server-name": mcpServerName,
 	}
 	metaStr, _ := json.Marshal(meta)
 
 	elicit := mcp.ElicitRequest{
-		Message: fmt.Sprintf("MCP server %s requires authoriziation, please visit the following URL to continue: %s", mcpServerName, url),
+		Message: fmt.Sprintf("MCP server %s requires authorization, please visit the following URL to continue: %s", mcpServerName, url),
 		RequestedSchema: mcp.PrimitiveSchema{
 			Type:       "object",
 			Properties: map[string]mcp.PrimitiveProperty{},
@@ -46,7 +46,7 @@ func (*Service) HandleAuthURL(ctx context.Context, mcpServerName, url string) (b
 
 	var elicitResponse mcp.ElicitResult
 
-	if err := session.Exchange(ctx, "elicitation/create", elicit, &elicitResponse); err != nil {
+	if err := session.Exchange(ctx, "elicitation/create", "", elicit, &elicitResponse); err != nil {
 		return false, fmt.Errorf("failed to elicit confirmation: %w", err)
 	}
 

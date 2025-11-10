@@ -531,7 +531,7 @@ type clientRegistrationMetadata struct {
 	JwksURI string `json:"jwks_uri,omitempty"`
 
 	// Client's JSON Web Key Set document value
-	Jwks interface{} `json:"jwks,omitempty"`
+	Jwks any `json:"jwks,omitempty"`
 
 	// A unique identifier string assigned by the client developer or software publisher
 	SoftwareID string `json:"software_id,omitempty"`

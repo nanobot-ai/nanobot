@@ -29,7 +29,7 @@ func NewExistingServerSession(ctx context.Context, state SessionState, handler M
 	}
 	s.stopReading()
 
-	session, err := newSession(ctx, s, handler, &state, nil, SessionFromContext(ctx))
+	session, err := newSession(ctx, s, handler, &state, nil, nil, SessionFromContext(ctx))
 	if err != nil {
 		return nil, err
 	}

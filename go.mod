@@ -3,9 +3,11 @@ module github.com/nanobot-ai/nanobot
 go 1.25.0
 
 require (
+	github.com/MicahParks/keyfunc/v3 v3.7.0
 	github.com/adrg/xdg v0.5.3
 	github.com/dop251/goja v0.0.0-20250630131328-58d95d85e994
 	github.com/glebarez/sqlite v1.11.0
+	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/hexops/autogold/v2 v2.3.0
 	github.com/modelcontextprotocol/go-sdk v0.2.0
 	github.com/obot-platform/mcp-oauth-proxy v0.0.3-0.20250916000024-e4d621ab46e1
@@ -22,6 +24,7 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/MicahParks/jwkset v0.11.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -30,7 +33,6 @@ require (
 	github.com/glebarez/go-sqlite v1.22.0 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
-	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20250630185457-6e76a2b096b5 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -58,6 +60,7 @@ require (
 	golang.org/x/mod v0.27.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
+	golang.org/x/time v0.9.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 	gorm.io/driver/sqlite v1.6.0 // indirect
 	modernc.org/libc v1.66.7 // indirect

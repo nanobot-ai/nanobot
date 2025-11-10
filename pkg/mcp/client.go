@@ -33,26 +33,23 @@ type SessionState struct {
 }
 
 type ClientOption struct {
-	Roots            func(ctx context.Context) ([]Root, error)
-	OnSampling       func(ctx context.Context, sampling CreateMessageRequest) (CreateMessageResult, error)
-	OnElicit         func(ctx context.Context, msg Message, req ElicitRequest) (ElicitResult, error)
-	OnRoots          func(ctx context.Context, msg Message) error
-	OnLogging        func(ctx context.Context, logMsg LoggingMessage) error
-	OnMessage        func(ctx context.Context, msg Message) error
-	OnNotify         func(ctx context.Context, msg Message) error
-	Env              map[string]string
-	ParentSession    *Session
-	SessionState     *SessionState
-	Runner           *Runner
-	ClientName       string
-	ClientVersion    string
-	OAuthClientName  string
-	OAuthRedirectURL string
-	CallbackHandler  CallbackHandler
-	ClientCredLookup ClientCredLookup
-	TokenStorage     TokenStorage
-	Wire             Wire
-	ignoreEvents     bool
+	HTTPClientOptions
+	Roots         func(ctx context.Context) ([]Root, error)
+	OnSampling    func(ctx context.Context, sampling CreateMessageRequest) (CreateMessageResult, error)
+	OnElicit      func(ctx context.Context, msg Message, req ElicitRequest) (ElicitResult, error)
+	OnRoots       func(ctx context.Context, msg Message) error
+	OnLogging     func(ctx context.Context, logMsg LoggingMessage) error
+	OnMessage     func(ctx context.Context, msg Message) error
+	OnNotify      func(ctx context.Context, msg Message) error
+	Env           map[string]string
+	ParentSession *Session
+	SessionState  *SessionState
+	Runner        *Runner
+	ClientName    string
+	ClientVersion string
+	Wire          Wire
+	HookRunner    HookRunner
+	ignoreEvents  bool
 }
 
 func (c ClientOption) Complete() ClientOption {
@@ -88,6 +85,10 @@ func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
 	if other.OnRoots != nil {
 		result.OnRoots = other.OnRoots
 	}
+	result.Roots = c.Roots
+	if other.Roots != nil {
+		result.Roots = other.Roots
+	}
 	result.OnLogging = c.OnLogging
 	if other.OnLogging != nil {
 		result.OnLogging = other.OnLogging
@@ -104,32 +105,22 @@ func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
 	if other.OnElicit != nil {
 		result.OnElicit = other.OnElicit
 	}
-	result.CallbackHandler = c.CallbackHandler
-	if other.CallbackHandler != nil {
-		result.CallbackHandler = other.CallbackHandler
-	}
-	result.ClientCredLookup = c.ClientCredLookup
-	if other.ClientCredLookup != nil {
-		result.ClientCredLookup = other.ClientCredLookup
-	}
-	result.TokenStorage = c.TokenStorage
-	if other.TokenStorage != nil {
-		result.TokenStorage = other.TokenStorage
-	}
+	result.CallbackHandler = complete.Last(c.CallbackHandler, other.CallbackHandler)
+	result.ClientCredLookup = complete.Last(c.ClientCredLookup, other.ClientCredLookup)
+	result.TokenStorage = complete.Last(c.TokenStorage, other.TokenStorage)
 	result.ClientName = complete.Last(c.ClientName, other.ClientName)
 	result.ClientVersion = complete.Last(c.ClientVersion, other.ClientVersion)
 	result.OAuthRedirectURL = complete.Last(c.OAuthRedirectURL, other.OAuthRedirectURL)
+	result.TokenExchangeEndpoint = complete.Last(c.TokenExchangeEndpoint, other.TokenExchangeEndpoint)
+	result.TokenExchangeClientID = complete.Last(c.TokenExchangeClientID, other.TokenExchangeClientID)
+	result.TokenExchangeClientSecret = complete.Last(c.TokenExchangeClientSecret, other.TokenExchangeClientSecret)
 	result.OAuthClientName = complete.Last(c.OAuthClientName, other.OAuthClientName)
 	result.Env = complete.MergeMap(c.Env, other.Env)
 	result.SessionState = complete.Last(c.SessionState, other.SessionState)
 	result.ParentSession = complete.Last(c.ParentSession, other.ParentSession)
 	result.Runner = complete.Last(c.Runner, other.Runner)
 	result.Wire = complete.Last(c.Wire, other.Wire)
-
-	result.Roots = c.Roots
-	if other.Roots != nil {
-		result.Roots = other.Roots
-	}
+	result.HookRunner = complete.Last(c.HookRunner, other.HookRunner)
 
 	return result
 }
@@ -141,7 +132,7 @@ type Server struct {
 
 	Image        string            `json:"image,omitempty"`
 	Dockerfile   string            `json:"dockerfile,omitempty"`
-	Source       ServerSource      `json:"source,omitempty"`
+	Source       ServerSource      `json:"source,omitzero"`
 	Sandboxed    bool              `json:"sandboxed,omitempty"`
 	Env          map[string]string `json:"env,omitempty"`
 	Command      string            `json:"command,omitempty"`
@@ -152,6 +143,8 @@ type Server struct {
 	Cwd          string            `json:"cwd,omitempty"`
 	Workdir      string            `json:"workdir,omitempty"`
 	Headers      map[string]string `json:"headers,omitempty"`
+
+	Hooks *Hooks `json:"hooks,omitempty"`
 }
 
 type ServerSource struct {
@@ -310,7 +303,7 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 			}
 			headers["Mcp-Session-Id"] = opt.SessionState.ID
 		}
-		wire = newHTTPClient(serverName, config, opt.OAuthClientName, opt.OAuthRedirectURL, opt.CallbackHandler, opt.ClientCredLookup, opt.TokenStorage, headers, !opt.ignoreEvents)
+		wire = newHTTPClient(serverName, config, opt.HTTPClientOptions, headers, !opt.ignoreEvents)
 	} else {
 		wire, err = newStdioClient(ctx, opt.Roots, opt.Env, serverName, config, opt.Runner)
 		if err != nil {
@@ -318,7 +311,12 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 		}
 	}
 
-	return newSession(ctx, wire, toHandler(opt), opt.SessionState, nil, opt.ParentSession)
+	var hooks Hooks
+	if config.Hooks != nil {
+		hooks = *config.Hooks
+	}
+
+	return newSession(ctx, wire, toHandler(opt), opt.SessionState, opt.HookRunner, hooks, opt.ParentSession)
 }
 
 func NewClient(ctx context.Context, serverName string, config Server, opts ...ClientOption) (*Client, error) {
@@ -382,7 +380,7 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 }
 
 func (c *Client) Initialize(ctx context.Context, param InitializeRequest) (result InitializeResult, err error) {
-	err = c.Session.Exchange(ctx, "initialize", param, &result)
+	err = c.Session.Exchange(ctx, "initialize", "", param, &result)
 	if err == nil {
 		err = c.Session.Send(ctx, Message{
 			Method: "notifications/initialized",
@@ -393,7 +391,7 @@ func (c *Client) Initialize(ctx context.Context, param InitializeRequest) (resul
 
 func (c *Client) ReadResource(ctx context.Context, uri string) (*ReadResourceResult, error) {
 	var result ReadResourceResult
-	err := c.Session.Exchange(ctx, "resources/read", ReadResourceRequest{
+	err := c.Session.Exchange(ctx, "resources/read", uri, ReadResourceRequest{
 		URI: uri,
 	}, &result)
 	return &result, err
@@ -404,7 +402,7 @@ func (c *Client) ListResourceTemplates(ctx context.Context) (*ListResourceTempla
 	if c.Session.InitializeResult.Capabilities.Resources == nil {
 		return &result, nil
 	}
-	err := c.Session.Exchange(ctx, "resources/templates/list", struct{}{}, &result)
+	err := c.Session.Exchange(ctx, "resources/templates/list", "", struct{}{}, &result)
 	return &result, err
 }
 
@@ -413,13 +411,13 @@ func (c *Client) ListResources(ctx context.Context) (*ListResourcesResult, error
 	if c.Session.InitializeResult.Capabilities.Resources == nil {
 		return &result, nil
 	}
-	err := c.Session.Exchange(ctx, "resources/list", struct{}{}, &result)
+	err := c.Session.Exchange(ctx, "resources/list", "", struct{}{}, &result)
 	return &result, err
 }
 
 func (c *Client) SubscribeResource(ctx context.Context, uri string) (*SubscribeResult, error) {
 	var result SubscribeResult
-	err := c.Session.Exchange(ctx, "resources/subscribe", SubscribeRequest{
+	err := c.Session.Exchange(ctx, "resources/subscribe", uri, SubscribeRequest{
 		URI: uri,
 	}, &result)
 	return &result, err
@@ -427,7 +425,7 @@ func (c *Client) SubscribeResource(ctx context.Context, uri string) (*SubscribeR
 
 func (c *Client) UnsubscribeResource(ctx context.Context, uri string) (*UnsubscribeResult, error) {
 	var result UnsubscribeResult
-	err := c.Session.Exchange(ctx, "resources/unsubscribe", UnsubscribeRequest{
+	err := c.Session.Exchange(ctx, "resources/unsubscribe", uri, UnsubscribeRequest{
 		URI: uri,
 	}, &result)
 	return &result, err
@@ -438,13 +436,13 @@ func (c *Client) ListPrompts(ctx context.Context) (*ListPromptsResult, error) {
 	if c.Session.InitializeResult.Capabilities.Prompts == nil {
 		return &prompts, nil
 	}
-	err := c.Session.Exchange(ctx, "prompts/list", struct{}{}, &prompts)
+	err := c.Session.Exchange(ctx, "prompts/list", "", struct{}{}, &prompts)
 	return &prompts, err
 }
 
 func (c *Client) GetPrompt(ctx context.Context, name string, args map[string]string) (*GetPromptResult, error) {
 	var result GetPromptResult
-	err := c.Session.Exchange(ctx, "prompts/get", GetPromptRequest{
+	err := c.Session.Exchange(ctx, "prompts/get", name, GetPromptRequest{
 		Name:      name,
 		Arguments: args,
 	}, &result)
@@ -453,13 +451,13 @@ func (c *Client) GetPrompt(ctx context.Context, name string, args map[string]str
 
 func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 	var tools ListToolsResult
-	err := c.Session.Exchange(ctx, "tools/list", struct{}{}, &tools)
+	err := c.Session.Exchange(ctx, "tools/list", "", struct{}{}, &tools)
 	return &tools, err
 }
 
 func (c *Client) Ping(ctx context.Context) (*PingResult, error) {
 	var result PingResult
-	err := c.Session.Exchange(ctx, "ping", PingRequest{}, &result)
+	err := c.Session.Exchange(ctx, "ping", "", struct{}{}, &result)
 	return &result, err
 }
 
@@ -478,7 +476,7 @@ func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOp
 	opt := complete.Complete(opts...)
 	result = new(CallToolResult)
 
-	err = c.Session.Exchange(ctx, "tools/call", struct {
+	err = c.Session.Exchange(ctx, "tools/call", tool, struct {
 		Name      string         `json:"name"`
 		Arguments any            `json:"arguments,omitempty"`
 		Meta      map[string]any `json:"_meta,omitempty"`
@@ -499,7 +497,7 @@ func (c *Client) SetLogLevel(ctx context.Context, level string) error {
 		return nil
 	}
 
-	return c.Session.Exchange(ctx, "logging/setLevel", SetLogLevelRequest{
+	return c.Session.Exchange(ctx, "logging/setLevel", "", SetLogLevelRequest{
 		Level: level,
 	}, &SetLogLevelResult{})
 }

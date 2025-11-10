@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,16 +12,25 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MicahParks/keyfunc/v3"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
+	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
 type HTTPServer struct {
-	env            map[string]string
-	MessageHandler MessageHandler
-	sessions       SessionStore
-	ctx            context.Context
-	healthzPath    string
+	mux                       *http.ServeMux
+	protectedResourceMetadata *protectedResourceMetadata
+	env                       map[string]string
+	MessageHandler            MessageHandler
+	sessions                  SessionStore
+	ctx                       context.Context
+	healthzPath               string
+
+	keyFunc          jwt.Keyfunc
+	trustedIssuer    string
+	trustedAudiences []string
 
 	// internal health check state
 	internalSession *ServerSession
@@ -29,9 +39,14 @@ type HTTPServer struct {
 }
 
 type HTTPServerOptions struct {
-	SessionStore SessionStore
-	BaseContext  context.Context
-	HealthzPath  string
+	SessionStore     SessionStore
+	BaseContext      context.Context
+	HealthCheckPath  string
+	ResourceName     string
+	RunHealthChecker bool
+	TrustedIssuer    string
+	JWKS             string
+	TrustedAudiences []string
 }
 
 func (h HTTPServerOptions) Complete() HTTPServerOptions {
@@ -41,31 +56,81 @@ func (h HTTPServerOptions) Complete() HTTPServerOptions {
 	if h.BaseContext == nil {
 		h.BaseContext = context.Background()
 	}
+
+	if h.ResourceName == "" {
+		h.ResourceName = "Nanobot MCP Server"
+	}
 	return h
 }
 
 func (h HTTPServerOptions) Merge(other HTTPServerOptions) (result HTTPServerOptions) {
 	h.SessionStore = complete.Last(h.SessionStore, other.SessionStore)
 	h.BaseContext = complete.Last(h.BaseContext, other.BaseContext)
-	h.HealthzPath = complete.Last(h.HealthzPath, other.HealthzPath)
+	h.TrustedIssuer = complete.Last(h.TrustedIssuer, other.TrustedIssuer)
+	h.RunHealthChecker = complete.Last(h.RunHealthChecker, other.RunHealthChecker)
+	h.HealthCheckPath = complete.Last(h.HealthCheckPath, other.HealthCheckPath)
+	h.ResourceName = complete.Last(h.ResourceName, other.ResourceName)
+	h.JWKS = complete.Last(h.JWKS, other.JWKS)
+	h.TrustedAudiences = append(h.TrustedAudiences, other.TrustedAudiences...)
 	return h
 }
 
-func NewHTTPServer(env map[string]string, handler MessageHandler, opts ...HTTPServerOptions) *HTTPServer {
+func NewHTTPServer(ctx context.Context, env map[string]string, handler MessageHandler, opts ...HTTPServerOptions) (*HTTPServer, error) {
 	o := complete.Complete(opts...)
 	h := &HTTPServer{
-		MessageHandler: handler,
-		env:            env,
-		sessions:       o.SessionStore,
-		ctx:            o.BaseContext,
-		healthzPath:    o.HealthzPath,
+		MessageHandler:   handler,
+		mux:              http.NewServeMux(),
+		env:              env,
+		sessions:         o.SessionStore,
+		ctx:              o.BaseContext,
+		trustedIssuer:    o.TrustedIssuer,
+		trustedAudiences: o.TrustedAudiences,
 	}
 
-	if h.healthzPath != "" {
+	if o.HealthCheckPath != "" {
+		h.mux.HandleFunc("GET /"+strings.TrimPrefix(o.HealthCheckPath, "/"), h.healthz)
+	}
+
+	if h.trustedIssuer != "" {
+		var (
+			k   keyfunc.Keyfunc
+			err error
+		)
+		if o.JWKS != "" {
+			var b []byte
+			b, err = base64.StdEncoding.DecodeString(o.JWKS)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode JWKS: %w", err)
+			}
+
+			k, err = keyfunc.NewJWKSetJSON(b)
+		} else {
+			k, err = keyfunc.NewDefaultCtx(ctx, []string{h.trustedIssuer})
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to create client JWK set: %w", err)
+		}
+
+		h.keyFunc = k.Keyfunc
+
+		h.protectedResourceMetadata = &protectedResourceMetadata{
+			AuthorizationServers: []string{h.trustedIssuer},
+			ResourceName:         o.ResourceName,
+		}
+
+		h.mux.HandleFunc("GET /.well-known/oauth-protect-resource", h.protectedMetadata)
+		h.mux.HandleFunc("GET /.well-known/oauth-protect-resource/", h.protectedMetadata)
+	}
+
+	if o.RunHealthChecker {
 		go h.runHealthTicker()
+	} else {
+		h.healthErr = new(error)
 	}
 
-	return h
+	h.mux.HandleFunc("/", h.serveHTTP)
+
+	return h, nil
 }
 
 func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request) {
@@ -130,25 +195,59 @@ func RequestFromContext(ctx context.Context) *http.Request {
 	return ret
 }
 
+func (h *HTTPServer) healthz(rw http.ResponseWriter, req *http.Request) {
+	h.healthMu.RLock()
+	healthErr := h.healthErr
+	h.healthMu.RUnlock()
+
+	if healthErr == nil {
+		http.Error(rw, "waiting for startup", http.StatusTooEarly)
+	} else if *healthErr != nil {
+		http.Error(rw, (*healthErr).Error(), http.StatusServiceUnavailable)
+	} else {
+		rw.WriteHeader(http.StatusOK)
+	}
+}
+
 func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	h.mux.ServeHTTP(rw, req)
+}
+
+func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	req = req.WithContext(withRequest(req))
+	originalToken := strings.TrimSpace(strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer "))
 
-	if req.Method == http.MethodGet {
-		if h.healthzPath != "" && req.URL.Path == h.healthzPath {
-			h.healthMu.RLock()
-			healthErr := h.healthErr
-			h.healthMu.RUnlock()
-
-			if healthErr == nil {
-				http.Error(rw, "waiting for startup", http.StatusTooEarly)
-			} else if *healthErr != nil {
-				http.Error(rw, (*healthErr).Error(), http.StatusServiceUnavailable)
-			} else {
-				rw.WriteHeader(http.StatusOK)
+	ctx := req.Context()
+	if h.keyFunc != nil {
+		_, err := jwt.Parse(
+			originalToken,
+			h.keyFunc,
+			jwt.WithAudience(h.trustedAudiences...),
+			jwt.WithIssuer(h.trustedIssuer),
+		)
+		if err != nil {
+			log.Infof(ctx, "Failed to parse JWT token for %s: %v", req.URL.Path, err)
+			scheme := "http"
+			if req.URL.Scheme != "" {
+				scheme = req.URL.Scheme
 			}
+			rw.Header().Set("WWW-Authenticate",
+				strings.TrimSuffix(
+					fmt.Sprintf(`Bearer error="invalid_request", error_description="Invalid access token", resource_metadata="%s//%s/.well-known/oauth-protected-resource/%s"`,
+						scheme,
+						req.URL.Host,
+						strings.TrimPrefix(req.URL.Path, "/"),
+					),
+					"/"),
+			)
+			http.Error(rw, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 
+		ctx = WithToken(ctx, originalToken)
+	}
+
+	if req.Method == http.MethodGet {
 		h.streamEvents(rw, req)
 		return
 	}
@@ -156,7 +255,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	streamingID := h.sessions.ExtractID(req)
 
 	if streamingID != "" && req.Method == http.MethodDelete {
-		sseSession, ok, err := h.sessions.LoadAndDelete(req.Context(), h.MessageHandler, streamingID)
+		sseSession, ok, err := h.sessions.LoadAndDelete(ctx, h.MessageHandler, streamingID)
 		if err != nil {
 			http.Error(rw, "Failed to delete session: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -183,7 +282,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	if streamingID != "" {
-		streamingSession, ok, err := h.sessions.Acquire(req.Context(), h.MessageHandler, streamingID)
+		streamingSession, ok, err := h.sessions.Acquire(ctx, h.MessageHandler, streamingID)
 		if err != nil {
 			http.Error(rw, "Failed to load session: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -198,7 +297,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 		streamingSession.session.AddEnv(h.getEnv(req))
 
-		response, err := streamingSession.Exchange(req.Context(), msg)
+		response, err := streamingSession.Exchange(ctx, msg)
 		if errors.Is(err, ErrNoResponse) {
 			rw.WriteHeader(http.StatusAccepted)
 			return
@@ -221,7 +320,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			http.Error(rw, "Failed to encode response: "+err.Error(), http.StatusInternalServerError)
 		}
 
-		_ = h.sessions.Store(req.Context(), streamingSession.ID(), streamingSession)
+		_ = h.sessions.Store(ctx, streamingSession.ID(), streamingSession)
 		return
 	}
 
@@ -230,7 +329,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	session, err := NewServerSession(h.ctx, h.MessageHandler)
+	session, err := NewServerSession(WithToken(h.ctx, originalToken), h.MessageHandler)
 	if err != nil {
 		http.Error(rw, "Failed to create session: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -241,14 +340,14 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	session.session.sessionManager = h.sessions
 	session.session.AddEnv(h.getEnv(req))
 
-	resp, err := session.Exchange(req.Context(), msg)
+	resp, err := session.Exchange(ctx, msg)
 	if err != nil {
 		session.Close(true)
 		http.Error(rw, "Failed to handle message: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if err := h.sessions.Store(req.Context(), session.ID(), session); err != nil {
+	if err := h.sessions.Store(ctx, session.ID(), session); err != nil {
 		session.Close(true)
 		http.Error(rw, "Failed to store session: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -359,12 +458,7 @@ func (h *HTTPServer) ensureInternalSession(ctx context.Context) (*ServerSession,
 		return nil, fmt.Errorf("failed to send initialized notification: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "/mcp", nil)
-	if err != nil {
-		session.Close(true)
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	h.sessions.Store(req.Context(), session.ID(), session)
+	h.sessions.Store(ctx, session.ID(), session)
 
 	h.healthMu.Lock()
 	if s = h.internalSession; s != nil {

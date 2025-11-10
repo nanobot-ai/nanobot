@@ -30,13 +30,16 @@ type Runtime struct {
 }
 
 type Options struct {
-	Roots            []mcp.Root
-	Profiles         []string
-	MaxConcurrency   int
-	CallbackHandler  mcp.CallbackHandler
-	TokenStorage     mcp.TokenStorage
-	OAuthRedirectURL string
-	DSN              string
+	Roots                     []mcp.Root
+	Profiles                  []string
+	MaxConcurrency            int
+	CallbackHandler           mcp.CallbackHandler
+	TokenStorage              mcp.TokenStorage
+	OAuthRedirectURL          string
+	DSN                       string
+	TokenExchangeEndpoint     string
+	TokenExchangeClientID     string
+	TokenExchangeClientSecret string
 }
 
 func (o Options) Merge(other Options) (result Options) {
@@ -47,6 +50,9 @@ func (o Options) Merge(other Options) (result Options) {
 	result.OAuthRedirectURL = complete.Last(o.OAuthRedirectURL, other.OAuthRedirectURL)
 	result.TokenStorage = complete.Last(o.TokenStorage, other.TokenStorage)
 	result.DSN = complete.Last(o.DSN, other.DSN)
+	result.TokenExchangeEndpoint = complete.Last(o.TokenExchangeEndpoint, other.TokenExchangeEndpoint)
+	result.TokenExchangeClientID = complete.Last(o.TokenExchangeClientID, other.TokenExchangeClientID)
+	result.TokenExchangeClientSecret = complete.Last(o.TokenExchangeClientSecret, other.TokenExchangeClientSecret)
 	return
 }
 
@@ -63,11 +69,14 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 
 	completer := llm.NewClient(cfg)
 	registry := tools.NewToolsService(tools.Options{
-		Roots:            opt.Roots,
-		Concurrency:      opt.MaxConcurrency,
-		CallbackHandler:  opt.CallbackHandler,
-		OAuthRedirectURL: opt.OAuthRedirectURL,
-		TokenStorage:     opt.TokenStorage,
+		Roots:                     opt.Roots,
+		Concurrency:               opt.MaxConcurrency,
+		CallbackHandler:           opt.CallbackHandler,
+		OAuthRedirectURL:          opt.OAuthRedirectURL,
+		TokenStorage:              opt.TokenStorage,
+		TokenExchangeEndpoint:     opt.TokenExchangeEndpoint,
+		TokenExchangeClientID:     opt.TokenExchangeClientID,
+		TokenExchangeClientSecret: opt.TokenExchangeClientSecret,
 	})
 	agents := agents.New(completer, registry)
 	sampler := sampling.NewSampler(agents)

@@ -17,11 +17,17 @@ import (
 )
 
 type Run struct {
-	ListenAddress string   `usage:"Address to listen on" default:"localhost:8080" short:"a"`
-	DisableUI     bool     `usage:"Disable the UI"`
-	HealthzPath   string   `usage:"Path to serve healthz on"`
-	Roots         []string `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
-	n             *Nanobot
+	ListenAddress             string   `usage:"Address to listen on" default:"localhost:8080" short:"a"`
+	DisableUI                 bool     `usage:"Disable the UI"`
+	HealthzPath               string   `usage:"Path to serve healthz on"`
+	TrustedIssuer             string   `usage:"Trusted issuer for JWT tokens"`
+	JWKS                      string   `usage:"Base64 encoded JWKS blob for validating JWT tokens"`
+	TrustedAudiences          []string `usage:"Trusted audiences for JWT tokens"`
+	TokenExchangeEndpoint     string   `usage:"Endpoint for token exchange"`
+	TokenExchangeClientID     string   `usage:"Client ID for token exchange"`
+	TokenExchangeClientSecret string   `usage:"Client secret for token exchange"`
+	Roots                     []string `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
+	n                         *Nanobot
 }
 
 func NewRun(n *Nanobot) *Run {
@@ -81,16 +87,11 @@ func (r *Run) getRoots() ([]mcp.Root, error) {
 	return roots, nil
 }
 
-func (r *Run) reload(ctx context.Context, client *mcp.Client, cfgPath string, runtimeOpt runtime.Options) error {
-	_, err := r.n.ReadConfig(ctx, cfgPath, runtimeOpt)
-	if err != nil {
-		return fmt.Errorf("failed to reload config: %w", err)
+func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
+	if (r.TrustedIssuer != "") != (len(r.TrustedAudiences) != 0) {
+		return fmt.Errorf("trusted issuer and audience must be set together")
 	}
 
-	return client.Session.Exchange(ctx, "initialize", mcp.InitializeRequest{}, &mcp.InitializeResult{})
-}
-
-func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 	roots, err := r.getRoots()
 	if err != nil {
 		return err
@@ -98,9 +99,12 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 
 	callbackHandler := mcp.NewCallbackServer(confirm.New())
 	runtimeOpt := runtime.Options{
-		Roots:           roots,
-		MaxConcurrency:  r.n.MaxConcurrency,
-		CallbackHandler: callbackHandler,
+		Roots:                     roots,
+		MaxConcurrency:            r.n.MaxConcurrency,
+		CallbackHandler:           callbackHandler,
+		TokenExchangeEndpoint:     r.TokenExchangeEndpoint,
+		TokenExchangeClientID:     r.TokenExchangeClientID,
+		TokenExchangeClientSecret: r.TokenExchangeClientSecret,
 	}
 
 	cfgPath := "nanobot.default"
@@ -136,5 +140,12 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		return err
 	}
 
-	return r.n.runMCP(cmd.Context(), cfgFactory, runtime, callbackHandler, r.ListenAddress, r.HealthzPath, !r.DisableUI)
+	return r.n.runMCP(cmd.Context(), cfgFactory, runtime, callbackHandler, mcpOpts{
+		TrustedIssuer:    r.TrustedIssuer,
+		JWKS:             r.JWKS,
+		TrustedAudiences: r.TrustedAudiences,
+		ListenAddress:    r.ListenAddress,
+		HealthzPath:      r.HealthzPath,
+		StartUI:          !r.DisableUI,
+	})
 }
