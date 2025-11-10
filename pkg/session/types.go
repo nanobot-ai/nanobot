@@ -18,7 +18,7 @@ func (c ConfigWrapper) Value() (driver.Value, error) {
 	return json.Marshal(c)
 }
 
-func (c *ConfigWrapper) Scan(value interface{}) error {
+func (c *ConfigWrapper) Scan(value any) error {
 	return scan(value, c)
 }
 
@@ -28,7 +28,7 @@ func (e Env) Value() (driver.Value, error) {
 	return json.Marshal(e)
 }
 
-func (e *Env) Scan(value interface{}) error {
+func (e *Env) Scan(value any) error {
 	return scan(value, e)
 }
 
@@ -38,11 +38,11 @@ func (m State) Value() (driver.Value, error) {
 	return json.Marshal(m)
 }
 
-func (m *State) Scan(value interface{}) error {
+func (m *State) Scan(value any) error {
 	return scan(value, m)
 }
 
-func scan(value interface{}, obj any) error {
+func scan(value any, obj any) error {
 	if value == nil {
 		return nil
 	}

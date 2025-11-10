@@ -156,7 +156,7 @@ func (s *Store) SetTokenConfig(ctx context.Context, url string, oauth2Config *oa
 		return fmt.Errorf("failed to get token: %w", err)
 	}
 
-	tokenData, err := json.Marshal(map[string]interface{}{
+	tokenData, err := json.Marshal(map[string]any{
 		"config": oauth2Config,
 		"token":  oauth2token,
 	})

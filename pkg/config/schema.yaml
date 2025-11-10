@@ -31,6 +31,14 @@ definitions:
       A map of strings to strings. This is used for various configurations that
       require key-value pairs.
 
+  StringSliceMap:
+    type: object
+    additionalProperties:
+      type: array
+      items:
+        type: string
+    description: |
+      A map of strings to string slices.
   DynamicInstruction:
     oneOf:
       - type: string
@@ -40,7 +48,7 @@ definitions:
         description: |
           A reference to a MCP Server prompt that will be used to generate the
           instruction at runtime.
-        required: [ mcpServer, prompt ]
+        required: [mcpServer, prompt]
         additionalProperties: false
         properties:
           mcpServer:
@@ -114,8 +122,8 @@ definitions:
           to validate the output against the schema.
         additionalProperties: true
     oneOf:
-      - required: [ fields ]
-      - required: [ schema ]
+      - required: [fields]
+      - required: [schema]
 
   OutputSchema:
     type: object
@@ -149,8 +157,8 @@ definitions:
           to validate the output against the schema.
         additionalProperties: true
     oneOf:
-      - required: [ fields ]
-      - required: [ schema ]
+      - required: [fields]
+      - required: [schema]
 
   EnvVarDefinition:
     oneOf:
@@ -326,6 +334,11 @@ definitions:
           This is useful for configuring the environment in which the MCP Server runs.
           The server will not automatically get the environment variables from the host system.
           Only the variables defined in the global env configuration will be available.
+      hooks:
+        $ref: "#/definitions/StringSliceMap"
+        description: |
+          A map of hooks that will be executed at various stages of the MCP Server lifecycle.
+          This is useful for customizing the behavior of the MCP Server.
       source:
         oneOf:
           - type: string
@@ -381,7 +394,7 @@ definitions:
           A more complex elicit configuration that allows for structured input from the user.
           This can include multiple fields and their values, as well as validation rules.
         additionalProperties: false
-        required: [ message ]
+        required: [message]
         properties:
           message:
             type: string
@@ -507,7 +520,7 @@ definitions:
             description: |
               A reference to an agent configuration. This allows for more complex
               configurations where the agent can be customized for this step.
-            required: [ name ]
+            required: [name]
             additionalProperties: false
             properties:
               name:
@@ -556,7 +569,7 @@ definitions:
                   This is a probability threshold that controls the diversity of the generated text.
                   Either the top P value or temperature can be set, but not both. Defaults to unset which means
                   it's up to the LLM provider to decide when default value is used.
-  
+
   Flow:
     type: object
     description: |
@@ -710,13 +723,13 @@ definitions:
         properties:
           effort:
             type: string
-            enum: [ low, medium, high ]
+            enum: [low, medium, high]
             description: |
               The amount of reasoning to use when generating responses. This can be
               "low", "medium", or "high".
           summary:
             type: string
-            enum: [ auto, concise, detailed ]
+            enum: [auto, concise, detailed]
             description: |
               The level of detail to use when summarizing the reasoning process.
               Can be "auto", "concise", or "detailed". If set to auto the LLM will
@@ -828,7 +841,6 @@ definitions:
         type: string
         description: |
           The encryption key to use for encrypting and decrypting data.
-
 
 type: object
 additionalProperties: false

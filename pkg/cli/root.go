@@ -234,14 +234,22 @@ func (n *Nanobot) Run(cmd *cobra.Command, _ []string) error {
 	return cmd.Help()
 }
 
-func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *runtime.Runtime,
-	oauthCallbackHandler mcp.CallbackServer, listenAddress string, healthzPath string, startUI bool) error {
+type mcpOpts struct {
+	TrustedIssuer    string
+	JWKS             string
+	TrustedAudiences []string
+	ListenAddress    string
+	HealthzPath      string
+	StartUI          bool
+}
+
+func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, opts mcpOpts) error {
 	env, err := n.loadEnv()
 	if err != nil {
 		return fmt.Errorf("failed to load environment: %w", err)
 	}
 
-	address := listenAddress
+	address := opts.ListenAddress
 	if strings.HasPrefix("address", "http://") {
 		address = strings.TrimPrefix(address, "http://")
 	} else if strings.HasPrefix(address, "https://") {
@@ -265,22 +273,26 @@ func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *
 		return nil
 	}
 
-	httpServer := mcp.NewHTTPServer(env, mcpServer, mcp.HTTPServerOptions{
-		SessionStore: sessionManager,
-		HealthzPath:  healthzPath,
+	httpServer, err := mcp.NewHTTPServer(ctx, env, mcpServer, mcp.HTTPServerOptions{
+		HealthCheckPath:  opts.HealthzPath,
+		RunHealthChecker: opts.HealthzPath != "" && os.Getenv("NANOBOT_DISABLE_HEALTH_CHECKER") != "true",
+		SessionStore:     sessionManager,
+		JWKS:             opts.JWKS,
+		TrustedIssuer:    opts.TrustedIssuer,
+		TrustedAudiences: opts.TrustedAudiences,
 	})
+	if err != nil {
+		return fmt.Errorf("failed to create HTTP server: %w", err)
+	}
 
 	mux := http.NewServeMux()
 	if oauthCallbackHandler != nil {
 		mux.Handle("/oauth/callback", oauthCallbackHandler)
 	}
-	if startUI {
+	if opts.StartUI {
 		mux.Handle("/", session.UISession(httpServer, sessionManager, api.Handler(sessionManager, address)))
 	} else {
 		mux.Handle("/", httpServer)
-	}
-	if healthzPath != "" {
-		mux.Handle("GET "+healthzPath, httpServer)
 	}
 
 	authCfg, err := config(ctx, "")

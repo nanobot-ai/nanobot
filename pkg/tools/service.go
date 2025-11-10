@@ -21,14 +21,17 @@ import (
 )
 
 type Service struct {
-	roots            []mcp.Root
-	sampler          Sampler
-	runner           mcp.Runner
-	callbackHandler  mcp.CallbackHandler
-	oauthRedirectURL string
-	tokenStorage     mcp.TokenStorage
-	concurrency      int
-	serverFactories  map[string]func(name string) mcp.MessageHandler
+	roots                     []mcp.Root
+	sampler                   Sampler
+	runner                    mcp.Runner
+	callbackHandler           mcp.CallbackHandler
+	oauthRedirectURL          string
+	tokenStorage              mcp.TokenStorage
+	concurrency               int
+	serverFactories           map[string]func(name string) mcp.MessageHandler
+	tokenExchangeEndpoint     string
+	tokenExchangeClientID     string
+	tokenExchangeClientSecret string
 }
 
 type Sampler interface {
@@ -36,11 +39,14 @@ type Sampler interface {
 }
 
 type Options struct {
-	Roots            []mcp.Root
-	Concurrency      int
-	CallbackHandler  mcp.CallbackHandler
-	OAuthRedirectURL string
-	TokenStorage     mcp.TokenStorage
+	Roots                     []mcp.Root
+	Concurrency               int
+	CallbackHandler           mcp.CallbackHandler
+	OAuthRedirectURL          string
+	TokenStorage              mcp.TokenStorage
+	TokenExchangeEndpoint     string
+	TokenExchangeClientID     string
+	TokenExchangeClientSecret string
 }
 
 func (r Options) Merge(other Options) (result Options) {
@@ -49,6 +55,9 @@ func (r Options) Merge(other Options) (result Options) {
 	result.CallbackHandler = complete.Last(r.CallbackHandler, other.CallbackHandler)
 	result.OAuthRedirectURL = complete.Last(r.OAuthRedirectURL, other.OAuthRedirectURL)
 	result.TokenStorage = complete.Last(r.TokenStorage, other.TokenStorage)
+	result.TokenExchangeEndpoint = complete.Last(r.TokenExchangeEndpoint, other.TokenExchangeEndpoint)
+	result.TokenExchangeClientID = complete.Last(r.TokenExchangeClientID, other.TokenExchangeClientID)
+	result.TokenExchangeClientSecret = complete.Last(r.TokenExchangeClientSecret, other.TokenExchangeClientSecret)
 	return result
 }
 
@@ -62,11 +71,14 @@ func (r Options) Complete() Options {
 func NewToolsService(opts ...Options) *Service {
 	opt := complete.Complete(opts...)
 	return &Service{
-		roots:            opt.Roots,
-		concurrency:      opt.Concurrency,
-		oauthRedirectURL: opt.OAuthRedirectURL,
-		callbackHandler:  opt.CallbackHandler,
-		tokenStorage:     opt.TokenStorage,
+		roots:                     opt.Roots,
+		concurrency:               opt.Concurrency,
+		oauthRedirectURL:          opt.OAuthRedirectURL,
+		callbackHandler:           opt.CallbackHandler,
+		tokenStorage:              opt.TokenStorage,
+		tokenExchangeEndpoint:     opt.TokenExchangeEndpoint,
+		tokenExchangeClientID:     opt.TokenExchangeClientID,
+		tokenExchangeClientSecret: opt.TokenExchangeClientSecret,
 	}
 }
 
@@ -267,7 +279,7 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 	roots := func(ctx context.Context) ([]mcp.Root, error) {
 		var roots mcp.ListRootsResult
 		if session.InitializeRequest.Capabilities.Roots != nil {
-			err := session.Exchange(ctx, "roots/list", mcp.ListRootsRequest{}, &roots)
+			err := session.Exchange(ctx, "roots/list", "", mcp.ListRootsRequest{}, &roots)
 			if err != nil {
 				return nil, fmt.Errorf("failed to list roots: %w", err)
 			}
@@ -327,12 +339,18 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 				Params: data,
 			})
 		},
-		Runner:           &s.runner,
-		CallbackHandler:  s.callbackHandler,
-		OAuthRedirectURL: oauthRedirectURL,
-		Wire:             wire,
-		SessionState:     state,
-		TokenStorage:     s.tokenStorage,
+		Runner: &s.runner,
+		HTTPClientOptions: mcp.HTTPClientOptions{
+			OAuthRedirectURL:          oauthRedirectURL,
+			CallbackHandler:           s.callbackHandler,
+			TokenStorage:              s.tokenStorage,
+			TokenExchangeEndpoint:     s.tokenExchangeEndpoint,
+			TokenExchangeClientID:     s.tokenExchangeClientID,
+			TokenExchangeClientSecret: s.tokenExchangeClientSecret,
+		},
+		Wire:         wire,
+		SessionState: state,
+		HookRunner:   s,
 	}
 
 	if session.InitializeRequest.Capabilities.Elicitation == nil {
@@ -343,7 +361,7 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 		}
 	} else {
 		clientOpts.OnElicit = func(ctx context.Context, _ mcp.Message, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {
-			err := session.Exchange(ctx, "elicitation/create", elicitation, &result)
+			err := session.Exchange(ctx, "elicitation/create", "", elicitation, &result)
 			return result, err
 		}
 	}
@@ -359,7 +377,7 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 
 				// There was no matching model, but the session supports sampling. Send the sampling request to it.
 				var result mcp.CreateMessageResult
-				if err = session.Exchange(ctx, "sampling/createMessage", samplingRequest, &result); err != nil {
+				if err = session.Exchange(ctx, "sampling/createMessage", "", samplingRequest, &result); err != nil {
 					return result, fmt.Errorf("failed to send sampling request: %w", err)
 				}
 				return result, nil
@@ -376,7 +394,13 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 		}
 	}
 
-	return mcp.NewClient(session.Context(), name, mcpConfig, clientOpts)
+	sessionCtx := session.Context()
+	token, ok := mcp.TokenFromContext(ctx)
+	if ok && token != "" {
+		sessionCtx = mcp.WithToken(sessionCtx, token)
+	}
+
+	return mcp.NewClient(sessionCtx, name, mcpConfig, clientOpts)
 }
 
 func (s *Service) sampleCall(ctx context.Context, agent string, args any, opts ...SampleCallOptions) (*types.CallResult, error) {
@@ -511,6 +535,49 @@ func (s *Service) runBefore(ctx context.Context, config types.Config, target, se
 	}
 
 	return args, nil, nil
+}
+
+type hookCtx struct{}
+
+func (s *Service) RunHook(ctx context.Context, msg, target string) (bool, string, *mcp.Message, error) {
+	// Don't call hooks recursively
+	if ctx.Value(hookCtx{}) != nil {
+		return true, "", nil, nil
+	}
+
+	server, tool, _ := strings.Cut(target, "/")
+	result, err := s.Call(mcp.WithToken(context.WithValue(ctx, hookCtx{}, struct{}{}), ""), server, tool, map[string]string{"message": msg})
+	if err != nil {
+		return false, "", nil, err
+	}
+
+	var content string
+	if len(result.Content) > 0 {
+		content = result.Content[0].Text
+	}
+
+	if result.IsError {
+		return false, content, nil, nil
+	}
+
+	var output mcp.HookResponse
+	if result.StructuredContent != nil {
+		b, err := json.Marshal(result.StructuredContent)
+		if err != nil {
+			return false, "", nil, err
+		}
+		err = json.Unmarshal(b, &output)
+		if err != nil {
+			return false, "", nil, err
+		}
+	}
+
+	var m *mcp.Message
+	if output.Modified {
+		m = output.NewMessage
+	}
+
+	return output.Accepted, output.Message, m, nil
 }
 
 func (s *Service) Call(ctx context.Context, server, tool string, args any, opts ...CallOptions) (ret *types.CallResult, err error) {

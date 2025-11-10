@@ -37,26 +37,6 @@ type Wire interface {
 
 type WireHandler func(ctx context.Context, msg Message)
 
-var sessionKey = struct{}{}
-
-func SessionFromContext(ctx context.Context) *Session {
-	if ctx == nil {
-		return nil
-	}
-	s, ok := ctx.Value(sessionKey).(*Session)
-	if !ok {
-		return nil
-	}
-	return s
-}
-
-func WithSession(ctx context.Context, s *Session) context.Context {
-	if s == nil {
-		return ctx
-	}
-	return context.WithValue(ctx, sessionKey, s)
-}
-
 type Session struct {
 	ctx               context.Context
 	cancel            context.CancelCauseFunc
@@ -65,13 +45,14 @@ type Session struct {
 	pendingRequest    PendingRequests
 	InitializeResult  InitializeResult
 	InitializeRequest InitializeRequest
-	recorder          *recorder
 	Parent            *Session
 	attributes        map[string]any
 	lock              sync.Mutex
 	filters           []filterRegistration
 	filterID          int
 	sessionManager    SessionStore
+	hooks             Hooks
+	hookRunner        HookRunner
 }
 
 type filterRegistration struct {
@@ -421,7 +402,6 @@ func (s *Session) Send(ctx context.Context, req Message) error {
 	}
 
 	req.JSONRPC = "2.0"
-	s.recorder.save(ctx, s.wire.SessionID(), true, req)
 	if err := s.wire.Send(ctx, req); err != nil {
 		return err
 	}
@@ -504,16 +484,23 @@ func (s *Session) toRequest(method string, in any, opt ExchangeOption) (*Message
 	return req, nil
 }
 
-func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts ...ExchangeOption) error {
+func (s *Session) Exchange(ctx context.Context, method, name string, in, out any, opts ...ExchangeOption) (err error) {
 	opt := complete.Complete(opts...)
-	req, err := s.toRequest(method, in, opt)
+	var req *Message
+	req, err = s.toRequest(method, in, opt)
 	if err != nil {
 		return err
 	}
 
-	if req.ID == nil {
-		return s.Send(ctx, *req)
+	if err = s.hooks.CallAllHooks(ctx, s.hookRunner, req, name, "in", nil); err != nil {
+		return fmt.Errorf("failed to call \"in\" hooks: %w", err)
 	}
+
+	defer func() {
+		if hooksErr := s.hooks.CallAllHooks(ctx, s.hookRunner, req, name, "out", err); hooksErr != nil && err == nil {
+			err = fmt.Errorf("failed to call \"out\" hooks: %w", hooksErr)
+		}
+	}()
 
 	ch := s.pendingRequest.WaitFor(req.ID)
 	defer s.pendingRequest.Done(req.ID)
@@ -550,13 +537,14 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 					return fmt.Errorf("failed to post init: %w", err)
 				}
 			}
+			req.Result = m.Result
+			req.Error = m.Error
 			return s.marshalResponse(m, out)
 		}
 	}
 }
 
 func (s *Session) onWire(ctx context.Context, message Message) {
-	s.recorder.save(s.ctx, s.wire.SessionID(), false, message)
 	message.Session = s
 	if s.pendingRequest.Notify(message) {
 		return
@@ -570,12 +558,13 @@ func NewEmptySession(ctx context.Context) *Session {
 	return s
 }
 
-func newSession(ctx context.Context, wire Wire, handler MessageHandler, session *SessionState, r *recorder, parentSession *Session) (*Session, error) {
+func newSession(ctx context.Context, wire Wire, handler MessageHandler, session *SessionState, r HookRunner, hooks Hooks, parentSession *Session) (*Session, error) {
 	s := &Session{
-		wire:     wire,
-		handler:  handler,
-		recorder: r,
-		Parent:   parentSession,
+		wire:       wire,
+		handler:    handler,
+		hookRunner: r,
+		hooks:      hooks,
+		Parent:     parentSession,
 	}
 	if session != nil {
 		s.InitializeRequest = session.InitializeRequest
@@ -594,12 +583,6 @@ func newSession(ctx context.Context, wire Wire, handler MessageHandler, session 
 	}()
 
 	return s, nil
-}
-
-type recorder struct {
-}
-
-func (r *recorder) save(ctx context.Context, sessionID string, send bool, msg Message) {
 }
 
 type Serializable interface {

@@ -343,7 +343,7 @@ func (s *Service) elicit(ctx flowContext, elicit types.Elicit) (*types.CallResul
 		}
 	}
 
-	if err := session.Exchange(ctx.ctx, "elicitation/create", &request, &response); err != nil {
+	if err := session.Exchange(ctx.ctx, "elicitation/create", "", &request, &response); err != nil {
 		return nil, fmt.Errorf("failed to create elicit request: %w", err)
 	}
 
