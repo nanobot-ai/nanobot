@@ -417,6 +417,7 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 		streamError := fmt.Errorf("failed to initialize HTTP Streaming client: %s: %s", resp.Status, streamingErrorMessage)
 
 		s.sse = true
+		s.needReconnect = true
 		if err := s.ensureSSE(ctx, &msg, ""); err != nil {
 			s.sse = false
 			return errors.Join(streamError, err)
