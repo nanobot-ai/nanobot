@@ -256,6 +256,34 @@ definitions:
           The entrypoint for the Nanobot. This is the tool, agent, or flow that
           will be invoked when "nanobot run" is executed.
 
+  ToolOverride:
+    type: object
+    description: |
+      Configuration for overriding properties of a tool provided by an MCP Server.
+      This allows you to customize the name, description, input schema, or disable
+      specific tools.
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        description: |
+          Override the name of the tool.
+      description:
+        type: string
+        description: |
+          Override the description of the tool.
+      disabled:
+        type: boolean
+        description: |
+          Set to true to disable this tool, preventing it from being used.
+      inputSchema:
+        type: object
+        description: |
+          Override the input schema for the tool. The input schema is replaced if set here,
+          and no translation is performed. Therefore, whatever is replaced here needs to be
+          understood by the MCP server.
+        additionalProperties: true
+
   MCPServer:
     type: object
     description: |
@@ -339,6 +367,14 @@ definitions:
         description: |
           A map of hooks that will be executed at various stages of the MCP Server lifecycle.
           This is useful for customizing the behavior of the MCP Server.
+      toolOverrides:
+        type: object
+        description: |
+          A map of tool name to tool override configuration. This allows you to override
+          properties of tools provided by the MCP Server, such as the name, description,
+          or input schema, or to disable specific tools.
+        additionalProperties:
+          $ref: "#/definitions/ToolOverride"
       source:
         oneOf:
           - type: string
