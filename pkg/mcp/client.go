@@ -16,7 +16,8 @@ import (
 )
 
 type Client struct {
-	Session *Session
+	Session       *Session
+	toolOverrides ToolOverrides
 }
 
 func (c *Client) Close(deleteSession bool) {
@@ -144,7 +145,20 @@ type Server struct {
 	Workdir      string            `json:"workdir,omitempty"`
 	Headers      map[string]string `json:"headers,omitempty"`
 
+	ToolOverrides ToolOverrides `json:"toolOverrides,omitzero"`
+
 	Hooks *Hooks `json:"hooks,omitempty"`
+}
+
+type ToolOverrides map[string]ToolOverride
+
+type ToolOverride struct {
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Disabled    bool   `json:"disabled,omitempty"`
+	// The input schema is replaced if set here, and no translation is performed.
+	// Therefore, whatever is replaced here needs to be understood by the MCP server.
+	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
 }
 
 type ServerSource struct {
@@ -343,7 +357,8 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 	}()
 
 	c := &Client{
-		Session: session,
+		Session:       session,
+		toolOverrides: config.ToolOverrides,
 	}
 
 	var (
@@ -452,6 +467,27 @@ func (c *Client) GetPrompt(ctx context.Context, name string, args map[string]str
 func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 	var tools ListToolsResult
 	err := c.Session.Exchange(ctx, "tools/list", "", struct{}{}, &tools)
+	if err == nil {
+		var idx int
+		for _, tool := range tools.Tools {
+			if override, ok := c.toolOverrides[tool.Name]; ok {
+				if override.Disabled {
+					tools.Tools = append(tools.Tools[:idx], tools.Tools[idx+1:]...)
+					continue
+				}
+
+				tool.Name = complete.First(override.Name, tool.Name)
+				tool.Description = complete.First(override.Description, tool.Description)
+				if len(override.InputSchema) > 0 {
+					tool.InputSchema = override.InputSchema
+				}
+
+				tools.Tools[idx] = tool
+			}
+			idx++
+		}
+	}
+
 	return &tools, err
 }
 
@@ -475,6 +511,13 @@ func (c CallOption) Merge(other CallOption) (result CallOption) {
 func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOption) (result *CallToolResult, err error) {
 	opt := complete.Complete(opts...)
 	result = new(CallToolResult)
+
+	for name, o := range c.toolOverrides {
+		if name == o.Name {
+			tool = name
+			break
+		}
+	}
 
 	err = c.Session.Exchange(ctx, "tools/call", tool, struct {
 		Name      string         `json:"name"`
