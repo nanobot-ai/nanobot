@@ -329,7 +329,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	session, err := NewServerSession(WithToken(h.ctx, originalToken), h.MessageHandler)
+	session, err := NewServerSession(h.ctx, h.MessageHandler)
 	if err != nil {
 		http.Error(rw, "Failed to create session: "+err.Error(), http.StatusInternalServerError)
 		return
