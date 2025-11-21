@@ -469,12 +469,11 @@ func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 	var tools ListToolsResult
 	err := c.Session.Exchange(ctx, "tools/list", "", struct{}{}, &tools)
 	if err == nil && len(c.toolOverrides) > 0 {
-		var idx int
+		filtered := tools.Tools[:0] // reuse the backing array
 		for _, tool := range tools.Tools {
 			override, ok := c.toolOverrides[tool.Name]
 			if !ok {
 				// If there are tool overrides, but this tool is not there, then skip it.
-				tools.Tools = append(tools.Tools[:idx], tools.Tools[idx+1:]...)
 				continue
 			}
 
@@ -484,9 +483,9 @@ func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 				tool.InputSchema = override.InputSchema
 			}
 
-			tools.Tools[idx] = tool
-			idx++
+			filtered = append(filtered, tool)
 		}
+		tools.Tools = filtered
 	}
 
 	return &tools, err
