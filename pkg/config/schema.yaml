@@ -272,10 +272,6 @@ definitions:
         type: string
         description: |
           Override the description of the tool.
-      disabled:
-        type: boolean
-        description: |
-          Set to true to disable this tool, preventing it from being used.
       inputSchema:
         type: object
         description: |

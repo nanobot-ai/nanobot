@@ -789,7 +789,7 @@ func (s *HTTPClient) exchangeToken(ctx context.Context, subjectToken string) (st
 
 	// Special handling for 404 - don't error, just continue with original token
 	if resp.StatusCode == http.StatusNotFound {
-		log.Infof(ctx, "Token exchange endpoint: %s returned 404", s.tokenExchangeEndpoint)
+		log.Debugf(ctx, "Token exchange endpoint: %s returned 404", s.tokenExchangeEndpoint)
 		return "", nil
 	}
 
