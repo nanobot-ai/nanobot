@@ -145,6 +145,8 @@ type Server struct {
 	Workdir      string            `json:"workdir,omitempty"`
 	Headers      map[string]string `json:"headers,omitempty"`
 
+	// If providing tool overrides, any tools not included will be implicitly disabled.
+	// If providing no tool overrides, all tools will be enabled.
 	ToolOverrides ToolOverrides `json:"toolOverrides,omitzero"`
 
 	Hooks *Hooks `json:"hooks,omitempty"`
@@ -155,7 +157,6 @@ type ToolOverrides map[string]ToolOverride
 type ToolOverride struct {
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
-	Disabled    bool   `json:"disabled,omitempty"`
 	// The input schema is replaced if set here, and no translation is performed.
 	// Therefore, whatever is replaced here needs to be understood by the MCP server.
 	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
@@ -467,23 +468,23 @@ func (c *Client) GetPrompt(ctx context.Context, name string, args map[string]str
 func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 	var tools ListToolsResult
 	err := c.Session.Exchange(ctx, "tools/list", "", struct{}{}, &tools)
-	if err == nil {
+	if err == nil && len(c.toolOverrides) > 0 {
 		var idx int
 		for _, tool := range tools.Tools {
-			if override, ok := c.toolOverrides[tool.Name]; ok {
-				if override.Disabled {
-					tools.Tools = append(tools.Tools[:idx], tools.Tools[idx+1:]...)
-					continue
-				}
-
-				tool.Name = complete.First(override.Name, tool.Name)
-				tool.Description = complete.First(override.Description, tool.Description)
-				if len(override.InputSchema) > 0 {
-					tool.InputSchema = override.InputSchema
-				}
-
-				tools.Tools[idx] = tool
+			override, ok := c.toolOverrides[tool.Name]
+			if !ok {
+				// If there are tool overrides, but this tool is not there, then skip it.
+				tools.Tools = append(tools.Tools[:idx], tools.Tools[idx+1:]...)
+				continue
 			}
+
+			tool.Name = complete.First(override.Name, tool.Name)
+			tool.Description = complete.First(override.Description, tool.Description)
+			if len(override.InputSchema) > 0 {
+				tool.InputSchema = override.InputSchema
+			}
+
+			tools.Tools[idx] = tool
 			idx++
 		}
 	}
@@ -513,7 +514,7 @@ func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOp
 	result = new(CallToolResult)
 
 	for name, o := range c.toolOverrides {
-		if name == o.Name {
+		if o.Name != "" && tool == o.Name {
 			tool = name
 			break
 		}
