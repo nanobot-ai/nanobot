@@ -46,6 +46,7 @@ type Manager struct {
 type liveSession struct {
 	session *mcp.ServerSession
 	count   int
+	cancel  context.CancelFunc
 }
 
 func (m *Manager) newRecord(id, accountID string) *Session {
@@ -235,8 +236,16 @@ func (m *Manager) Release(session *mcp.ServerSession) {
 	if ok {
 		live.count--
 		if live.count == 0 {
-			go func(sessionID string) {
-				time.Sleep(10 * time.Second)
+			ctx, cancel := context.WithCancel(context.Background())
+			live.cancel = cancel
+
+			go func(ctx context.Context, sessionID string) {
+				defer cancel()
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(10 * time.Second):
+				}
 
 				m.liveSessionsLock.Lock()
 				defer m.liveSessionsLock.Unlock()
@@ -246,7 +255,10 @@ func (m *Manager) Release(session *mcp.ServerSession) {
 					delete(m.liveSessions, sessionID)
 					live.session.Close(false)
 				}
-			}(session.ID())
+			}(ctx, session.ID())
+		} else if live.cancel != nil {
+			live.cancel()
+			live.cancel = nil
 		}
 
 		m.liveSessions[session.ID()] = live
