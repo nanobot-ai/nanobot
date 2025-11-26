@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -32,7 +31,6 @@ type HTTPServer struct {
 	keyFunc          jwt.Keyfunc
 	trustedIssuer    string
 	trustedAudiences []string
-	resourceMetadata string
 
 	// internal health check state
 	internalSession *ServerSession
@@ -121,20 +119,7 @@ func NewHTTPServer(ctx context.Context, env map[string]string, handler MessageHa
 		}
 
 		h.mux.HandleFunc("GET /.well-known/oauth-protected-resource", h.protectedMetadata)
-		h.mux.HandleFunc("GET /.well-known/oauth-protected-resource/", h.protectedMetadata)
-	}
-
-	if len(h.trustedAudiences) > 0 {
-		aud := h.trustedAudiences[len(h.trustedAudiences)-1]
-		u, err := url.Parse(aud)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse trusted audience URL %s: %w", aud, err)
-		}
-
-		u.Path = "/.well-known/oauth-protected-resource" + u.Path
-
-		h.resourceMetadata = u.String()
-		h.protectedResourceMetadata.Resource = aud
+		h.mux.HandleFunc("GET /.well-known/oauth-protected-resource/{path...}", h.protectedMetadata)
 	}
 
 	if o.RunHealthChecker {
@@ -242,10 +227,25 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		)
 		if err != nil {
 			log.Infof(ctx, "Failed to parse JWT token for %s: %v", req.URL, err)
+
+			host := req.Header.Get("X-Forwarded-Host")
+			if host == "" {
+				host = req.Host
+			}
+			scheme := req.Header.Get("X-Forwarded-Proto")
+			if scheme == "" {
+				if strings.HasPrefix(host, "localhost") || strings.HasPrefix(host, "127.0.0.1") {
+					scheme = "http"
+				} else {
+					scheme = "https"
+				}
+			}
+			resourceMetadata := strings.TrimSuffix(fmt.Sprintf("%s://%s/.well-known/oauth-protected-resource/%s", scheme, host, strings.TrimPrefix(req.URL.Path, "/")), "/")
+
 			rw.Header().Set("WWW-Authenticate",
 				strings.TrimSuffix(
 					fmt.Sprintf(`Bearer error="invalid_request", error_description="Invalid access token", resource_metadata="%s"`,
-						h.resourceMetadata,
+						resourceMetadata,
 					),
 					"/"),
 			)
