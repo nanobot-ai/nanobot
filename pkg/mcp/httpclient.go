@@ -787,32 +787,11 @@ func (s *HTTPClient) exchangeToken(ctx context.Context, subjectToken string) (st
 	}
 	defer resp.Body.Close()
 
-	// Special handling for 404 - don't error, just continue with original token
-	if resp.StatusCode == http.StatusNotFound {
-		log.Debugf(ctx, "Token exchange endpoint: %s returned 404", s.tokenExchangeEndpoint)
-		return "", nil
-	}
-
-	// Read the response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read token exchange response: %w", err)
-	}
-
-	// Handle error responses
+	// If the response status code is not OK, then continue without a token.
+	// Maybe OAuth will work.
 	if resp.StatusCode != http.StatusOK {
-		// Try to parse as OAuth error response
-		var errResp struct {
-			Error            string `json:"error"`
-			ErrorDescription string `json:"error_description"`
-		}
-		if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
-			if errResp.ErrorDescription != "" {
-				return "", fmt.Errorf("token exchange failed: %s - %s", errResp.Error, errResp.ErrorDescription)
-			}
-			return "", fmt.Errorf("token exchange failed: %s", errResp.Error)
-		}
-		return "", fmt.Errorf("token exchange failed with status %d: %s", resp.StatusCode, string(body))
+		log.Debugf(ctx, "Token exchange endpoint: %s returned %d", s.tokenExchangeEndpoint, resp.StatusCode)
+		return "", nil
 	}
 
 	// Parse successful response
@@ -824,7 +803,7 @@ func (s *HTTPClient) exchangeToken(ctx context.Context, subjectToken string) (st
 		Scope           string `json:"scope"`
 		RefreshToken    string `json:"refresh_token"`
 	}
-	if err := json.Unmarshal(body, &tokenResp); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
 		return "", fmt.Errorf("failed to parse token exchange response: %w", err)
 	}
 
