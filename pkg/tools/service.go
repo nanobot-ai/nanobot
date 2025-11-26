@@ -546,7 +546,7 @@ func (s *Service) RunHook(ctx context.Context, msg, target string) (bool, string
 	}
 
 	server, tool, _ := strings.Cut(target, "/")
-	result, err := s.Call(mcp.WithToken(context.WithValue(ctx, hookCtx{}, struct{}{}), ""), server, tool, map[string]string{"message": msg})
+	result, err := s.Call(context.WithValue(ctx, hookCtx{}, struct{}{}), server, tool, map[string]string{"message": msg})
 	if err != nil {
 		return false, "", nil, err
 	}
