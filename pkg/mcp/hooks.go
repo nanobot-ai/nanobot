@@ -109,7 +109,12 @@ func parseHookDefinition(data string) (HookDefinition, error) {
 		}
 	}
 
-	method := values.Get("method")
+	parts = strings.Split(parts[0], ":")
+	var method string
+	if len(parts) > 1 {
+		method = parts[1]
+	}
+
 	name := values.Get("name")
 	direction := values.Get("direction")
 	if direction != "" && direction != "in" && direction != "out" {
