@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"io"
+
+	"github.com/google/uuid"
 )
 
 func String() string {
@@ -27,4 +29,9 @@ func String() string {
 	hex.Encode(dst[24:], uuid[10:])
 
 	return string(dst[:])
+}
+
+func ValidUUID(s string) bool {
+	_, err := uuid.Parse(s)
+	return err == nil
 }

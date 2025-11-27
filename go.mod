@@ -8,6 +8,7 @@ require (
 	github.com/dop251/goja v0.0.0-20250630131328-58d95d85e994
 	github.com/glebarez/sqlite v1.11.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
+	github.com/google/uuid v1.6.0
 	github.com/hexops/autogold/v2 v2.3.0
 	github.com/modelcontextprotocol/go-sdk v0.2.0
 	github.com/obot-platform/mcp-oauth-proxy v0.0.3-0.20250916000024-e4d621ab46e1
@@ -35,7 +36,6 @@ require (
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20250630185457-6e76a2b096b5 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/handlers v1.5.2 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/hexops/valast v1.5.0 // indirect
