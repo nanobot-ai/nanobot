@@ -540,13 +540,8 @@ func (s *Service) runBefore(ctx context.Context, config types.Config, target, se
 type hookCtx struct{}
 
 func (s *Service) RunHook(ctx context.Context, msg, target string) (bool, string, *mcp.Message, error) {
-	// Don't call hooks recursively
-	if ctx.Value(hookCtx{}) != nil {
-		return true, "", nil, nil
-	}
-
 	server, tool, _ := strings.Cut(target, "/")
-	result, err := s.Call(context.WithValue(ctx, hookCtx{}, struct{}{}), server, tool, map[string]string{"message": msg})
+	result, err := s.Call(ctx, server, tool, map[string]string{"message": msg})
 	if err != nil {
 		return false, "", nil, err
 	}
