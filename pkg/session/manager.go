@@ -14,6 +14,7 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/nanobot-ai/nanobot/pkg/uuid"
 	"gorm.io/gorm"
 )
 
@@ -155,7 +156,8 @@ func (m *Manager) ExtractID(req *http.Request) string {
 		if i > 0 && parts[i-1] == "agents" {
 			continue
 		}
-		if len(strings.Split(part, "-")) == 5 {
+
+		if uuid.ValidUUID(part) {
 			return part
 		}
 	}

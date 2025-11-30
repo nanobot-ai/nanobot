@@ -99,7 +99,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	var protectedResourceMetadata protectedResourceMetadata
 	if protectedResourceResp.StatusCode != http.StatusOK && protectedResourceResp.StatusCode != http.StatusNotFound {
 		body, _ := io.ReadAll(protectedResourceResp.Body)
-		return nil, fmt.Errorf("unexpeted status getting protected resource metadata (%d): %s", protectedResourceResp.StatusCode, string(body))
+		return nil, fmt.Errorf("unexpected status getting protected resource metadata (%d): %s", protectedResourceResp.StatusCode, string(body))
 	} else if protectedResourceResp.StatusCode == http.StatusOK {
 		protectedResourceMetadata, err = parseProtectedResourceMetadata(protectedResourceResp.Body)
 		if err != nil {
