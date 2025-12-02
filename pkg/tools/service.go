@@ -6,15 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/http"
 	"net/url"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/envvar"
 	"github.com/nanobot-ai/nanobot/pkg/expr"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
@@ -32,6 +35,7 @@ type Service struct {
 	tokenExchangeEndpoint     string
 	tokenExchangeClientID     string
 	tokenExchangeClientSecret string
+	auditLogCollector         *auditlogs.Collector
 }
 
 type Sampler interface {
@@ -47,6 +51,7 @@ type Options struct {
 	TokenExchangeEndpoint     string
 	TokenExchangeClientID     string
 	TokenExchangeClientSecret string
+	AuditLogCollector         *auditlogs.Collector
 }
 
 func (r Options) Merge(other Options) (result Options) {
@@ -58,6 +63,7 @@ func (r Options) Merge(other Options) (result Options) {
 	result.TokenExchangeEndpoint = complete.Last(r.TokenExchangeEndpoint, other.TokenExchangeEndpoint)
 	result.TokenExchangeClientID = complete.Last(r.TokenExchangeClientID, other.TokenExchangeClientID)
 	result.TokenExchangeClientSecret = complete.Last(r.TokenExchangeClientSecret, other.TokenExchangeClientSecret)
+	result.AuditLogCollector = complete.Last(r.AuditLogCollector, other.AuditLogCollector)
 	return result
 }
 
@@ -79,6 +85,7 @@ func NewToolsService(opts ...Options) *Service {
 		tokenExchangeEndpoint:     opt.TokenExchangeEndpoint,
 		tokenExchangeClientID:     opt.TokenExchangeClientID,
 		tokenExchangeClientSecret: opt.TokenExchangeClientSecret,
+		auditLogCollector:         opt.AuditLogCollector,
 	}
 }
 
@@ -91,6 +98,40 @@ func (s *Service) AddServer(name string, factory func(name string) mcp.MessageHa
 
 func (s *Service) SetSampler(sampler Sampler) {
 	s.sampler = sampler
+}
+
+// buildAuditLog creates a new audit log entry for internal service calls
+func buildAuditLog(msg *mcp.Message, session *mcp.Session) *auditlogs.MCPAuditLog {
+	auditLog := &auditlogs.MCPAuditLog{
+		CreatedAt:     time.Now(),
+		CallType:      msg.Method,
+		SessionID:     session.ID(),
+		ClientName:    session.InitializeRequest.ClientInfo.Name,
+		ClientVersion: session.InitializeRequest.ClientInfo.Version,
+	}
+	auditLog.RequestBody, _ = json.Marshal(msg)
+
+	session.Get("subject", &auditLog.Subject)
+	session.Get("clientIP", &auditLog.ClientIP)
+
+	return auditLog
+}
+
+// collectAuditLog finalizes and collects the audit log entry
+func (s *Service) collectAuditLog(auditLog *auditlogs.MCPAuditLog) {
+	if s.auditLogCollector == nil || auditLog == nil {
+		return
+	}
+
+	auditLog.ProcessingTimeMs = time.Since(auditLog.CreatedAt).Milliseconds()
+	if auditLog.ResponseStatus == 0 {
+		if auditLog.Error != "" {
+			auditLog.ResponseStatus = http.StatusInternalServerError
+		} else {
+			auditLog.ResponseStatus = http.StatusOK
+		}
+	}
+	s.auditLogCollector.CollectMCPAuditEntry(*auditLog)
 }
 
 func (s *Service) GetDynamicInstruction(ctx context.Context, instruction types.DynamicInstructions) (string, error) {
@@ -242,6 +283,10 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 		session = session.Parent
 	}
 
+	if session.HookRunner == nil {
+		session.HookRunner = s
+	}
+
 	config := types.ConfigFromContext(ctx)
 
 	var (
@@ -252,18 +297,15 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 	)
 
 	serverFactory, ok = s.serverFactories[name]
-
 	if !ok {
 		mcpConfig, ok = config.MCPServers[name]
 	}
-
 	if !ok {
 		_, ok = config.Agents[name]
 		if ok {
 			serverFactory, ok = s.serverFactories["nanobot.agent"]
 		}
 	}
-
 	if !ok {
 		return nil, fmt.Errorf("MCP server %s not found in config", name)
 	}
@@ -279,15 +321,13 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 	roots := func(ctx context.Context) ([]mcp.Root, error) {
 		var roots mcp.ListRootsResult
 		if session.InitializeRequest.Capabilities.Roots != nil {
-			err := session.Exchange(ctx, "roots/list", "", mcp.ListRootsRequest{}, &roots)
+			err := session.Exchange(ctx, "roots/list", mcp.ListRootsRequest{}, &roots)
 			if err != nil {
 				return nil, fmt.Errorf("failed to list roots: %w", err)
 			}
 		}
 
-		if len(s.roots) > 0 {
-			roots.Roots = append(roots.Roots, s.roots...)
-		}
+		roots.Roots = append(roots.Roots, s.roots...)
 
 		return roots.Roots, nil
 	}
@@ -307,19 +347,48 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 		Roots:         roots,
 		Env:           session.GetEnvMap(),
 		ParentSession: session,
-		OnRoots: func(ctx context.Context, msg mcp.Message) error {
-			roots, err := roots(ctx)
+		OnRoots: func(ctx context.Context, msg mcp.Message) (err error) {
+			auditLog := buildAuditLog(&msg, session)
+			defer func() {
+				if err != nil {
+					auditLog.Error = err.Error()
+					if auditLog.ResponseStatus < http.StatusBadRequest {
+						auditLog.ResponseStatus = http.StatusInternalServerError
+						if errors.Is(err, mcp.ErrNoReader) {
+							auditLog.ResponseStatus = http.StatusNotFound
+						}
+					}
+				}
+				s.collectAuditLog(auditLog)
+			}()
+
+			roots, err := roots(mcp.WithMCPServerConfig(mcp.WithAuditLog(ctx, auditLog), mcpConfig))
 			if err != nil {
 				return fmt.Errorf("failed to get roots: %w", err)
 			}
-			return msg.Reply(ctx, mcp.ListRootsResult{
-				Roots: roots,
-			})
+
+			result := mcp.ListRootsResult{Roots: roots}
+			auditLog.ResponseBody, _ = json.Marshal(result)
+			return msg.Reply(ctx, result)
 		},
-		OnNotify: func(ctx context.Context, msg mcp.Message) error {
-			return session.Send(ctx, msg)
+		OnNotify: func(ctx context.Context, msg mcp.Message) (err error) {
+			auditLog := buildAuditLog(&msg, session)
+			defer func() {
+				if err != nil {
+					auditLog.Error = err.Error()
+					if auditLog.ResponseStatus < http.StatusBadRequest {
+						auditLog.ResponseStatus = http.StatusInternalServerError
+						if errors.Is(err, mcp.ErrNoReader) {
+							auditLog.ResponseStatus = http.StatusNotFound
+						}
+					}
+				}
+				s.collectAuditLog(auditLog)
+			}()
+
+			return session.Send(mcp.WithMCPServerConfig(mcp.WithAuditLog(ctx, auditLog), mcpConfig), msg)
 		},
-		OnLogging: func(ctx context.Context, logMsg mcp.LoggingMessage) error {
+		OnLogging: func(ctx context.Context, logMsg mcp.LoggingMessage) (err error) {
 			data, err := json.Marshal(mcp.LoggingMessage{
 				Level:  logMsg.Level,
 				Logger: logMsg.Logger,
@@ -331,13 +400,28 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 			if err != nil {
 				return fmt.Errorf("failed to marshal logging message: %w", err)
 			}
-			for session.Parent != nil {
-				session = session.Parent
+
+			msg := mcp.Message{
+				JSONRPC: "2.0",
+				Method:  "notifications/message",
+				Params:  data,
 			}
-			return session.Send(ctx, mcp.Message{
-				Method: "notifications/message",
-				Params: data,
-			})
+
+			auditLog := buildAuditLog(&msg, session)
+			defer func() {
+				if err != nil {
+					auditLog.Error = err.Error()
+					if auditLog.ResponseStatus < http.StatusBadRequest {
+						auditLog.ResponseStatus = http.StatusInternalServerError
+						if errors.Is(err, mcp.ErrNoReader) {
+							auditLog.ResponseStatus = http.StatusNotFound
+						}
+					}
+				}
+				s.collectAuditLog(auditLog)
+			}()
+
+			return session.Send(mcp.WithMCPServerConfig(mcp.WithAuditLog(ctx, auditLog), mcpConfig), msg)
 		},
 		Runner: &s.runner,
 		HTTPClientOptions: mcp.HTTPClientOptions{
@@ -360,45 +444,86 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 			}, nil
 		}
 	} else {
-		clientOpts.OnElicit = func(ctx context.Context, _ mcp.Message, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, _ error) {
-			err := session.Exchange(ctx, "elicitation/create", "", elicitation, &result)
+		clientOpts.OnElicit = func(ctx context.Context, msg mcp.Message, elicitation mcp.ElicitRequest) (result mcp.ElicitResult, err error) {
+			auditLog := buildAuditLog(&msg, session)
+			defer func() {
+				if err != nil {
+					auditLog.Error = err.Error()
+					if auditLog.ResponseStatus < http.StatusBadRequest {
+						auditLog.ResponseStatus = http.StatusInternalServerError
+						if errors.Is(err, mcp.ErrNoReader) {
+							auditLog.ResponseStatus = http.StatusNotFound
+						}
+					}
+				}
+				s.collectAuditLog(auditLog)
+			}()
+
+			if err = session.Exchange(mcp.WithMCPServerConfig(mcp.WithAuditLog(ctx, auditLog), mcpConfig), "elicitation/create", elicitation, &result); err != nil {
+				auditLog.Error = err.Error()
+			} else {
+				auditLog.ResponseBody, _ = json.Marshal(result)
+			}
 			return result, err
 		}
 	}
 	if s.sampler != nil {
-		clientOpts.OnSampling = func(ctx context.Context, samplingRequest mcp.CreateMessageRequest) (mcp.CreateMessageResult, error) {
+		clientOpts.OnSampling = func(ctx context.Context, samplingRequest mcp.CreateMessageRequest) (_ mcp.CreateMessageResult, err error) {
+			msg, err := mcp.NewMessageWithID("sampling/createMessage", samplingRequest)
+			if err != nil {
+				return mcp.CreateMessageResult{}, fmt.Errorf("failed to create message: %w", err)
+			}
+
 			result, err := s.sampler.Sample(ctx, samplingRequest, sampling.SamplerOptions{
 				ProgressToken: uuid.String(),
 			})
 			if err != nil {
-				if !errors.Is(err, sampling.ErrNoMatchingModel) || session.InitializeRequest.Capabilities.Sampling == nil {
-					return mcp.CreateMessageResult{}, err
+				if errors.Is(err, sampling.ErrNoMatchingModel) && session.InitializeRequest.Capabilities.Sampling != nil {
+					auditLog := buildAuditLog(msg, session)
+					defer func() {
+						if err != nil {
+							auditLog.Error = err.Error()
+							if auditLog.ResponseStatus < http.StatusBadRequest {
+								auditLog.ResponseStatus = http.StatusInternalServerError
+								if errors.Is(err, mcp.ErrNoReader) {
+									auditLog.ResponseStatus = http.StatusNotFound
+								}
+							}
+						}
+						s.collectAuditLog(auditLog)
+					}()
+
+					// There was no matching model, but the session supports sampling. Send the sampling request to it.
+					var result mcp.CreateMessageResult
+					if err = session.Exchange(mcp.WithMCPServerConfig(mcp.WithAuditLog(ctx, auditLog), mcpConfig), "sampling/createMessage", samplingRequest, &result); err != nil {
+						return result, fmt.Errorf("failed to send sampling request: %w", err)
+					}
+					auditLog.ResponseBody, _ = json.Marshal(result)
+					return result, nil
 				}
 
-				// There was no matching model, but the session supports sampling. Send the sampling request to it.
-				var result mcp.CreateMessageResult
-				if err = session.Exchange(ctx, "sampling/createMessage", "", samplingRequest, &result); err != nil {
-					return result, fmt.Errorf("failed to send sampling request: %w", err)
-				}
-				return result, nil
+				return mcp.CreateMessageResult{}, err
 			}
+
 			for _, content := range result.Content {
-				return mcp.CreateMessageResult{
+				samplingResult := mcp.CreateMessageResult{
 					Content:    content,
 					Role:       "assistant",
 					Model:      result.Model,
 					StopReason: result.StopReason,
-				}, nil
+				}
+				return samplingResult, nil
 			}
 			return mcp.CreateMessageResult{}, fmt.Errorf("no content returned from sampler")
 		}
 	}
 
 	sessionCtx := session.Context()
-	token, ok := mcp.TokenFromContext(ctx)
-	if ok && token != "" {
+	token := mcp.TokenFromContext(ctx)
+	if token != "" {
 		sessionCtx = mcp.WithToken(sessionCtx, token)
 	}
+	sessionCtx = mcp.WithAuditLog(sessionCtx, mcp.AuditLogFromContext(ctx))
 
 	return mcp.NewClient(sessionCtx, name, mcpConfig, clientOpts)
 }

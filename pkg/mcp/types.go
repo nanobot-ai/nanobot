@@ -90,7 +90,7 @@ type PrimitiveProperty struct {
 	MaxLength   *int         `json:"maxLength,omitempty"`
 	Minimum     *json.Number `json:"minimum,omitempty"`
 	Maximum     *json.Number `json:"maximum,omitempty"`
-	Default     *bool        `json:"default,omitempty"`
+	Default     any          `json:"default,omitempty"`
 	Enum        []string     `json:"enum,omitempty"`
 	EnumNames   []string     `json:"enumNames,omitempty"`
 	// Format must be one of "date-time", "email", "uri", "date"

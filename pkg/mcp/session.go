@@ -46,13 +46,13 @@ type Session struct {
 	InitializeResult  InitializeResult
 	InitializeRequest InitializeRequest
 	Parent            *Session
+	HookRunner        HookRunner
 	attributes        map[string]any
 	lock              sync.Mutex
 	filters           []filterRegistration
 	filterID          int
 	sessionManager    SessionStore
-	hooks             Hooks
-	hookRunner        HookRunner
+	hooks             *Hooks
 }
 
 type filterRegistration struct {
@@ -401,6 +401,10 @@ func (s *Session) Send(ctx context.Context, req Message) error {
 		req = *newReq
 	}
 
+	if err := s.hooks.CallAllHooks(ctx, s.HookRunner, &req, "request", nil); err != nil {
+		return fmt.Errorf("failed to call \"request\" hooks: %w", err)
+	}
+
 	req.JSONRPC = "2.0"
 	if err := s.wire.Send(ctx, req); err != nil {
 		return err
@@ -484,7 +488,7 @@ func (s *Session) toRequest(method string, in any, opt ExchangeOption) (*Message
 	return req, nil
 }
 
-func (s *Session) Exchange(ctx context.Context, method, name string, in, out any, opts ...ExchangeOption) (err error) {
+func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts ...ExchangeOption) (err error) {
 	opt := complete.Complete(opts...)
 	var req *Message
 	req, err = s.toRequest(method, in, opt)
@@ -492,13 +496,10 @@ func (s *Session) Exchange(ctx context.Context, method, name string, in, out any
 		return err
 	}
 
-	if err = s.hooks.CallAllHooks(ctx, s.hookRunner, req, name, "in", nil); err != nil {
-		return fmt.Errorf("failed to call \"in\" hooks: %w", err)
-	}
-
 	defer func() {
-		if hooksErr := s.hooks.CallAllHooks(ctx, s.hookRunner, req, name, "out", err); hooksErr != nil && err == nil {
-			err = fmt.Errorf("failed to call \"out\" hooks: %w", hooksErr)
+		hooksErr := s.hooks.CallAllHooks(ctx, s.HookRunner, req, "response", err)
+		if hooksErr != nil && err == nil {
+			err = fmt.Errorf("failed to call \"response\" hooks: %w", hooksErr)
 		}
 	}()
 
@@ -558,11 +559,11 @@ func NewEmptySession(ctx context.Context) *Session {
 	return s
 }
 
-func newSession(ctx context.Context, wire Wire, handler MessageHandler, session *SessionState, r HookRunner, hooks Hooks, parentSession *Session) (*Session, error) {
+func newSession(ctx context.Context, wire Wire, handler MessageHandler, session *SessionState, r HookRunner, hooks *Hooks, parentSession *Session) (*Session, error) {
 	s := &Session{
 		wire:       wire,
 		handler:    handler,
-		hookRunner: r,
+		HookRunner: r,
 		hooks:      hooks,
 		Parent:     parentSession,
 	}

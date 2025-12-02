@@ -8,6 +8,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/expr"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
@@ -18,19 +19,32 @@ import (
 )
 
 type Server struct {
-	handlers []handler
-	runtime  *runtime.Runtime
-	data     *sessiondata.Data
-	config   types.ConfigFactory
-	manager  *session.Manager
+	handlers           []handler
+	runtime            *runtime.Runtime
+	data               *sessiondata.Data
+	config             types.ConfigFactory
+	manager            *session.Manager
+	forceFetchToolList bool
 }
 
-func NewServer(runtime *runtime.Runtime, config types.ConfigFactory, manager *session.Manager) *Server {
+type Options struct {
+	ForceFetchToolList bool
+}
+
+func (o Options) Merge(other Options) Options {
+	return Options{
+		ForceFetchToolList: o.ForceFetchToolList || other.ForceFetchToolList,
+	}
+}
+
+func NewServer(runtime *runtime.Runtime, config types.ConfigFactory, manager *session.Manager, options ...Options) *Server {
+	opt := complete.Complete(options...)
 	s := &Server{
-		runtime: runtime,
-		data:    sessiondata.NewData(runtime),
-		config:  config,
-		manager: manager,
+		runtime:            runtime,
+		data:               sessiondata.NewData(runtime),
+		config:             config,
+		manager:            manager,
+		forceFetchToolList: opt.ForceFetchToolList,
 	}
 	s.init()
 	return s
@@ -222,7 +236,7 @@ func (s *Server) handleListTools(ctx context.Context, msg mcp.Message, _ mcp.Lis
 		Tools: []mcp.Tool{},
 	}
 
-	toolMappings, err := s.data.ToolMapping(ctx)
+	toolMappings, err := s.data.ToolMapping(ctx, sessiondata.GetOption{ForceFetch: s.forceFetchToolList})
 	if err != nil {
 		return err
 	}
@@ -318,6 +332,16 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 		experimental = map[string]any{
 			"ai.nanobot.meta/intro": intro,
 		}
+	}
+
+	if len(c.Publish.MCPServers) == 1 && len(c.Publish.Entrypoint) == 0 && len(c.Publish.Tools) == 0 {
+		// This nanobot just exposes a single MCP server. Call the initialize directly and return its response.
+		c, err := s.data.InitializedClient(ctx, c.Publish.MCPServers[0])
+		if err != nil {
+			return fmt.Errorf("failed to initialize client: %w", err)
+		}
+
+		return msg.Reply(ctx, c.Session.InitializeResult)
 	}
 
 	return msg.Reply(ctx, mcp.InitializeResult{

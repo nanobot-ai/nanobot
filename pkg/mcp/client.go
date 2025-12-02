@@ -326,12 +326,7 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 		}
 	}
 
-	var hooks Hooks
-	if config.Hooks != nil {
-		hooks = *config.Hooks
-	}
-
-	return newSession(ctx, wire, toHandler(opt), opt.SessionState, opt.HookRunner, hooks, opt.ParentSession)
+	return newSession(ctx, wire, toHandler(opt), opt.SessionState, opt.HookRunner, config.Hooks, opt.ParentSession)
 }
 
 func NewClient(ctx context.Context, serverName string, config Server, opts ...ClientOption) (*Client, error) {
@@ -396,7 +391,7 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 }
 
 func (c *Client) Initialize(ctx context.Context, param InitializeRequest) (result InitializeResult, err error) {
-	err = c.Session.Exchange(ctx, "initialize", "", param, &result)
+	err = c.Session.Exchange(ctx, "initialize", param, &result)
 	if err == nil {
 		err = c.Session.Send(ctx, Message{
 			Method: "notifications/initialized",
@@ -407,7 +402,7 @@ func (c *Client) Initialize(ctx context.Context, param InitializeRequest) (resul
 
 func (c *Client) ReadResource(ctx context.Context, uri string) (*ReadResourceResult, error) {
 	var result ReadResourceResult
-	err := c.Session.Exchange(ctx, "resources/read", uri, ReadResourceRequest{
+	err := c.Session.Exchange(ctx, "resources/read", ReadResourceRequest{
 		URI: uri,
 	}, &result)
 	return &result, err
@@ -418,7 +413,7 @@ func (c *Client) ListResourceTemplates(ctx context.Context) (*ListResourceTempla
 	if c.Session.InitializeResult.Capabilities.Resources == nil {
 		return &result, nil
 	}
-	err := c.Session.Exchange(ctx, "resources/templates/list", "", struct{}{}, &result)
+	err := c.Session.Exchange(ctx, "resources/templates/list", struct{}{}, &result)
 	return &result, err
 }
 
@@ -427,13 +422,13 @@ func (c *Client) ListResources(ctx context.Context) (*ListResourcesResult, error
 	if c.Session.InitializeResult.Capabilities.Resources == nil {
 		return &result, nil
 	}
-	err := c.Session.Exchange(ctx, "resources/list", "", struct{}{}, &result)
+	err := c.Session.Exchange(ctx, "resources/list", struct{}{}, &result)
 	return &result, err
 }
 
 func (c *Client) SubscribeResource(ctx context.Context, uri string) (*SubscribeResult, error) {
 	var result SubscribeResult
-	err := c.Session.Exchange(ctx, "resources/subscribe", uri, SubscribeRequest{
+	err := c.Session.Exchange(ctx, "resources/subscribe", SubscribeRequest{
 		URI: uri,
 	}, &result)
 	return &result, err
@@ -441,7 +436,7 @@ func (c *Client) SubscribeResource(ctx context.Context, uri string) (*SubscribeR
 
 func (c *Client) UnsubscribeResource(ctx context.Context, uri string) (*UnsubscribeResult, error) {
 	var result UnsubscribeResult
-	err := c.Session.Exchange(ctx, "resources/unsubscribe", uri, UnsubscribeRequest{
+	err := c.Session.Exchange(ctx, "resources/unsubscribe", UnsubscribeRequest{
 		URI: uri,
 	}, &result)
 	return &result, err
@@ -452,13 +447,13 @@ func (c *Client) ListPrompts(ctx context.Context) (*ListPromptsResult, error) {
 	if c.Session.InitializeResult.Capabilities.Prompts == nil {
 		return &prompts, nil
 	}
-	err := c.Session.Exchange(ctx, "prompts/list", "", struct{}{}, &prompts)
+	err := c.Session.Exchange(ctx, "prompts/list", struct{}{}, &prompts)
 	return &prompts, err
 }
 
 func (c *Client) GetPrompt(ctx context.Context, name string, args map[string]string) (*GetPromptResult, error) {
 	var result GetPromptResult
-	err := c.Session.Exchange(ctx, "prompts/get", name, GetPromptRequest{
+	err := c.Session.Exchange(ctx, "prompts/get", GetPromptRequest{
 		Name:      name,
 		Arguments: args,
 	}, &result)
@@ -467,7 +462,7 @@ func (c *Client) GetPrompt(ctx context.Context, name string, args map[string]str
 
 func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 	var tools ListToolsResult
-	err := c.Session.Exchange(ctx, "tools/list", "", struct{}{}, &tools)
+	err := c.Session.Exchange(ctx, "tools/list", struct{}{}, &tools)
 	if err == nil && len(c.toolOverrides) > 0 {
 		filtered := tools.Tools[:0] // reuse the backing array
 		for _, tool := range tools.Tools {
@@ -493,7 +488,7 @@ func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 
 func (c *Client) Ping(ctx context.Context) (*PingResult, error) {
 	var result PingResult
-	err := c.Session.Exchange(ctx, "ping", "", struct{}{}, &result)
+	err := c.Session.Exchange(ctx, "ping", struct{}{}, &result)
 	return &result, err
 }
 
@@ -519,7 +514,7 @@ func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOp
 		}
 	}
 
-	err = c.Session.Exchange(ctx, "tools/call", tool, struct {
+	err = c.Session.Exchange(ctx, "tools/call", struct {
 		Name      string         `json:"name"`
 		Arguments any            `json:"arguments,omitempty"`
 		Meta      map[string]any `json:"_meta,omitempty"`
@@ -540,7 +535,7 @@ func (c *Client) SetLogLevel(ctx context.Context, level string) error {
 		return nil
 	}
 
-	return c.Session.Exchange(ctx, "logging/setLevel", "", SetLogLevelRequest{
+	return c.Session.Exchange(ctx, "logging/setLevel", SetLogLevelRequest{
 		Level: level,
 	}, &SetLogLevelResult{})
 }

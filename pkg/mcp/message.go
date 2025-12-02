@@ -27,9 +27,18 @@ type Message struct {
 }
 
 func NewMessage(method string, params any) (*Message, error) {
+	return newMessage(method, params, nil)
+}
+
+func NewMessageWithID(method string, params any) (*Message, error) {
+	return newMessage(method, params, nextMessageID())
+}
+
+func newMessage(method string, params, id any) (*Message, error) {
 	msg := &Message{
 		JSONRPC: "2.0",
 		Method:  method,
+		ID:      id,
 	}
 	if params != nil {
 		data, err := json.Marshal(params)

@@ -12,6 +12,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/llm"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
 	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
 	"github.com/nanobot-ai/nanobot/pkg/servers/agentui"
@@ -40,6 +41,7 @@ type Options struct {
 	TokenExchangeEndpoint     string
 	TokenExchangeClientID     string
 	TokenExchangeClientSecret string
+	AuditLogCollector         *auditlogs.Collector
 }
 
 func (o Options) Merge(other Options) (result Options) {
@@ -53,6 +55,7 @@ func (o Options) Merge(other Options) (result Options) {
 	result.TokenExchangeEndpoint = complete.Last(o.TokenExchangeEndpoint, other.TokenExchangeEndpoint)
 	result.TokenExchangeClientID = complete.Last(o.TokenExchangeClientID, other.TokenExchangeClientID)
 	result.TokenExchangeClientSecret = complete.Last(o.TokenExchangeClientSecret, other.TokenExchangeClientSecret)
+	result.AuditLogCollector = complete.Last(o.AuditLogCollector, other.AuditLogCollector)
 	return
 }
 
@@ -77,6 +80,7 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 		TokenExchangeEndpoint:     opt.TokenExchangeEndpoint,
 		TokenExchangeClientID:     opt.TokenExchangeClientID,
 		TokenExchangeClientSecret: opt.TokenExchangeClientSecret,
+		AuditLogCollector:         opt.AuditLogCollector,
 	})
 	agents := agents.New(completer, registry)
 	sampler := sampling.NewSampler(agents)

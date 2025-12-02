@@ -46,10 +46,12 @@ type RuntimeMeta interface {
 
 type GetOption struct {
 	AllowMissing bool
+	ForceFetch   bool
 }
 
 func (g GetOption) Merge(other GetOption) (result GetOption) {
 	result.AllowMissing = complete.Last(g.AllowMissing, other.AllowMissing)
+	result.ForceFetch = complete.Last(g.ForceFetch, other.ForceFetch)
 	return
 }
 
@@ -385,16 +387,23 @@ func (d *Data) getPublishedMCPServers(ctx context.Context) (result []string) {
 	return result
 }
 
+func (d *Data) InitializedClient(ctx context.Context, name string) (*mcp.Client, error) {
+	return d.runtime.GetClient(ctx, name)
+}
+
 func (d *Data) ToolMapping(ctx context.Context, opts ...GetOption) (types.ToolMappings, error) {
 	var (
 		session      = mcp.SessionFromContext(ctx)
 		toolMappings = types.ToolMappings{}
+		opt          = complete.Complete(opts...)
 	)
 
-	if found := session.Get(toolMappingKey, &toolMappings); !found && complete.Complete(opts...).AllowMissing {
-		return nil, nil
-	} else if found {
-		return toolMappings, nil
+	if !opt.ForceFetch {
+		if found := session.Get(toolMappingKey, &toolMappings); !found && opt.AllowMissing {
+			return nil, nil
+		} else if found {
+			return toolMappings, nil
+		}
 	}
 
 	var c types.Config

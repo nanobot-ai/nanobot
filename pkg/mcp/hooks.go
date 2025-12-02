@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
+	"github.com/tidwall/gjson"
 )
 
 type HookRunner interface {
@@ -46,7 +50,25 @@ func (h *Hooks) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-func (h Hooks) CallAllHooks(ctx context.Context, r HookRunner, msg *Message, name, direction string, err error) error {
+func (h *Hooks) CallAllHooks(ctx context.Context, r HookRunner, msg *Message, direction string, err error) error {
+	if h == nil {
+		h = MCPServerConfigFromContext(ctx).Hooks
+		if h == nil {
+			return nil
+		}
+
+		ctx = WithMCPServerConfig(ctx, Server{})
+	}
+
+	var name string
+	switch msg.Method {
+	case "resources/read", "resources/subscribe", "resources/unsubscribe":
+		name = gjson.GetBytes(msg.Params, "uri").String()
+	case "tools/call", "prompts/get":
+		name = gjson.GetBytes(msg.Params, "name").String()
+	default:
+	}
+
 	hookDef := HookDefinition{
 		Type:        "message",
 		Method:      msg.Method,
@@ -64,19 +86,44 @@ func (h Hooks) CallAllHooks(ctx context.Context, r HookRunner, msg *Message, nam
 		accepted bool
 		reason   string
 		m        *Message
+		errs     []error
+		statuses []auditlogs.MCPWebhookStatus
 	)
-	for def, targets := range h {
+	for def, targets := range *h {
 		if def.Matches(hookDef) {
 			for _, target := range targets {
 				if accepted, reason, m, err = r.RunHook(ctx, string(message), target); err != nil {
-					return fmt.Errorf("failed to run hook %s: %w", def, err)
+					errs = append(errs, fmt.Errorf("failed to run hook %s: %w", def, err))
 				} else if !accepted {
-					return fmt.Errorf("hook %s rejected message: %s", def, reason)
+					errs = append(errs, fmt.Errorf("hook %s rejected message: %s", def, reason))
 				} else if m != nil {
 					*msg = *m
 				}
+
+				status := "ok"
+				if !accepted {
+					status = "rejected"
+				}
+				statuses = append(statuses, auditlogs.MCPWebhookStatus{
+					Type:    direction,
+					Method:  msg.Method,
+					Name:    target,
+					Status:  status,
+					Message: reason,
+				})
 			}
 		}
+	}
+
+	if auditLog := AuditLogFromContext(ctx); auditLog != nil {
+		auditLog.WebhookStatuses = append(auditLog.WebhookStatuses, statuses...)
+		if len(errs) > 0 {
+			auditLog.ResponseStatus = http.StatusFailedDependency
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to run hooks: %v", errs)
 	}
 
 	return nil

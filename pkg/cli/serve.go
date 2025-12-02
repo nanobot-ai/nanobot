@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/confirm"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/printer"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -17,17 +19,23 @@ import (
 )
 
 type Run struct {
-	ListenAddress             string   `usage:"Address to listen on" default:"localhost:8080" short:"a"`
-	DisableUI                 bool     `usage:"Disable the UI"`
-	HealthzPath               string   `usage:"Path to serve healthz on"`
-	TrustedIssuer             string   `usage:"Trusted issuer for JWT tokens"`
-	JWKS                      string   `usage:"Base64 encoded JWKS blob for validating JWT tokens"`
-	TrustedAudiences          []string `usage:"Trusted audiences for JWT tokens"`
-	TokenExchangeEndpoint     string   `usage:"Endpoint for token exchange"`
-	TokenExchangeClientID     string   `usage:"Client ID for token exchange"`
-	TokenExchangeClientSecret string   `usage:"Client secret for token exchange"`
-	Roots                     []string `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
-	n                         *Nanobot
+	ListenAddress                string            `usage:"Address to listen on" default:"localhost:8080" short:"a"`
+	DisableUI                    bool              `usage:"Disable the UI"`
+	ForceFetchToolList           bool              `usage:"Always fetch tools when listing instead of using session cache"`
+	HealthzPath                  string            `usage:"Path to serve healthz on"`
+	TrustedIssuer                string            `usage:"Trusted issuer for JWT tokens"`
+	JWKS                         string            `usage:"Base64 encoded JWKS blob for validating JWT tokens"`
+	TrustedAudiences             []string          `usage:"Trusted audiences for JWT tokens"`
+	TokenExchangeEndpoint        string            `usage:"Endpoint for token exchange"`
+	TokenExchangeClientID        string            `usage:"Client ID for token exchange"`
+	TokenExchangeClientSecret    string            `usage:"Client secret for token exchange"`
+	AuditLogSendURL              string            `usage:"URL to send audit logs to"`
+	AuditLogToken                string            `usage:"Token to send audit logs with"`
+	AuditLogMetadata             map[string]string `usage:"Metadata to send with audit logs"`
+	AuditLogBatchSize            int               `usage:"Batch size for sending audit logs" default:"1000"`
+	AuditLogFlushIntervalSeconds int               `usage:"Interval for flushing audit logs" default:"5"`
+	Roots                        []string          `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
+	n                            *Nanobot
 }
 
 func NewRun(n *Nanobot) *Run {
@@ -56,10 +64,6 @@ func (r *Run) getRoots() ([]mcp.Root, error) {
 		rootDefs = r.Roots
 		roots    []mcp.Root
 	)
-
-	if len(rootDefs) == 0 {
-		rootDefs = []string{"cwd:."}
-	}
 
 	for _, root := range rootDefs {
 		name, directory, ok := strings.Cut(root, ":")
@@ -132,20 +136,28 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 	cfg, _ := json.MarshalIndent(once, "", "  ")
 	printer.Prefix("config", string(cfg))
 
+	var auditLogCollector *auditlogs.Collector
+	if r.AuditLogSendURL != "" {
+		auditLogCollector = auditlogs.NewCollector(r.AuditLogSendURL, r.AuditLogToken, r.AuditLogBatchSize, time.Duration(r.AuditLogFlushIntervalSeconds)*time.Second, r.AuditLogMetadata)
+		defer auditLogCollector.Close()
+	}
+
 	runtime, err := r.n.GetRuntime(runtimeOpt, runtime.Options{
-		OAuthRedirectURL: "http://" + strings.Replace(r.ListenAddress, "127.0.0.1", "localhost", 1) + "/oauth/callback",
-		DSN:              r.n.DSN(),
+		OAuthRedirectURL:  "http://" + strings.Replace(r.ListenAddress, "127.0.0.1", "localhost", 1) + "/oauth/callback",
+		DSN:               r.n.DSN(),
+		AuditLogCollector: auditLogCollector,
 	})
 	if err != nil {
 		return err
 	}
 
-	return r.n.runMCP(cmd.Context(), cfgFactory, runtime, callbackHandler, mcpOpts{
-		TrustedIssuer:    r.TrustedIssuer,
-		JWKS:             r.JWKS,
-		TrustedAudiences: r.TrustedAudiences,
-		ListenAddress:    r.ListenAddress,
-		HealthzPath:      r.HealthzPath,
-		StartUI:          !r.DisableUI,
+	return r.n.runMCP(cmd.Context(), cfgFactory, runtime, callbackHandler, auditLogCollector, mcpOpts{
+		TrustedIssuer:      r.TrustedIssuer,
+		JWKS:               r.JWKS,
+		TrustedAudiences:   r.TrustedAudiences,
+		ListenAddress:      r.ListenAddress,
+		HealthzPath:        r.HealthzPath,
+		ForceFetchToolList: r.ForceFetchToolList,
+		StartUI:            !r.DisableUI,
 	})
 }
