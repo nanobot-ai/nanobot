@@ -59,28 +59,40 @@ type HTTPClientOptions struct {
 	TokenExchangeClientSecret string
 }
 
-func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, headers map[string]string, watchesEvents bool) *HTTPClient {
+func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, sessionState *SessionState, headers map[string]string, watchesEvents bool) (*HTTPClient, error) {
 	var sessionID *string
 	if id := headers[SessionIDHeader]; id != "" {
 		sessionID = &id
+	} else if sessionState != nil {
+		sessionID = &sessionState.ID
+	}
+
+	var initializeRequest *Message
+	if sessionState != nil {
+		var err error
+		initializeRequest, err = NewMessage("initialize", sessionState.InitializeRequest)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &HTTPClient{
-		httpClient:    http.DefaultClient,
-		oauthHandler:  newOAuth(opts.CallbackHandler, opts.ClientCredLookup, opts.TokenStorage, opts.OAuthClientName, opts.OAuthRedirectURL),
-		baseURL:       config.BaseURL,
-		messageURL:    config.BaseURL,
-		serverName:    serverName,
-		displayName:   complete.First(config.Name, config.ShortName, serverName),
-		headers:       maps.Clone(headers),
-		waiter:        newWaiter(),
-		needReconnect: watchesEvents,
-		sessionID:     sessionID,
+		httpClient:        http.DefaultClient,
+		oauthHandler:      newOAuth(opts.CallbackHandler, opts.ClientCredLookup, opts.TokenStorage, opts.OAuthClientName, opts.OAuthRedirectURL),
+		baseURL:           config.BaseURL,
+		messageURL:        config.BaseURL,
+		serverName:        serverName,
+		displayName:       complete.First(config.Name, config.ShortName, serverName),
+		headers:           maps.Clone(headers),
+		waiter:            newWaiter(),
+		needReconnect:     watchesEvents,
+		sessionID:         sessionID,
+		initializeRequest: initializeRequest,
 
 		tokenExchangeClientID:     opts.TokenExchangeClientID,
 		tokenExchangeClientSecret: opts.TokenExchangeClientSecret,
 		tokenExchangeEndpoint:     opts.TokenExchangeEndpoint,
-	}
+	}, nil
 }
 
 func (s *HTTPClient) SetOAuthCallbackHandler(handler CallbackHandler) {
@@ -426,6 +438,9 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 	if err != nil {
 		return err
 	}
+
+	// Remove the session ID header if it exists because we are initializing.
+	delete(req.Header, SessionIDHeader)
 
 	s.clientLock.RLock()
 	httpClient := s.httpClient

@@ -318,7 +318,10 @@ func NewSession(ctx context.Context, serverName string, config Server, opts ...C
 			}
 			headers["Mcp-Session-Id"] = opt.SessionState.ID
 		}
-		wire = newHTTPClient(serverName, config, opt.HTTPClientOptions, headers, !opt.ignoreEvents)
+		wire, err = newHTTPClient(serverName, config, opt.HTTPClientOptions, opt.SessionState, headers, !opt.ignoreEvents)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		wire, err = newStdioClient(ctx, opt.Roots, opt.Env, serverName, config, opt.Runner)
 		if err != nil {
