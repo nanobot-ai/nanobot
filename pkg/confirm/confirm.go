@@ -46,7 +46,7 @@ func (*Service) HandleAuthURL(ctx context.Context, mcpServerName, url string) (b
 
 	var elicitResponse mcp.ElicitResult
 
-	if err := session.Exchange(ctx, "elicitation/create", "", elicit, &elicitResponse); err != nil {
+	if err := session.Exchange(ctx, "elicitation/create", elicit, &elicitResponse); err != nil {
 		return false, fmt.Errorf("failed to elicit confirmation: %w", err)
 	}
 

@@ -22,6 +22,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
 	"github.com/nanobot-ai/nanobot/pkg/server"
 	"github.com/nanobot-ai/nanobot/pkg/session"
@@ -235,15 +236,16 @@ func (n *Nanobot) Run(cmd *cobra.Command, _ []string) error {
 }
 
 type mcpOpts struct {
-	TrustedIssuer    string
-	JWKS             string
-	TrustedAudiences []string
-	ListenAddress    string
-	HealthzPath      string
-	StartUI          bool
+	TrustedIssuer      string
+	JWKS               string
+	TrustedAudiences   []string
+	ListenAddress      string
+	HealthzPath        string
+	ForceFetchToolList bool
+	StartUI            bool
 }
 
-func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, opts mcpOpts) error {
+func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, auditLogCollector *auditlogs.Collector, opts mcpOpts) error {
 	env, err := n.loadEnv()
 	if err != nil {
 		return fmt.Errorf("failed to load environment: %w", err)
@@ -261,7 +263,9 @@ func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *
 		return err
 	}
 
-	var mcpServer mcp.MessageHandler = server.NewServer(runt, config, sessionManager)
+	var mcpServer mcp.MessageHandler = server.NewServer(runt, config, sessionManager, server.Options{
+		ForceFetchToolList: opts.ForceFetchToolList,
+	})
 
 	if address == "stdio" {
 		stdio := mcp.NewStdioServer(env, mcpServer)
@@ -274,12 +278,13 @@ func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *
 	}
 
 	httpServer, err := mcp.NewHTTPServer(ctx, env, mcpServer, mcp.HTTPServerOptions{
-		HealthCheckPath:  opts.HealthzPath,
-		RunHealthChecker: opts.HealthzPath != "" && os.Getenv("NANOBOT_DISABLE_HEALTH_CHECKER") != "true",
-		SessionStore:     sessionManager,
-		JWKS:             opts.JWKS,
-		TrustedIssuer:    opts.TrustedIssuer,
-		TrustedAudiences: opts.TrustedAudiences,
+		HealthCheckPath:   opts.HealthzPath,
+		RunHealthChecker:  opts.HealthzPath != "" && os.Getenv("NANOBOT_DISABLE_HEALTH_CHECKER") != "true",
+		SessionStore:      sessionManager,
+		JWKS:              opts.JWKS,
+		TrustedIssuer:     opts.TrustedIssuer,
+		TrustedAudiences:  opts.TrustedAudiences,
+		AuditLogCollector: auditLogCollector,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP server: %w", err)

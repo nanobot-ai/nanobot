@@ -171,8 +171,8 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 
 	// Perform token exchange if configured and a token was parsed
 	// Check for a token on the context
-	token, ok := TokenFromContext(ctx)
-	if ok && token != "" {
+	token := TokenFromContext(ctx)
+	if token != "" {
 		// Exchange the token
 		exchangedToken, err := s.exchangeToken(ctx, token)
 		if err != nil {
