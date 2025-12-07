@@ -462,6 +462,9 @@ func (c *Client) GetPrompt(ctx context.Context, name string, args map[string]str
 
 func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 	var tools ListToolsResult
+	if c.Session.InitializeResult.Capabilities.Tools == nil {
+		return &tools, nil
+	}
 	err := c.Session.Exchange(ctx, "tools/list", struct{}{}, &tools)
 	if err == nil && len(c.toolOverrides) > 0 {
 		filtered := tools.Tools[:0] // reuse the backing array
