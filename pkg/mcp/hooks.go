@@ -164,7 +164,7 @@ func parseHookDefinition(data string) (HookDefinition, error) {
 
 	name := values.Get("name")
 	direction := values.Get("direction")
-	if direction != "" && direction != "in" && direction != "out" {
+	if direction != "" && direction != "request" && direction != "response" {
 		return HookDefinition{}, fmt.Errorf("invalid direction value: %s", direction)
 	}
 
