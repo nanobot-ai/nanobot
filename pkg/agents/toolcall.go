@@ -86,9 +86,8 @@ func (a *Agents) invoke(ctx context.Context, config types.Config, target types.T
 		Items: []types.CompletionItem{
 			{
 				ToolCallResult: &types.ToolCallResult{
-					CallID:     funcCall.ToolCall.CallID,
-					Output:     *response,
-					OutputRole: config.Flows[target.MCPServer].OutputRole,
+					CallID: funcCall.ToolCall.CallID,
+					Output: *response,
 				},
 			},
 		},

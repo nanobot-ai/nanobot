@@ -35,7 +35,6 @@ type Config struct {
 	Publish    Publish               `json:"publish,omitempty"`
 	Agents     map[string]Agent      `json:"agents,omitempty"`
 	MCPServers map[string]mcp.Server `json:"mcpServers,omitempty"`
-	Flows      map[string]Flow       `json:"flows,omitempty"`
 	Profiles   map[string]Config     `json:"profiles,omitempty"`
 	Prompts    map[string]Prompt     `json:"prompts,omitempty"`
 }
@@ -73,15 +72,6 @@ func (c Config) Validate(allowLocal bool) error {
 		}
 		if err := validateMCPServer(mcpServerName, mcpServer, allowLocal); err != nil {
 			errs = append(errs, err)
-		}
-	}
-
-	for flowName, flow := range c.Flows {
-		if err := checkDup(seenNames, "flows", flowName); err != nil {
-			errs = append(errs, err)
-		}
-		if err := flow.validate(flowName, c); err != nil {
-			errs = append(errs, fmt.Errorf("error validating flow %q: %w", flowName, err))
 		}
 	}
 
@@ -155,135 +145,6 @@ func (e *EnvDef) UnmarshalJSON(data []byte) error {
 	}
 	type Alias EnvDef
 	return json.Unmarshal(data, (*Alias)(e))
-}
-
-type Flow struct {
-	Description string      `json:"description,omitempty"`
-	Input       InputSchema `json:"input,omitempty"`
-	Before      StringList  `json:"before,omitempty"`
-	After       StringList  `json:"after,omitempty"`
-	OutputRole  string      `json:"outputRole,omitempty"`
-	Steps       []Step      `json:"steps,omitzero"`
-}
-
-func (f Flow) validate(flowName string, c Config) error {
-	var errs []error
-	for i, step := range f.Steps {
-		if err := step.validate(c); err != nil {
-			errs = append(errs, fmt.Errorf("error validating step %d in flow %q: %w", i, flowName, err))
-		}
-	}
-	return errors.Join(errs...)
-}
-
-type Step struct {
-	ID         string         `json:"id,omitempty"`
-	Agent      AgentCall      `json:"agent,omitempty"`
-	Tool       string         `json:"tool,omitempty"`
-	Flow       string         `json:"flow,omitempty"`
-	If         string         `json:"if,omitempty"`
-	While      string         `json:"while,omitempty"`
-	Elicit     *Elicit        `json:"elicit,omitempty"`
-	ForEach    any            `json:"forEach,omitempty"`
-	ForEachVar string         `json:"forEachVar,omitempty"`
-	Set        map[string]any `json:"set,omitempty"`
-	Evaluate   any            `json:"evaluate,omitempty"`
-	Return     map[string]any `json:"return,omitempty"`
-	Input      any            `json:"input,omitempty"`
-	Parallel   bool
-	Steps      []Step `json:"steps,omitzero"`
-	Else       []Step `json:"else,omitzero"`
-}
-
-type Elicit struct {
-	Message      string       `json:"message,omitempty"`
-	CancelResult any          `json:"cancelResult,omitempty"`
-	RejectResult any          `json:"rejectResult,omitempty"`
-	Input        *InputSchema `json:"input,omitempty"`
-}
-
-func (e Elicit) MarshalJSON() ([]byte, error) {
-	if e.Input == nil && e.Message != "" {
-		return json.Marshal(e.Message)
-	}
-	type Alias Elicit
-	return json.Marshal(Alias(e))
-}
-
-func (e *Elicit) UnmarshalJSON(data []byte) error {
-	if data[0] == '"' && data[len(data)-1] == '"' {
-		var raw string
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return err
-		}
-		e.Message = raw
-		e.Input = nil
-		return nil
-	}
-	type Alias Elicit
-	return json.Unmarshal(data, (*Alias)(e))
-}
-
-func ignoreEmptyStringList(s string) []string {
-	if s == "" {
-		return nil
-	}
-	return []string{s}
-}
-
-func (s Step) validate(c Config) error {
-	_, _, errs := validateReferences(c, ignoreEmptyStringList(s.Tool), ignoreEmptyStringList(s.Agent.Name), ignoreEmptyStringList(s.Flow))
-	for i, step := range s.Steps {
-		if err := step.validate(c); err != nil {
-			errs = append(errs, fmt.Errorf("error validating nested step %d: %w", i, err))
-		}
-	}
-	return errors.Join(errs...)
-}
-
-type AgentCall struct {
-	Name              string        `json:"name,omitempty"`
-	Output            *OutputSchema `json:"output,omitempty"`
-	Chat              *bool         `json:"chat,omitempty"`
-	ToolChoice        string        `json:"toolChoice,omitempty"`
-	Temperature       *json.Number  `json:"temperature,omitempty"`
-	TopP              *json.Number  `json:"topP,omitempty"`
-	NewThread         *bool         `json:"newThread,omitempty"`
-	InputAsToolResult *bool         `json:"inputAsToolResult,omitempty"`
-	// NOTE: DON'T ADD A NEW FIELD HERE WITHOUT UPDATING MarshalJSON/UnmarshalJSON/Merge
-}
-
-func (a AgentCall) Merge(other AgentCall) (result AgentCall) {
-	result.Name = complete.Last(a.Name, other.Name)
-	result.Output = complete.Last(a.Output, other.Output)
-	result.Chat = complete.Last(a.Chat, other.Chat)
-	result.ToolChoice = complete.Last(a.ToolChoice, other.ToolChoice)
-	result.Temperature = complete.Last(a.Temperature, other.Temperature)
-	result.TopP = complete.Last(a.TopP, other.TopP)
-	result.NewThread = complete.Last(a.NewThread, other.NewThread)
-	result.InputAsToolResult = complete.Last(a.InputAsToolResult, other.InputAsToolResult)
-	return
-}
-
-func (a AgentCall) MarshalJSON() ([]byte, error) {
-	if a.Output == nil && a.Chat == nil && a.ToolChoice == "" && a.Temperature == nil && a.TopP == nil && a.NewThread == nil {
-		return json.Marshal(a.Name)
-	}
-	type Alias AgentCall
-	return json.Marshal(Alias(a))
-}
-
-func (a *AgentCall) UnmarshalJSON(data []byte) error {
-	if data[0] == '"' && data[len(data)-1] == '"' {
-		var raw string
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return err
-		}
-		a.Name = raw
-		return nil
-	}
-	type Alias AgentCall
-	return json.Unmarshal(data, (*Alias)(a))
 }
 
 type Publish struct {
@@ -454,12 +315,9 @@ type Agent struct {
 	StarterMessages StringList                `json:"starterMessages,omitempty"`
 	Instructions    DynamicInstructions       `json:"instructions,omitempty"`
 	Model           string                    `json:"model,omitempty"`
-	Before          StringList                `json:"before,omitempty"`
-	After           StringList                `json:"after,omitempty"`
 	MCPServers      StringList                `json:"mcpServers,omitempty"`
 	Tools           StringList                `json:"tools,omitempty"`
 	Agents          StringList                `json:"agents,omitempty"`
-	Flows           StringList                `json:"flows,omitempty"`
 	Prompts         StringList                `json:"prompts,omitzero"`
 	Resources       StringList                `json:"resources,omitzero"`
 	Reasoning       *AgentReasoning           `json:"reasoning,omitempty"`
@@ -517,7 +375,7 @@ func validateReference[T any](ref string, targetType string, targets map[string]
 	return toolRef.PublishedName(toolRef.Server), nil
 }
 
-func validateReferences(c Config, tools, agents, flows StringList) (bool, map[string]struct{}, []error) {
+func validateReferences(c Config, tools, agents StringList) (bool, map[string]struct{}, []error) {
 	var (
 		errs              []error
 		unknownNames      bool
@@ -544,19 +402,11 @@ func validateReferences(c Config, tools, agents, flows StringList) (bool, map[st
 		resolvedToolNames[targetName] = struct{}{}
 	}
 
-	for _, ref := range flows {
-		targetName, err := validateReference(ref, "flow", c.Flows)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("error validating flow reference %q: %w", ref, err))
-		}
-		resolvedToolNames[targetName] = struct{}{}
-	}
-
 	return unknownNames, resolvedToolNames, errs
 }
 
 func (a Agent) validate(agentName string, c Config) error {
-	unknownNames, resolvedToolNames, errs := validateReferences(c, a.Tools, a.Agents, a.Flows)
+	unknownNames, resolvedToolNames, errs := validateReferences(c, a.Tools, a.Agents)
 
 	if agentName == AgentTool {
 		errs = append(errs, fmt.Errorf("agent can not be named \"chat\""))

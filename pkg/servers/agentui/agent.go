@@ -59,7 +59,7 @@ func (s *Server) describeSession(ctx context.Context, args any) <-chan struct{} 
 	if description == "" {
 		go func() {
 			defer close(result)
-			ret, err := s.runtime.Call(ctx, "nanobot.summary", "nanobot.summary", args)
+			ret, err := s.runtime.Call(ctx, "nanobot.summary.agent", "chat", args)
 			if err != nil {
 				return
 			}

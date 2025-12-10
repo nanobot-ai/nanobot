@@ -94,8 +94,7 @@ func TestCompletionItem_ToolResult(t *testing.T) {
 	item := CompletionItem{
 		ID: "test-id",
 		ToolCallResult: &ToolCallResult{
-			OutputRole: "assistant",
-			CallID:     "test-call-id",
+			CallID: "test-call-id",
 			Output: CallResult{
 				Content: []mcp.Content{
 					{
@@ -112,7 +111,7 @@ func TestCompletionItem_ToolResult(t *testing.T) {
 		t.Fatalf("Failed to marshal CompletionItem: %v", err)
 	}
 
-	autogold.Expect(`{"id":"test-id","type":"tool","output":{"content":[{"type":"text","text":"This is a tool result"}]},"outputRole":"assistant","callID":"test-call-id"}`).Equal(t, string(data))
+	autogold.Expect(`{"id":"test-id","type":"tool","output":{"content":[{"type":"text","text":"This is a tool result"}]},"callID":"test-call-id"}`).Equal(t, string(data))
 
 	var unmarshalledItem CompletionItem
 	if err := json.Unmarshal(data, &unmarshalledItem); err != nil {
@@ -135,8 +134,7 @@ func TestCompletionItem_ToolBoth(t *testing.T) {
 			TargetType: "test-target-type",
 		},
 		ToolCallResult: &ToolCallResult{
-			OutputRole: "assistant",
-			CallID:     "test-call-id",
+			CallID: "test-call-id",
 			Output: CallResult{
 				Content: []mcp.Content{
 					{
@@ -153,7 +151,7 @@ func TestCompletionItem_ToolBoth(t *testing.T) {
 		t.Fatalf("Failed to marshal CompletionItem: %v", err)
 	}
 
-	autogold.Expect(`{"id":"test-id","type":"tool","output":{"content":[{"type":"text","text":"This is a tool result"}]},"outputRole":"assistant","arguments":"test-arguments","callID":"test-call-id","name":"test-name","target":"test-target","targetType":"test-target-type"}`).Equal(t, string(data))
+	autogold.Expect(`{"id":"test-id","type":"tool","output":{"content":[{"type":"text","text":"This is a tool result"}]},"arguments":"test-arguments","callID":"test-call-id","name":"test-name","target":"test-target","targetType":"test-target-type"}`).Equal(t, string(data))
 
 	var unmarshalledItem CompletionItem
 	if err := json.Unmarshal(data, &unmarshalledItem); err != nil {

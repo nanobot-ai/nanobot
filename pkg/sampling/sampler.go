@@ -96,13 +96,11 @@ func (s *Sampler) getMatchingModel(config types.Config, req *mcp.CreateMessageRe
 type SamplerOptions struct {
 	ProgressToken any
 	Continue      bool
-	AgentOverride types.AgentCall
 }
 
 func (s SamplerOptions) Merge(other SamplerOptions) (result SamplerOptions) {
 	result.ProgressToken = complete.Last(s.ProgressToken, other.ProgressToken)
 	result.Continue = complete.Last(s.Continue, other.Continue)
-	result.AgentOverride = complete.Merge(s.AgentOverride, other.AgentOverride)
 	return
 }
 
@@ -116,13 +114,7 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 	}
 
 	request := types.CompletionRequest{
-		Model:             model,
-		ToolChoice:        opt.AgentOverride.ToolChoice,
-		OutputSchema:      opt.AgentOverride.Output,
-		Temperature:       opt.AgentOverride.Temperature,
-		TopP:              opt.AgentOverride.TopP,
-		NewThread:         opt.AgentOverride.NewThread != nil && *opt.AgentOverride.NewThread,
-		InputAsToolResult: opt.AgentOverride.InputAsToolResult,
+		Model: model,
 	}
 
 	if req.MaxTokens != 0 {
@@ -172,7 +164,6 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 	}
 
 	completeOptions := types.CompletionOptions{
-		Chat:          opt.AgentOverride.Chat,
 		ProgressToken: opt.ProgressToken,
 	}
 

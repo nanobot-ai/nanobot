@@ -104,7 +104,6 @@ func TestSchema(t *testing.T) {
 			"description": "This is the first agent.",
 			"model": "a model",
 			"tools": "atool",
-			"flows": "atool",
 			"reasoning": {
 				"effort": "low",
 				"summary": "detailed"
@@ -149,7 +148,6 @@ func TestSchema(t *testing.T) {
 		"agent2": {
 			"threadName": "a different thread",
 			"tools": ["tool1", "tool2"],
-			"flows": ["tool1", "tool2"],
 			"agents": ["tool1", "tool2"],
 			"instructions": {
 				"mcpServer": "aserver",
@@ -158,148 +156,6 @@ func TestSchema(t *testing.T) {
 					"key": "value"
 				}
 			}
-		}
-	},
-    "flows": {
-		"flow2": {
-			"input": {
-				"description": "This is the input schema for flow1.",
-				"schema": {
-					"type": "object"
-				}
-			},
-			"steps": [
-			]
-		},
-		"flow1": {
-			"before": "target/foo",
-			"after": ["target/foo"],
-			"description": "This is the first flow.",
-			"outputRole": "assistant",
-			"input": {
-				"name": "a name",
-				"description": "This is the input schema for flow1.",
-				"fields": {
-					"field1": "description1",
-					"field2": "description2",
-					"field3": {
-						"description": "description3",
-						"fields": {
-							"fields4": "description4",
-							"fields5": "description5"
-						}
-					}
-				}
-			},
-			"steps": [
-				{
-					"id": "step1",
-					"input": {},
-					"tool": "tool1",
-					"steps": [
-						{
-							"id": "subStep"
-						}
-					],
-					"else": [
-						{
-							"id": "subStep"
-						}
-					]
-				},
-				{
-					"id": "step1",
-					"input": "a string",
-					"agent": "tool1"
-				},
-				{
-					"id": "elicit1",
-					"elicit": "a string"
-				},
-				{
-					"id": "step1",
-					"evaluate": "an expression",
-					"elicit": {
-						"message": "a message",
-						"rejectResult": "user declined",
-						"cancelResult": {
-							"data": "user canceled"
-						},
-						"input": {
-							"fields": {
-								"elicit1": "description1"
-							}
-						}
-					}
-				},
-				{
-					"id": "step1",
-					"input": "a string",
-					"evaluate": {
-						"x": "an expression"
-					},
-					"agent": {
-						"name": "tool1",
-						"chat": false,
-						"newThread": true,
-						"temperature": 0.5,
-						"topP": 0.5,
-						"toolChoice": "tool1",
-						"inputAsToolResult": true,
-						"output": {
-							"description": "output1",
-							"fields": {
-								"field1": "description1",
-								"field1": "description1"
-							}
-						}
-					}
-				},
-				{
-					"id": "step1",
-					"input": "a string",
-					"flow": "tool1",
-					"while": "an expression",
-					"return": {
-						"key1": {
-							"something": 1
-						},
-						"key2": null,
-						"key3": 4
-					}
-				},
-				{
-					"id": "step1",
-					"input": "a string",
-					"flow": "tool1",
-					"while": "an expression",
-					"set": {
-						"key1": {
-							"something": 1
-						},
-						"key2": null,
-						"key3": 4
-					}
-				},
-				{
-					"id": "step1",
-					"parallel": true,
-					"forEach": "expr",
-					"forEachVar": "item",
-					"input": "a string",
-					"flow": "tool1"
-				},
-				{
-					"id": "step1",
-					"forEach": [
-						"item1",
-						"item2"
-					],
-					"forEachVar": "item",
-					"input": "a string",
-					"flow": "tool1"
-				}
-			]
 		}
 	},
 	"prompts": {

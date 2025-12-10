@@ -184,9 +184,8 @@ func (c CompletionItem) MarshalJSON() ([]byte, error) {
 		return slices.Concat(header[:len(header)-1], []byte(","), content[1:]), nil
 	} else if c.ToolCallResult != nil || c.ToolCall != nil {
 		var (
-			tc         ToolCall
-			output     CallResult
-			outputRole string
+			tc     ToolCall
+			output CallResult
 		)
 		if c.ToolCall != nil {
 			tc = *c.ToolCall
@@ -197,24 +196,21 @@ func (c CompletionItem) MarshalJSON() ([]byte, error) {
 		}
 		if c.ToolCallResult != nil {
 			output = c.ToolCallResult.Output
-			outputRole = c.ToolCallResult.OutputRole
 		}
 		return json.Marshal(struct {
-			ID         string     `json:"id,omitempty"`
-			HasMore    bool       `json:"hasMore,omitempty"`
-			Partial    bool       `json:"partial,omitempty"`
-			Type       string     `json:"type,omitempty"`
-			Output     CallResult `json:"output,omitzero"`
-			OutputRole string     `json:"outputRole,omitzero"`
+			ID      string     `json:"id,omitempty"`
+			HasMore bool       `json:"hasMore,omitempty"`
+			Partial bool       `json:"partial,omitempty"`
+			Type    string     `json:"type,omitempty"`
+			Output  CallResult `json:"output,omitzero"`
 			ToolCall
 		}{
-			ID:         c.ID,
-			Type:       "tool",
-			HasMore:    c.HasMore,
-			Partial:    c.Partial,
-			ToolCall:   tc,
-			Output:     output,
-			OutputRole: outputRole,
+			ID:       c.ID,
+			Type:     "tool",
+			HasMore:  c.HasMore,
+			Partial:  c.Partial,
+			ToolCall: tc,
+			Output:   output,
 		})
 	} else if c.Reasoning != nil {
 		return json.Marshal(struct {
@@ -264,9 +260,8 @@ func (c *CompletionResponse) Deserialize(data any) (any, error) {
 }
 
 type ToolCallResult struct {
-	OutputRole string     `json:"outputRole,omitempty"`
-	CallID     string     `json:"callID,omitempty"`
-	Output     CallResult `json:"output,omitzero"`
+	CallID string     `json:"callID,omitempty"`
+	Output CallResult `json:"output,omitzero"`
 	// NOTE: If you add fields here, make sure to update the CompletionItem.MarshalJSON method, it
 	//has special handling for ToolCallResult.
 }

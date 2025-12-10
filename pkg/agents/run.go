@@ -37,7 +37,7 @@ func New(completer types.Completer, registry *tools.Service) *Agents {
 }
 
 func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, agent *types.Agent) (types.ToolMappings, error) {
-	toolMappings, err := a.registry.BuildToolMappings(ctx, slices.Concat(agent.Tools, agent.Agents, agent.Flows, agent.MCPServers))
+	toolMappings, err := a.registry.BuildToolMappings(ctx, slices.Concat(agent.Tools, agent.Agents, agent.MCPServers))
 	if err != nil {
 		return nil, fmt.Errorf("failed to build tool mappings: %w", err)
 	}

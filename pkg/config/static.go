@@ -23,25 +23,6 @@ var UI = types.Config{
 			},
 		},
 	},
-	Flows: map[string]types.Flow{
-		"nanobot.summary": {
-			Input: types.InputSchema{
-				Fields: map[string]types.Field{
-					"prompt": {
-						Description: "The input prompt to summarize",
-					},
-				},
-			},
-			Steps: []types.Step{
-				{
-					Agent: types.AgentCall{
-						Name: "nanobot.summary.agent",
-					},
-					Input: "${input.prompt}",
-				},
-			},
-		},
-	},
 	Publish: types.Publish{
 		MCPServers: []string{"nanobot.meta", "nanobot.resources", "nanobot.agentui"},
 	},

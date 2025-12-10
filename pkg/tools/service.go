@@ -539,13 +539,11 @@ func (s *Service) sampleCall(ctx context.Context, agent string, args any, opts .
 
 	return s.sampler.Sample(ctx, *createMessageRequest, sampling.SamplerOptions{
 		ProgressToken: opt.ProgressToken,
-		AgentOverride: opt.AgentOverride,
 	})
 }
 
 type CallOptions struct {
 	ProgressToken      any
-	AgentOverride      types.AgentCall
 	LogData            map[string]any
 	ReturnInput        bool
 	ReturnOutput       bool
@@ -562,7 +560,6 @@ type ToolCallInvocation struct {
 
 func (o CallOptions) Merge(other CallOptions) (result CallOptions) {
 	result.ProgressToken = complete.Last(o.ProgressToken, other.ProgressToken)
-	result.AgentOverride = complete.Merge(o.AgentOverride, other.AgentOverride)
 	result.LogData = complete.MergeMap(o.LogData, other.LogData)
 	result.ReturnInput = o.ReturnInput || other.ReturnInput
 	result.ReturnOutput = o.ReturnOutput || other.ReturnOutput
@@ -575,8 +572,6 @@ func (o CallOptions) Merge(other CallOptions) (result CallOptions) {
 func (s *Service) getTarget(ctx context.Context, config types.Config, server, tool string) (any, error) {
 	if a, ok := config.Agents[server]; ok {
 		return a, nil
-	} else if f, ok := config.Flows[server]; ok {
-		return f, nil
 	}
 	tools, err := s.ListTools(ctx, ListToolsOptions{
 		Servers: []string{server},
@@ -589,77 +584,6 @@ func (s *Service) getTarget(ctx context.Context, config types.Config, server, to
 		return tools[0].Tools[0], nil
 	}
 	return nil, fmt.Errorf("unknown target %s/%s", server, tool)
-}
-
-func (s *Service) runAfter(ctx context.Context, config types.Config, target, server, tool string, ret *types.CallResult, opt CallOptions) (*types.CallResult, error) {
-	var err error
-	for _, flowName := range slices.Sorted(maps.Keys(config.Flows)) {
-		if slices.Contains(config.Flows[flowName].After, target) ||
-			slices.Contains(config.Flows[flowName].After, server) {
-			newOpts := opt
-			newOpts.ReturnOutput = true
-			newOpts.ReturnInput = false
-			newOpts.LogData = maps.Clone(opt.LogData)
-			delete(newOpts.LogData, "mcpToolName")
-			newOpts.Target, err = s.getTarget(ctx, config, server, tool)
-			if err != nil {
-				return nil, err
-			}
-
-			newRet, err := s.Call(ctx, flowName, "", ret, newOpts)
-			if err != nil {
-				return nil, fmt.Errorf("failed to call after flow %s: %w", flowName, err)
-			}
-			if newRet.IsError {
-				return newRet, nil
-			}
-
-			if len(newRet.Content) == 0 || newRet.Content[0].Text == "" {
-				return nil, fmt.Errorf("after flow %s returned empty content", flowName)
-			}
-
-			if retType, ok := ret.StructuredContent.(*types.CallResult); ok {
-				ret = retType
-			} else {
-				var callResult types.CallResult
-				if err := json.Unmarshal([]byte(ret.Content[0].Text), &callResult); err != nil {
-					return nil, fmt.Errorf("failed to unmarshal call result from after flow %s: %w", flowName, err)
-				}
-				ret = &callResult
-			}
-		}
-	}
-
-	return ret, nil
-}
-
-func (s *Service) runBefore(ctx context.Context, config types.Config, target, server, tool string, args any, opt CallOptions) (any, *types.CallResult, error) {
-	var err error
-
-	for _, flowName := range slices.Sorted(maps.Keys(config.Flows)) {
-		if slices.Contains(config.Flows[flowName].Before, target) ||
-			slices.Contains(config.Flows[flowName].Before, server) {
-			newOpts := opt
-			newOpts.ReturnInput = true
-			newOpts.ReturnOutput = false
-			newOpts.LogData = maps.Clone(opt.LogData)
-			delete(newOpts.LogData, "mcpToolName")
-			newOpts.Target, err = s.getTarget(ctx, config, server, tool)
-			if err != nil {
-				return nil, nil, err
-			}
-			ret, err := s.Call(ctx, flowName, "", args, newOpts)
-			if err != nil {
-				return nil, nil, fmt.Errorf("failed to call before flow %s: %w", flowName, err)
-			}
-			if ret.IsError {
-				return nil, ret, nil
-			}
-			args = ret.StructuredContent
-		}
-	}
-
-	return args, nil, nil
 }
 
 func (s *Service) RunHook(ctx context.Context, in, out any, target string) (hasOutput bool, _ error) {
@@ -721,17 +645,9 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 		target = server + "/" + tool
 	}
 
-	defer func() {
-		if err == nil {
-			ret, err = s.runAfter(ctx, config, target, server, tool, ret, opt)
-		}
-	}()
-
 	targetType := "tool"
 	if _, ok := config.Agents[server]; ok {
 		targetType = "agent"
-	} else if _, ok := config.Flows[server]; ok {
-		targetType = "flow"
 	}
 
 	if session != nil && opt.ProgressToken != nil {
@@ -812,20 +728,10 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 		}
 	}
 
-	args, ret, err = s.runBefore(ctx, config, target, server, tool, args, opt)
-	if err != nil || ret != nil {
-		return ret, err
-	}
-
 	if _, ok := config.Agents[server]; ok && tool != types.AgentTool {
 		return s.sampleCall(ctx, server, args, SampleCallOptions{
 			ProgressToken: opt.ProgressToken,
-			AgentOverride: opt.AgentOverride,
 		})
-	}
-
-	if _, ok := config.Flows[server]; ok {
-		return s.startFlow(ctx, config, server, args, opt)
 	}
 
 	c, err := s.GetClient(ctx, server)
@@ -877,10 +783,8 @@ func (s *Service) ListTools(ctx context.Context, opts ...ListToolsOptions) (resu
 
 	serverList := slices.Sorted(maps.Keys(config.MCPServers))
 	agentsList := slices.Sorted(maps.Keys(config.Agents))
-	flowsList := slices.Sorted(maps.Keys(config.Flows))
 	if len(opt.Servers) == 0 {
 		opt.Servers = append(serverList, agentsList...)
-		opt.Servers = append(opt.Servers, flowsList...)
 	}
 
 	for _, server := range opt.Servers {
@@ -932,32 +836,6 @@ func (s *Service) ListTools(ctx context.Context, opts ...ListToolsOptions) (resu
 
 		result = append(result, ListToolsResult{
 			Server: agentName,
-			Tools:  tools.Tools,
-		})
-	}
-
-	for _, flowName := range opt.Servers {
-		flow, ok := config.Flows[flowName]
-		if !ok {
-			continue
-		}
-
-		tools := filterTools(&mcp.ListToolsResult{
-			Tools: []mcp.Tool{
-				{
-					Name:        flowName,
-					Description: flow.Description,
-					InputSchema: flow.Input.ToSchema(),
-				},
-			},
-		}, opt.Tools)
-
-		if len(tools.Tools) == 0 {
-			continue
-		}
-
-		result = append(result, ListToolsResult{
-			Server: flowName,
 			Tools:  tools.Tools,
 		})
 	}
@@ -1144,11 +1022,9 @@ func (s *Service) convertToSampleRequest(config types.Config, agent string, args
 
 type SampleCallOptions struct {
 	ProgressToken any
-	AgentOverride types.AgentCall
 }
 
 func (s SampleCallOptions) Merge(other SampleCallOptions) (result SampleCallOptions) {
 	result.ProgressToken = complete.Last(s.ProgressToken, other.ProgressToken)
-	result.AgentOverride = complete.Merge(s.AgentOverride, other.AgentOverride)
 	return
 }

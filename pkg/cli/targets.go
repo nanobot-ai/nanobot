@@ -69,8 +69,6 @@ func (t *Targets) Run(cmd *cobra.Command, args []string) error {
 			if _, ok := c.MCPServers[target]; ok {
 				targetType = "tool"
 				target = target + "/" + t.Name
-			} else if _, ok := c.Flows[target]; ok {
-				targetType = "flow"
 			}
 
 			_, _ = tw.Write([]byte(target + "\t" + targetType + "\t" + trim(t.Description) + "\n"))
