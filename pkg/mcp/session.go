@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
+	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 )
 
 var ErrNoResult = errors.New("no result in response")
@@ -52,7 +53,7 @@ type Session struct {
 	filters           []filterRegistration
 	filterID          int
 	sessionManager    SessionStore
-	hooks             *Hooks
+	hooks             Hooks
 }
 
 type filterRegistration struct {
@@ -61,6 +62,16 @@ type filterRegistration struct {
 }
 
 const SessionEnvMapKey = "env"
+
+func (s *Session) Root() *Session {
+	if s == nil {
+		return nil
+	}
+	if s.Parent == nil {
+		return s
+	}
+	return s.Parent.Root()
+}
 
 func (s *Session) Context() context.Context {
 	return s.ctx
@@ -401,10 +412,12 @@ func (s *Session) Send(ctx context.Context, req Message) error {
 		req = *newReq
 	}
 
-	if err := s.hooks.CallAllHooks(ctx, s.HookRunner, &req, "request", nil); err != nil {
+	newReq, err := s.callAllHooks(ctx, &req, "request")
+	if err != nil {
 		return fmt.Errorf("failed to call \"request\" hooks: %w", err)
 	}
 
+	req = *newReq
 	req.JSONRPC = "2.0"
 	if err := s.wire.Send(ctx, req); err != nil {
 		return err
@@ -488,18 +501,117 @@ func (s *Session) toRequest(method string, in any, opt ExchangeOption) (*Message
 	return req, nil
 }
 
+func getMessageName(req *Message) string {
+	name := "unknown"
+	switch req.Method {
+	case "resources/read", "resources/subscribe", "resources/unsubscribe":
+		_ = json.Unmarshal(req.Params, &struct {
+			Uri *string `json:"uri,omitempty"`
+		}{
+			Uri: &name,
+		})
+	case "tools/call", "prompts/get":
+		_ = json.Unmarshal(req.Params, &struct {
+			Name *string `json:"name,omitempty"`
+		}{
+			Name: &name,
+		})
+	default:
+	}
+	return name
+}
+
+func (s *Session) callAllHooks(ctx context.Context, req *Message, direction string) (*Message, error) {
+	var (
+		hooks    = s.hooks
+		name     = getMessageName(req)
+		auditLog = AuditLogFromContext(ctx)
+	)
+	if len(hooks) == 0 {
+		ctxServer := MCPServerConfigFromContext(ctx)
+		if len(ctxServer.Hooks) > 0 {
+			hooks = ctxServer.Hooks
+			ctx = WithMCPServerConfig(ctx, Server{})
+		}
+	}
+
+	params := map[string]string{
+		"name":        name,
+		"direction":   direction,
+		"callOnError": fmt.Sprintf("%v", req.Error != nil),
+		"method":      req.Method,
+	}
+
+	for _, hook := range hooks {
+		for _, target := range hook.Targets {
+			hookResponse, err := InvokeHooks(ctx, s.HookRunner, Hooks{HookMapping{
+				Name:    hook.Name,
+				Params:  hook.Params,
+				Targets: []string{target},
+			}}, &SessionMessageHook{
+				Accept:  true,
+				Message: req,
+			}, req.Method, params)
+			if err != nil {
+				return nil, fmt.Errorf("failed to invoke session hooks: %w", err)
+			}
+
+			if auditLog != nil {
+				status := "ok"
+				if !hookResponse.Accept {
+					status = "rejected"
+				}
+				auditLog.WebhookStatuses = append(auditLog.WebhookStatuses, auditlogs.MCPWebhookStatus{
+					Type:    direction,
+					Method:  req.Method,
+					Name:    hook.Name,
+					Status:  status,
+					Message: hookResponse.Reason,
+				})
+			}
+
+			if !hookResponse.Accept {
+				if hookResponse.Reason != "" {
+					return nil, fmt.Errorf("message rejected: %s", hookResponse.Reason)
+				}
+				return nil, fmt.Errorf("message rejected by hook")
+			}
+
+			if hookResponse.Message != nil {
+				req = hookResponse.Message
+			}
+		}
+	}
+
+	return req, nil
+}
+
 func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts ...ExchangeOption) (err error) {
 	opt := complete.Complete(opts...)
-	var req *Message
+	var (
+		req        *Message
+		respResult json.RawMessage
+		respError  *RPCError
+	)
 	req, err = s.toRequest(method, in, opt)
 	if err != nil {
 		return err
 	}
 
+	req, err = s.callAllHooks(ctx, req, "in")
+	if err != nil {
+		return fmt.Errorf("failed to call \"in\" hooks: %w", err)
+	}
+
 	defer func() {
-		hooksErr := s.hooks.CallAllHooks(ctx, s.HookRunner, req, "response", err)
-		if hooksErr != nil && err == nil {
-			err = fmt.Errorf("failed to call \"response\" hooks: %w", hooksErr)
+		tempReq := *req
+		tempReq.Result = respResult
+		tempReq.Error = respError
+		if err != nil && respError == nil {
+			tempReq.Error = ErrRPCUnknown.WithMessage(fmt.Sprintf("failed to call %s: %w", getMessageName(req), err))
+		}
+		if _, hooksErr := s.callAllHooks(ctx, req, "out"); hooksErr != nil && err == nil {
+			err = fmt.Errorf("failed to call \"out\" hooks: %w", hooksErr)
 		}
 	}()
 
@@ -538,8 +650,8 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 					return fmt.Errorf("failed to post init: %w", err)
 				}
 			}
-			req.Result = m.Result
-			req.Error = m.Error
+			respResult = m.Result
+			respError = m.Error
 			return s.marshalResponse(m, out)
 		}
 	}
@@ -559,7 +671,7 @@ func NewEmptySession(ctx context.Context) *Session {
 	return s
 }
 
-func newSession(ctx context.Context, wire Wire, handler MessageHandler, session *SessionState, r HookRunner, hooks *Hooks, parentSession *Session) (*Session, error) {
+func newSession(ctx context.Context, wire Wire, handler MessageHandler, session *SessionState, r HookRunner, hooks Hooks, parentSession *Session) (*Session, error) {
 	s := &Session{
 		wire:       wire,
 		handler:    handler,

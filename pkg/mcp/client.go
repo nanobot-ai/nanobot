@@ -149,7 +149,7 @@ type Server struct {
 	// If providing no tool overrides, all tools will be enabled.
 	ToolOverrides ToolOverrides `json:"toolOverrides,omitzero"`
 
-	Hooks *Hooks `json:"hooks,omitempty"`
+	Hooks Hooks `json:"hooks,omitzero"`
 }
 
 type ToolOverrides map[string]ToolOverride
