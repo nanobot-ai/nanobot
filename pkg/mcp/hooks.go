@@ -3,233 +3,169 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"net/http"
+	"maps"
 	"net/url"
+	"slices"
 	"strings"
-
-	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
-	"github.com/tidwall/gjson"
 )
 
 type HookRunner interface {
-	RunHook(ctx context.Context, msg, target string) (bool, string, *Message, error)
+	RunHook(ctx context.Context, in, out any, target string) (bool, error)
 }
 
-type Hooks map[HookDefinition][]string
+type Hooks []HookMapping
 
 func (h *Hooks) UnmarshalJSON(data []byte) error {
-	var m map[string][]string
+	var m map[string]stringList
 	if err := json.Unmarshal(data, &m); err != nil {
 		return err
 	}
 
-	*h = make(Hooks, len(m))
-	for key, value := range m {
+	mappings := make([]HookMapping, 0, len(m))
+	for _, key := range slices.Sorted(maps.Keys(m)) {
 		def, err := parseHookDefinition(key)
 		if err != nil {
 			return fmt.Errorf("failed to parse hook definition %s: %w", key, err)
 		}
 
-		(*h)[def] = value
+		mappings = append(mappings, HookMapping{
+			Name:    def.Name,
+			Params:  def.Params,
+			Targets: m[key],
+		})
 	}
 
+	*h = mappings
 	return nil
 }
 
-func (h *Hooks) MarshalJSON() ([]byte, error) {
+func (h Hooks) MarshalJSON() ([]byte, error) {
 	if h == nil {
 		return nil, nil
 	}
 
-	m := make(map[string][]string, len(*h))
-	for def, targets := range *h {
-		m[def.String()] = targets
+	m := make(map[string][]string, len(h))
+	for _, mapping := range h {
+		m[mapping.String()] = mapping.Targets
 	}
 
 	return json.Marshal(m)
 }
 
-func (h *Hooks) CallAllHooks(ctx context.Context, r HookRunner, msg *Message, direction string, err error) error {
-	if h == nil {
-		h = MCPServerConfigFromContext(ctx).Hooks
-		if h == nil {
-			return nil
+type stringList []string
+
+func (s *stringList) UnmarshalJSON(data []byte) error {
+	if data[0] == '[' && data[len(data)-1] == ']' {
+		var raw []string
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return err
 		}
-
-		ctx = WithMCPServerConfig(ctx, Server{})
+		*s = raw
+	} else {
+		var raw string
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return err
+		}
+		var list []string
+		for _, item := range strings.Split(raw, ",") {
+			list = append(list, strings.TrimSpace(item))
+		}
+		*s = list
 	}
+	return nil
+}
 
-	var name string
-	switch msg.Method {
-	case "resources/read", "resources/subscribe", "resources/unsubscribe":
-		name = gjson.GetBytes(msg.Params, "uri").String()
-	case "tools/call", "prompts/get":
-		name = gjson.GetBytes(msg.Params, "name").String()
-	default:
-	}
+type HookResponseCallback[T any] = func(hook HookMapping, resp T, err error) T
 
-	hookDef := HookDefinition{
-		Type:        "message",
-		Method:      msg.Method,
-		Name:        name,
-		Direction:   direction,
-		CallOnError: err != nil || msg.Error != nil,
-	}
-
-	message, err := json.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal message: %w", err)
-	}
-
+func InvokeHooks[T any](ctx context.Context, r HookRunner, hooks Hooks, in *T, name string, params map[string]string, callbacks ...HookResponseCallback[T]) (T, error) {
 	var (
-		accepted bool
-		reason   string
-		m        *Message
-		errs     []error
-		statuses []auditlogs.MCPWebhookStatus
+		out     T
+		current = in
+		matched bool
+		errs    []error
 	)
-	for def, targets := range *h {
-		if def.Matches(hookDef) {
-			for _, target := range targets {
-				if accepted, reason, m, err = r.RunHook(ctx, string(message), target); err != nil {
-					errs = append(errs, fmt.Errorf("failed to run hook %s: %w", def, err))
-				} else if !accepted {
-					errs = append(errs, fmt.Errorf("hook %s rejected message: %s", def, reason))
-				} else if m != nil {
-					*msg = *m
+	for _, mapping := range hooks {
+		if mapping.Matches(name, params) {
+			for _, target := range mapping.Targets {
+				matched = true
+				hasOutput, err := r.RunHook(ctx, current, &out, target)
+				if hasOutput || err != nil {
+					for _, cb := range callbacks {
+						out = cb(mapping, out, err)
+					}
 				}
+				if err != nil {
+					errs = append(errs, fmt.Errorf("failed to run hook %s: %w", mapping.String(), err))
+					continue
+				}
+				if hasOutput {
+					current = &out
+				}
+			}
+		}
+	}
+	if !matched {
+		return *in, errors.Join(errs...)
+	}
+	return *current, errors.Join(errs...)
+}
 
-				status := "ok"
-				if !accepted {
-					status = "rejected"
-				}
-				statuses = append(statuses, auditlogs.MCPWebhookStatus{
-					Type:    direction,
-					Method:  msg.Method,
-					Name:    target,
-					Status:  status,
-					Message: reason,
-				})
+type HookMapping struct {
+	Name    string
+	Params  map[string]string
+	Targets []string
+}
+
+func parseHookDefinition(data string) (result HookMapping, _ error) {
+	name, queryRaw, ok := strings.Cut(data, "?")
+	if ok {
+		query, err := url.ParseQuery(queryRaw)
+		if err != nil {
+			return result, fmt.Errorf("failed to parse hook parameters: %w", err)
+		}
+		result.Params = make(map[string]string, len(query))
+		for k, v := range query {
+			if len(v) == 0 {
+				continue
+			} else if len(v) > 1 {
+				result.Params[k] = strings.Join(v, ",")
+			} else {
+				result.Params[k] = v[0]
 			}
 		}
 	}
 
-	if auditLog := AuditLogFromContext(ctx); auditLog != nil {
-		auditLog.WebhookStatuses = append(auditLog.WebhookStatuses, statuses...)
-		if len(errs) > 0 {
-			auditLog.ResponseStatus = http.StatusFailedDependency
-		}
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("failed to run hooks: %v", errs)
-	}
-
-	return nil
-}
-
-type HookDefinition struct {
-	Type        string
-	Method      string
-	Name        string
-	Direction   string
-	CallOnError bool
-}
-
-func parseHookDefinition(data string) (HookDefinition, error) {
-	if !strings.HasPrefix(data, "message:") {
-		return HookDefinition{}, fmt.Errorf("invalid hook definition")
-	}
-
-	parts := strings.Split(data, "?")
-	if len(parts) > 2 {
-		return HookDefinition{}, fmt.Errorf("invalid hook definition, too many '?'")
-	}
-
-	var values url.Values
-	if len(parts) > 1 {
-		var err error
-		values, err = url.ParseQuery(parts[1])
-		if err != nil {
-			return HookDefinition{}, fmt.Errorf("failed to parse hook parameters: %w", err)
-		}
-	}
-
-	parts = strings.Split(parts[0], ":")
-	var method string
-	if len(parts) > 1 {
-		method = parts[1]
-	}
-
-	name := values.Get("name")
-	direction := values.Get("direction")
-	if direction != "" && direction != "request" && direction != "response" {
-		return HookDefinition{}, fmt.Errorf("invalid direction value: %s", direction)
-	}
-
-	var callOnError bool
-	if onError := values.Get("onError"); onError != "false" && onError != "no" {
-		callOnError = true
-	}
-
-	return HookDefinition{
-		Type:        "message",
-		Method:      method,
-		Name:        name,
-		Direction:   direction,
-		CallOnError: callOnError,
-	}, nil
+	result.Name = name
+	return
 }
 
 // Matches will indicate if the hook definition applies to the given hook definition.
 // It is assumed that the `other` hook definition is fully defined.
-func (h HookDefinition) Matches(other HookDefinition) bool {
-	if h.Type != "" && h.Type != other.Type {
+func (h HookMapping) Matches(name string, params map[string]string) bool {
+	if h.Name != name && h.Name != "*" {
 		return false
 	}
-	if h.Method != "" && h.Method != "*" && h.Method != other.Method {
-		return false
-	}
-	if h.Direction != "" && h.Direction != other.Direction {
-		return false
-	}
-	if h.Name != "" && h.Name != other.Name {
-		return false
-	}
-	if !h.CallOnError && other.CallOnError {
-		return false
+	for k, v := range h.Params {
+		if params[k] != v {
+			return false
+		}
 	}
 	return true
 }
 
-func (h HookDefinition) String() string {
+func (h HookMapping) String() string {
 	s := strings.Builder{}
-	s.WriteString(h.Type)
-	s.WriteString(":")
-	s.WriteString(h.Method)
-	s.WriteString("?")
-
-	if h.Name != "" {
-		s.WriteString("name=")
-		s.WriteString(h.Name)
+	s.WriteString(h.Name)
+	if len(h.Params) > 0 {
+		q := make(url.Values, len(h.Params))
+		for k, v := range h.Params {
+			q.Add(k, v)
+		}
+		s.WriteString("?")
+		s.WriteString(q.Encode())
 	}
 
-	if h.Direction != "" {
-		s.WriteString("&direction=")
-		s.WriteString(h.Direction)
-	}
-
-	if !h.CallOnError {
-		s.WriteString("&onError=false")
-	}
-
-	return strings.TrimSuffix(s.String(), "?")
-}
-
-type HookResponse struct {
-	Accepted   bool     `json:"accepted"`
-	Message    string   `json:"message"`
-	Modified   bool     `json:"modified"`
-	NewMessage *Message `json:"newMessage,omitempty"`
+	return s.String()
 }
