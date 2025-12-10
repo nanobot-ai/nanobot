@@ -662,42 +662,37 @@ func (s *Service) runBefore(ctx context.Context, config types.Config, target, se
 	return args, nil, nil
 }
 
-type hookCtx struct{}
-
-func (s *Service) RunHook(ctx context.Context, msg, target string) (bool, string, *mcp.Message, error) {
+func (s *Service) RunHook(ctx context.Context, in, out any, target string) (hasOutput bool, _ error) {
 	server, tool, _ := strings.Cut(target, "/")
-	result, err := s.Call(ctx, server, tool, map[string]string{"message": msg})
+	result, err := s.Call(ctx,, server, tool, in)
 	if err != nil {
-		return false, "", nil, err
-	}
-
-	var content string
-	if len(result.Content) > 0 {
-		content = result.Content[0].Text
+		return false, fmt.Errorf("failed to call hook %s: %w", target, err)
 	}
 
 	if result.IsError {
-		return false, content, nil, nil
+		var content string
+		if len(result.Content) > 0 {
+			content = result.Content[0].Text
+		} else {
+			sc, _ := json.Marshal(result.StructuredContent)
+			content = fmt.Sprintf("failed to call hook %s: %s", target, sc)
+		}
+		return false, errors.New(content)
 	}
 
-	var output mcp.HookResponse
 	if result.StructuredContent != nil {
 		b, err := json.Marshal(result.StructuredContent)
 		if err != nil {
-			return false, "", nil, err
+			return false, fmt.Errorf("failed to marshal structured content: %w", err)
 		}
-		err = json.Unmarshal(b, &output)
+		err = json.Unmarshal(b, &out)
 		if err != nil {
-			return false, "", nil, err
+			return false, fmt.Errorf("failed to unmarshal structured content: %w", err)
 		}
+		return true, nil
 	}
 
-	var m *mcp.Message
-	if output.Modified {
-		m = output.NewMessage
-	}
-
-	return output.Accepted, output.Message, m, nil
+	return false, nil
 }
 
 func (s *Service) Call(ctx context.Context, server, tool string, args any, opts ...CallOptions) (ret *types.CallResult, err error) {
