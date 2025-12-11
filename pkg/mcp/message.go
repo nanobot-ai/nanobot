@@ -194,9 +194,9 @@ func (e *RPCError) WithMessage(fmtStr string, args ...any) *RPCError {
 }
 
 func (e *RPCError) WithError(err error) *RPCError {
-	cp := *e
+	cp := e.WithMessage("%v", err)
 	cp.err = err
-	return &cp
+	return cp
 }
 
 func (e *RPCError) RPCError() *RPCError {
@@ -217,9 +217,6 @@ func (e *RPCError) Error() string {
 	}
 	if e.Data != nil {
 		return fmt.Sprintf("%d: %s (%s)", e.Code, e.Message, string(e.Data))
-	}
-	if e.err != nil {
-		return fmt.Sprintf("%d: %v", e.Code, e.err)
 	}
 	return fmt.Sprintf("%d: %s", e.Code, e.Message)
 }

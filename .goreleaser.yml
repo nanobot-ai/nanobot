@@ -1,7 +1,7 @@
 version: 2
 dist: releases
 snapshot:
-  version_template: '{{ .Summary }}'
+  version_template: "{{ .Summary }}"
 builds:
   - id: default
     env:
@@ -25,7 +25,7 @@ universal_binaries:
       - default
     replace: true
 archives:
-  - formats: ['tar.gz']
+  - formats: ["tar.gz"]
     ids:
       - default
       - mac
@@ -33,17 +33,17 @@ archives:
       {{ .ProjectName }}_ {{- .Os }}_ {{- if eq .Arch "amd64" }}x86_64 {{- else }}{{ .Arch }}{{ end }}
     format_overrides:
       - goos: windows
-        formats: ['zip']
+        formats: ["zip"]
 checksum:
-  name_template: '{{ .ProjectName }}_v{{ .Version }}_checksums.txt'
+  name_template: "{{ .ProjectName }}_v{{ .Version }}_checksums.txt"
 changelog:
   use: github
   sort: asc
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
-      - '^ci:'
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
       - Merge pull request
       - Merge branch
 release:
@@ -58,6 +58,7 @@ dockers:
     dockerfile: Dockerfile
     use: buildx
     build_flag_templates:
+      - "--target=release"
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.title={{.ProjectName}}"
@@ -72,6 +73,7 @@ dockers:
     dockerfile: Dockerfile
     use: buildx
     build_flag_templates:
+      - "--target=release"
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.title={{.ProjectName}}"
@@ -91,10 +93,10 @@ docker_manifests:
       - "ghcr.io/nanobot-ai/nanobot:latest-arm64"
 brews:
   - name: nanobot
-    description: 'Nanobot cli'
+    description: "Nanobot cli"
     install: |
       bin.install "nanobot"
-    homepage: 'https://nanobot.ai'
+    homepage: "https://nanobot.ai"
     skip_upload: false
     directory: Formula
     repository:

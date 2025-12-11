@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -69,17 +70,47 @@ func (s *callbackHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c.ch <- CallbackPayload{
+	cb := CallbackPayload{
 		Code:             r.URL.Query().Get("code"),
 		Error:            r.URL.Query().Get("error"),
 		ErrorDescription: r.URL.Query().Get("error_description"),
 	}
-	close(c.ch)
+	select {
+	case c.ch <- cb:
+		close(c.ch)
+	default:
+		if cb.Error != "" {
+			http.Error(w, fmt.Sprintf("error(%s): %s", cb.Error, cb.ErrorDescription), http.StatusBadRequest)
+			return
+		} else if cb.Code == "" {
+			http.Error(w, "missing code", http.StatusBadRequest)
+			return
+		}
+
+		tok, err := c.conf.Exchange(r.Context(), cb.Code, oauth2.VerifierOption(c.verifier))
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error: %s", err.Error()), http.StatusBadRequest)
+			return
+		}
+
+		// Set the token in the cookie and redirect.
+		http.SetCookie(w, &http.Cookie{
+			Name:     "nanobot-token",
+			Value:    tok.AccessToken,
+			Path:     "/",
+			Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
+			HttpOnly: true,
+		})
+		http.Redirect(w, r, c.redirectURL, http.StatusFound)
+		return
+	}
 
 	_, _ = w.Write([]byte("Success!!"))
 }
 
 type callback struct {
-	conf *oauth2.Config
-	ch   chan<- CallbackPayload
+	conf        *oauth2.Config
+	redirectURL string
+	verifier    string
+	ch          chan<- CallbackPayload
 }

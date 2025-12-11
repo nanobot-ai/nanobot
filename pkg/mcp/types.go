@@ -4,7 +4,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"time"
+
+	"github.com/obot-platform/mcp-oauth-proxy/pkg/providers"
 )
+
+type User providers.UserInfo
 
 type ClientCapabilities struct {
 	Roots       *RootsCapability    `json:"roots,omitempty"`
@@ -487,7 +491,7 @@ type SetLogLevelResult struct {
 }
 
 type SessionMessageHook struct {
-	Accept  bool
-	Message *Message
-	Reason  string
+	Accept  bool     `json:"accept"`
+	Message *Message `json:"message"`
+	Reason  string   `json:"reason"`
 }
