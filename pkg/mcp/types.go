@@ -406,3 +406,9 @@ type SetLogLevelRequest struct {
 
 type SetLogLevelResult struct {
 }
+
+type SessionMessageHook struct {
+	Accept  bool
+	Message *Message
+	Reason  string
+}

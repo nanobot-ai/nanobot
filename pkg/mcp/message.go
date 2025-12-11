@@ -163,6 +163,7 @@ type JSONRPCError interface {
 }
 
 var (
+	ErrRPCUnknown        = NewRPCError(-32001, "JSON RPC unknown error")
 	ErrRPCParse          = NewRPCError(-32700, "JSON RPC parse error")
 	ErrRPCInvalidRequest = NewRPCError(-32600, "JSON RPC invalid request")
 	ErrRPCMethodNotFound = NewRPCError(-32601, "JSON RPC method not found")
