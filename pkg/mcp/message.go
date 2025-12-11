@@ -132,7 +132,7 @@ func (r *Message) SendError(ctx context.Context, err error) {
 	if rpcError := (JSONRPCError)(nil); errors.As(err, &rpcError) {
 		data = rpcError.RPCError()
 	} else {
-		data = ErrRPCInternal.WithMessage("%v", err)
+		data = ErrRPCInternal.WithError(err)
 	}
 
 	resp := Message{
@@ -175,6 +175,8 @@ type RPCError struct {
 	Message    string          `json:"message,omitempty"`
 	Data       json.RawMessage `json:"data,omitempty"`
 	DataObject any             `json:"-"`
+
+	err error `json:"-"`
 }
 
 func NewRPCError(code int, message string) *RPCError {
@@ -187,6 +189,12 @@ func NewRPCError(code int, message string) *RPCError {
 func (e *RPCError) WithMessage(fmtStr string, args ...any) *RPCError {
 	cp := *e
 	cp.Message += ": " + fmt.Sprintf(fmtStr, args...)
+	return &cp
+}
+
+func (e *RPCError) WithError(err error) *RPCError {
+	cp := *e
+	cp.err = err
 	return &cp
 }
 
@@ -209,5 +217,12 @@ func (e *RPCError) Error() string {
 	if e.Data != nil {
 		return fmt.Sprintf("%d: %s (%s)", e.Code, e.Message, string(e.Data))
 	}
+	if e.err != nil {
+		return fmt.Sprintf("%d: %v", e.Code, e.err)
+	}
 	return fmt.Sprintf("%d: %s", e.Code, e.Message)
+}
+
+func (e *RPCError) Unwrap() error {
+	return e.err
 }
