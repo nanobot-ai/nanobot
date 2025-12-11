@@ -354,28 +354,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		if err != nil {
 			log.Infof(ctx, "Failed to parse JWT token for %s: %v", req.URL, err)
 
-			host := req.Header.Get("X-Forwarded-Host")
-			if host == "" {
-				host = req.Host
-			}
-			scheme := req.Header.Get("X-Forwarded-Proto")
-			if scheme == "" {
-				if strings.HasPrefix(host, "localhost") || strings.HasPrefix(host, "127.0.0.1") {
-					scheme = "http"
-				} else {
-					scheme = "https"
-				}
-			}
-			resourceMetadata := strings.TrimSuffix(fmt.Sprintf("%s://%s/.well-known/oauth-protected-resource/%s", scheme, host, strings.TrimPrefix(req.URL.Path, "/")), "/")
-
-			rw.Header().Set("WWW-Authenticate",
-				strings.TrimSuffix(
-					fmt.Sprintf(`Bearer error="invalid_request", error_description="Invalid access token", resource_metadata="%s"`,
-						resourceMetadata,
-					),
-					"/"),
-			)
-			http.Error(rw, `{"http_error": "unauthorized"}`, http.StatusUnauthorized)
+			respondWithUnauthorized(rw, req)
 			return
 		}
 
@@ -483,6 +462,9 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		if errors.Is(err, ErrNoResponse) {
 			rw.WriteHeader(http.StatusAccepted)
 			return
+		} else if errors.As(err, &AuthRequiredErr{}) {
+			respondWithUnauthorized(rw, req)
+			return
 		} else if err != nil {
 			response = Message{
 				JSONRPC: msg.JSONRPC,
@@ -524,8 +506,15 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	resp, err := session.Exchange(ctx, msg)
 	if err != nil {
+		if errors.As(err, &AuthRequiredErr{}) {
+			respondWithUnauthorized(rw, req)
+			return
+		}
 		session.Close(true)
 		http.Error(rw, fmt.Sprintf(`{"http_error": "Failed to handle message: %v"}`, err), http.StatusInternalServerError)
+		return
+	} else if resp.Error != nil && errors.As(resp.Error, &AuthRequiredErr{}) {
+		respondWithUnauthorized(rw, req)
 		return
 	}
 
@@ -545,6 +534,32 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		http.Error(rw, fmt.Sprintf(`{"http_error": "Failed to encode response: %v"}`, err), http.StatusInternalServerError)
 		return
 	}
+}
+
+func respondWithUnauthorized(rw http.ResponseWriter, req *http.Request) {
+	host := req.Header.Get("X-Forwarded-Host")
+	if host == "" {
+		host = req.Host
+	}
+	scheme := req.Header.Get("X-Forwarded-Proto")
+	if scheme == "" {
+		if strings.HasPrefix(host, "localhost") || strings.HasPrefix(host, "127.0.0.1") {
+			scheme = "http"
+		} else {
+			scheme = "https"
+		}
+	}
+	resourceMetadata := strings.TrimSuffix(fmt.Sprintf("%s://%s/.well-known/oauth-protected-resource/%s", scheme, host, strings.TrimPrefix(req.URL.Path, "/")), "/")
+
+	rw.Header().Set("WWW-Authenticate",
+		strings.TrimSuffix(
+			fmt.Sprintf(`Bearer error="invalid_request", error_description="Invalid access token", resource_metadata="%s"`,
+				resourceMetadata,
+			),
+			"/"),
+	)
+	rw.Header().Set("Content-Type", "application/json")
+	http.Error(rw, `{"http_error": "unauthorized"}`, http.StatusUnauthorized)
 }
 
 func (h *HTTPServer) runHealthTicker() {
