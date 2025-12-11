@@ -137,11 +137,12 @@ func (n *Nanobot) PersistentPre(cmd *cobra.Command, _ []string) error {
 }
 
 func display(obj any, format string) bool {
-	if format == "json" {
+	switch format {
+	case "json":
 		data, _ := json.MarshalIndent(obj, "", "  ")
 		fmt.Println(string(data))
 		return true
-	} else if format == "yaml" {
+	case "yaml":
 		data, _ := yaml.Marshal(obj)
 		fmt.Println(string(data))
 		return true
@@ -236,9 +237,7 @@ func (n *Nanobot) Run(cmd *cobra.Command, _ []string) error {
 }
 
 type mcpOpts struct {
-	TrustedIssuer      string
-	JWKS               string
-	TrustedAudiences   []string
+	Auth               auth.Auth
 	ListenAddress      string
 	HealthzPath        string
 	ForceFetchToolList bool
@@ -281,9 +280,6 @@ func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *
 		HealthCheckPath:   opts.HealthzPath,
 		RunHealthChecker:  opts.HealthzPath != "" && os.Getenv("NANOBOT_DISABLE_HEALTH_CHECKER") != "true",
 		SessionStore:      sessionManager,
-		JWKS:              opts.JWKS,
-		TrustedIssuer:     opts.TrustedIssuer,
-		TrustedAudiences:  opts.TrustedAudiences,
 		AuditLogCollector: auditLogCollector,
 	})
 	if err != nil {
@@ -300,12 +296,7 @@ func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *
 		mux.Handle("/", httpServer)
 	}
 
-	authCfg, err := config(ctx, "")
-	if err != nil {
-		return err
-	}
-
-	handler, err := auth.Wrap(env, authCfg, n.DSN(), mux)
+	handler, err := auth.Wrap(ctx, env, opts.Auth, n.DSN(), address, opts.HealthzPath, opts.StartUI, oauthCallbackHandler, mux)
 	if err != nil {
 		return fmt.Errorf("failed to setup auth: %w", err)
 	}

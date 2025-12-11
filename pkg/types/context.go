@@ -3,16 +3,14 @@ package types
 import (
 	"context"
 
-	"github.com/obot-platform/mcp-oauth-proxy/pkg/providers"
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 )
 
 type Context struct {
-	User    User
+	User    mcp.User
 	Config  ConfigFactory
 	Profile []string
 }
-
-type User providers.UserInfo
 
 type contextKey struct{}
 

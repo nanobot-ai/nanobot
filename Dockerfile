@@ -1,8 +1,25 @@
 # syntax=docker/dockerfile:1
+
+# Build stage
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /build
+
+# Copy go mod files first for better caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the binary
+RUN CGO_ENABLED=0 go build -o nanobot .
+
+# Final stage
 FROM cgr.dev/chainguard/wolfi-base:latest
 
-# Copy the binary
-COPY nanobot /usr/local/bin/nanobot
+# Copy the binary from builder
+COPY --from=builder /build/nanobot /usr/local/bin/nanobot
 
 # Create non-root user
 RUN adduser -D -s /bin/sh nanobot

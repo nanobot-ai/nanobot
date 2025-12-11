@@ -37,6 +37,17 @@ func TokenFromContext(ctx context.Context) string {
 	return token
 }
 
+type userKey struct{}
+
+func WithUser(ctx context.Context, user User) context.Context {
+	return context.WithValue(ctx, userKey{}, user)
+}
+
+func UserFromContext(ctx context.Context) User {
+	user, _ := ctx.Value(userKey{}).(User)
+	return user
+}
+
 type auditLogKey struct{}
 
 func WithAuditLog(ctx context.Context, auditLog *auditlogs.MCPAuditLog) context.Context {
