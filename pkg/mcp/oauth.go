@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -353,10 +354,8 @@ func parseProtectedResourceMetadata(reader io.Reader) (protectedResourceMetadata
 	// We don't set defaults here as the absence has specific meaning
 
 	// Validate that resource_signing_alg_values_supported does not contain "none"
-	for _, alg := range metadata.ResourceSigningAlgValuesSupported {
-		if alg == "none" {
-			return metadata, fmt.Errorf("resource_signing_alg_values_supported must not contain 'none'")
-		}
+	if slices.Contains(metadata.ResourceSigningAlgValuesSupported, "none") {
+		return metadata, fmt.Errorf("resource_signing_alg_values_supported must not contain 'none'")
 	}
 
 	return metadata, nil

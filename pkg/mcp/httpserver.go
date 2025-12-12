@@ -3,7 +3,6 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,10 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MicahParks/keyfunc/v3"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 	"github.com/tidwall/gjson"
@@ -101,10 +97,6 @@ type HTTPServer struct {
 	ctx                       context.Context
 	healthzPath               string
 
-	keyFunc          jwt.Keyfunc
-	trustedIssuer    string
-	trustedAudiences []string
-
 	// internal health check state
 	internalSession *ServerSession
 	healthErr       *error
@@ -119,9 +111,6 @@ type HTTPServerOptions struct {
 	HealthCheckPath   string
 	ResourceName      string
 	RunHealthChecker  bool
-	TrustedIssuer     string
-	JWKS              string
-	TrustedAudiences  []string
 	AuditLogCollector *auditlogs.Collector
 }
 
@@ -142,12 +131,9 @@ func (h HTTPServerOptions) Complete() HTTPServerOptions {
 func (h HTTPServerOptions) Merge(other HTTPServerOptions) (result HTTPServerOptions) {
 	h.SessionStore = complete.Last(h.SessionStore, other.SessionStore)
 	h.BaseContext = complete.Last(h.BaseContext, other.BaseContext)
-	h.TrustedIssuer = complete.Last(h.TrustedIssuer, other.TrustedIssuer)
 	h.RunHealthChecker = complete.Last(h.RunHealthChecker, other.RunHealthChecker)
 	h.HealthCheckPath = complete.Last(h.HealthCheckPath, other.HealthCheckPath)
 	h.ResourceName = complete.Last(h.ResourceName, other.ResourceName)
-	h.JWKS = complete.Last(h.JWKS, other.JWKS)
-	h.TrustedAudiences = append(h.TrustedAudiences, other.TrustedAudiences...)
 	h.AuditLogCollector = complete.Last(h.AuditLogCollector, other.AuditLogCollector)
 	return h
 }
@@ -160,44 +146,11 @@ func NewHTTPServer(ctx context.Context, env map[string]string, handler MessageHa
 		env:               env,
 		sessions:          o.SessionStore,
 		ctx:               o.BaseContext,
-		trustedIssuer:     o.TrustedIssuer,
-		trustedAudiences:  o.TrustedAudiences,
 		auditLogCollector: o.AuditLogCollector,
 	}
 
 	if o.HealthCheckPath != "" {
 		h.mux.HandleFunc("GET /"+strings.TrimPrefix(o.HealthCheckPath, "/"), h.healthz)
-	}
-
-	if h.trustedIssuer != "" {
-		var (
-			k   keyfunc.Keyfunc
-			err error
-		)
-		if o.JWKS != "" {
-			var b []byte
-			b, err = base64.StdEncoding.DecodeString(o.JWKS)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode JWKS: %w", err)
-			}
-
-			k, err = keyfunc.NewJWKSetJSON(b)
-		} else {
-			k, err = keyfunc.NewDefaultCtx(ctx, []string{h.trustedIssuer})
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to create client JWK set: %w", err)
-		}
-
-		h.keyFunc = k.Keyfunc
-
-		h.protectedResourceMetadata = &protectedResourceMetadata{
-			AuthorizationServers: []string{h.trustedIssuer},
-			ResourceName:         o.ResourceName,
-		}
-
-		h.mux.HandleFunc("GET /.well-known/oauth-protected-resource", h.protectedMetadata)
-		h.mux.HandleFunc("GET /.well-known/oauth-protected-resource/{path...}", h.protectedMetadata)
 	}
 
 	if o.RunHealthChecker {
@@ -307,7 +260,6 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	req = req.WithContext(withRequest(req))
-	originalToken := strings.TrimSpace(strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer "))
 	// Determine audit log method and session ID based on HTTP method
 	sessionID := h.sessions.ExtractID(req)
 	var auditMethod string
@@ -344,29 +296,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	ctx := req.Context()
-	if h.keyFunc != nil {
-		token, err := jwt.Parse(
-			originalToken,
-			h.keyFunc,
-			jwt.WithAudience(h.trustedAudiences...),
-			jwt.WithIssuer(h.trustedIssuer),
-		)
-		if err != nil {
-			log.Infof(ctx, "Failed to parse JWT token for %s: %v", req.URL, err)
-
-			respondWithUnauthorized(rw, req)
-			return
-		}
-
-		ctx = WithToken(ctx, originalToken)
-
-		auditLog.Subject, err = token.Claims.GetSubject()
-		if err != nil {
-			http.Error(rw, `{"http_error": "Failed to get user ID from token"}`, http.StatusUnauthorized)
-			return
-		}
-	}
-
+	auditLog.Subject = UserFromContext(ctx).Sub
 	if req.Method == http.MethodGet {
 		h.streamEvents(rw, req, auditLog)
 		return
