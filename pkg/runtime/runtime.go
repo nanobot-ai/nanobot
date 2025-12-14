@@ -15,9 +15,10 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
 	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
-	"github.com/nanobot-ai/nanobot/pkg/servers/agentui"
+	"github.com/nanobot-ai/nanobot/pkg/servers/capabilities"
 	"github.com/nanobot-ai/nanobot/pkg/servers/meta"
 	"github.com/nanobot-ai/nanobot/pkg/servers/resources"
+	"github.com/nanobot-ai/nanobot/pkg/servers/workspace"
 	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
 	"github.com/nanobot-ai/nanobot/pkg/tools"
@@ -82,8 +83,8 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 		TokenExchangeClientSecret: opt.TokenExchangeClientSecret,
 		AuditLogCollector:         opt.AuditLogCollector,
 	})
-	agents := agents.New(completer, registry)
-	sampler := sampling.NewSampler(agents)
+	agentsService := agents.New(completer, registry)
+	sampler := sampling.NewSampler(agentsService)
 
 	// This is a circular dependency. Oh well, so much for good design.
 	registry.SetSampler(sampler)
@@ -99,11 +100,7 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 	})
 
 	registry.AddServer("nanobot.agent", func(name string) mcp.MessageHandler {
-		return agent.NewServer(sessiondata.NewData(r), r, name)
-	})
-
-	registry.AddServer("nanobot.agentui", func(string) mcp.MessageHandler {
-		return agentui.NewServer(sessiondata.NewData(r), r)
+		return agent.NewServer(sessiondata.NewData(r), r, agentsService, name)
 	})
 
 	if opt.DSN != "" {
@@ -123,13 +120,26 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 		})
 	}
 
+	if opt.DSN != "" {
+		store, err := workspace.NewStoreFromDSN(opt.DSN)
+		if err != nil {
+			panic(fmt.Errorf("failed to create workspace store: %w", err))
+		}
+		registry.AddServer("nanobot.workspace", func(string) mcp.MessageHandler {
+			return workspace.NewServer(store)
+		})
+		registry.AddServer("nanobot.capabilities", func(string) mcp.MessageHandler {
+			return capabilities.NewServer(store)
+		})
+	}
+
 	return r, nil
 }
 
 func (r *Runtime) WithTempSession(ctx context.Context, config *types.Config) context.Context {
 	session := mcp.NewEmptySession(ctx)
 	session.Set(types.ConfigSessionKey, config)
-	return mcp.WithSession(ctx, session)
+	return mcp.WithSession(types.WithConfig(ctx, *config), session)
 }
 
 func (r *Runtime) getToolFromRef(ctx context.Context, config types.Config, serverRef string) (*tools.ListToolsResult, error) {

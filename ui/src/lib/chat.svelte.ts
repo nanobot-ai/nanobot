@@ -18,93 +18,55 @@ import {
 	type Resources
 } from './types';
 import { getNotificationContext } from './context/notifications.svelte';
+import { SimpleClient } from './mcpclient';
+import { SvelteDate } from 'svelte/reactivity';
 
-interface CallToolResult {
+export interface CallToolResult {
 	content?: ToolOutputItem[];
 }
 
 export class ChatAPI {
 	private readonly baseUrl: string;
-	private readonly fetcher: typeof fetch;
+	private readonly mcpClient: SimpleClient;
 
 	constructor(
 		baseUrl: string = '',
 		opts?: {
 			fetcher?: typeof fetch;
+			sessionId?: string;
 		}
 	) {
 		this.baseUrl = baseUrl;
-		this.fetcher = opts?.fetcher || fetch;
+		this.mcpClient = new SimpleClient({
+			baseUrl: baseUrl,
+			fetcher: opts?.fetcher,
+			sessionId: opts?.sessionId
+		});
+	}
+
+	#getClient(sessionId?: string) {
+		if (sessionId) {
+			return new SimpleClient({
+				baseUrl: this.baseUrl,
+				sessionId
+			});
+		}
+		return this.mcpClient;
 	}
 
 	async reply(id: string | number, result: unknown, opts?: { sessionId?: string }) {
-		const resp = await this.fetcher(`${this.baseUrl}/mcp/ui`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				...(opts?.sessionId && { 'Mcp-Session-Id': opts.sessionId })
-			},
-			body: JSON.stringify({
-				jsonrpc: '2.0',
-				id,
-				result
-			})
-		});
-
-		// We expect a 204 No Content response or 202
-		if (resp.status == 204 || resp.status == 202) {
-			return;
-		}
-
-		if (!resp.ok) {
-			const text = await resp.text();
-			logError(`response: ${resp.status}: ${resp.statusText}: ${text}`);
-			throw new Error(text);
-		}
-
-		try {
-			// check for a protocol error
-			const data = await resp.json();
-			if (data.error?.message) {
-				logError(data.error.message);
-			}
-		} catch (e) {
-			console.debug('Error parsing JSON:', e);
-		}
+		// If sessionId is provided, create a new client instance with that session
+		const client = this.#getClient(opts?.sessionId);
+		await client.reply(id, result);
 	}
 
 	async exchange(method: string, params: unknown, opts?: { sessionId?: string }) {
-		const resp = await this.fetcher(`${this.baseUrl}/mcp/ui`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				...(opts?.sessionId && { 'Mcp-Session-Id': opts.sessionId })
-			},
-			body: JSON.stringify({
-				id: crypto.randomUUID(),
-				jsonrpc: '2.0',
-				method,
-				params
-			})
-		});
-
-		let toThrow = null;
-		try {
-			const data = await resp.json();
-			if (data.error?.message) {
-				logError(data.error.message);
-				toThrow = new Error(data.error.message);
-			} else {
-				return data.result;
-			}
-		} catch (e) {
-			logError(e);
-			toThrow = e;
-		}
-		throw toThrow;
+		// If sessionId is provided, create a new client instance with that session
+		const client = this.#getClient(opts?.sessionId);
+		return await client.exchange(method, params);
 	}
 
-	private async callMCPTool<T>(
+	async callMCPTool<T>(
 		name: string,
 		opts?: {
 			payload?: Record<string, unknown>;
@@ -115,18 +77,14 @@ export class ChatAPI {
 			parseResponse?: (data: CallToolResult) => T;
 		}
 	): Promise<T> {
-		const resp = await this.fetcher(`${this.baseUrl}/mcp/ui`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				...(opts?.sessionId && { 'Mcp-Session-Id': opts.sessionId })
-			},
-			signal: opts?.abort?.signal,
-			body: JSON.stringify({
-				id: crypto.randomUUID(),
-				jsonrpc: '2.0',
-				method: 'tools/call',
-				params: {
+		// If sessionId is provided, create a new client instance with that session
+		const client = this.#getClient(opts?.sessionId);
+
+		try {
+			// Get the raw result from exchange to support parseResponse
+			const result = await client.exchange(
+				'tools/call',
+				{
 					name: name,
 					arguments: opts?.payload || {},
 					...(opts?.async && {
@@ -135,37 +93,43 @@ export class ChatAPI {
 							progressToken: opts?.progressToken
 						}
 					})
-				}
-			})
-		});
+				},
+				{ abort: opts?.abort }
+			);
 
-		const data = await resp.json();
-		if (data.error?.message) {
+			if (opts?.parseResponse) {
+				return opts.parseResponse(result as CallToolResult);
+			}
+
+			// Handle structured content
+			if (result && typeof result === 'object' && 'structuredContent' in result) {
+				return (result as { structuredContent: T }).structuredContent;
+			}
+
+			return result as T;
+		} catch (error) {
 			// Try to get notification context and show error
 			try {
 				const notifications = getNotificationContext();
-				notifications.error('API Error', data.error.message);
+				const message = error instanceof Error ? error.message : String(error);
+				notifications.error('API Error', message);
 			} catch {
 				// If context is not available (e.g., during SSR), just log
-				console.error('MCP Tool Error:', data.error.message);
+				console.error('MCP Tool Error:', error);
 			}
-			throw new Error(data.error.message);
+			throw error;
 		}
-		if (opts?.parseResponse) {
-			return opts.parseResponse(data.result as CallToolResult);
-		}
-		if (data.result?.structuredContent) {
-			return data.result.structuredContent as T;
-		}
-		return {} as T;
+	}
+
+	async capabilities() {
+		const client = this.#getClient();
+		const { initializeResult } = await client.getSessionDetails();
+		return initializeResult?.capabilities?.experimental?.['ai.nanobot']?.session ?? {};
 	}
 
 	async deleteThread(threadId: string): Promise<void> {
-		await this.callMCPTool('delete_chat', {
-			payload: {
-				chatId: threadId
-			}
-		});
+		const client = this.#getClient(threadId);
+		return client.deleteSession();
 	}
 
 	async renameThread(threadId: string, title: string): Promise<Chat> {
@@ -190,7 +154,13 @@ export class ChatAPI {
 	}
 
 	async createThread(): Promise<Chat> {
-		return await this.callMCPTool<Chat>('create_chat');
+		const client = this.#getClient('new');
+		const { id } = await client.getSessionDetails();
+		return {
+			id,
+			title: 'New Chat',
+			created: new SvelteDate().toISOString()
+		};
 	}
 
 	async createResource(
@@ -207,7 +177,8 @@ export class ChatAPI {
 			payload: {
 				blob,
 				mimeType,
-				name
+				name,
+				...(opts?.description && { description: opts.description })
 			},
 			sessionId: opts?.sessionId,
 			abort: opts?.abort,
@@ -225,11 +196,12 @@ export class ChatAPI {
 	}
 
 	async sendMessage(request: ChatRequest): Promise<ChatResult> {
-		await this.callMCPTool<CallToolResult>('chat_ui', {
+		await this.callMCPTool<CallToolResult>('chat', {
 			payload: {
 				prompt: request.message,
 				attachments: request.attachments?.map((a) => {
 					return {
+						name: a.name,
 						url: a.uri,
 						mimeType: a.mimeType
 					};
@@ -263,6 +235,7 @@ export class ChatAPI {
 			events?: string[];
 		}
 	): () => void {
+		console.log('Subscribing to thread:', threadId);
 		const eventSource = new EventSource(`${this.baseUrl}/api/events/${threadId}`);
 		eventSource.onmessage = (e) => {
 			const data = JSON.parse(e.data);
@@ -318,7 +291,7 @@ export function appendMessage(messages: ChatMessage[], newMessage: ChatMessage):
 }
 
 // Default instance
-export const chatApi = new ChatAPI();
+export const defaultChatApi = new ChatAPI();
 
 export class ChatService {
 	messages: ChatMessage[];
@@ -337,7 +310,7 @@ export class ChatService {
 	private onChatDone: (() => void)[] = [];
 
 	constructor(opts?: { api?: ChatAPI; chatId?: string }) {
-		this.api = opts?.api || chatApi;
+		this.api = opts?.api || defaultChatApi;
 		this.messages = $state<ChatMessage[]>([]);
 		this.history = $state<ChatMessage[]>();
 		this.isLoading = $state(false);
@@ -363,6 +336,7 @@ export class ChatService {
 
 		this.messages = [];
 		this.prompts = [];
+		this.resources = [];
 		this.elicitations = [];
 		this.history = undefined;
 		this.isLoading = false;
@@ -599,15 +573,4 @@ export class ChatService {
 
 function now(): string {
 	return new Date().toISOString();
-}
-
-function logError(error: unknown) {
-	try {
-		const notifications = getNotificationContext();
-		notifications.error('API Error', error?.toString());
-	} catch {
-		// If context is not available (e.g., during SSR), just log
-		console.error('MCP Tool Error:', error);
-	}
-	console.error('Error:', error);
 }

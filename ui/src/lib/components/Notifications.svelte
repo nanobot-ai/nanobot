@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { slide } from 'svelte/transition';
 	import { X, CheckCircle, AlertCircle, AlertTriangle, Info, Copy } from '@lucide/svelte';
-	import { notifications } from '$lib/stores/notifications.svelte';
 	import type { Notification } from '$lib/types';
+	import { getNotificationContext } from '$lib/context/notifications.svelte';
 
 	let copiedTooltipId = $state<string | null>(null);
+	const notifications = getNotificationContext();
 
 	function getNotificationClasses(type: Notification['type']): string {
 		const baseClasses = 'alert shadow-lg border';

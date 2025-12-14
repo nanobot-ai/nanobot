@@ -82,7 +82,8 @@
 			<Library class="h-4 w-4" />
 		</button>
 		<ul
-			class="dropdown-content menu z-50 max-h-[50vh] w-64 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">
+			class="dropdown-content menu z-50 max-h-[50vh] w-64 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
+		>
 			<li class="menu-title">
 				<span>Available Resources</span>
 			</li>

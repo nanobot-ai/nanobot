@@ -330,6 +330,7 @@ func (i InputItemContent) MarshalJSON() ([]byte, error) {
 type InputFile struct {
 	Type     string  `json:"type,omitempty"`
 	FileData *string `json:"file_data,omitempty"`
+	FileURL  *string `json:"file_url,omitempty"`
 	FileID   *string `json:"file_id,omitempty"`
 	Filename string  `json:"filename,omitempty"`
 }

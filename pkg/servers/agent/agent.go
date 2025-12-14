@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/nanobot-ai/nanobot/pkg/agents"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
@@ -18,6 +19,7 @@ type Server struct {
 	tools      mcp.ServerTools
 	data       *sessiondata.Data
 	agentName  string
+	agents     *agents.Agents
 	multiAgent bool
 	runtime    Caller
 }
@@ -28,10 +30,11 @@ type Caller interface {
 	GetPrompt(ctx context.Context, target, prompt string, args map[string]string) (*mcp.GetPromptResult, error)
 }
 
-func NewServer(d *sessiondata.Data, r Caller, name string) *Server {
+func NewServer(d *sessiondata.Data, r Caller, agents *agents.Agents, name string) *Server {
 	s := &Server{
 		data:      d,
 		agentName: name,
+		agents:    agents,
 		runtime:   r,
 	}
 
@@ -52,6 +55,16 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 		mcp.Invoke(ctx, msg, s.tools.List)
 	case "tools/call":
 		mcp.Invoke(ctx, msg, s.tools.Call)
+	}
+
+	newConfig, err := s.agents.GetConfigForAgent(ctx, s.agentName)
+	if err != nil {
+		msg.SendError(ctx, err)
+		return
+	}
+	ctx = types.WithConfig(ctx, newConfig)
+
+	switch msg.Method {
 	case "resources/list":
 		mcp.Invoke(ctx, msg, s.resourcesList)
 	case "resources/templates/list":
@@ -101,7 +114,7 @@ func (s *Server) readProgress(ctx context.Context) (ret []mcp.ResourceContent, _
 		return nil, nil
 	}
 
-	callResult, err := sampling.CompletionResponseToCallResult(&progress, true)
+	callResult, err := sampling.CompletionResponseToCallResult(&progress, true, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -260,40 +273,13 @@ func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListRes
 	return result, nil
 }
 
-func (s *Server) initialize(ctx context.Context, _ mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
-	agents, err := s.data.Agents(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	var (
-		agent           types.AgentDisplay
-		starterMessages []byte
-	)
-	if len(agents) <= 1 {
-		delete(s.tools, "set_current_agent")
-	} else {
-		agent = agents[0]
-		s.multiAgent = true
-	}
-
-	if len(agent.StarterMessages) > 0 {
-		starterMessages, _ = json.Marshal(agent.StarterMessages)
-	}
-
+func (s *Server) initialize(_ context.Context, _ mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
 	return &mcp.InitializeResult{
 		ProtocolVersion: params.ProtocolVersion,
 		Capabilities: mcp.ServerCapabilities{
 			Tools:     &mcp.ToolsServerCapability{},
 			Prompts:   &mcp.PromptsServerCapability{},
 			Resources: &mcp.ResourcesServerCapability{},
-			Experimental: map[string]any{
-				"ai.nanobot.meta/name":             agent.Name,
-				"ai.nanobot.meta/icon":             agent.Icon,
-				"ai.nanobot.meta/icon-dark":        agent.IconDark,
-				"ai.nanobot.meta/description":      agent.Description,
-				"ai.nanobot.meta/starter-messages": string(starterMessages),
-			},
 		},
 		ServerInfo: mcp.ServerInfo{
 			Name:    version.Name,

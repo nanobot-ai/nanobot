@@ -245,10 +245,23 @@ type mcpOpts struct {
 	StartUI            bool
 }
 
-func (n *Nanobot) runMCP(ctx context.Context, config types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, auditLogCollector *auditlogs.Collector, opts mcpOpts) error {
+func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, auditLogCollector *auditlogs.Collector, opts mcpOpts) error {
 	env, err := n.loadEnv()
 	if err != nil {
 		return fmt.Errorf("failed to load environment: %w", err)
+	}
+
+	config := func(ctx context.Context, profile string) (types.Config, error) {
+		cfg, err := baseConfig(ctx, profile)
+		if err != nil {
+			return types.Config{}, err
+		}
+
+		if opts.StartUI {
+			return config.Merge(cfg, config.UI)
+		}
+
+		return cfg, nil
 	}
 
 	address := opts.ListenAddress

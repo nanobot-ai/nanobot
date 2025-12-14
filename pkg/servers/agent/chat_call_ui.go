@@ -1,4 +1,4 @@
-package agentui
+package agent
 
 import (
 	"context"
@@ -6,26 +6,13 @@ import (
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
-
-type chatCall struct {
-	s *Server
-}
-
-func (c chatCall) Definition() mcp.Tool {
-	return mcp.Tool{
-		Name:        types.AgentTool + "_ui",
-		Description: types.AgentToolDescription,
-		InputSchema: types.ChatInputSchema,
-	}
-}
 
 func (c chatCall) inlineAttachments(ctx context.Context, attachments []any) ([]any, error) {
 	newAttachments := make([]any, 0, len(attachments))
 
-	messages, err := agent.GetMessages(ctx)
+	messages, err := GetMessages(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get messages: %w", err)
 	}
@@ -85,50 +72,44 @@ attachmentsLoop:
 
 		for _, content := range resource.Contents {
 			dataURI := content.ToDataURI()
-			newAttachments = append(newAttachments, map[string]any{
+			attachmentData := map[string]any{
 				"url": dataURI,
-			})
+			}
+			if content.Name != "" {
+				attachmentData["name"] = content.Name
+			}
+			newAttachments = append(newAttachments, attachmentData)
 		}
 	}
 
 	return newAttachments, nil
 }
 
-func (c chatCall) Invoke(ctx context.Context, msg mcp.Message, payload mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	description := c.s.describeSession(ctx, payload.Arguments)
-	currentAgent := c.s.data.CurrentAgent(ctx)
+func (s *Server) describeSession(ctx context.Context, args any) <-chan struct{} {
+	result := make(chan struct{})
+	var description string
 
-	c.s.data.CurrentAgent(ctx)
-	client, err := c.s.runtime.GetClient(ctx, currentAgent)
-	if err != nil {
-		return nil, err
+	session := mcp.SessionFromContext(ctx)
+	session = session.Parent
+	session.Get(types.DescriptionSessionKey, &description)
+	if description == "" && s.agentName != "nanobot.summary" {
+		go func() {
+			defer close(result)
+			ret, err := s.runtime.Call(ctx, "nanobot.summary", "chat", args)
+			if err != nil {
+				return
+			}
+			for _, content := range ret.Content {
+				if content.Type == "text" {
+					description = content.Text
+					session.Set(types.DescriptionSessionKey, description)
+					break
+				}
+			}
+		}()
+	} else {
+		close(result)
 	}
 
-	if attachments, _ := payload.Arguments["attachments"].([]any); len(attachments) > 0 {
-		payload.Arguments["attachments"], err = c.inlineAttachments(ctx, attachments)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	result, err := client.Call(ctx, types.AgentTool, payload.Arguments, mcp.CallOption{
-		ProgressToken: msg.ProgressToken(),
-		Meta:          payload.Meta,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	mcpResult := mcp.CallToolResult{
-		StructuredContent: result.StructuredContent,
-		IsError:           result.IsError,
-		Content:           result.Content,
-	}
-
-	if description != nil {
-		<-description
-	}
-
-	err = msg.Reply(ctx, mcpResult)
-	return &mcpResult, err
+	return result
 }

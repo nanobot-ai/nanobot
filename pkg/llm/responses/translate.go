@@ -482,8 +482,15 @@ func messageToInputItem(role string, content mcp.Content) (InputItem, bool) {
 
 func toInputPDF(file *mcp.EmbeddedResource) *InputFile {
 	data := fmt.Sprintf("data:%s;base64,%s", file.MIMEType, file.Blob)
+	name := file.URI
+	if name == "" {
+		name = file.Name
+	}
+	if name == "" {
+		name = "file.pdf"
+	}
 	return &InputFile{
 		FileData: &data,
-		Filename: file.URI,
+		Filename: name,
 	}
 }

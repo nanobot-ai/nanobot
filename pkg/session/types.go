@@ -4,11 +4,9 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
-	"github.com/nanobot-ai/nanobot/pkg/uuid"
 	"gorm.io/gorm"
 )
 
@@ -64,7 +62,6 @@ type Session struct {
 	State       State         `json:"state" gorm:"type:json"`
 	Config      ConfigWrapper `json:"config,omitempty" gorm:"type:json"`
 	Cwd         string        `json:"cwd,omitempty"`
-	IsPublic    bool          `json:"isPublic"`
 }
 
 type Token struct {
@@ -72,21 +69,4 @@ type Token struct {
 	AccountID string `json:"accountID,omitempty"`
 	URL       string `json:"url,omitempty"`
 	Data      string `json:"data,omitempty"`
-}
-
-func (s *Session) Clone(accountID string) *Session {
-	newSession := *s
-	newSession.SessionID = uuid.String()
-	newSession.AccountID = accountID
-	newSession.IsPublic = false
-	newSession.Model = gorm.Model{}
-	newSession.State.ID = newSession.SessionID
-	newSession.State.Attributes = make(map[string]any, len(s.State.Attributes))
-	for k, v := range s.State.Attributes {
-		if k == types.CurrentAgentSessionKey || strings.HasPrefix(k, "thread") ||
-			k == types.ConfigSessionKey {
-			newSession.State.Attributes[k] = v
-		}
-	}
-	return &newSession
 }

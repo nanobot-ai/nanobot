@@ -3,6 +3,8 @@ package types
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 )
 
 const (
@@ -25,6 +27,10 @@ var ChatInputSchema = []byte(`{
 	    "type": "object",
 	    "required": ["url"],
 	    "properties": {
+	      "name": {
+	        "description": "The name of the resource, often the filename",
+	        "type": "string"
+	      },
 	      "url": {
 	        "description": "The URL of the attachment or data URI",
 	        "type": "string"
@@ -50,6 +56,7 @@ type SampleConfirmRequest struct {
 }
 
 type Attachment struct {
+	Name     string `json:"name,omitempty"`
 	URL      string `json:"url"`
 	MimeType string `json:"mimeType,omitempty"`
 }
@@ -72,11 +79,10 @@ type ChatList struct {
 }
 
 type Chat struct {
-	ID         string    `json:"id"`
-	Title      string    `json:"title"`
-	Created    time.Time `json:"created"`
-	ReadOnly   bool      `json:"readonly,omitempty"`
-	Visibility string    `json:"visibility,omitempty"`
+	ID       string    `json:"id"`
+	Title    string    `json:"title"`
+	Created  time.Time `json:"created"`
+	ReadOnly bool      `json:"readonly,omitempty"`
 }
 
 type AgentList struct {
@@ -91,4 +97,14 @@ type AgentDisplay struct {
 	Icon            string   `json:"icon"`
 	IconDark        string   `json:"iconDark"`
 	StarterMessages []string `json:"starterMessages"`
+	Base            bool     `json:"base"`
+}
+
+type Workspace struct {
+	ID         string                 `json:"id"`
+	Name       string                 `json:"name"`
+	Order      int                    `json:"order"`
+	Color      string                 `json:"color,omitempty"`
+	Icons      []mcp.Icon             `json:"icons,omitempty"`
+	Attributes map[string]interface{} `json:"attributes,omitempty"`
 }

@@ -64,15 +64,15 @@ func (m *Manager) newRecord(id, accountID string) *Session {
 
 func (m *Manager) loadAttributesFromRecord(stored *Session, session *mcp.ServerSession) {
 	session.GetSession().Set(types.DescriptionSessionKey, stored.Description)
-	session.GetSession().Set(types.PublicSessionKey, stored.IsPublic)
 	session.GetSession().Set(types.AccountIDSessionKey, stored.AccountID)
 }
 
 func (m *Manager) saveAttributesToRecord(stored *Session, session *mcp.ServerSession) error {
-	var config types.Config
+	var (
+		config types.Config
+	)
 
 	session.GetSession().Get(types.DescriptionSessionKey, &stored.Description)
-	session.GetSession().Get(types.PublicSessionKey, &stored.IsPublic)
 	session.GetSession().Get(types.ConfigSessionKey, &config)
 
 	stored.Config = ConfigWrapper(config)
@@ -170,14 +170,7 @@ func checkAccount(ctx context.Context, serverSession *mcp.ServerSession) bool {
 		nanobotContext = types.NanobotContext(ctx)
 	)
 	serverSession.GetSession().Get(types.AccountIDSessionKey, &account)
-	if account != nanobotContext.User.ID {
-		var isPublic bool
-		serverSession.GetSession().Get(types.PublicSessionKey, &isPublic)
-		if !isPublic {
-			return false
-		}
-	}
-	return true
+	return account == nanobotContext.User.ID
 }
 
 func (m *Manager) Acquire(ctx context.Context, server mcp.MessageHandler, id string) (ret *mcp.ServerSession, found bool, retErr error) {

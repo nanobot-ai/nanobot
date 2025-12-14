@@ -3,7 +3,6 @@ package schema
 import (
 	"encoding/json"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -42,13 +41,7 @@ func ValidateAndFixToolSchema(schema json.RawMessage) json.RawMessage {
 func ValidateToolMappings(toolMappings types.ToolMappings) types.ToolMappings {
 	validated := make(types.ToolMappings)
 	for k, mapping := range toolMappings {
-		validatedTool := mcp.Tool{
-			Name:        mapping.Target.Name,
-			Description: mapping.Target.Description,
-			InputSchema: ValidateAndFixToolSchema(mapping.Target.InputSchema),
-			Annotations: mapping.Target.Annotations,
-		}
-		mapping.Target = validatedTool
+		mapping.Target.InputSchema = ValidateAndFixToolSchema(mapping.Target.InputSchema)
 		validated[k] = mapping
 	}
 	return validated

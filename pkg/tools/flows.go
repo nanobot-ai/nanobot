@@ -64,8 +64,7 @@ func (s *Service) newGlobals(ctx context.Context, vars map[string]any, opt ...Ca
 		}
 	}
 
-	var c types.Config
-	session.Get(types.ConfigSessionKey, &c)
+	c := types.ConfigFromContext(ctx)
 	for serverName := range c.MCPServers {
 		if _, ok := servers[serverName]; !ok {
 			servers[serverName] = map[string]any{

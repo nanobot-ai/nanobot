@@ -16,27 +16,48 @@ const (
 	ConfigSessionKey                = "config"
 	ConfigHashSessionKey            = "configHash"
 	CurrentAgentSessionKey          = "currentAgent"
+	SessionInitSessionKey           = "sessionInit"
+	DefaultAgentSessionKey          = "defaultAgent"
 	AccountIDSessionKey             = "accountID"
 	DescriptionSessionKey           = "description"
-	PublicSessionKey                = "public"
 	ResourceSubscriptionsSessionKey = "resourceSubscriptions"
 	PublicURLSessionKey             = "publicURL"
 )
 
+type configContextKey struct{}
+
 func ConfigFromContext(ctx context.Context) (result Config) {
+	config, ok := ctx.Value(configContextKey{}).(Config)
+	if ok {
+		return config
+	}
 	mcp.SessionFromContext(ctx).Get(ConfigSessionKey, &result)
 	return
+}
+
+func WithConfig(ctx context.Context, config Config) context.Context {
+	return context.WithValue(ctx, configContextKey{}, config)
+}
+
+func GetSessionAndAccountID(ctx context.Context) (string, string) {
+	var (
+		session   = mcp.SessionFromContext(ctx).Root()
+		accountID string
+	)
+	session.Get(AccountIDSessionKey, &accountID)
+	return session.ID(), accountID
 }
 
 type Config struct {
 	Auth       *Auth                 `json:"auth,omitempty"`
 	Extends    StringList            `json:"extends,omitempty"`
 	Env        map[string]EnvDef     `json:"env,omitempty"`
-	Publish    Publish               `json:"publish,omitempty"`
+	Publish    Publish               `json:"publish,omitzero"`
 	Agents     map[string]Agent      `json:"agents,omitempty"`
 	MCPServers map[string]mcp.Server `json:"mcpServers,omitempty"`
 	Profiles   map[string]Config     `json:"profiles,omitempty"`
 	Prompts    map[string]Prompt     `json:"prompts,omitempty"`
+	Hooks      mcp.Hooks             `json:"hooks,omitempty"`
 }
 
 type ConfigFactory func(ctx context.Context, profiles string) (Config, error)
@@ -149,7 +170,7 @@ func (e *EnvDef) UnmarshalJSON(data []byte) error {
 
 type Publish struct {
 	Name              string              `json:"name,omitempty"`
-	Introduction      DynamicInstructions `json:"introduction,omitempty"`
+	Introduction      DynamicInstructions `json:"introduction,omitzero"`
 	Version           string              `json:"version,omitempty"`
 	Instructions      string              `json:"instructions,omitempty"`
 	Tools             StringList          `json:"tools,omitzero"`
@@ -158,6 +179,16 @@ type Publish struct {
 	ResourceTemplates StringList          `json:"resourceTemplates,omitzero"`
 	MCPServers        StringList          `json:"mcpServers,omitzero"`
 	Entrypoint        StringList          `json:"entrypoint,omitempty"`
+}
+
+func (p Publish) IsSingleServerProxy() bool {
+	return len(p.MCPServers) == 1 &&
+		len(p.Entrypoint) == 0 &&
+		len(p.Tools) == 0 &&
+		len(p.Resources) == 0 &&
+		len(p.Prompts) == 0 &&
+		len(p.ResourceTemplates) == 0 &&
+		p.Instructions == ""
 }
 
 type ToolRef struct {
@@ -264,7 +295,11 @@ type TargetMapping[T any] struct {
 	Target     T      `json:"target,omitempty"`
 }
 
-type ToolMappings map[string]TargetMapping[mcp.Tool]
+type TargetTool struct {
+	mcp.Tool
+	External bool `json:"external,omitempty"`
+}
+type ToolMappings map[string]TargetMapping[TargetTool]
 
 //func (t ToolMappings) Serialize() (any, error) {
 //	return t, nil
@@ -313,7 +348,7 @@ type Agent struct {
 	Icon            string                    `json:"icon,omitempty"`
 	IconDark        string                    `json:"iconDark,omitempty"`
 	StarterMessages StringList                `json:"starterMessages,omitempty"`
-	Instructions    DynamicInstructions       `json:"instructions,omitempty"`
+	Instructions    DynamicInstructions       `json:"instructions,omitzero"`
 	Model           string                    `json:"model,omitempty"`
 	MCPServers      StringList                `json:"mcpServers,omitempty"`
 	Tools           StringList                `json:"tools,omitempty"`
@@ -331,6 +366,7 @@ type Agent struct {
 	Truncation      string                    `json:"truncation,omitempty"`
 	MaxTokens       int                       `json:"maxTokens,omitempty"`
 	MimeTypes       []string                  `json:"mimeTypes,omitempty"`
+	Hooks           mcp.Hooks                 `json:"hooks,omitempty"`
 
 	// Selection criteria fields
 
@@ -345,15 +381,24 @@ type AgentReasoning struct {
 	Summary string `json:"summary,omitempty"`
 }
 
-func (a Agent) ToDisplay() AgentDisplay {
-	return AgentDisplay{
+func (a Agent) ToDisplay(id string) AgentDisplay {
+	agent := AgentDisplay{
+		ID:              id,
 		Name:            a.Name,
 		ShortName:       a.ShortName,
 		Description:     a.Description,
 		Icon:            a.Icon,
 		IconDark:        a.IconDark,
 		StarterMessages: a.StarterMessages,
+		Base:            true,
 	}
+	if agent.Name == "" {
+		agent.Name = agent.ShortName
+	}
+	if agent.Name == "" {
+		agent.Name = agent.ID
+	}
+	return agent
 }
 
 const mcpServerName = "MCP Server"
@@ -436,9 +481,9 @@ func (a Agent) validate(agentName string, c Config) error {
 
 type DynamicInstructions struct {
 	Instructions string            `json:"-"`
-	MCPServer    string            `json:"mcpServer"`
-	Prompt       string            `json:"prompt"`
-	Args         map[string]string `json:"args"`
+	MCPServer    string            `json:"mcpServer,omitempty"`
+	Prompt       string            `json:"prompt,omitempty"`
+	Args         map[string]string `json:"args,omitempty"`
 }
 
 func (a DynamicInstructions) IsPrompt() bool {

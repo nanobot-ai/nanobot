@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -242,7 +243,7 @@ func (s *Server) handleListTools(ctx context.Context, msg mcp.Message, _ mcp.Lis
 	}
 
 	for _, k := range slices.Sorted(maps.Keys(toolMappings)) {
-		result.Tools = append(result.Tools, toolMappings[k].Target)
+		result.Tools = append(result.Tools, toolMappings[k].Target.Tool)
 	}
 
 	return msg.Reply(ctx, result)
@@ -313,7 +314,55 @@ func (s *Server) handleInitialized(ctx context.Context, msg mcp.Message, payload
 	return nil
 }
 
+func (s *Server) initUI(params types.SessionInitHook) types.SessionInitHook {
+	if _, ok := params.Meta["ui"]; ok {
+		return params
+	}
+
+	u, err := url.Parse(params.URL)
+	if err != nil {
+		// ignore parsing error
+		return params
+	}
+
+	if params.Meta == nil {
+		params.Meta = make(map[string]any)
+	}
+	params.Meta["ui"] = u.Query().Has("ui") || u.Path == "/mcp/ui"
+	return params
+}
+
+func (s *Server) runInitHook(ctx context.Context) (types.SessionInitHook, error) {
+	var (
+		sessionInit types.SessionInitHook
+		session     = mcp.SessionFromContext(ctx)
+		c           = types.ConfigFromContext(ctx)
+		req         = mcp.RequestFromContext(ctx)
+	)
+
+	session.Get(types.SessionInitSessionKey, &sessionInit)
+	sessionInit.SessionID = session.ID()
+	if req != nil {
+		sessionInit.URL = sessiondata.GetHostURL(req)
+	}
+
+	sessionInit = s.initUI(sessionInit)
+
+	sessionInit, err := mcp.InvokeHooks(ctx, s.runtime, c.Hooks, &sessionInit, "session", nil)
+	if err != nil {
+		return sessionInit, fmt.Errorf("failed to invoke session hook: %w", err)
+	}
+
+	session.Set(types.SessionInitSessionKey, &sessionInit)
+	return sessionInit, nil
+}
+
 func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload mcp.InitializeRequest) error {
+	sessionInit, err := s.runInitHook(ctx)
+	if err != nil {
+		return err
+	}
+
 	session := mcp.SessionFromContext(ctx)
 	c := types.ConfigFromContext(ctx)
 
@@ -323,18 +372,24 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 
 	s.data.Refresh(ctx)
 
-	var experimental map[string]any
+	experimental := map[string]any{}
+	meta := map[string]any{}
+	if len(sessionInit.Meta) > 0 {
+		meta["session"] = sessionInit.Meta
+	}
+
 	if c.Publish.Introduction.IsSet() {
 		intro, err := s.runtime.GetDynamicInstruction(ctx, c.Publish.Introduction)
 		if err != nil {
 			return fmt.Errorf("failed to get introduction: %w", err)
 		}
-		experimental = map[string]any{
-			"ai.nanobot.meta/intro": intro,
-		}
+		meta["intro"] = intro
+	}
+	if len(meta) > 0 {
+		experimental[types.MetaNanobot] = meta
 	}
 
-	if len(c.Publish.MCPServers) == 1 && len(c.Publish.Entrypoint) == 0 && len(c.Publish.Tools) == 0 {
+	if c.Publish.IsSingleServerProxy() {
 		// This nanobot just exposes a single MCP server. Call the initialize directly and return its response.
 		c, err := s.data.InitializedClient(ctx, c.Publish.MCPServers[0])
 		if err != nil {

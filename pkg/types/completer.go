@@ -16,13 +16,21 @@ type Completer interface {
 }
 
 type CompletionOptions struct {
-	ProgressToken any
-	Chat          *bool
+	ProgressToken      any
+	Chat               *bool
+	ToolChoice         *mcp.ToolChoice
+	Tools              []mcp.Tool
+	ToolIncludeContext string
+	ToolSource         string
 }
 
 func (c CompletionOptions) Merge(other CompletionOptions) (result CompletionOptions) {
 	result.ProgressToken = complete.Last(c.ProgressToken, other.ProgressToken)
 	result.Chat = complete.Last(c.Chat, other.Chat)
+	result.ToolChoice = complete.Last(c.ToolChoice, other.ToolChoice)
+	result.Tools = append(c.Tools, other.Tools...)
+	result.ToolIncludeContext = complete.Last(c.ToolIncludeContext, other.ToolIncludeContext)
+	result.ToolSource = complete.Last(c.ToolSource, other.ToolSource)
 	return
 }
 
@@ -44,6 +52,13 @@ type CompletionRequest struct {
 	Tools             []ToolUseDefinition  `json:"tools,omitzero"`
 	InputAsToolResult *bool                `json:"inputAsToolResult,omitempty"`
 	Reasoning         *AgentReasoning      `json:"reasoning,omitempty"`
+}
+
+func (r CompletionRequest) GetAgent() string {
+	if r.Agent != "" {
+		return r.Agent
+	}
+	return r.Model
 }
 
 func (r CompletionRequest) Reset() CompletionRequest {

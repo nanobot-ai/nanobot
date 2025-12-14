@@ -140,7 +140,7 @@ type Server struct {
 	Args         []string          `json:"args,omitempty"`
 	BaseURL      string            `json:"url,omitempty"`
 	Ports        []string          `json:"ports,omitempty"`
-	ReversePorts []int             `json:"reversePorts"`
+	ReversePorts []int             `json:"reversePorts,omitempty"`
 	Cwd          string            `json:"cwd,omitempty"`
 	Workdir      string            `json:"workdir,omitempty"`
 	Headers      map[string]string `json:"headers,omitempty"`
@@ -150,6 +150,14 @@ type Server struct {
 	ToolOverrides ToolOverrides `json:"toolOverrides,omitzero"`
 
 	Hooks Hooks `json:"hooks,omitzero"`
+}
+
+func (s Server) MarshalJSON() ([]byte, error) {
+	if s.Cwd == "." {
+		s.Cwd = ""
+	}
+	type Alias Server
+	return json.Marshal((Alias)(s))
 }
 
 type ToolOverrides map[string]ToolOverride
@@ -361,12 +369,15 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 	}
 
 	var (
-		sampling     *struct{}
+		sampling     *SamplingCapability
 		roots        *RootsCapability
 		elicitations *struct{}
 	)
 	if opt.OnSampling != nil {
-		sampling = &struct{}{}
+		sampling = &SamplingCapability{
+			Context: &struct{}{},
+			Tools:   &struct{}{},
+		}
 	}
 	if opt.OnRoots != nil {
 		roots = &RootsCapability{}
@@ -376,7 +387,7 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 	}
 	if opt.SessionState == nil {
 		_, err = c.Initialize(ctx, InitializeRequest{
-			ProtocolVersion: "2025-06-18",
+			ProtocolVersion: "2025-11-25",
 			Capabilities: ClientCapabilities{
 				Sampling:    sampling,
 				Roots:       roots,
@@ -464,6 +475,10 @@ func (c *Client) GetPrompt(ctx context.Context, name string, args map[string]str
 }
 
 func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
+	if c.Session.InitializeResult.Capabilities.Tools == nil {
+		return &ListToolsResult{}, nil
+	}
+
 	var tools ListToolsResult
 	err := c.Session.Exchange(ctx, "tools/list", struct{}{}, &tools)
 	if err == nil && len(c.toolOverrides) > 0 {

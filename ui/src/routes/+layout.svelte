@@ -3,9 +3,11 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import nanobotLogo from '$lib/assets/nanobot.svg';
 	import Threads from '$lib/components/Threads.svelte';
+	import WorkspaceList from '$lib/components/WorkspaceList.svelte';
 	import Notifications from '$lib/components/Notifications.svelte';
-	import { chatApi } from '$lib/chat.svelte';
-	import { notifications } from '$lib/stores/notifications.svelte';
+	import { defaultChatApi } from '$lib/chat.svelte';
+	import { NotificationStore } from '$lib/stores/notifications.svelte';
+	import { workspaceStore } from '$lib/stores/workspaces.svelte';
 	import { setNotificationContext } from '$lib/context/notifications.svelte';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
@@ -20,8 +22,10 @@
 	let isSidebarCollapsed = $state(false);
 	let isMobileSidebarOpen = $state(false);
 	let currentTheme = $state('lofi');
+	let workspaceSupported = $state(false);
 	const root = resolve('/');
 	const newThread = resolve('/');
+	const notifications = new NotificationStore();
 
 	// Set notification context for global access
 	setNotificationContext(notifications);
@@ -49,7 +53,12 @@
 			document.documentElement.setAttribute('data-theme', currentTheme);
 		}
 
-		threads = await chatApi.getThreads();
+		console.log(`Capabilities:`, await defaultChatApi.capabilities());
+		workspaceSupported = !!(await defaultChatApi.capabilities()).workspace?.supported;
+
+		// Load threads and workspaces in parallel
+		const [threadsData] = await Promise.all([defaultChatApi.getThreads(), workspaceStore.load()]);
+		threads = threadsData;
 		isLoading = false;
 	});
 
@@ -70,7 +79,7 @@
 
 	async function handleRenameThread(threadId: string, newTitle: string) {
 		try {
-			await chatApi.renameThread(threadId, newTitle);
+			await defaultChatApi.renameThread(threadId, newTitle);
 			const threadIndex = threads.findIndex((t) => t.id === threadId);
 			if (threadIndex !== -1) {
 				threads[threadIndex].title = newTitle;
@@ -84,7 +93,7 @@
 
 	async function handleDeleteThread(threadId: string) {
 		try {
-			await chatApi.deleteThread(threadId);
+			await defaultChatApi.deleteThread(threadId);
 			const threadToDelete = threads.find((t) => t.id === threadId);
 			threads = threads.filter((t) => t.id !== threadId);
 			notifications.success('Thread Deleted', `Deleted "${threadToDelete?.title || 'thread'}"`);
@@ -156,19 +165,34 @@
 				</div>
 			</div>
 
-			<!-- Threads list -->
+			<!-- Threads and Workspaces list -->
 			<div class="flex-1 overflow-hidden {!isSidebarCollapsed ? 'min-w-80' : ''}">
-				<Threads
-					{threads}
-					onRename={handleRenameThread}
-					onDelete={handleDeleteThread}
-					{isLoading}
-					onThreadClick={closeMobileSidebar}
-				/>
+				<div class="flex h-full flex-col">
+					<!-- Threads section (takes up ~40% of available space) -->
+					<div class={['flex-shrink-0 overflow-y-auto', { 'max-h-4/10': workspaceSupported }]}>
+						<Threads
+							{threads}
+							onRename={handleRenameThread}
+							onDelete={handleDeleteThread}
+							{isLoading}
+							onThreadClick={closeMobileSidebar}
+						/>
+					</div>
+
+					{#if workspaceSupported}
+						<!-- Divider -->
+						<div class="divider my-0"></div>
+
+						<!-- Workspaces section (takes remaining space) -->
+						<div class="flex-1 overflow-hidden">
+							<WorkspaceList onWorkspaceClick={closeMobileSidebar} />
+						</div>
+					{/if}
+				</div>
 			</div>
 
 			<!-- Theme switcher - bottom left corner -->
-			<div class="absolute bottom-4 left-4">
+			<div class="absolute bottom-4 left-4 z-50">
 				<button
 					onclick={toggleTheme}
 					class="btn btn-circle border-base-300 bg-base-100 shadow-lg btn-sm"

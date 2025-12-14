@@ -5,6 +5,9 @@ const (
 	HistoryMimeType    = "application/vnd.nanobot.chat.history+json"
 	ToolResultMimeType = "application/vnd.nanobot.tool.result+json"
 	ErrorMimeType      = "application/vnd.nanobot.error+json"
+	AgentMimeType      = "application/vnd.nanobot.agent+json"
+	WorkspaceMimeType  = "application/vnd.nanobot.workspace+json"
+	MetaNanobot        = "ai.nanobot"
 
 	MessageURI  = "chat://message/%s"
 	HistoryURI  = "chat://history"
@@ -30,3 +33,10 @@ var (
 		"application/pdf": {},
 	}
 )
+
+func Meta(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	return map[string]any{MetaNanobot: m}
+}

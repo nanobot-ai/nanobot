@@ -9,7 +9,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/modelcontextprotocol/go-sdk/jsonschema"
+	"github.com/google/jsonschema-go/jsonschema"
 )
 
 type NoResponse *struct{}
@@ -96,7 +96,7 @@ func NewServerTools(tools ...ServerTool) ServerTools {
 }
 
 func NewServerTool[In, Out any](name, description string, handler func(ctx context.Context, in In) (Out, error)) ServerTool {
-	inSchema, err := jsonschema.For[In]()
+	inSchema, err := jsonschema.For[In](nil)
 	if err != nil {
 		panic(err)
 	}
@@ -167,6 +167,16 @@ func callResult(object any, err error) (*CallToolResult, error) {
 					Description: res.Description,
 					URI:         res.URI,
 					MIMEType:    res.MimeType,
+				},
+			},
+		}, nil
+	}
+	if res, ok := object.(string); ok {
+		return &CallToolResult{
+			Content: []Content{
+				{
+					Type: "text",
+					Text: res,
 				},
 			},
 		}, nil

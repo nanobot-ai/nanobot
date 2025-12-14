@@ -1,7 +1,7 @@
 import type { Notification } from '$lib/types';
 import { SvelteDate } from 'svelte/reactivity';
 
-class NotificationStore {
+export class NotificationStore {
 	notifications = $state<Notification[]>([]);
 
 	add(notification: Omit<Notification, 'id' | 'timestamp'>): string {
@@ -14,7 +14,7 @@ class NotificationStore {
 				typeof notification.autoClose === 'boolean'
 					? notification.autoClose
 					: notification.type !== 'error',
-			duration: notification.duration || (notification.type === 'error' ? 0 : 5000) // errors don'c auto-close
+			duration: notification.duration || (notification.type === 'error' ? 0 : 5000) // errors don't auto-close
 		};
 
 		this.notifications.push(newNotification);
@@ -56,4 +56,3 @@ class NotificationStore {
 }
 
 export type { NotificationStore };
-export const notifications = new NotificationStore();

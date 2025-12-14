@@ -28,6 +28,12 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 			return fmt.Errorf("can not map tool %s to a MCP server", functionCall.Name)
 		}
 
+		if targetServer.Target.External {
+			// Handled externally, so terminate the run waiting for the client
+			run.Done = true
+			continue
+		}
+
 		callOutput, err := a.invoke(ctx, config, targetServer, tools.ToolCallInvocation{
 			MessageID: run.Response.Output.ID,
 			ItemID:    output.ID,
@@ -54,7 +60,7 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 	return nil
 }
 
-func (a *Agents) invoke(ctx context.Context, config types.Config, target types.TargetMapping[mcp.Tool], funcCall tools.ToolCallInvocation, opts []types.CompletionOptions) (*types.Message, error) {
+func (a *Agents) invoke(ctx context.Context, config types.Config, target types.TargetMapping[types.TargetTool], funcCall tools.ToolCallInvocation, opts []types.CompletionOptions) (*types.Message, error) {
 	var (
 		data map[string]any
 	)

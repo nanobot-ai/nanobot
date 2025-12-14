@@ -42,7 +42,7 @@ type CreateArtifactParams struct {
 }
 
 func (s *Server) createResource(ctx context.Context, params CreateArtifactParams) (*mcp.Resource, error) {
-	sessionID, accountID := s.getSessionAndAccountID(ctx)
+	sessionID, accountID := types.GetSessionAndAccountID(ctx)
 
 	data, err := base64.StdEncoding.DecodeString(params.Blob)
 	if err != nil {
@@ -73,7 +73,7 @@ func (s *Server) createResource(ctx context.Context, params CreateArtifactParams
 }
 
 func (s *Server) readResource(ctx context.Context, _ mcp.Message, body mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-	_, accountID := s.getSessionAndAccountID(ctx)
+	_, accountID := types.GetSessionAndAccountID(ctx)
 
 	id := strings.TrimPrefix(body.URI, "nanobot://resource/")
 
@@ -87,22 +87,13 @@ func (s *Server) readResource(ctx context.Context, _ mcp.Message, body mcp.ReadR
 	return &mcp.ReadResourceResult{
 		Contents: []mcp.ResourceContent{
 			{
+				Name:     artifact.Name,
 				URI:      "nanobot://resource/" + artifact.UUID,
 				MIMEType: artifact.MimeType,
 				Blob:     artifact.Blob,
 			},
 		},
 	}, nil
-}
-
-func (s *Server) getSessionAndAccountID(ctx context.Context) (string, string) {
-	var (
-		session   = mcp.SessionFromContext(ctx)
-		accountID string
-	)
-	session = session.Parent
-	session.Get(types.AccountIDSessionKey, &accountID)
-	return session.ID(), accountID
 }
 
 func (s *Server) listResourcesTemplates(_ context.Context, _ mcp.Message, _ mcp.ListResourceTemplatesRequest) (*mcp.ListResourceTemplatesResult, error) {
@@ -112,7 +103,7 @@ func (s *Server) listResourcesTemplates(_ context.Context, _ mcp.Message, _ mcp.
 }
 
 func (s *Server) listResources(ctx context.Context, _ mcp.Message, body mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
-	sessionID, _ := s.getSessionAndAccountID(ctx)
+	sessionID, _ := types.GetSessionAndAccountID(ctx)
 
 	resources, err := s.store.FindBySessionID(ctx, sessionID)
 	if err != nil {
@@ -157,7 +148,18 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	}
 }
 
-func (s *Server) initialize(_ context.Context, _ mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
+func (s *Server) initialize(ctx context.Context, _ mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
+	if !types.IsUISession(ctx) {
+		s.tools = mcp.NewServerTools()
+		return &mcp.InitializeResult{
+			ProtocolVersion: params.ProtocolVersion,
+			ServerInfo: mcp.ServerInfo{
+				Name:    version.Name,
+				Version: version.Get().String(),
+			},
+		}, nil
+	}
+
 	return &mcp.InitializeResult{
 		ProtocolVersion: params.ProtocolVersion,
 		Capabilities: mcp.ServerCapabilities{

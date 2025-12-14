@@ -44,6 +44,11 @@ func TestSchema(t *testing.T) {
 		},
 		"encryptionKey": "encryptionkey"
 	},
+	"hooks": {
+		"config": ["hook1.js", "hook2.js"],
+		"request": "hook3.js",
+		"response": ["hook4.js"]
+	},
 	"mcpServers": {
 		"server1": {
 			"command": "command1",

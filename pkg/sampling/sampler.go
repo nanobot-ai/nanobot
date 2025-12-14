@@ -94,13 +94,24 @@ func (s *Sampler) getMatchingModel(config types.Config, req *mcp.CreateMessageRe
 }
 
 type SamplerOptions struct {
-	ProgressToken any
-	Continue      bool
+	ProgressToken      any
+	Continue           bool
+	Chat               *bool
+	NewThread          *bool
+	ToolChoice         *mcp.ToolChoice
+	Tools              []mcp.Tool
+	ToolIncludeContext string
+	ToolSource         string
 }
 
 func (s SamplerOptions) Merge(other SamplerOptions) (result SamplerOptions) {
 	result.ProgressToken = complete.Last(s.ProgressToken, other.ProgressToken)
 	result.Continue = complete.Last(s.Continue, other.Continue)
+	result.Chat = complete.Last(s.Chat, other.Chat)
+	result.ToolChoice = complete.Last(s.ToolChoice, other.ToolChoice)
+	result.Tools = append(s.Tools, other.Tools...)
+	result.ToolIncludeContext = complete.Last(s.ToolIncludeContext, other.ToolIncludeContext)
+	result.ToolSource = complete.Last(s.ToolSource, other.ToolSource)
 	return
 }
 
@@ -128,8 +139,8 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 	}
 
 	var currentRole string
-	for _, content := range req.Messages {
-		role := content.Role
+	for _, msg := range req.Messages {
+		role := msg.Role
 		if role == "" {
 			role = "user"
 		}
@@ -156,15 +167,54 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 		}
 
 		inputIndex := len(request.Input) - 1
-		itemsLength := len(request.Input[inputIndex].Items)
-		request.Input[inputIndex].Items = append(request.Input[inputIndex].Items, types.CompletionItem{
-			ID:      fmt.Sprintf("%s_%d", id, itemsLength),
-			Content: &content.Content,
-		})
+		for _, currentContent := range msg.Content {
+			var (
+				content        *mcp.Content
+				toolCall       *types.ToolCall
+				toolCallResult *types.ToolCallResult
+			)
+
+			switch currentContent.Type {
+			case "tool_use":
+				input, err := json.Marshal(currentContent.Input)
+				if err != nil {
+					return nil, fmt.Errorf("failed to marshal tool input for %s: %w", currentContent.Name, err)
+				}
+				toolCall = &types.ToolCall{
+					Name:      currentContent.Name,
+					Arguments: string(input),
+					CallID:    currentContent.ID,
+				}
+			case "tool_result":
+				toolCallResult = &types.ToolCallResult{
+					CallID: currentContent.ToolUseID,
+					Output: types.CallResult{
+						Content:           currentContent.Content,
+						IsError:           currentContent.IsError,
+						StructuredContent: currentContent.StructuredContent,
+					},
+				}
+			default:
+				content = &currentContent
+			}
+
+			itemsLength := len(request.Input[inputIndex].Items)
+			request.Input[inputIndex].Items = append(request.Input[inputIndex].Items, types.CompletionItem{
+				ID:             fmt.Sprintf("%s_%d", id, itemsLength),
+				Content:        content,
+				ToolCall:       toolCall,
+				ToolCallResult: toolCallResult,
+			})
+		}
 	}
 
 	completeOptions := types.CompletionOptions{
-		ProgressToken: opt.ProgressToken,
+		ProgressToken:      opt.ProgressToken,
+		Chat:               opt.Chat,
+		ToolChoice:         opt.ToolChoice,
+		Tools:              opt.Tools,
+		ToolIncludeContext: opt.ToolIncludeContext,
+		ToolSource:         opt.ToolSource,
 	}
 
 	resp, err := s.completer.Complete(ctx, request, completeOptions)
@@ -185,10 +235,10 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 		result.Agent = request.Model
 	}
 
-	return CompletionResponseToCallResult(resp, false)
+	return CompletionResponseToCallResult(resp, false, opt.Tools)
 }
 
-func CompletionResponseToCallResult(resp *types.CompletionResponse, includeMessages bool) (*types.CallResult, error) {
+func CompletionResponseToCallResult(resp *types.CompletionResponse, includeMessages bool, externalTools []mcp.Tool) (*types.CallResult, error) {
 	result := &types.CallResult{
 		Model:        resp.Model,
 		ChatResponse: resp.ChatResponse,
@@ -201,7 +251,26 @@ func CompletionResponseToCallResult(resp *types.CompletionResponse, includeMessa
 			result = &cp
 			break
 		}
-		if output.Content == nil {
+		if output.ToolCall != nil {
+			for _, tool := range externalTools {
+				if tool.Name == output.ToolCall.Name {
+					input := map[string]any{}
+					if output.ToolCall.Arguments != "" {
+						if err := json.Unmarshal([]byte(output.ToolCall.Arguments), &input); err != nil {
+							return nil, fmt.Errorf("failed to unmarshal tool arguments for %s: %w", tool.Name, err)
+						}
+					}
+					result.Content = append(result.Content, mcp.Content{
+						Type:  "tool_use",
+						ID:    output.ToolCall.CallID,
+						Name:  tool.Name,
+						Input: input,
+					})
+				}
+			}
+		}
+		if output.Content == nil || (output.Content.Type == "text" && output.Content.Text == "") {
+			// ignore empty string content
 			continue
 		}
 		result.Content = append(result.Content, *output.Content)

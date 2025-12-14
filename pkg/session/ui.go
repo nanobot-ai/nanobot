@@ -2,7 +2,6 @@ package session
 
 import (
 	"compress/gzip"
-	"errors"
 	"io"
 	"io/fs"
 	"mime"
@@ -12,12 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/types"
-	"github.com/nanobot-ai/nanobot/pkg/uuid"
 	"github.com/nanobot-ai/nanobot/ui"
-	"gorm.io/gorm"
 )
 
 func getCookieID(req *http.Request) string {
@@ -35,63 +29,63 @@ func UISession(next http.Handler, sessionStore *Manager, apiHandler http.Handler
 			return
 		}
 
-		nctx := types.NanobotContext(req.Context())
-		user := nctx.User
-		nanobotSessionID := getCookieID(req)
+		//nctx := types.NanobotContext(req.Context())
+		//user := nctx.User
+		//nanobotSessionID := getCookieID(req)
 
-		if nanobotSessionID != "" {
-			session, err := sessionStore.DB.GetByIDByAccountID(req.Context(), nanobotSessionID, complete.First(user.ID, nanobotSessionID))
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				nanobotSessionID = ""
-			} else if err != nil {
-				http.Error(rw, "Failed to load session: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-			nanobotSessionID = session.SessionID
-		}
+		//if nanobotSessionID != "" {
+		//	session, err := sessionStore.DB.GetByIDByAccountID(req.Context(), nanobotSessionID, complete.First(user.ID, nanobotSessionID))
+		//	if errors.Is(err, gorm.ErrRecordNotFound) {
+		//		nanobotSessionID = ""
+		//	} else if err != nil {
+		//		http.Error(rw, "Failed to load session: "+err.Error(), http.StatusInternalServerError)
+		//		return
+		//	}
+		//	nanobotSessionID = session.SessionID
+		//}
 
-		if nanobotSessionID == "" {
-			nanobotSessionID = uuid.String()
-			err := sessionStore.DB.Create(req.Context(), &Session{
-				Type:      "ui",
-				SessionID: nanobotSessionID,
-				AccountID: complete.First(user.ID, nanobotSessionID),
-				State: State{
-					InitializeResult: mcp.InitializeResult{},
-					InitializeRequest: mcp.InitializeRequest{
-						Capabilities: mcp.ClientCapabilities{
-							Elicitation: &struct{}{},
-						},
-					},
-				},
-			})
-			if err != nil {
-				http.Error(rw, "Failed to create session: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
+		//if nanobotSessionID == "" {
+		//	nanobotSessionID = uuid.String()
+		//	err := sessionStore.DB.Create(req.Context(), &Session{
+		//		Type:      "ui",
+		//		SessionID: nanobotSessionID,
+		//		AccountID: complete.First(user.ID, nanobotSessionID),
+		//		State: State{
+		//			InitializeResult: mcp.InitializeResult{},
+		//			InitializeRequest: mcp.InitializeRequest{
+		//				Capabilities: mcp.ClientCapabilities{
+		//					Elicitation: &struct{}{},
+		//				},
+		//			},
+		//		},
+		//	})
+		//	if err != nil {
+		//		http.Error(rw, "Failed to create session: "+err.Error(), http.StatusInternalServerError)
+		//		return
+		//	}
 
-			cookie := http.Cookie{
-				Name:     "nanobot-session-id",
-				Value:    nanobotSessionID,
-				Secure:   isSecureRequest(req),
-				Path:     "/",
-				HttpOnly: true,
-			}
-			if cookie.Secure {
-				cookie.SameSite = http.SameSiteNoneMode
-			}
-			http.SetCookie(rw, &cookie)
-		}
+		//	cookie := http.Cookie{
+		//		Name:     "nanobot-session-id",
+		//		Value:    nanobotSessionID,
+		//		Secure:   isSecureRequest(req),
+		//		Path:     "/",
+		//		HttpOnly: true,
+		//	}
+		//	if cookie.Secure {
+		//		cookie.SameSite = http.SameSiteNoneMode
+		//	}
+		//	http.SetCookie(rw, &cookie)
+		//}
 
-		if user.ID == "" {
-			user.ID = nanobotSessionID
-			nctx.User = user
-			req = req.WithContext(types.WithNanobotContext(req.Context(), nctx))
-		}
-
-		if req.Header.Get("Mcp-Session-Id") == "" {
-			req.Header.Set("Mcp-Session-Id", nanobotSessionID)
-		}
+		//if user.ID == "" {
+		//	user.ID = nanobotSessionID
+		//	nctx.User = user
+		//	req = req.WithContext(types.WithNanobotContext(req.Context(), nctx))
+		//}
+		//
+		//if req.Header.Get("Mcp-Session-Id") == "" {
+		//	req.Header.Set("Mcp-Session-Id", nanobotSessionID)
+		//}
 
 		if strings.HasPrefix(req.URL.Path, "/mcp") {
 			next.ServeHTTP(rw, req)

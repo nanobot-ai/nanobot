@@ -34,9 +34,7 @@ definitions:
   StringSliceMap:
     type: object
     additionalProperties:
-      type: array
-      items:
-        type: string
+      $ref: "#/definitions/StringOrStringList"
     description: |
       A map of strings to string slices.
   DynamicInstruction:
@@ -584,6 +582,11 @@ definitions:
         description: |
           The speed of the agent. This is used to help the LLM understand how
           quickly the agent can respond. Higher values indicate faster agents.
+      hooks:
+        $ref: "#/definitions/StringSliceMap"
+        description: |
+          A map of hooks that will be executed at various stages of the Agent lifecycle.
+          Currently supported hooks are "config", "request", and "response".
 
   Prompt:
     type: object
@@ -666,6 +669,11 @@ properties:
       This is useful for configuring the environment in which the Nanobot runs.
     additionalProperties:
       $ref: "#/definitions/EnvVarDefinition"
+  hooks:
+    $ref: "#/definitions/StringSliceMap"
+    description: |
+      A map of hooks that will be executed at various stages of the Nanobot lifecycle.
+      This is useful for customizing the behavior of the Nanobot at the global level.
   agents:
     type: object
     description: |

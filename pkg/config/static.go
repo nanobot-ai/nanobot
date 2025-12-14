@@ -12,8 +12,14 @@ var DefaultConfig = types.Config{
 }
 
 var UI = types.Config{
+	Hooks: []mcp.HookMapping{
+		{
+			Name:    "session",
+			Targets: []string{"nanobot.capabilities/init_session"},
+		},
+	},
 	Agents: map[string]types.Agent{
-		"nanobot.summary.agent": {
+		"nanobot.summary": {
 			Chat: new(bool),
 			Instructions: types.DynamicInstructions{
 				Instructions: `- you will generate a short title based on the first message a user begins a conversation with
@@ -24,11 +30,11 @@ var UI = types.Config{
 		},
 	},
 	Publish: types.Publish{
-		MCPServers: []string{"nanobot.meta", "nanobot.resources", "nanobot.agentui"},
+		MCPServers: []string{"nanobot.meta", "nanobot.resources"},
 	},
 	MCPServers: map[string]mcp.Server{
-		"nanobot.meta":      {},
-		"nanobot.resources": {},
-		"nanobot.agentui":   {},
+		"nanobot.meta":         {},
+		"nanobot.resources":    {},
+		"nanobot.capabilities": {},
 	},
 }

@@ -7,9 +7,14 @@ import (
 )
 
 type ClientCapabilities struct {
-	Roots       *RootsCapability `json:"roots,omitempty"`
-	Sampling    *struct{}        `json:"sampling,omitzero"`
-	Elicitation *struct{}        `json:"elicitation,omitzero"`
+	Roots       *RootsCapability    `json:"roots,omitempty"`
+	Sampling    *SamplingCapability `json:"sampling,omitempty"`
+	Elicitation *struct{}           `json:"elicitation,omitempty"`
+}
+
+type SamplingCapability struct {
+	Context *struct{} `json:"context,omitempty"`
+	Tools   *struct{} `json:"tools,omitempty"`
 }
 
 type RootsCapability struct {
@@ -52,12 +57,14 @@ type InitializeResult struct {
 	Capabilities    ServerCapabilities `json:"capabilities"`
 	ServerInfo      ServerInfo         `json:"serverInfo"`
 	Instructions    string             `json:"instructions"`
+	Meta            map[string]any     `json:"_meta,omitzero"`
 }
 
 type InitializeRequest struct {
 	ProtocolVersion string             `json:"protocolVersion"`
 	Capabilities    ClientCapabilities `json:"capabilities"`
 	ClientInfo      ClientInfo         `json:"clientInfo"`
+	Meta            map[string]any     `json:"_meta,omitzero"`
 }
 
 type PingResult struct {
@@ -116,6 +123,13 @@ type CreateMessageRequest struct {
 	Temperature      *json.Number      `json:"temperature,omitempty"`
 	StopSequences    []string          `json:"stopSequences,omitzero"`
 	Metadata         map[string]any    `json:"metadata,omitempty"`
+	ToolChoice       *ToolChoice       `json:"toolChoice,omitempty"`
+	Tools            []Tool            `json:"tools,omitzero"`
+}
+
+type ToolChoice struct {
+	// Mode must be one of "none", "auto", "required"
+	Mode string `json:"mode"`
 }
 
 type ListRootsRequest struct {
@@ -137,14 +151,41 @@ type LoggingMessage struct {
 }
 
 type SamplingMessage struct {
-	Role    string  `json:"role,omitempty"`
-	Content Content `json:"content,omitempty"`
+	Role    string   `json:"role,omitempty"`
+	Content Contents `json:"content,omitempty"`
+}
+
+type Contents []Content
+
+func (c Contents) MarshalJSON() ([]byte, error) {
+	if len(c) == 1 {
+		return json.Marshal(c[0])
+	}
+	type Alias Contents
+	return json.Marshal((*Alias)(&c))
+}
+
+func (c *Contents) UnmarshalJSON(b []byte) error {
+	if len(b) > 0 && b[0] == '{' {
+		var content Content
+		if err := json.Unmarshal(b, &content); err != nil {
+			return err
+		}
+		*c = Contents{content}
+	} else {
+		var contents []Content
+		if err := json.Unmarshal(b, &contents); err != nil {
+			return err
+		}
+		*c = contents
+	}
+	return nil
 }
 
 type Content struct {
 	Type string `json:"type,omitempty"`
 
-	// Name is used for resource_link
+	// Name is used for resource_link, tool_use
 	Name string `json:"name,omitempty"`
 
 	// Description is used for resource_link
@@ -167,6 +208,24 @@ type Content struct {
 
 	// Meta is used for all types and contains arbitrary metadata.
 	Meta map[string]any `json:"_meta,omitempty"`
+
+	// ID is used for tool_use
+	ID string `json:"id,omitempty"`
+
+	// Input is used for tool_use
+	Input map[string]any `json:"input,omitempty"`
+
+	// ToolUseID is used for tool_result
+	ToolUseID string `json:"toolUseId,omitempty"`
+
+	// Content is used for tool_result
+	Content []Content `json:"content,omitempty"`
+
+	// StructuredContent is used for tool_result
+	StructuredContent map[string]any `json:"structuredContent,omitempty"`
+
+	// IsError is used for tool_result
+	IsError bool `json:"isError,omitempty"`
 }
 
 func (c Content) MarshalJSON() ([]byte, error) {
@@ -180,16 +239,20 @@ func (c Content) MarshalJSON() ([]byte, error) {
 			c.Type = "image"
 		} else if c.URI != "" {
 			c.Type = "resource_link"
+		} else if c.ToolUseID != "" {
+			c.Type = "tool_result"
+		} else if c.ID != "" {
+			c.Type = "tool_use"
 		}
 	}
 	return json.Marshal((*Alias)(&c))
 }
 
 type CreateMessageResult struct {
-	Content    Content `json:"content,omitempty"`
-	Role       string  `json:"role,omitempty"`
-	Model      string  `json:"model,omitempty"`
-	StopReason string  `json:"stopReason,omitempty"`
+	Content    Contents `json:"content,omitempty"`
+	Role       string   `json:"role,omitempty"`
+	Model      string   `json:"model,omitempty"`
+	StopReason string   `json:"stopReason,omitempty"`
 }
 
 func (c *Content) ToImageURL() string {
@@ -222,10 +285,22 @@ type ResourceAnnotations struct {
 
 type Tool struct {
 	Name         string           `json:"name"`
+	Title        string           `json:"title,omitempty"`
+	Icons        []Icon           `json:"icons,omitzero"`
 	Description  string           `json:"description,omitempty"`
 	InputSchema  json.RawMessage  `json:"inputSchema,omitzero"`
 	OutputSchema json.RawMessage  `json:"outputSchema,omitzero"`
 	Annotations  *ToolAnnotations `json:"annotations,omitempty"`
+}
+
+type Icons struct {
+	Icons []Icon `json:"icons,omitzero"`
+}
+
+type Icon struct {
+	Src      string   `json:"src"`
+	MIMEType string   `json:"mimeType,omitempty"`
+	Sizes    []string `json:"sizes,omitzero"`
 }
 
 type ToolAnnotations struct {
@@ -354,6 +429,7 @@ type ListResourcesResult struct {
 }
 
 type Resource struct {
+	Icons
 	URI         string         `json:"uri"`
 	Name        string         `json:"name"`
 	Title       string         `json:"title,omitempty"`

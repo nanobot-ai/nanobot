@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/config"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/schema"
@@ -42,6 +41,7 @@ func NewData(runtime RuntimeMeta) *Data {
 type RuntimeMeta interface {
 	BuildToolMappings(ctx context.Context, toolList []string, opts ...types.BuildToolMappingsOptions) (types.ToolMappings, error)
 	GetClient(ctx context.Context, name string) (*mcp.Client, error)
+	GetAgentAttributes(ctx context.Context, name string) (agentConfigName string, agentAttribute map[string]any, _ error)
 }
 
 type GetOption struct {
@@ -110,8 +110,7 @@ func (d *Data) Agents(ctx context.Context) ([]types.AgentDisplay, error) {
 		)
 
 		if agent, ok := c.Agents[key]; ok {
-			agentDisplay = agent.ToDisplay()
-			agentDisplay.Name = complete.First(agentDisplay.Name, agentDisplay.ShortName)
+			agentDisplay = agent.ToDisplay(key)
 		} else if mcpServer, ok := c.MCPServers[key]; ok {
 			c, err := d.runtime.GetClient(ctx, key)
 			if err != nil {
@@ -128,6 +127,7 @@ func (d *Data) Agents(ctx context.Context) ([]types.AgentDisplay, error) {
 			starterMessages, _ := c.Session.InitializeResult.Capabilities.Experimental["ai.nanobot.meta/starter-messages"].(string)
 
 			agentDisplay = types.AgentDisplay{
+				ID:              key,
 				Name:            complete.First(c.Session.InitializeResult.ServerInfo.Name, mcpServer.Name, mcpServer.ShortName, key),
 				ShortName:       complete.First(mcpServer.ShortName, c.Session.InitializeResult.ServerInfo.Name, mcpServer.Name, key),
 				Description:     strings.TrimSpace(mcpServer.Description),
@@ -153,9 +153,11 @@ func (d *Data) CurrentAgent(ctx context.Context) string {
 		c            types.Config
 	)
 	if !session.Get(types.CurrentAgentSessionKey, &currentAgent) {
-		session.Get(types.ConfigSessionKey, &c)
-		if len(c.Publish.Entrypoint) > 0 {
-			currentAgent = c.Publish.Entrypoint[0]
+		if !session.Get(types.DefaultAgentSessionKey, &currentAgent) {
+			session.Get(types.ConfigSessionKey, &c)
+			if len(c.Publish.Entrypoint) > 0 {
+				currentAgent = c.Publish.Entrypoint[0]
+			}
 		}
 	}
 	return currentAgent
@@ -171,11 +173,11 @@ func (d *Data) setURL(ctx context.Context) {
 		return
 	}
 
-	url := getHostURL(req)
+	url := GetHostURL(req)
 	session.Set(types.PublicURLSessionKey, mcp.SavedString(url))
 }
 
-func getHostURL(req *http.Request) string {
+func GetHostURL(req *http.Request) string {
 	scheme := req.Header.Get("X-Forwarded-Proto")
 	if scheme == "" {
 		if req.TLS != nil {
@@ -197,7 +199,13 @@ func getHostURL(req *http.Request) string {
 		return fmt.Sprintf("%s://%s%s", scheme, host, originalURL)
 	}
 
-	return fmt.Sprintf("%s://%s%s", scheme, host, req.URL.Path)
+	q := ""
+	if req.URL.RawQuery != "" || req.URL.Fragment != "" {
+		_, p, _ := strings.Cut(req.URL.String(), "?")
+		q = "?" + p
+	}
+
+	return fmt.Sprintf("%s://%s%s%s", scheme, host, req.URL.Path, q)
 }
 
 func (d *Data) getAndSetConfig(ctx context.Context, defaultConfig types.ConfigFactory) (types.Config, error) {
@@ -227,18 +235,6 @@ func (d *Data) getAndSetConfig(ctx context.Context, defaultConfig types.ConfigFa
 		c, err = defaultConfig(ctx, profiles)
 		if err != nil {
 			return c, fmt.Errorf("failed to load default config: %w", err)
-		}
-	}
-
-	if req := mcp.RequestFromContext(ctx); req != nil && req.URL.Path == "/mcp/ui" {
-		uiConfig, _, err := config.Load(ctx, "nanobot.ui")
-		if err != nil {
-			return c, fmt.Errorf("failed to load ui config: %w", err)
-		}
-		uiConfig.Publish.Entrypoint = nil
-		c, err = config.Merge(c, *uiConfig)
-		if err != nil {
-			return c, fmt.Errorf("failed to merge ui config: %w", err)
 		}
 	}
 
@@ -460,12 +456,12 @@ func (r *resourceTemplateMatchCache) Serialize(v any) (any, error) {
 	return r, nil
 }
 
-func (d *Data) checkResourceMatch(ctx context.Context, uri string) (string, string, bool) {
+func (d *Data) checkResourceMatch(ctx context.Context, uri, keySuffix string) (string, string, bool) {
 	var (
 		agent   = d.CurrentAgent(ctx)
 		session = mcp.SessionFromContext(ctx)
 		cache   = resourceTemplateMatchCache{}
-		key     = fmt.Sprintf("%s::%s", agent, uri)
+		key     = fmt.Sprintf("%s::%s", agent, uri) + keySuffix
 	)
 	session.Get(resourceTemplateMappingCacheKey, &cache)
 	if hit, ok := cache[key]; ok {
@@ -494,7 +490,7 @@ func (d *Data) cacheResourceMatch(ctx context.Context, uri, server, resourceName
 
 func (d *Data) MatchPublishedResource(ctx context.Context, uri string) (retServer string, retResourceName string, retErr error) {
 	var ok bool
-	if retServer, retResourceName, ok = d.checkResourceMatch(ctx, uri); ok {
+	if retServer, retResourceName, ok = d.checkResourceMatch(ctx, uri, ""); ok {
 		return
 	}
 
@@ -528,10 +524,42 @@ func (d *Data) MatchPublishedResource(ctx context.Context, uri string) (retServe
 	return templateMatch.MCPServer, resourceName, nil
 }
 
+func (d *Data) filterSupportingResources(ctx context.Context, refs []string) (result []string, _ error) {
+	for _, ref := range refs {
+		toolRef := types.ParseToolRef(ref)
+		if toolRef.Server == "" {
+			continue
+		}
+
+		client, err := d.runtime.GetClient(ctx, toolRef.Server)
+		if err != nil {
+			return nil, err
+		}
+
+		if client.Session.InitializeResult.Capabilities.Resources != nil {
+			result = append(result, refs...)
+		}
+	}
+
+	return
+}
+
 func (d *Data) MatchResource(ctx context.Context, uri string, refs []string) (retServer string, retResourceName string, retErr error) {
 	var ok bool
-	if retServer, retResourceName, ok = d.checkResourceMatch(ctx, uri); ok {
+	if retServer, retResourceName, ok = d.checkResourceMatch(ctx, uri, ":"+strings.Join(refs, ",")); ok {
 		return
+	}
+
+	refs, err := d.filterSupportingResources(ctx, refs)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to filter supporting resources: %w", err)
+	}
+
+	if len(refs) == 1 {
+		target := types.ParseToolRef(refs[0])
+		if target.Server != "" {
+			return target.Server, uri, nil
+		}
 	}
 
 	defer func() {
@@ -540,6 +568,16 @@ func (d *Data) MatchResource(ctx context.Context, uri string, refs []string) (re
 		}
 		d.cacheResourceMatch(ctx, uri, retServer, retResourceName)
 	}()
+
+	resourceTemplateMappings, err := d.BuildResourceTemplateMappings(ctx, refs)
+	if err != nil {
+		return "", "", err
+	}
+
+	templateMatch, resourceName, ok := d.matchResourceURITemplate(resourceTemplateMappings, uri)
+	if ok {
+		return templateMatch.MCPServer, resourceName, nil
+	}
 
 	resourceMappings, err := d.BuildResourceMappings(ctx, refs)
 	if err != nil {
@@ -551,17 +589,7 @@ func (d *Data) MatchResource(ctx context.Context, uri string, refs []string) (re
 		return resourceMapping.MCPServer, uri, nil
 	}
 
-	resourceTemplateMappings, err := d.BuildResourceTemplateMappings(ctx, refs)
-	if err != nil {
-		return "", "", err
-	}
-
-	templateMatch, resourceName, ok := d.matchResourceURITemplate(resourceTemplateMappings, uri)
-	if !ok {
-		return "", "", fmt.Errorf("resource %q not found: %w", uri, ErrResourceNotFound)
-	}
-
-	return templateMatch.MCPServer, resourceName, nil
+	return "", "", fmt.Errorf("resource %q not found: %w", uri, ErrResourceNotFound)
 }
 
 func (d *Data) PublishedResourceMappings(ctx context.Context) (types.ResourceMappings, error) {

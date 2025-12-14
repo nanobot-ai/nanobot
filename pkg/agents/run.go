@@ -36,10 +36,36 @@ func New(completer types.Completer, registry *tools.Service) *Agents {
 	}
 }
 
-func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, agent *types.Agent) (types.ToolMappings, error) {
+func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, agent *types.Agent, opts []types.CompletionOptions) (types.ToolMappings, error) {
+	opt := complete.Complete(opts...)
+
+	if opt.ToolChoice != nil {
+		switch opt.ToolChoice.Mode {
+		case "none":
+			req.ToolChoice = "none"
+		case "auto":
+			req.ToolChoice = "auto"
+		case "required":
+			req.ToolChoice = "required"
+		}
+	}
+
 	toolMappings, err := a.registry.BuildToolMappings(ctx, slices.Concat(agent.Tools, agent.Agents, agent.MCPServers))
 	if err != nil {
 		return nil, fmt.Errorf("failed to build tool mappings: %w", err)
+	}
+
+	switch opt.ToolIncludeContext {
+	case "none":
+		toolMappings = types.ToolMappings{}
+	case "thisServer":
+		newMappings := types.ToolMappings{}
+		for key, mapping := range toolMappings {
+			if mapping.MCPServer == opt.ToolSource {
+				newMappings[key] = mapping
+			}
+		}
+		toolMappings = newMappings
 	}
 
 	for _, key := range slices.Sorted(maps.Keys(toolMappings)) {
@@ -51,6 +77,20 @@ func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, age
 			Parameters:  schema.ValidateAndFixToolSchema(tool.InputSchema),
 			Description: tool.Description,
 			Attributes:  agent.ToolExtensions[toolMapping.Target.Name],
+		})
+	}
+
+	for _, tool := range opt.Tools {
+		toolMappings[tool.Name] = types.TargetMapping[types.TargetTool]{
+			Target: types.TargetTool{
+				Tool:     tool,
+				External: true,
+			},
+		}
+		req.Tools = append(req.Tools, types.ToolUseDefinition{
+			Name:        tool.Name,
+			Parameters:  schema.ValidateAndFixToolSchema(tool.InputSchema),
+			Description: tool.Description,
 		})
 	}
 
@@ -90,7 +130,7 @@ func populateToolCallResult(previousRun *types.Execution, req *types.CompletionR
 	req.Input = nil
 }
 
-func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *types.Execution, previousRun *types.Execution) (types.CompletionRequest, types.ToolMappings, error) {
+func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *types.Execution, previousRun *types.Execution, opts []types.CompletionOptions) (types.CompletionRequest, types.ToolMappings, error) {
 	req := run.Request
 
 	if previousRun != nil {
@@ -129,10 +169,7 @@ func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *
 		req.Input = input
 	}
 
-	agentName := req.Agent
-	if agentName == "" {
-		agentName = req.Model
-	}
+	agentName := req.GetAgent()
 
 	agent, ok := config.Agents[agentName]
 	if !ok {
@@ -203,7 +240,7 @@ func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *
 
 	req.Model = agent.Model
 
-	toolMapping, err := a.addTools(ctx, &req, &agent)
+	toolMapping, err := a.addTools(ctx, &req, &agent, opts)
 	if err != nil {
 		return req, nil, fmt.Errorf("failed to add tools: %w", err)
 	}
@@ -384,7 +421,7 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 		isChat               = session != nil
 		previousRun          *types.Execution
 		currentRun           = &types.Execution{}
-		config               = types.ConfigFromContext(ctx)
+		baseConfig           = types.ConfigFromContext(ctx)
 		startID              = ""
 	)
 
@@ -404,7 +441,7 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 		previousExecutionKey = fmt.Sprintf("%s/%s", previousExecutionKey, req.ThreadName)
 	}
 
-	if isChat && config.Agents[req.Model].Chat != nil && !*config.Agents[req.Model].Chat {
+	if isChat && baseConfig.Agents[req.Model].Chat != nil && !*baseConfig.Agents[req.Model].Chat {
 		isChat = false
 	}
 
@@ -439,6 +476,13 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 	}
 
 	for {
+		config, err := a.configHook(ctx, baseConfig, currentRun.Request.GetAgent())
+		if err != nil {
+			return nil, err
+		}
+
+		ctx := types.WithConfig(ctx, config)
+
 		if err := a.run(ctx, config, currentRun, previousRun, opts); err != nil {
 			return nil, err
 		}
@@ -496,16 +540,82 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 	}
 }
 
+func (a *Agents) GetConfigForAgent(ctx context.Context, agentName string) (types.Config, error) {
+	config := types.ConfigFromContext(ctx)
+	return a.configHook(ctx, config, agentName)
+}
+
+func (a *Agents) configHook(ctx context.Context, baseConfig types.Config, agentName string) (types.Config, error) {
+	session := mcp.SessionFromContext(ctx).Root()
+	var sessionInit types.SessionInitHook
+	session.Get(types.SessionInitSessionKey, &sessionInit)
+
+	agent := baseConfig.Agents[agentName]
+	hookResult, err := mcp.InvokeHooks(ctx, a.registry, agent.Hooks, &types.AgentConfigHook{
+		Agent:     &agent,
+		Meta:      sessionInit.Meta,
+		SessionID: session.ID(),
+	}, "config", nil)
+	if err != nil {
+		return types.Config{}, fmt.Errorf("failed to invoke config hook: %w", err)
+	}
+
+	if hookResult.Agent != nil {
+		if baseConfig.Agents == nil {
+			baseConfig.Agents = map[string]types.Agent{}
+		} else {
+			baseConfig.Agents = maps.Clone(baseConfig.Agents)
+		}
+		baseConfig.Agents[agentName] = *hookResult.Agent
+	}
+
+	if len(hookResult.MCPServers) > 0 {
+		if baseConfig.MCPServers == nil {
+			baseConfig.MCPServers = map[string]mcp.Server{}
+		} else {
+			baseConfig.MCPServers = maps.Clone(baseConfig.MCPServers)
+		}
+		for name, server := range hookResult.MCPServers {
+			baseConfig.MCPServers[name] = server.ToMCPServer()
+		}
+	}
+
+	return baseConfig, nil
+}
+
 func (a *Agents) runBefore(ctx context.Context, config types.Config, req types.CompletionRequest) (types.CompletionRequest, *types.CompletionResponse, error) {
-	return req, nil, nil
+	agent := config.Agents[req.GetAgent()]
+	resp, err := mcp.InvokeHooks(ctx, a.registry, agent.Hooks, &types.AgentRequestHook{
+		Request: &req,
+	}, "request", nil)
+	if err != nil {
+		return req, nil, fmt.Errorf("failed to invoke request hook: %w", err)
+	}
+
+	if resp.Request != nil {
+		req = *resp.Request
+	}
+
+	return req, resp.Response, nil
 }
 
 func (a *Agents) runAfter(ctx context.Context, config types.Config, req types.CompletionRequest, resp *types.CompletionResponse) (*types.CompletionResponse, error) {
+	agent := config.Agents[req.GetAgent()]
+	hookResp, err := mcp.InvokeHooks(ctx, a.registry, agent.Hooks, &types.AgentResponseHook{
+		Request:  &req,
+		Response: resp,
+	}, "response", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to invoke response hook: %w", err)
+	}
+	if hookResp.Response != nil {
+		return hookResp.Response, nil
+	}
 	return resp, nil
 }
 
 func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execution, prev *types.Execution, opts []types.CompletionOptions) error {
-	completionRequest, toolMapping, err := a.populateRequest(ctx, config, run, prev)
+	completionRequest, toolMapping, err := a.populateRequest(ctx, config, run, prev, opts)
 	if err != nil {
 		return err
 	}

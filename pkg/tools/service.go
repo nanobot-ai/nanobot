@@ -89,6 +89,11 @@ func NewToolsService(opts ...Options) *Service {
 	}
 }
 
+func (s *Service) GetAgentAttributes(_ context.Context, name string) (agentConfigName string, agentAttribute map[string]any, _ error) {
+	// noop
+	return name, nil, nil
+}
+
 func (s *Service) AddServer(name string, factory func(name string) mcp.MessageHandler) {
 	if s.serverFactories == nil {
 		s.serverFactories = make(map[string]func(string) mcp.MessageHandler)
@@ -468,14 +473,22 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 		}
 	}
 	if s.sampler != nil {
-		clientOpts.OnSampling = func(ctx context.Context, samplingRequest mcp.CreateMessageRequest) (_ mcp.CreateMessageResult, err error) {
+		clientOpts.OnSampling = func(ctx context.Context, samplingRequest mcp.CreateMessageRequest) (mcp.CreateMessageResult, error) {
 			msg, err := mcp.NewMessageWithID("sampling/createMessage", samplingRequest)
 			if err != nil {
 				return mcp.CreateMessageResult{}, fmt.Errorf("failed to create message: %w", err)
 			}
-
+			includeContext := samplingRequest.IncludeContext
+			if includeContext == "" {
+				includeContext = "none"
+			}
 			result, err := s.sampler.Sample(ctx, samplingRequest, sampling.SamplerOptions{
-				ProgressToken: uuid.String(),
+				ToolChoice:         samplingRequest.ToolChoice,
+				ToolIncludeContext: includeContext,
+				ToolSource:         name,
+				Tools:              samplingRequest.Tools,
+				ProgressToken:      uuid.String(),
+				Chat:               new(bool),
 			})
 			if err != nil {
 				if errors.Is(err, sampling.ErrNoMatchingModel) && session.InitializeRequest.Capabilities.Sampling != nil {
@@ -504,17 +517,12 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 
 				return mcp.CreateMessageResult{}, err
 			}
-
-			for _, content := range result.Content {
-				samplingResult := mcp.CreateMessageResult{
-					Content:    content,
-					Role:       "assistant",
-					Model:      result.Model,
-					StopReason: result.StopReason,
-				}
-				return samplingResult, nil
-			}
-			return mcp.CreateMessageResult{}, fmt.Errorf("no content returned from sampler")
+			return mcp.CreateMessageResult{
+				Content:    result.Content,
+				Role:       "assistant",
+				Model:      result.Model,
+				StopReason: result.StopReason,
+			}, nil
 		}
 	}
 
@@ -874,10 +882,12 @@ func (s *Service) getMatches(ref string, tools []ListToolsResult, opts ...types.
 				if toolRef.As != "" {
 					tool.Name = toolRef.As
 				}
-				result[tool.Name] = types.TargetMapping[mcp.Tool]{
+				result[tool.Name] = types.TargetMapping[types.TargetTool]{
 					MCPServer:  toolRef.Server,
 					TargetName: originalName,
-					Target:     tool,
+					Target: types.TargetTool{
+						Tool: tool,
+					},
 				}
 			}
 		}
@@ -923,7 +933,7 @@ func (s *Service) BuildToolMappings(ctx context.Context, toolList []string, opts
 
 func hasOnlySampleKeys(args map[string]any) bool {
 	for key := range args {
-		if key != "prompt" && key != "attachments" {
+		if key != "prompt" && key != "attachments" && key != "_meta" {
 			return false
 		}
 	}
@@ -971,10 +981,10 @@ func (s *Service) convertToSampleRequest(config types.Config, agent string, args
 	if sampleArgs.Prompt != "" {
 		sampleRequest.Messages = append(sampleRequest.Messages, mcp.SamplingMessage{
 			Role: "user",
-			Content: mcp.Content{
+			Content: []mcp.Content{{
 				Type: "text",
 				Text: sampleArgs.Prompt,
-			},
+			}},
 		})
 	}
 
@@ -994,25 +1004,26 @@ func (s *Service) convertToSampleRequest(config types.Config, agent string, args
 		if mimeType == "" || strings.HasPrefix(mimeType, "image/") {
 			sampleRequest.Messages = append(sampleRequest.Messages, mcp.SamplingMessage{
 				Role: "user",
-				Content: mcp.Content{
+				Content: []mcp.Content{{
 					Type:     "image",
 					Data:     data,
 					MIMEType: mimeType,
-				},
+				}},
 			})
 		} else {
 			sampleRequest.Messages = append(sampleRequest.Messages, mcp.SamplingMessage{
 				Role: "user",
-				Content: mcp.Content{
+				Content: []mcp.Content{{
 					Type: "resource",
 					Resource: &mcp.EmbeddedResource{
+						Name:     attachment.Name,
 						MIMEType: mimeType,
 						Blob:     data,
 						Annotations: &mcp.ResourceAnnotations{
 							Audience: []string{"assistant"},
 						},
 					},
-				},
+				}},
 			})
 		}
 	}

@@ -154,7 +154,7 @@
 				<h3 class="mb-4 text-lg font-bold">Information Request</h3>
 
 				<div class="mb-6">
-					<p class="text-base-content/80">{elicitation.message}</p>
+					<p class="whitespace-pre-wrap text-base-content/80">{elicitation.message}</p>
 				</div>
 
 				<form

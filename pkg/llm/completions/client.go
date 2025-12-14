@@ -160,7 +160,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 			}
 
 			// Handle content
-			if delta.Content != nil {
+			if delta.Content != nil && *delta.Content != "" {
 				if resp.Choices[choice.Index].Message.Content.Text == nil {
 					resp.Choices[choice.Index].Message.Content.Text = new(string)
 				}
@@ -183,7 +183,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 			}
 
 			// Handle reasoning (for reasoning models like DeepSeek-R1, QwQ, etc.)
-			if delta.Reasoning != nil {
+			if delta.Reasoning != nil && *delta.Reasoning != "" {
 				if resp.Choices[choice.Index].Message.Reasoning == nil {
 					resp.Choices[choice.Index].Message.Reasoning = new(string)
 				}

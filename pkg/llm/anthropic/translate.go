@@ -91,6 +91,13 @@ func toRequest(req *types.CompletionRequest) (Request, error) {
 			result.ToolChoice = &ToolChoice{
 				Type: "none",
 			}
+		case "required":
+			if len(req.Tools) > 0 {
+				result.ToolChoice = &ToolChoice{
+					Type: "tool",
+					Name: req.Tools[0].Name,
+				}
+			}
 		default:
 			result.ToolChoice = &ToolChoice{
 				Type: "tool",
