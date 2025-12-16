@@ -257,12 +257,9 @@ func (c *clientFactory) Deserialize(data any) (_ any, err error) {
 }
 
 func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, error) {
-	session := mcp.SessionFromContext(ctx)
+	session := mcp.SessionFromContext(ctx).Root()
 	if session == nil {
 		return nil, fmt.Errorf("session not found in context")
-	}
-	for session.Parent != nil {
-		session = session.Parent
 	}
 
 	sessionKey := "clients/" + name
@@ -280,12 +277,9 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 }
 
 func (s *Service) newClient(ctx context.Context, name string, state *mcp.SessionState) (*mcp.Client, error) {
-	session := mcp.SessionFromContext(ctx)
+	session := mcp.SessionFromContext(ctx).Root()
 	if session == nil {
 		return nil, fmt.Errorf("session not found in context")
-	}
-	for session.Parent != nil {
-		session = session.Parent
 	}
 
 	if session.HookRunner == nil {

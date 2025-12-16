@@ -8,6 +8,7 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/servers/workspace"
+	"github.com/nanobot-ai/nanobot/pkg/tools"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 	"github.com/nanobot-ai/nanobot/pkg/version"
@@ -15,13 +16,19 @@ import (
 )
 
 type Server struct {
-	store *workspace.Store
-	tools mcp.ServerTools
+	store   *workspace.Store
+	tools   mcp.ServerTools
+	service *tools.Service
 }
 
-func NewServer(store *workspace.Store) *Server {
+type Caller interface {
+	Call(ctx context.Context, server, tool string, args any, opts ...tools.CallOptions) (ret *types.CallResult, err error)
+}
+
+func NewServer(store *workspace.Store, tools *tools.Service) *Server {
 	s := &Server{
-		store: store,
+		store:   store,
+		service: tools,
 	}
 
 	s.tools = mcp.NewServerTools(
@@ -68,7 +75,7 @@ func (s *Server) initWorkspace(ctx context.Context, params types.SessionInitHook
 	sessionID, accountID := types.GetSessionAndAccountID(ctx)
 
 	// Verify the workspace exists and belongs to this
-	w, err := s.store.GetByUUIDAndAccountID(ctx, workspaceUUID, accountID)
+	currentWorkspace, err := s.store.GetByUUIDAndAccountID(ctx, workspaceUUID, accountID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return params, mcp.ErrRPCInvalidParams.WithMessage("workspace not found")
 	} else if err != nil {
@@ -79,13 +86,25 @@ func (s *Server) initWorkspace(ctx context.Context, params types.SessionInitHook
 		Model:     gorm.Model{},
 		UUID:      uuid.String(),
 		AccountID: accountID,
-		Base:      &workspaceUUID,
-		BaseURI:   w.BaseURI,
+		ParentID:  &workspaceUUID,
 		SessionID: sessionID,
 	}
 
-	if err := s.store.Create(ctx, &newWorkspace); err != nil {
-		return params, fmt.Errorf("failed to assign new workspace: %w", err)
+	if u.Query().Get("shared") == "true" {
+		newWorkspace = *currentWorkspace
+	} else {
+		uri := fmt.Sprintf("%s?parentId=%s", newWorkspace.UUID, *newWorkspace.ParentID)
+
+		_, err = s.service.Call(ctx, "nanobot.workspace.provider", "sessionCreate", map[string]any{
+			"uri": uri,
+		})
+		if err != nil {
+			return params, fmt.Errorf("failed to create workspace: %w", err)
+		}
+
+		if err := s.store.Create(ctx, &newWorkspace); err != nil {
+			return params, fmt.Errorf("failed to assign new workspace: %w", err)
+		}
 	}
 
 	if params.Meta == nil {
@@ -94,9 +113,10 @@ func (s *Server) initWorkspace(ctx context.Context, params types.SessionInitHook
 
 	params.Meta["workspace"] = map[string]any{
 		"id":        newWorkspace.UUID,
-		"base":      newWorkspace.Base,
-		"baseUri":   newWorkspace.BaseURI,
 		"supported": true,
+	}
+	if newWorkspace.ParentID != nil {
+		params.Meta["parentId"] = *newWorkspace.ParentID
 	}
 
 	return params, nil
@@ -117,7 +137,7 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	}
 }
 
-func (s *Server) initialize(_ context.Context, _ mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
+func (s *Server) initialize(ctx context.Context, _ mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
 	return &mcp.InitializeResult{
 		ProtocolVersion: params.ProtocolVersion,
 		Capabilities: mcp.ServerCapabilities{

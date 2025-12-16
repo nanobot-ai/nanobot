@@ -382,9 +382,16 @@ export class SimpleClient {
 				})
 			},
 			{ abort: opts?.abort }
-		);
+		) as T;
 
-		return result as T;
+		if (opts?.prefix) {
+			return {
+				...result,
+				resources: result.resources.filter(({ name }) => opts?.prefix && name.startsWith(opts.prefix))
+			}
+		}
+
+		return result;
 	}
 
 	/**

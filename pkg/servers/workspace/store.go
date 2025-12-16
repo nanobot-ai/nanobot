@@ -27,8 +27,8 @@ type WorkspaceRecord struct {
 	Icons datatypes.JSON `json:"icons"`
 	// Attributes is a JSON object containing workspace-specific attributes
 	Attributes datatypes.JSON `json:"attributes"`
-	// Base is the workspace UUID this workspace is created from
-	Base *string `json:"base,omitempty"`
+	// ParentID is the workspace UUID this workspace is created from
+	ParentID *string `json:"parentID,omitempty"`
 	// BaseURI is the external resource ID of the overlay base of the workspace
 	BaseURI string `json:"baseURI,omitempty"`
 	// SessionID the associated session ID for this workspace
@@ -101,9 +101,50 @@ func (s *Store) Delete(ctx context.Context, id uint) error {
 // FindByAccountID retrieves all workspaces for a given account ID
 func (s *Store) FindByAccountID(ctx context.Context, accountID string) ([]WorkspaceRecord, error) {
 	var workspaces []WorkspaceRecord
-	err := s.db.WithContext(ctx).Where("account_id = ? and base is null", accountID).Order("`order` asc, created_at desc").Find(&workspaces).Error
+	err := s.db.WithContext(ctx).Where("account_id = ? and parent_id is null", accountID).Order("`order` asc, created_at desc").Find(&workspaces).Error
 	if err != nil {
 		return nil, err
 	}
 	return workspaces, nil
+}
+
+// FindByParentID retrieves all workspace records for a given parent ID
+func (s *Store) FindByParentID(ctx context.Context, parentID string) ([]WorkspaceRecord, error) {
+	var workspaces []WorkspaceRecord
+	err := s.db.WithContext(ctx).Where("parent_id = ?", parentID).Find(&workspaces).Error
+	if err != nil {
+		return nil, err
+	}
+	return workspaces, nil
+}
+
+// WorkspaceWithSession combines workspace and session data
+type WorkspaceWithSession struct {
+	WorkspaceRecord
+	SessionDescription string `gorm:"column:session_description"`
+}
+
+// FindByParentIDWithSessions retrieves all workspace records with their session data for a given parent ID
+func (s *Store) FindByParentIDWithSessions(ctx context.Context, parentID string) ([]WorkspaceWithSession, error) {
+	var results []WorkspaceWithSession
+	err := s.db.WithContext(ctx).
+		Table("workspaces").
+		Select("workspaces.*, sessions.description as session_description").
+		Joins("LEFT JOIN sessions ON sessions.session_id = workspaces.session_id").
+		Where("workspaces.parent_id = ? AND sessions.deleted_at is null", parentID).
+		Find(&results).Error
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+// GetBySessionID retrieves a workspace by its session ID
+func (s *Store) GetBySessionID(ctx context.Context, sessionID string) (*WorkspaceRecord, error) {
+	var workspace WorkspaceRecord
+	err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&workspace).Error
+	if err != nil {
+		return nil, err
+	}
+	return &workspace, nil
 }

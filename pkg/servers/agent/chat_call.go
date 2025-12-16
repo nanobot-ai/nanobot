@@ -251,10 +251,6 @@ func (c chatCall) chatInvoke(ctx context.Context, msg mcp.Message, payload mcp.C
 		return nil, err
 	}
 
-	if result.ChatResponse && result.Agent != "" {
-		c.s.data.SetCurrentAgent(ctx, result.Agent)
-	}
-
 	mcpResult := mcp.CallToolResult{
 		StructuredContent: result.StructuredContent,
 		IsError:           result.IsError,

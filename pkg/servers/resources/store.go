@@ -55,6 +55,21 @@ func (s *Store) GetByUUIDAndAccountID(ctx context.Context, uuid, accountID strin
 	return &artifact, nil
 }
 
+// GetByNameSessionIDAndAccountID retrieves an artifact by name, session ID, and account ID
+func (s *Store) GetByNameSessionIDAndAccountID(ctx context.Context, name, sessionID, accountID string) (*Resource, error) {
+	var artifact Resource
+	err := s.db.WithContext(ctx).Where("name = ? and session_id = ? and account_id = ?", name, sessionID, accountID).First(&artifact).Error
+	if err != nil {
+		return nil, err
+	}
+	return &artifact, nil
+}
+
+// Update updates an existing artifact in the database
+func (s *Store) Update(ctx context.Context, artifact *Resource) error {
+	return s.db.WithContext(ctx).Save(artifact).Error
+}
+
 // Delete deletes an artifact by its ID
 func (s *Store) Delete(ctx context.Context, id uint) error {
 	return s.db.WithContext(ctx).Delete(&Resource{}, id).Error

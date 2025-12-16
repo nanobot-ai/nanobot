@@ -116,7 +116,7 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 					panic(fmt.Errorf("failed to create resources store: %w", err))
 				}
 			})
-			return resources.NewServer(store)
+			return resources.NewServer(store, r.Service)
 		})
 	}
 
@@ -125,11 +125,16 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 		if err != nil {
 			panic(fmt.Errorf("failed to create workspace store: %w", err))
 		}
+		// Get session store (which is also opt.TokenStorage)
+		sessionStore, ok := opt.TokenStorage.(*session.Store)
+		if !ok {
+			panic(fmt.Errorf("token storage is not a session store"))
+		}
 		registry.AddServer("nanobot.workspace", func(string) mcp.MessageHandler {
-			return workspace.NewServer(store)
+			return workspace.NewServer(store, sessionStore, r.Service)
 		})
 		registry.AddServer("nanobot.capabilities", func(string) mcp.MessageHandler {
-			return capabilities.NewServer(store)
+			return capabilities.NewServer(store, r.Service)
 		})
 	}
 

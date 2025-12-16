@@ -227,8 +227,7 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 	}
 
 	result = &types.CallResult{
-		Model:        resp.Model,
-		ChatResponse: resp.ChatResponse,
+		Model: resp.Model,
 	}
 
 	if _, ok := config.Agents[request.Model]; ok {
@@ -240,9 +239,8 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 
 func CompletionResponseToCallResult(resp *types.CompletionResponse, includeMessages bool, externalTools []mcp.Tool) (*types.CallResult, error) {
 	result := &types.CallResult{
-		Model:        resp.Model,
-		ChatResponse: resp.ChatResponse,
-		IsError:      resp.Error != "",
+		Model:   resp.Model,
+		IsError: resp.Error != "",
 	}
 
 	for _, output := range resp.Output.Items {

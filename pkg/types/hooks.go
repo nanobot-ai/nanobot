@@ -59,3 +59,11 @@ func IsUISession(ctx context.Context) bool {
 	isUI, _ := sessionInit.Meta["ui"].(bool)
 	return isUI
 }
+
+func GetWorkspaceID(ctx context.Context) string {
+	var sessionInit SessionInitHook
+	mcp.SessionFromContext(ctx).Get(SessionInitSessionKey, &sessionInit)
+	workspace, _ := sessionInit.Meta["workspace"].(map[string]any)
+	id, _ := workspace["id"].(string)
+	return id
+}

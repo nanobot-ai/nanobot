@@ -35,23 +35,22 @@ func (c CompletionOptions) Merge(other CompletionOptions) (result CompletionOpti
 }
 
 type CompletionRequest struct {
-	Model             string               `json:"model,omitempty"`
-	Agent             string               `json:"agent,omitempty"`
-	ThreadName        string               `json:"threadName,omitempty"`
-	NewThread         bool                 `json:"newThread,omitempty"`
-	Input             []Message            `json:"input,omitzero"`
-	ModelPreferences  mcp.ModelPreferences `json:"modelPreferences,omitzero"`
-	SystemPrompt      string               `json:"systemPrompt,omitzero"`
-	MaxTokens         int                  `json:"maxTokens,omitempty"`
-	ToolChoice        string               `json:"toolChoice,omitempty"`
-	OutputSchema      *OutputSchema        `json:"outputSchema,omitempty"`
-	Temperature       *json.Number         `json:"temperature,omitempty"`
-	Truncation        string               `json:"truncation,omitempty"`
-	TopP              *json.Number         `json:"topP,omitempty"`
-	Metadata          map[string]any       `json:"metadata,omitempty"`
-	Tools             []ToolUseDefinition  `json:"tools,omitzero"`
-	InputAsToolResult *bool                `json:"inputAsToolResult,omitempty"`
-	Reasoning         *AgentReasoning      `json:"reasoning,omitempty"`
+	Model            string               `json:"model,omitempty"`
+	Agent            string               `json:"agent,omitempty"`
+	ThreadName       string               `json:"threadName,omitempty"`
+	NewThread        bool                 `json:"newThread,omitempty"`
+	Input            []Message            `json:"input,omitzero"`
+	ModelPreferences mcp.ModelPreferences `json:"modelPreferences,omitzero"`
+	SystemPrompt     string               `json:"systemPrompt,omitzero"`
+	MaxTokens        int                  `json:"maxTokens,omitempty"`
+	ToolChoice       string               `json:"toolChoice,omitempty"`
+	OutputSchema     *OutputSchema        `json:"outputSchema,omitempty"`
+	Temperature      *json.Number         `json:"temperature,omitempty"`
+	Truncation       string               `json:"truncation,omitempty"`
+	TopP             *json.Number         `json:"topP,omitempty"`
+	Metadata         map[string]any       `json:"metadata,omitempty"`
+	Tools            []ToolUseDefinition  `json:"tools,omitzero"`
+	Reasoning        *AgentReasoning      `json:"reasoning,omitempty"`
 }
 
 func (r CompletionRequest) GetAgent() string {
@@ -63,7 +62,6 @@ func (r CompletionRequest) GetAgent() string {
 
 func (r CompletionRequest) Reset() CompletionRequest {
 	r.Input = nil
-	r.InputAsToolResult = &[]bool{false}[0]
 	r.NewThread = false
 	return r
 }
@@ -258,7 +256,6 @@ type SummaryText struct {
 type CompletionResponse struct {
 	Output           Message   `json:"output,omitempty"`
 	InternalMessages []Message `json:"internalMessages,omitempty"`
-	ChatResponse     bool      `json:"chatResponse,omitempty"`
 	Agent            string    `json:"agent,omitempty"`
 	Model            string    `json:"model,omitempty"`
 	HasMore          bool      `json:"hasMore,omitempty"`
@@ -292,7 +289,6 @@ type ToolCall struct {
 type CallResult struct {
 	Content           []mcp.Content `json:"content,omitempty"`
 	IsError           bool          `json:"isError,omitempty"`
-	ChatResponse      bool          `json:"chatResponse,omitempty"`
 	Agent             string        `json:"agent,omitempty"`
 	Model             string        `json:"model,omitempty"`
 	StopReason        string        `json:"stopReason,omitempty"`

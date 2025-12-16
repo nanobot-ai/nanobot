@@ -40,6 +40,13 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_TOKEN }}
+      - name: Check UI dist folder exists
+        run: |
+          if [ ! -d "ui/dist" ]; then
+            echo "Error: ui/dist folder does not exist. Please build the UI before releasing."
+            exit 1
+          fi
+          echo "✓ ui/dist folder exists"
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:

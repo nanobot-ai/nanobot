@@ -49,15 +49,17 @@ func GetSessionAndAccountID(ctx context.Context) (string, string) {
 }
 
 type Config struct {
-	Auth       *Auth                 `json:"auth,omitempty"`
-	Extends    StringList            `json:"extends,omitempty"`
-	Env        map[string]EnvDef     `json:"env,omitempty"`
-	Publish    Publish               `json:"publish,omitzero"`
-	Agents     map[string]Agent      `json:"agents,omitempty"`
-	MCPServers map[string]mcp.Server `json:"mcpServers,omitempty"`
-	Profiles   map[string]Config     `json:"profiles,omitempty"`
-	Prompts    map[string]Prompt     `json:"prompts,omitempty"`
-	Hooks      mcp.Hooks             `json:"hooks,omitempty"`
+	Auth             *Auth                 `json:"auth,omitempty"`
+	Extends          StringList            `json:"extends,omitempty"`
+	Env              map[string]EnvDef     `json:"env,omitempty"`
+	Publish          Publish               `json:"publish,omitzero"`
+	Agents           map[string]Agent      `json:"agents,omitempty"`
+	MCPServers       map[string]mcp.Server `json:"mcpServers,omitempty"`
+	Profiles         map[string]Config     `json:"profiles,omitempty"`
+	Prompts          map[string]Prompt     `json:"prompts,omitempty"`
+	Hooks            mcp.Hooks             `json:"hooks,omitempty"`
+	WorkspaceID      string                `json:"workspaceId,omitempty"`
+	WorkspaceBaseURI string                `json:"workspaceBaseUri,omitempty"`
 }
 
 type ConfigFactory func(ctx context.Context, profiles string) (Config, error)

@@ -378,18 +378,21 @@ func (s ReadResourceResult) MarshalJSON() ([]byte, error) {
 }
 
 type ResourceContent struct {
-	URI      string `json:"uri"`
-	Name     string `json:"name"`
-	MIMEType string `json:"mimeType"`
-	Text     string `json:"text,omitempty"`
-	Blob     string `json:"blob,omitempty"`
+	URI      string  `json:"uri"`
+	Name     string  `json:"name"`
+	MIMEType string  `json:"mimeType"`
+	Text     *string `json:"text,omitempty"`
+	Blob     *string `json:"blob,omitempty"`
 }
 
 func (r ResourceContent) ToDataURI() string {
-	if r.Text != "" {
-		return "data:" + r.MIMEType + ";base64," + base64.StdEncoding.EncodeToString([]byte(r.Text))
+	if r.Text != nil {
+		return "data:" + r.MIMEType + ";base64," + base64.StdEncoding.EncodeToString([]byte(*r.Text))
 	}
-	return "data:" + r.MIMEType + ";base64," + r.Blob
+	if r.Blob != nil {
+		return "data:" + r.MIMEType + ";base64," + *r.Blob
+	}
+	return "data:" + r.MIMEType + ";base64,"
 }
 
 type ListResourceTemplatesRequest struct {

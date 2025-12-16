@@ -83,12 +83,14 @@ func printHistory(wl *sync.Mutex, rw http.ResponseWriter, req *http.Request, cli
 					return err
 				}
 				var id string
-				if err := json.Unmarshal([]byte(message.Text), &struct {
-					ID *string `json:"id"`
-				}{
-					ID: &id,
-				}); err != nil {
-					return fmt.Errorf("failed to unmarshal message: %w", err)
+				if message.Text != nil {
+					if err := json.Unmarshal([]byte(*message.Text), &struct {
+						ID *string `json:"id"`
+					}{
+						ID: &id,
+					}); err != nil {
+						return fmt.Errorf("failed to unmarshal message: %w", err)
+					}
 				}
 				if id != "" {
 					printedIDs[id] = struct{}{}
@@ -123,8 +125,10 @@ func printProgressURI(wl *sync.Mutex, rw http.ResponseWriter, req *http.Request,
 		}
 
 		var callResult types.AsyncCallResult
-		if err := json.Unmarshal([]byte(message.Text), &callResult); err != nil {
-			return fmt.Errorf("failed to unmarshal tool result: %w", err)
+		if message.Text != nil {
+			if err := json.Unmarshal([]byte(*message.Text), &callResult); err != nil {
+				return fmt.Errorf("failed to unmarshal tool result: %w", err)
+			}
 		}
 
 		if callResult.ToolName != types.AgentTool {

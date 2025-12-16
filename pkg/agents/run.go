@@ -97,39 +97,6 @@ func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, age
 	return toolMappings, nil
 }
 
-func populateToolCallResult(previousRun *types.Execution, req *types.CompletionRequest, callID string) {
-	if previousRun.ToolOutputs == nil {
-		previousRun.ToolOutputs = make(map[string]types.ToolOutput)
-	}
-	var newContent []mcp.Content
-	for _, input := range req.Input {
-		for _, item := range input.Items {
-			if item.Content != nil {
-				newContent = append(newContent, *item.Content)
-			}
-		}
-	}
-
-	previousRun.ToolOutputs[callID] = types.ToolOutput{
-		Output: types.Message{
-			Role: "user",
-			Items: []types.CompletionItem{
-				{
-					ToolCallResult: &types.ToolCallResult{
-						CallID: callID,
-						Output: types.CallResult{
-							Content: newContent,
-						},
-					},
-				},
-			},
-		},
-		Done: true,
-	}
-	req.InputAsToolResult = nil
-	req.Input = nil
-}
-
 func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *types.Execution, previousRun *types.Execution, opts []types.CompletionOptions) (types.CompletionRequest, types.ToolMappings, error) {
 	req := run.Request
 
@@ -141,12 +108,9 @@ func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *
 			for _, output := range outputMessage.Items {
 				prevInput := output
 				if prevInput.ToolCall != nil {
+					// We are skipping invalid tool calls that point have no corresponding tool output
 					if _, exists := previousRun.ToolOutputs[prevInput.ToolCall.CallID]; !exists {
-						if req.InputAsToolResult != nil && *req.InputAsToolResult {
-							populateToolCallResult(previousRun, &req, prevInput.ToolCall.CallID)
-						} else {
-							continue
-						}
+						continue
 					}
 				}
 				newItems = append(newItems, prevInput)
@@ -449,10 +413,6 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 		isChat = *ch
 	}
 
-	if isChat && req.InputAsToolResult == nil {
-		req.InputAsToolResult = &isChat
-	}
-
 	// Save the original request to the Execution status
 	currentRun.Request = req
 
@@ -495,27 +455,8 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 			return nil, err
 		}
 
-		if isChat {
-			for _, toolOutput := range currentRun.ToolOutputs {
-				for _, output := range toolOutput.Output.Items {
-					if output.ToolCallResult != nil && output.ToolCallResult.Output.ChatResponse {
-						return &types.CompletionResponse{
-							Output: types.Message{
-								Items: []types.CompletionItem{
-									{
-										ToolCallResult: output.ToolCallResult,
-									},
-								},
-							},
-						}, nil
-					}
-				}
-			}
-		}
-
 		if currentRun.Done {
 			if isChat {
-				currentRun.Response.ChatResponse = true
 				session.Set(previousExecutionKey, currentRun)
 			}
 

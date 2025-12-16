@@ -4,23 +4,33 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/session"
+	"github.com/nanobot-ai/nanobot/pkg/tools"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 	"gorm.io/gorm"
 )
 
+var emptyTools mcp.ServerTools
+
 type Server struct {
-	store *Store
-	tools mcp.ServerTools
+	store        *Store
+	sessionStore *session.Store
+	tools        mcp.ServerTools
+	toolsService *tools.Service
 }
 
-func NewServer(store *Store) *Server {
+func NewServer(store *Store, sessionStore *session.Store, tools *tools.Service) *Server {
 	s := &Server{
-		store: store,
+		store:        store,
+		sessionStore: sessionStore,
+		toolsService: tools,
 	}
 
 	s.tools = mcp.NewServerTools(
@@ -60,7 +70,19 @@ func dbWorkspaceToDisplay(workspace *WorkspaceRecord) types.Workspace {
 	return display
 }
 
-func (s *Server) listResourcesTemplates(_ context.Context, _ mcp.Message, _ mcp.ListResourceTemplatesRequest) (*mcp.ListResourceTemplatesResult, error) {
+func (s *Server) listResourcesTemplates(ctx context.Context, _ mcp.Message, _ mcp.ListResourceTemplatesRequest) (*mcp.ListResourceTemplatesResult, error) {
+	if s.isInWorkspace(ctx) {
+		return &mcp.ListResourceTemplatesResult{
+			ResourceTemplates: []mcp.ResourceTemplate{
+				{
+					URITemplate: "session://session/{uuid}",
+					Name:        "Nanobot Sessions",
+					Description: "Access session data by session ID",
+					MimeType:    types.SessionMimeType,
+				},
+			},
+		}, nil
+	}
 	return &mcp.ListResourceTemplatesResult{
 		ResourceTemplates: []mcp.ResourceTemplate{
 			{
@@ -73,11 +95,62 @@ func (s *Server) listResourcesTemplates(_ context.Context, _ mcp.Message, _ mcp.
 	}, nil
 }
 
+func (s *Server) listSessions(ctx context.Context, accountID string) (*mcp.ListResourcesResult, error) {
+	result := &mcp.ListResourcesResult{
+		Resources: make([]mcp.Resource, 0),
+	}
+
+	// Get current workspace ID
+	currentWorkspaceID := types.GetWorkspaceID(ctx)
+	if currentWorkspaceID == "" {
+		return result, nil
+	}
+
+	// Find all workspace records with their session data where parent_id matches the current workspace's parent_id
+	workspaces, err := s.store.FindByParentIDWithSessions(ctx, currentWorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return the session IDs from those workspace records
+	for _, workspace := range workspaces {
+		if workspace.SessionID != "" {
+			resource := mcp.Resource{
+				URI:      "session://" + workspace.SessionID,
+				Name:     workspace.SessionDescription,
+				MimeType: types.SessionMimeType,
+				Meta: types.Meta(map[string]any{
+					"order":       workspace.Order,
+					"color":       workspace.Color,
+					"workspaceId": workspace.UUID,
+				}),
+			}
+
+			// Parse and add icons if available
+			if len(workspace.Icons) > 0 {
+				var icons []mcp.Icon
+				if err := json.Unmarshal(workspace.Icons, &icons); err == nil {
+					resource.Icons.Icons = icons
+				}
+			}
+
+			result.Resources = append(result.Resources, resource)
+		}
+	}
+
+	return result, nil
+}
+
 func (s *Server) listResources(ctx context.Context, _ mcp.Message, _ mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
 	_, accountID := types.GetSessionAndAccountID(ctx)
 
 	result := &mcp.ListResourcesResult{
 		Resources: make([]mcp.Resource, 0),
+	}
+
+	if s.isInWorkspace(ctx) {
+		// return sessions
+		return s.listSessions(ctx, accountID)
 	}
 
 	// Get workspaces from database store
@@ -112,9 +185,59 @@ func (s *Server) listResources(ctx context.Context, _ mcp.Message, _ mcp.ListRes
 	return result, nil
 }
 
+func (s *Server) readSession(ctx context.Context, sessionUUID, accountID string) (*mcp.ReadResourceResult, error) {
+	// Get session from database by UUID and verify account ownership
+	sess, err := s.sessionStore.GetByIDByAccountID(ctx, sessionUUID, accountID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("session not found")
+	} else if err != nil {
+		return nil, err
+	}
+
+	// Build the response data
+	responseData := map[string]any{
+		"id":        sess.SessionID,
+		"createdAt": sess.CreatedAt.Format(time.RFC3339Nano),
+		"updatedAt": sess.UpdatedAt.Format(time.RFC3339Nano),
+		"title":     sess.Description,
+	}
+
+	// Look up the associated workspace by session ID
+	workspace, err := s.store.GetBySessionID(ctx, sess.SessionID)
+	if err == nil && workspace != nil {
+		if workspace.ParentID != nil && *workspace.ParentID != "" {
+			responseData["workspaceId"] = *workspace.ParentID
+		}
+		responseData["sessionWorkspaceId"] = workspace.UUID
+	}
+
+	// Marshal the session to JSON
+	data, err := json.Marshal(responseData)
+	if err != nil {
+		return nil, err
+	}
+
+	return &mcp.ReadResourceResult{
+		Contents: []mcp.ResourceContent{
+			{
+				Name:     sess.Description,
+				URI:      "session://" + sess.SessionID,
+				MIMEType: types.SessionMimeType,
+				Text:     &[]string{string(data)}[0],
+			},
+		},
+	}, nil
+}
+
 func (s *Server) readResource(ctx context.Context, _ mcp.Message, body mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 	_, accountID := types.GetSessionAndAccountID(ctx)
 
+	sessionFromURI, ok := strings.CutPrefix(body.URI, "session://")
+	if ok {
+		return s.readSession(ctx, sessionFromURI, accountID)
+	}
+
+	// Handle nanobot://workspaces/ URIs
 	id := strings.TrimPrefix(body.URI, "nanobot://workspaces/")
 
 	// Get workspace from database
@@ -140,7 +263,7 @@ func (s *Server) readResource(ctx context.Context, _ mcp.Message, body mcp.ReadR
 				Name:     display.Name,
 				URI:      "nanobot://workspaces/" + display.ID,
 				MIMEType: types.WorkspaceMimeType,
-				Text:     string(data),
+				Text:     &[]string{string(data)}[0],
 			},
 		},
 	}, nil
@@ -190,6 +313,12 @@ func (s *Server) createWorkspace(ctx context.Context, params CreateWorkspacePara
 		Icons:      iconsJSON,
 		Attributes: attributesJSON,
 	}
+
+	c := types.ConfigFromContext(ctx)
+
+	_, err = s.toolsService.Call(ctx, "nanobot.workspace.provider", "sessionCreate", map[string]any{
+		"uri": fmt.Sprintf("%s?parentId=%s&baseUri=%s", workspaceUUID, c.WorkspaceID, c.WorkspaceBaseURI),
+	})
 
 	if err := s.store.Create(ctx, workspace); err != nil {
 		return nil, err
@@ -296,6 +425,10 @@ func (s *Server) deleteWorkspace(ctx context.Context, params DeleteWorkspacePara
 	return "Workspace deleted successfully", nil
 }
 
+func (s *Server) isInWorkspace(ctx context.Context) bool {
+	return types.GetWorkspaceID(ctx) != ""
+}
+
 func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	switch msg.Method {
 	case "initialize":
@@ -309,9 +442,17 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	case "resources/templates/list":
 		mcp.Invoke(ctx, msg, s.listResourcesTemplates)
 	case "tools/list":
-		mcp.Invoke(ctx, msg, s.tools.List)
+		if s.isInWorkspace(ctx) {
+			mcp.Invoke(ctx, msg, emptyTools.List)
+		} else {
+			mcp.Invoke(ctx, msg, s.tools.List)
+		}
 	case "tools/call":
-		mcp.Invoke(ctx, msg, s.tools.Call)
+		if s.isInWorkspace(ctx) {
+			mcp.Invoke(ctx, msg, emptyTools.List)
+		} else {
+			mcp.Invoke(ctx, msg, s.tools.Call)
+		}
 	default:
 		msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage("%v", msg.Method))
 	}

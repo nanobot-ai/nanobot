@@ -694,3 +694,13 @@ properties:
       tools, prompts, and other resources that the Nanobot can use.
     additionalProperties:
       $ref: "#/definitions/MCPServer"
+  workspaceId:
+    type: string
+    description: |
+      The workspace ID associated with this Nanobot configuration. This can be used
+      to scope operations to a specific workspace or organization.
+  workspaceBaseUri:
+    type: string
+    description: |
+      The base URI for the workspace associated with this Nanobot configuration.
+      This can be used to construct workspace-specific URLs or API endpoints.

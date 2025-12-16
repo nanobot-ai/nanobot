@@ -236,6 +236,8 @@ func JSONCoerce[T any](in any, out *T) error {
 		data = inBytes
 	} else if inStr, ok := in.(string); ok {
 		data = []byte(inStr)
+	} else if inStrP, ok := in.(*string); ok && inStrP != nil {
+		data = []byte(*inStrP)
 	} else {
 		var err error
 		data, err = json.Marshal(in)

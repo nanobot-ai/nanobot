@@ -33,6 +33,8 @@ func TestSchema(t *testing.T) {
 	obj := map[string]any{}
 	err = json.Unmarshal([]byte(`
 {
+	"workspaceId": "workspace123",
+	"workspaceBaseUri": "https://example.com/workspaces/workspace123",
 	"auth": {
 		"oauthClientId": "clientid",
 		"oauthClientSecret": "clientsecret",

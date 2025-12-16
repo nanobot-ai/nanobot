@@ -7,6 +7,7 @@ const (
 	ErrorMimeType      = "application/vnd.nanobot.error+json"
 	AgentMimeType      = "application/vnd.nanobot.agent+json"
 	WorkspaceMimeType  = "application/vnd.nanobot.workspace+json"
+	SessionMimeType    = "application/vnd.nanobot.session+json"
 	MetaNanobot        = "ai.nanobot"
 
 	MessageURI  = "chat://message/%s"
