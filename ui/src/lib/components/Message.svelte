@@ -28,9 +28,11 @@
 {#if message.role === 'user' && toolCall?.type === 'prompt' && toolCall.payload?.prompt}
 	<MessageItemText
 		item={{
+			id: crypto.randomUUID(),
 			type: 'text',
 			text: toolCall.payload?.prompt
 		}}
+		role="user"
 	/>
 {:else if message.role === 'user' && toolCall?.type === 'tool' && toolCall.payload?.toolName}
 	<!-- Don't print anything for tool calls -->

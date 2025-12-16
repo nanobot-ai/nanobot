@@ -5,20 +5,20 @@ import (
 )
 
 type Request struct {
-	Messages         []Message             `json:"messages"`
-	Model            string                `json:"model"`
-	MaxTokens        *int                  `json:"max_tokens,omitempty"`
-	MaxCompletionTokens *int               `json:"max_completion_tokens,omitempty"`
-	Temperature      *json.Number          `json:"temperature,omitempty"`
-	TopP             *json.Number          `json:"top_p,omitempty"`
-	Stream           bool                  `json:"stream,omitempty"`
-	StreamOptions    *StreamOptions        `json:"stream_options,omitempty"`
-	Stop             []string              `json:"stop,omitempty"`
-	ToolChoice       *ToolChoice           `json:"tool_choice,omitempty"`
-	Tools            []Tool                `json:"tools,omitempty"`
-	User             string                `json:"user,omitempty"`
-	Metadata         map[string]any        `json:"metadata,omitempty"`
-	ResponseFormat   *ResponseFormat       `json:"response_format,omitempty"`
+	Messages            []Message       `json:"messages"`
+	Model               string          `json:"model"`
+	MaxTokens           *int            `json:"max_tokens,omitempty"`
+	MaxCompletionTokens *int            `json:"max_completion_tokens,omitempty"`
+	Temperature         *json.Number    `json:"temperature,omitempty"`
+	TopP                *json.Number    `json:"top_p,omitempty"`
+	Stream              bool            `json:"stream,omitempty"`
+	StreamOptions       *StreamOptions  `json:"stream_options,omitempty"`
+	Stop                []string        `json:"stop,omitempty"`
+	ToolChoice          *ToolChoice     `json:"tool_choice,omitempty"`
+	Tools               []Tool          `json:"tools,omitempty"`
+	User                string          `json:"user,omitempty"`
+	Metadata            map[string]any  `json:"metadata,omitempty"`
+	ResponseFormat      *ResponseFormat `json:"response_format,omitempty"`
 }
 
 type StreamOptions struct {
@@ -26,18 +26,18 @@ type StreamOptions struct {
 }
 
 type Message struct {
-	Role         string         `json:"role"`
-	Content      MessageContent `json:"content,omitempty"`
-	Reasoning    *string        `json:"reasoning,omitempty"`
-	Name         string         `json:"name,omitempty"`
-	ToolCalls    []ToolCall     `json:"tool_calls,omitempty"`
-	ToolCallID   string         `json:"tool_call_id,omitempty"`
-	Refusal      *string        `json:"refusal,omitempty"`
+	Role       string         `json:"role"`
+	Content    MessageContent `json:"content,omitempty"`
+	Reasoning  *string        `json:"reasoning,omitempty"`
+	Name       string         `json:"name,omitempty"`
+	ToolCalls  []ToolCall     `json:"tool_calls,omitempty"`
+	ToolCallID string         `json:"tool_call_id,omitempty"`
+	Refusal    *string        `json:"refusal,omitempty"`
 }
 
 type MessageContent struct {
-	Text              *string        `json:"-"`
-	ContentParts      []ContentPart  `json:",inline"`
+	Text         *string       `json:"-"`
+	ContentParts []ContentPart `json:",inline"`
 }
 
 func (m MessageContent) MarshalJSON() ([]byte, error) {
@@ -64,9 +64,9 @@ func (m *MessageContent) UnmarshalJSON(data []byte) error {
 }
 
 type ContentPart struct {
-	Type     string     `json:"type"`
-	Text     string     `json:"text,omitempty"`
-	ImageURL *ImageURL  `json:"image_url,omitempty"`
+	Type     string    `json:"type"`
+	Text     string    `json:"text,omitempty"`
+	ImageURL *ImageURL `json:"image_url,omitempty"`
 }
 
 type ImageURL struct {
@@ -87,8 +87,8 @@ type Function struct {
 }
 
 type ToolChoice struct {
-	Type     string            `json:"type,omitempty"`
-	Function *ToolChoiceFunc   `json:"function,omitempty"`
+	Type     string          `json:"type,omitempty"`
+	Function *ToolChoiceFunc `json:"function,omitempty"`
 }
 
 type ToolChoiceFunc struct {
@@ -112,7 +112,7 @@ func (t *ToolChoice) UnmarshalJSON(data []byte) error {
 	if data[0] == '"' {
 		return json.Unmarshal(data, &t.Type)
 	}
-	
+
 	var obj struct {
 		Type     string          `json:"type"`
 		Function *ToolChoiceFunc `json:"function"`
@@ -120,15 +120,15 @@ func (t *ToolChoice) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return err
 	}
-	
+
 	t.Type = obj.Type
 	t.Function = obj.Function
 	return nil
 }
 
 type ResponseFormat struct {
-	Type       string          `json:"type"`
-	JSONSchema *JSONSchema     `json:"json_schema,omitempty"`
+	Type       string      `json:"type"`
+	JSONSchema *JSONSchema `json:"json_schema,omitempty"`
 }
 
 type JSONSchema struct {
@@ -149,19 +149,19 @@ type Response struct {
 }
 
 type Choice struct {
-	Index        int            `json:"index"`
-	Message      *Message       `json:"message,omitempty"`
-	Delta        *ChoiceDelta   `json:"delta,omitempty"`
-	FinishReason *string        `json:"finish_reason,omitempty"`
-	Logprobs     *Logprobs      `json:"logprobs,omitempty"`
+	Index        int          `json:"index"`
+	Message      *Message     `json:"message,omitempty"`
+	Delta        *ChoiceDelta `json:"delta,omitempty"`
+	FinishReason *string      `json:"finish_reason,omitempty"`
+	Logprobs     *Logprobs    `json:"logprobs,omitempty"`
 }
 
 type ChoiceDelta struct {
-	Role         string        `json:"role,omitempty"`
-	Content      *string       `json:"content,omitempty"`
-	Reasoning    *string       `json:"reasoning,omitempty"`
-	ToolCalls    []ToolCall    `json:"tool_calls,omitempty"`
-	Refusal      *string       `json:"refusal,omitempty"`
+	Role      string     `json:"role,omitempty"`
+	Content   *string    `json:"content,omitempty"`
+	Reasoning *string    `json:"reasoning,omitempty"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	Refusal   *string    `json:"refusal,omitempty"`
 }
 
 type ToolCall struct {
@@ -177,10 +177,10 @@ type FunctionCall struct {
 }
 
 type Usage struct {
-	PromptTokens            int                     `json:"prompt_tokens"`
-	CompletionTokens        int                     `json:"completion_tokens"`
-	TotalTokens             int                     `json:"total_tokens"`
-	PromptTokensDetails     *PromptTokensDetails    `json:"prompt_tokens_details,omitempty"`
+	PromptTokens            int                      `json:"prompt_tokens"`
+	CompletionTokens        int                      `json:"completion_tokens"`
+	TotalTokens             int                      `json:"total_tokens"`
+	PromptTokensDetails     *PromptTokensDetails     `json:"prompt_tokens_details,omitempty"`
 	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"`
 }
 
@@ -197,9 +197,9 @@ type Logprobs struct {
 }
 
 type TokenLogprob struct {
-	Token   string        `json:"token"`
-	Logprob float64       `json:"logprob"`
-	Bytes   []int         `json:"bytes,omitempty"`
+	Token       string       `json:"token"`
+	Logprob     float64      `json:"logprob"`
+	Bytes       []int        `json:"bytes,omitempty"`
 	TopLogprobs []TopLogprob `json:"top_logprobs"`
 }
 

@@ -301,7 +301,7 @@
 
 			{#if selectedNode.inputs && selectedNode.inputs.length > 0}
 				<div class="space-y-2">
-					{#each selectedNode.inputs as input}
+					{#each selectedNode.inputs as input (input.name)}
 						<div class="bg-base-50 rounded border border-base-200 p-3">
 							<div class="mb-1 flex items-start justify-between gap-2">
 								<div class="flex-1">
@@ -350,10 +350,11 @@
 				<!-- Input Form -->
 				<div class="bg-base-50 mt-3 space-y-3 rounded-lg border border-base-200 p-3">
 					<div>
-						<label class="label">
+						<label for="input-name" class="label">
 							<span class="label-text text-xs">Name</span>
 						</label>
 						<input
+							id="input-name"
 							type="text"
 							bind:value={inputName}
 							placeholder="e.g., Project Name"
@@ -362,10 +363,11 @@
 					</div>
 
 					<div>
-						<label class="label">
+						<label for="input-description" class="label">
 							<span class="label-text text-xs">Description</span>
 						</label>
 						<textarea
+							id="input-description"
 							bind:value={inputDescription}
 							placeholder="Describe what this input is for..."
 							class="textarea-bordered textarea w-full textarea-sm"
@@ -409,7 +411,7 @@
 						<span>Tools</span>
 					</div>
 					<div class="flex flex-wrap gap-1">
-						{#each selectedNode.tools as tool}
+						{#each selectedNode.tools as tool (tool)}
 							<span class="badge gap-1 badge-sm badge-warning">
 								{tool}
 								<button
@@ -434,7 +436,7 @@
 						<span>Agents</span>
 					</div>
 					<div class="flex flex-wrap gap-1">
-						{#each selectedNode.agents as agent}
+						{#each selectedNode.agents as agent (agent)}
 							<span class="badge gap-1 badge-sm badge-info">
 								{getAgentName(agent)}
 								<button
@@ -459,7 +461,7 @@
 						<span>Tasks</span>
 					</div>
 					<div class="flex flex-wrap gap-1">
-						{#each selectedNode.tasks as task}
+						{#each selectedNode.tasks as task (task)}
 							<span class="badge gap-1 badge-sm badge-secondary">
 								{getTaskName(task)}
 								<button
@@ -501,7 +503,6 @@
 									newTool = '';
 								}
 							}}
-							autofocus
 						/>
 						<button onclick={addTool} class="btn btn-xs btn-warning" disabled={!newTool.trim()}>
 							Add
@@ -535,7 +536,7 @@
 							onchange={addAgent}
 						>
 							<option value="">Select agent...</option>
-							{#each availableAgents as agent}
+							{#each availableAgents as agent (agent.id)}
 								<option value={agent.id}>{agent.title}</option>
 							{/each}
 						</select>
@@ -568,7 +569,7 @@
 							onchange={addTask}
 						>
 							<option value="">Select task...</option>
-							{#each availableTasks as task}
+							{#each availableTasks as task (task.id)}
 								<option value={task.id}>{task.title}</option>
 							{/each}
 						</select>
@@ -602,7 +603,7 @@
 			{@const outgoingEdges = flowchart.edges.filter((e) => e.source === selectedNode.id)}
 			<!-- View Mode: Show existing edges -->
 			<div class="space-y-2">
-				{#each outgoingEdges as edge}
+				{#each outgoingEdges as edge (edge.id)}
 					{@const targetNode = flowchart.nodes.find((n) => n.id === edge.target)}
 					{#if targetNode}
 						<button
@@ -667,16 +668,17 @@
 				{#if edgeType === 'simple'}
 					<!-- Simple Next Step -->
 					<div class="space-y-2">
-						<label class="label">
+						<label for="simple-target-select" class="label">
 							<span class="label-text">Next node:</span>
 						</label>
 						<select
+							id="simple-target-select"
 							bind:value={simpleTarget}
 							onchange={() => (simpleTargetIsNew = simpleTarget === 'new')}
 							class="select-bordered select w-full select-sm"
 						>
 							<option value="">Select a node...</option>
-							{#each availableTargetNodes as node}
+							{#each availableTargetNodes as node (node.id)}
 								<option value={node.id}>{node.label}</option>
 							{/each}
 							<option value="new">+ Create New Node</option>
@@ -705,10 +707,11 @@
 					<!-- Decision Branches -->
 					<div class="space-y-3">
 						<div>
-							<label class="label">
+							<label for="decision-condition-input" class="label">
 								<span class="label-text text-xs font-medium">Condition/Question:</span>
 							</label>
 							<input
+								id="decision-condition-input"
 								type="text"
 								bind:value={decisionCondition}
 								placeholder="e.g., Design approved?"
@@ -718,16 +721,17 @@
 
 						<!-- Yes/True Branch -->
 						<div class="space-y-2 rounded border border-success/30 bg-success/5 p-2">
-							<label class="label py-0">
+							<label for="yes-target-select" class="label py-0">
 								<span class="label-text text-xs font-medium text-success">Yes/True →</span>
 							</label>
 							<select
+								id="yes-target-select"
 								bind:value={yesTarget}
 								onchange={() => (yesTargetIsNew = yesTarget === 'new')}
 								class="select-bordered select w-full select-sm"
 							>
 								<option value="">Select a node...</option>
-								{#each availableTargetNodes as node}
+								{#each availableTargetNodes as node (node.id)}
 									<option value={node.id}>{node.label}</option>
 								{/each}
 								<option value="new">+ Create New Node</option>
@@ -755,16 +759,17 @@
 
 						<!-- No/False Branch -->
 						<div class="space-y-2 rounded border border-error/30 bg-error/5 p-2">
-							<label class="label py-0">
+							<label for="no-target-select" class="label py-0">
 								<span class="label-text text-xs font-medium text-error">No/False →</span>
 							</label>
 							<select
+								id="no-target-select"
 								bind:value={noTarget}
 								onchange={() => (noTargetIsNew = noTarget === 'new')}
 								class="select-bordered select w-full select-sm"
 							>
 								<option value="">Select a node...</option>
-								{#each availableTargetNodes as node}
+								{#each availableTargetNodes as node (node.id)}
 									<option value={node.id}>{node.label}</option>
 								{/each}
 								<option value="new">+ Create New Node</option>

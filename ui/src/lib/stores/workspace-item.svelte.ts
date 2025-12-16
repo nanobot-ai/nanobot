@@ -8,7 +8,7 @@ import type {
 	ResourceContents
 } from '$lib/types';
 import { UIPath } from '$lib/types';
-import { SvelteSet } from 'svelte/reactivity';
+import { SvelteSet, SvelteDate } from 'svelte/reactivity';
 import { SimpleClient } from '$lib/mcpclient';
 
 // MIME types for different workspace resources
@@ -53,6 +53,9 @@ export class WorkspaceItemStore {
 			return null;
 		}
 
+		// Create timestamp once at the top to avoid reactivity warnings
+		const timestamp = resource.annotations?.lastModified || new SvelteDate().toISOString();
+
 		switch (resource.mimeType) {
 			case TASK_MIME_TYPE: {
 				// Extract ID from URI (workspace://tasks/{id} where id can contain /)
@@ -64,7 +67,7 @@ export class WorkspaceItemStore {
 						workspaceId: this.workspaceId,
 						type: 'task',
 						title: resource.name || 'Untitled Task',
-						created: resource.annotations?.lastModified || new Date().toISOString(),
+						created: timestamp,
 						status: 'active'
 					}
 				};
@@ -79,7 +82,7 @@ export class WorkspaceItemStore {
 						workspaceId: this.workspaceId,
 						type: 'agent',
 						title: resource.name || 'Untitled Agent',
-						created: resource.annotations?.lastModified || new Date().toISOString(),
+						created: timestamp,
 						status: 'active'
 					}
 				};
@@ -94,7 +97,7 @@ export class WorkspaceItemStore {
 						workspaceId: this.workspaceId,
 						type: 'conversation',
 						title: resource.name || 'Untitled Conversation',
-						created: resource.annotations?.lastModified || new Date().toISOString(),
+						created: timestamp,
 						status: 'active'
 					}
 				};
@@ -117,7 +120,7 @@ export class WorkspaceItemStore {
 							id,
 							workspaceId: this.workspaceId,
 							path,
-							created: resource.annotations?.lastModified || new Date().toISOString(),
+							created: timestamp,
 							size: resource.size || 0,
 							mimeType: resource.mimeType
 						}
@@ -152,12 +155,13 @@ export class WorkspaceItemStore {
 		} else {
 			// We have enough info from the notification
 			// Create a minimal Resource object for classification
+			const timestamp = new SvelteDate().toISOString();
 			fullResource = {
 				uri: resourceUpdate.uri,
 				mimeType: resourceUpdate.mimeType,
 				name: '', // Will be set by classifyResource
 				annotations: {
-					lastModified: new Date().toISOString()
+					lastModified: timestamp
 				}
 			} as Resource;
 		}
@@ -638,12 +642,13 @@ export class WorkspaceItemStore {
 			}
 		});
 
+		const timestamp = new SvelteDate().toISOString();
 		const newItem: WorkspaceItem = {
 			id,
 			workspaceId: this.workspaceId,
 			type,
 			title,
-			created: new Date().toISOString(),
+			created: timestamp,
 			status: 'active'
 		};
 

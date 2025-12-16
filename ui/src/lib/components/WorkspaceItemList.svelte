@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { resolve } from '$app/paths';
 	import { MoreVertical, Edit, Trash2, X, Check } from '@lucide/svelte';
 	import type { WorkspaceItem } from '$lib/types';
 
@@ -15,7 +14,7 @@
 	let { items, workspaceId, onRename, onDelete, onItemClick }: Props = $props();
 
 	// Get current route params to highlight active item
-	const currentTaskId = $derived($page.params.taskId);
+	const currentTaskId = $derived(page.params.taskId);
 
 	let editingItemId = $state<string | null>(null);
 	let editTitle = $state('');
@@ -87,7 +86,7 @@
 		>
 			<!-- Item title area (clickable) -->
 			<a
-				href={resolve(itemUrl)}
+				href={itemUrl}
 				class="flex-1 truncate py-2 pr-3 pl-6 text-left transition-colors focus:outline-none {isActive
 					? 'font-semibold'
 					: ''}"

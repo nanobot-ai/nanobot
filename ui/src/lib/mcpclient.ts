@@ -370,7 +370,7 @@ export class SimpleClient {
 		prefix?: string;
 		abort?: AbortController;
 	}): Promise<T> {
-		const result = await this.exchange(
+		const result = (await this.exchange(
 			'resources/list',
 			{
 				...(opts?.prefix && {
@@ -382,13 +382,15 @@ export class SimpleClient {
 				})
 			},
 			{ abort: opts?.abort }
-		) as T;
+		)) as T;
 
 		if (opts?.prefix) {
 			return {
 				...result,
-				resources: result.resources.filter(({ name }) => opts?.prefix && name.startsWith(opts.prefix))
-			}
+				resources: result.resources.filter(
+					({ name }) => opts?.prefix && name.startsWith(opts.prefix)
+				)
+			};
 		}
 
 		return result;

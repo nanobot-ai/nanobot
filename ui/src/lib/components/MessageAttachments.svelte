@@ -92,7 +92,7 @@
 		{#each selectedResources as resource (resource.uri)}
 			{@render item(
 				'Remove resource',
-				resource.mimeType,
+				resource.mimeType || '',
 				false,
 				resource.title || resource.name,
 				resource,

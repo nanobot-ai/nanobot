@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 
 	interface Props {
-		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult>;
+		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
 		agent?: Agent;
 	}
 
@@ -43,7 +43,7 @@
 </script>
 
 <div class="flex flex-col items-center p-8 pt-20">
-	{#if agent.name}
+	{#if agent?.name}
 		<!-- Agent Icon -->
 		{#if agent.icon}
 			<div class="mb-6">
@@ -79,22 +79,24 @@
 	{/if}
 
 	<!-- Starter Messages -->
-	<div
-		class={[
-			'grid w-full max-w-2xl grid-cols-1 gap-3',
-			{
-				'grid-cols-2': agent.starterMessages?.length === 2,
-				'grid-cols-3': agent.starterMessages?.length > 2
-			}
-		]}
-	>
-		{#each agent.starterMessages || [] as message (message)}
-			<button
-				class="card-compact card cursor-pointer bg-base-200 shadow-sm transition-colors hover:bg-base-300"
-				onclick={() => onSend?.(message)}
-			>
-				<span class="card-body text-sm">{message}</span>
-			</button>
-		{/each}
-	</div>
+	{#if agent}
+		<div
+			class={[
+				'grid w-full max-w-2xl grid-cols-1 gap-3',
+				{
+					'grid-cols-2': agent.starterMessages?.length === 2,
+					'grid-cols-3': agent.starterMessages?.length ?? 0 > 2
+				}
+			]}
+		>
+			{#each agent.starterMessages || [] as message (message)}
+				<button
+					class="card-compact card cursor-pointer bg-base-200 shadow-sm transition-colors hover:bg-base-300"
+					onclick={() => onSend?.(message)}
+				>
+					<span class="card-body text-sm">{message}</span>
+				</button>
+			{/each}
+		</div>
+	{/if}
 </div>

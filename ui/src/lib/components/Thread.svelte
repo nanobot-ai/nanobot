@@ -51,7 +51,7 @@
 	let showScrollButton = $state(false);
 	let previousLastMessageId = $state<string | null>(null);
 	let hasMessages = $derived(messages && messages.length > 0);
-	let selectedPrompt = $state<string>();
+	let selectedPrompt = $state<string | undefined>();
 
 	// Watch for changes to the last message ID and scroll to bottom
 	$effect(() => {
@@ -102,11 +102,13 @@
 							{#if selectedPrompt === prompt.name}
 								<Prompt
 									{prompt}
-									onSend={(m) => {
-										selectedPrompt = null;
-										return onSendMessage(m);
+									onSend={async (m) => {
+										selectedPrompt = undefined;
+										if (onSendMessage) {
+											return await onSendMessage(m);
+										}
 									}}
-									onCancel={() => (selectedPrompt = null)}
+									onCancel={() => (selectedPrompt = undefined)}
 									open
 								/>
 							{/if}

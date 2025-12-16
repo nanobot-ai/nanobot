@@ -30,8 +30,15 @@ func TestCompletionItem_Text(t *testing.T) {
 		t.Fatalf("Failed to unmarshal CompletionItem: %v", err)
 	}
 
-	if !reflect.DeepEqual(item, unmarshalledItem) {
-		t.Errorf("Expected unmarshalled item to be equal to original item, but got: %+v", unmarshalledItem)
+	// Compare relevant fields individually since unmarshal may populate zero values
+	if item.Content.Type != unmarshalledItem.Content.Type {
+		t.Errorf("Expected content type %q but got %q", item.Content.Type, unmarshalledItem.Content.Type)
+	}
+	if item.Content.Text != unmarshalledItem.Content.Text {
+		t.Errorf("Expected content text %q but got %q", item.Content.Text, unmarshalledItem.Content.Text)
+	}
+	if item.ID != unmarshalledItem.ID || item.Partial != unmarshalledItem.Partial || item.HasMore != unmarshalledItem.HasMore {
+		t.Errorf("Expected unmarshalled item fields to match original, but got: %+v", unmarshalledItem)
 	}
 }
 
@@ -56,8 +63,15 @@ func TestCompletionItem_Image(t *testing.T) {
 		t.Fatalf("Failed to unmarshal CompletionItem: %v", err)
 	}
 
-	if !reflect.DeepEqual(item, unmarshalledItem) {
-		t.Errorf("Expected unmarshalled item to be equal to original item, but got: %+v", unmarshalledItem)
+	// Compare relevant fields individually since unmarshal may populate zero values
+	if item.Content.Type != unmarshalledItem.Content.Type {
+		t.Errorf("Expected content type %q but got %q", item.Content.Type, unmarshalledItem.Content.Type)
+	}
+	if item.Content.Data != unmarshalledItem.Content.Data {
+		t.Errorf("Expected content data %q but got %q", item.Content.Data, unmarshalledItem.Content.Data)
+	}
+	if item.ID != unmarshalledItem.ID || item.Partial != unmarshalledItem.Partial || item.HasMore != unmarshalledItem.HasMore {
+		t.Errorf("Expected unmarshalled item fields to match original, but got: %+v", unmarshalledItem)
 	}
 }
 

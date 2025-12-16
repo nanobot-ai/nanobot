@@ -28,7 +28,7 @@
 	let key = $derived(sidecar?.resource?.text ?? sidecar?.resource?.blob ?? '');
 </script>
 
-{#if key}
+{#if key && sidecar}
 	{#key key}
 		<div
 			class="workspace peer m-3 h-[60vh] border-2 border-base-100/30 md:m-0 md:h-dvh md:max-h-dvh md:w-3/4"

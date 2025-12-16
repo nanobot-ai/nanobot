@@ -201,7 +201,6 @@
 				</select>
 
 				<MessageAttachments
-					{disabled}
 					{selectedResources}
 					{uploadedFiles}
 					{uploadingFiles}

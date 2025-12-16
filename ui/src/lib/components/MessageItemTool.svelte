@@ -31,18 +31,26 @@
 		return { success: false, data: input };
 	}
 
-	function getStyle(item: ToolOutputItem, singleUIResource: boolean = false) {
+	function getStyle(
+		item: ToolOutputItem,
+		singleUIResource: boolean = false
+	): Record<string, string> {
 		if (singleUIResource) {
 			return {};
 		}
 		if (isUIResource(item) && item.resource._meta?.['mcpui.dev/ui-preferred-frame-size']) {
-			const coords = item.resource._meta?.['mcpui.dev/ui-preferred-frame-size'];
-			if (coords[0] && coords[1]) {
+			const coords = item.resource._meta['mcpui.dev/ui-preferred-frame-size'];
+			if (Array.isArray(coords) && coords[0] && coords[1]) {
 				return {
 					width: `${coords[0]}`,
-					height: `${coords[0]}`
+					height: `${coords[1]}`
 				};
-			} else if ('height' in coords && 'width' in coords) {
+			} else if (
+				coords &&
+				typeof coords === 'object' &&
+				'height' in coords &&
+				'width' in coords
+			) {
 				return {
 					width: `${coords.width}`,
 					height: `${coords.height}`
@@ -141,10 +149,10 @@
 							<div
 								class="prose overflow-x-auto rounded border border-success/20 bg-success/10 p-3 prose-invert"
 							>
-								{#if parseToolOutput(contentItem.text).success}
+								{#if contentItem.type === 'text' && 'text' in contentItem && parseToolOutput(contentItem.text).success}
 									<!-- JSON Syntax Highlighted Display -->
 									{@html parseToolOutput(contentItem.text).data}
-								{:else if contentItem.type === 'text' && contentItem.text}
+								{:else if contentItem.type === 'text' && 'text' in contentItem && contentItem.text}
 									{@html renderMarkdown(contentItem.text)}
 								{:else}
 									{@html parseToolOutput(JSON.stringify(contentItem)).data}

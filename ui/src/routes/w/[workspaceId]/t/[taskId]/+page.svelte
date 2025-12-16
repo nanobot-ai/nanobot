@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { workspaceStore } from '$lib/stores/workspaces.svelte';
 	import type { TaskNode } from '$lib/types';
 	import TaskFlowchart from '$lib/components/TaskFlowchart.svelte';
@@ -29,7 +30,9 @@
 		<!-- Header spanning full width -->
 		<div class="flex-shrink-0 bg-base-200 p-4">
 			<div class="mb-2 text-xs text-base-content/60">
-				<button onclick={() => goto('/')} class="hover:text-base-content">Workspaces</button>
+				<button onclick={() => goto(resolve('/'))} class="hover:text-base-content"
+					>Workspaces</button
+				>
 				<span class="mx-1">/</span>
 				<span>{workspace.name}</span>
 				<span class="mx-1">/</span>
@@ -81,7 +84,7 @@
 				<p class="mb-4 text-base-content/60">
 					The task you're looking for doesn't exist or has been deleted.
 				</p>
-				<button onclick={() => goto('/')} class="btn btn-primary">Back to Home</button>
+				<button onclick={() => goto(resolve('/'))} class="btn btn-primary">Back to Home</button>
 			</div>
 		</div>
 	{/if}

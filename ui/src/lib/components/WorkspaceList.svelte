@@ -187,7 +187,6 @@
 						onkeydown={handleNewWorkspaceKeydown}
 						placeholder="Workspace name..."
 						class="input input-sm flex-1"
-						autofocus
 					/>
 					<button class="btn btn-ghost btn-xs" onclick={cancelCreateWorkspace} aria-label="Cancel">
 						<X class="h-3 w-3" />

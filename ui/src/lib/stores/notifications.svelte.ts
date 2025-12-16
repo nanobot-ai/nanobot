@@ -54,5 +54,3 @@ export class NotificationStore {
 		return this.add({ type: 'info', title, message, duration });
 	}
 }
-
-export type { NotificationStore };

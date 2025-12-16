@@ -2,7 +2,6 @@ import type { Workspace } from '$lib/types';
 import { WorkspaceItemStore } from './workspace-item.svelte';
 import { WorkspaceService } from '$lib/workspace.svelte';
 import { SvelteSet } from 'svelte/reactivity';
-import { untrack } from 'svelte';
 
 /**
  * WorkspaceStore - Manages workspace list and caches WorkspaceItemStore instances

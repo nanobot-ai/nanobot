@@ -600,7 +600,7 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 		tempReq.Result = respResult
 		tempReq.Error = respError
 		if err != nil && respError == nil {
-			tempReq.Error = ErrRPCUnknown.WithMessage(fmt.Sprintf("failed to call %s [%s]: %s", req.Method, getMessageName(req), err))
+			tempReq.Error = ErrRPCUnknown.WithMessage("failed to call %s [%s]: %v", req.Method, getMessageName(req), err)
 		}
 		if _, hooksErr := s.callAllHooks(ctx, &tempReq, "response"); hooksErr != nil && err == nil {
 			err = fmt.Errorf("failed to call \"response\" hooks: %w", hooksErr)
