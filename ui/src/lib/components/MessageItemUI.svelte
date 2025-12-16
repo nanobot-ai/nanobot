@@ -22,11 +22,7 @@
 
 	let { item, onSend, style = {} }: Props = $props();
 	let container: HTMLDivElement;
-	const iFrameRef = $state<{
-		current: HTMLIFrameElement | null;
-	}>({
-		current: null
-	});
+	const iFrameRef = $state(React.createRef<HTMLIFrameElement>());
 
 	$effect(() => {
 		if (iFrameRef.current) {
