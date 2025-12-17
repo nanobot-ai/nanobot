@@ -1,0 +1,66 @@
+#!/bin/bash
+# sb_readdir - Sandbox directory reader with pagination and recursive support
+#
+# Usage: sb_readdir <path> [offset] [limit] [recursive]
+#   path: absolute path to directory
+#   offset: number of entries to skip (0-based, optional, default: 0)
+#   limit: maximum number of entries to return (optional, default: unlimited)
+#   recursive: "1" for recursive, "0" for non-recursive (optional, default: 0)
+#
+# Output format: type|size|path (one per line)
+#   type: "f" for file, "d" for directory, "l" for symlink
+#   size: file size in bytes
+#   path: absolute path to the entry
+#
+# Exit codes:
+#   0: success
+#   1: error (directory not found, not a directory, etc.)
+
+set -e
+set -o pipefail
+
+PATH_ARG="$1"
+OFFSET="${2:-0}"
+LIMIT="${3:-}"
+RECURSIVE="${4:-0}"
+
+if [ -z "$PATH_ARG" ]; then
+	echo "Error: path argument is required" >&2
+	exit 1
+fi
+
+if [ ! -e "$PATH_ARG" ]; then
+	echo "Error: path not found: $PATH_ARG" >&2
+	exit 1
+fi
+
+if [ ! -d "$PATH_ARG" ]; then
+	echo "Error: path is not a directory: $PATH_ARG" >&2
+	exit 1
+fi
+
+# Build find command based on recursive flag
+FIND_ARG=
+if [ "$RECURSIVE" != "1" ]; then
+    FIND_ARG="-maxdepth 1"
+fi
+
+# Use find with -printf to get type, size, and path
+# Format: type|size|path|skipped
+# Sort output for consistent ordering
+OUTPUT=$(find "$PATH_ARG" -mindepth 1 $FIND_ARG -type d \( -name .git -o -name node_modules \) -printf '%y|%s|%p|1\n' -prune -o -printf '%y|%s|%p\n' 2>/dev/null | sort)
+
+# Handle pagination
+if [ -n "$OUTPUT" ]; then
+	# Apply offset and limit
+	if [ "$OFFSET" -gt 0 ]; then
+		OUTPUT=$(echo "$OUTPUT" | tail -n +$((OFFSET + 1)))
+	fi
+
+	if [ -n "$LIMIT" ]; then
+		# Take limit + 1 to check if there are more entries
+		OUTPUT=$(echo "$OUTPUT" | head -n $((LIMIT + 1)))
+	fi
+
+	echo "$OUTPUT"
+fi

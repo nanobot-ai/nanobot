@@ -29,9 +29,9 @@ validate:
 	@echo ""
 	@echo "Running UI validation checks..."
 	@echo "==> Installing UI dependencies..."
-	@cd ui && pnpm install --frozen-lockfile
+	@pnpm install --frozen-lockfile
 	@echo "==> Running UI type check..."
-	@cd ui && pnpm run check
+	@pnpm run ci
 	@echo "✓ All validation checks passed!"
 
 .PHONY: build validate

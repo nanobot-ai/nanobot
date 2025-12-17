@@ -33,7 +33,7 @@ jobs:
         with:
           node-version: '25'
           cache: 'pnpm'
-          cache-dependency-path: 'ui/pnpm-lock.yaml'
+          cache-dependency-path: 'pnpm-lock.yaml'
 
       - name: Run make validate
         run: make validate

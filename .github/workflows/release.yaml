@@ -42,11 +42,11 @@ jobs:
           password: ${{ secrets.GHCR_TOKEN }}
       - name: Check UI dist folder exists
         run: |
-          if [ ! -d "ui/dist" ]; then
-            echo "Error: ui/dist folder does not exist. Please build the UI before releasing."
+          if [ ! -d "packages/ui/dist" ]; then
+            echo "Error: packages/ui/dist folder does not exist. Please build the UI before releasing."
             exit 1
           fi
-          echo "✓ ui/dist folder exists"
+          echo "✓ packages/ui/dist folder exists"
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:

@@ -1,0 +1,119 @@
+#!/bin/bash
+# sb_execute - Execute a command and manage process metadata and output
+#
+# Usage: sb_execute <processId> <outputByteLimit> <command> [arg1] [arg2] ...
+#
+# Creates /.data/.processes/<processId>/ directory structure:
+# - meta.json: Process metadata (command, args, startTime, exitCode, signal, truncated)
+# - stdout.txt: Process stdout
+# - stderr.txt: Process stderr
+# - exitcode.txt: Process exit code
+# - signal.txt: Signal that terminated process (if killed)
+# - pid.txt: Process PID for kill operations
+
+set -e
+
+if [ $# -lt 3 ]; then
+	echo "Error: processId, outputByteLimit, and command arguments are required" >&2
+	echo "Usage: sb_execute <processId> <outputByteLimit> <command> [args...]" >&2
+	exit 1
+fi
+
+PROCESS_ID="$1"
+shift
+OUTPUT_BYTE_LIMIT="$1"
+shift
+COMMAND="$1"
+shift
+
+PROCESS_DIR="/.data/.processes/${PROCESS_ID}"
+mkdir -p "$PROCESS_DIR"
+
+# Build args array using jq - this is safe and doesn't require shell escaping
+ARGS_JSON=$(jq -n --args '$ARGS.positional' -- "$@")
+
+# Create initial metadata using jq
+jq -n \
+	--arg cmd "$COMMAND" \
+	--argjson args "$ARGS_JSON" \
+	--argjson startTime "$(date +%s%3N)" \
+	--argjson limit "$OUTPUT_BYTE_LIMIT" \
+	'{
+		command: $cmd,
+		args: $args,
+		startTime: $startTime,
+		exitCode: null,
+		signal: null,
+		outputByteLimit: $limit,
+		truncated: false
+	}' > "$PROCESS_DIR/meta.json"
+
+# Execute the command and capture output, exit code, and PID
+set +e
+
+if [ "$OUTPUT_BYTE_LIMIT" -gt 0 ]; then
+	# With byte limit - use head to truncate output
+	"$COMMAND" "$@" > >(head -c "$OUTPUT_BYTE_LIMIT" > "$PROCESS_DIR/stdout.txt") 2> >(head -c "$OUTPUT_BYTE_LIMIT" > "$PROCESS_DIR/stderr.txt") &
+	CMD_PID=$!
+	echo "$CMD_PID" > "$PROCESS_DIR/pid.txt"
+	wait $CMD_PID
+	EXIT_CODE=$?
+
+	# Check if output was truncated by comparing actual output size
+	STDOUT_SIZE=$(stat -f%z "$PROCESS_DIR/stdout.txt" 2>/dev/null || stat -c%s "$PROCESS_DIR/stdout.txt" 2>/dev/null || echo 0)
+	STDERR_SIZE=$(stat -f%z "$PROCESS_DIR/stderr.txt" 2>/dev/null || stat -c%s "$PROCESS_DIR/stderr.txt" 2>/dev/null || echo 0)
+	TRUNCATED=false
+	if [ "$STDOUT_SIZE" -ge "$OUTPUT_BYTE_LIMIT" ] || [ "$STDERR_SIZE" -ge "$OUTPUT_BYTE_LIMIT" ]; then
+		TRUNCATED=true
+	fi
+else
+	# No byte limit - capture all output
+	"$COMMAND" "$@" > "$PROCESS_DIR/stdout.txt" 2> "$PROCESS_DIR/stderr.txt" &
+	CMD_PID=$!
+	echo "$CMD_PID" > "$PROCESS_DIR/pid.txt"
+	wait $CMD_PID
+	EXIT_CODE=$?
+	TRUNCATED=false
+fi
+
+set -e
+
+# Detect signal from exit code (128 + signal number)
+SIGNAL="null"
+if [ $EXIT_CODE -gt 128 ]; then
+	SIGNAL_NUM=$((EXIT_CODE - 128))
+	# Common signals
+	case $SIGNAL_NUM in
+		1) SIGNAL="SIGHUP" ;;
+		2) SIGNAL="SIGINT" ;;
+		3) SIGNAL="SIGQUIT" ;;
+		9) SIGNAL="SIGKILL" ;;
+		15) SIGNAL="SIGTERM" ;;
+		*) SIGNAL="SIG$SIGNAL_NUM" ;;
+	esac
+	echo "$SIGNAL" > "$PROCESS_DIR/signal.txt"
+fi
+
+# Write exit code
+echo "$EXIT_CODE" > "$PROCESS_DIR/exitcode.txt"
+
+# Update metadata with exit code, signal, and truncated flag using jq
+jq -n \
+	--arg cmd "$COMMAND" \
+	--argjson args "$ARGS_JSON" \
+	--argjson startTime "$(date +%s%3N)" \
+	--argjson exitCode "$EXIT_CODE" \
+	--arg signal "$SIGNAL" \
+	--argjson limit "$OUTPUT_BYTE_LIMIT" \
+	--argjson truncated "$TRUNCATED" \
+	'{
+		command: $cmd,
+		args: $args,
+		startTime: $startTime,
+		exitCode: $exitCode,
+		signal: (if $signal == "null" then null else $signal end),
+		outputByteLimit: $limit,
+		truncated: $truncated
+	}' > "$PROCESS_DIR/meta.json"
+
+exit $EXIT_CODE

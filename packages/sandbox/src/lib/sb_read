@@ -1,0 +1,50 @@
+#!/bin/bash
+# sb_read - Sandbox file reader with offset/limit/encoding support
+#
+# Usage: sb_read <path> [encoding] [offset] [limit]
+#   path: absolute path to file
+#   encoding: "utf-8" (default) or "base64"
+#   offset: line number to start from (1-based, optional)
+#   limit: maximum number of lines to read (optional)
+
+set -e
+set -o pipefail
+
+FILE_PATH="$1"
+ENCODING="${2:-utf-8}"
+OFFSET="${3:-1}"
+LIMIT="${4:-}"
+
+if [ -z "$FILE_PATH" ]; then
+	echo "Error: path argument is required" >&2
+	exit 1
+fi
+
+if [ ! -f "$FILE_PATH" ]; then
+	echo "Error: file not found: $FILE_PATH" >&2
+	exit 1
+fi
+
+if [ "$ENCODING" = "base64" ]; then
+	# Read as base64
+	if [ -n "$LIMIT" ] || [ "$OFFSET" != "1" ]; then
+		# Apply offset/limit in decoded form, then re-encode
+		base64 < "$FILE_PATH" | base64 -d | tail -n +"$OFFSET" ${LIMIT:+| head -n "$LIMIT"} | base64 -w 0
+	else
+		# Just encode the whole file
+		base64 < "$FILE_PATH"
+	fi
+else
+	# Read as utf-8
+	if [ "$OFFSET" != "1" ]; then
+		if [ -n "$LIMIT" ]; then
+			tail -n +"$OFFSET" "$FILE_PATH" | head -n "$LIMIT"
+		else
+			tail -n +"$OFFSET" "$FILE_PATH"
+		fi
+	elif [ -n "$LIMIT" ]; then
+		head -n "$LIMIT" "$FILE_PATH"
+	else
+		cat "$FILE_PATH"
+	fi
+fi

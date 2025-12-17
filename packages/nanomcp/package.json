@@ -1,0 +1,40 @@
+{
+	"name": "@nanobot-ai/nanomcp",
+	"version": "0.0.0",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./package.json": "./package.json"
+	},
+	"files": [
+		"dist"
+	],
+	"keywords": [
+		"mcp",
+		"nanobot"
+	],
+	"author": "Darren Shepherd <darren@obot.ai>",
+	"license": "MIT",
+	"scripts": {
+		"build": "echo OK",
+		"dev": "echo NOTHING TO DO",
+		"test": "tsx --test",
+		"lint": "biome lint .",
+		"lint:fix": "biome lint --write .",
+		"format": "biome format --write .",
+		"format:check": "biome format .",
+		"check": "biome check . && pnpm run typecheck",
+		"check:fix": "biome check --write .",
+		"typecheck": "tsc --noEmit",
+		"ci": "pnpm run check && pnpm run test && pnpm run build",
+		"prepublishOnly": "pnpm run ci"
+	},
+	"dependencies": {
+		"@remix-run/fetch-router": "^0.13.0",
+		"@remix-run/headers": "^0.18.0",
+		"@remix-run/logger-middleware": "^0.1.0",
+		"@remix-run/node-fetch-server": "^0.12.0",
+		"commander": "^14.0.2",
+		"fetch-to-node": "^2.1.0"
+	}
+}

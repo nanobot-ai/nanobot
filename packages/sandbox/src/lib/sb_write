@@ -1,0 +1,33 @@
+#!/bin/bash
+# sb_write - Sandbox file writer with encoding support
+#
+# Usage: sb_write <path> [encoding]
+#   path: absolute path to file
+#   encoding: "utf-8" (default) or "base64"
+#
+# Content is read from stdin
+
+set -e
+set -o pipefail
+
+PATH_ARG="$1"
+ENCODING="${2:-utf-8}"
+
+if [ -z "$PATH_ARG" ]; then
+	echo "Error: path argument is required" >&2
+	exit 1
+fi
+
+# Create directory if it doesn't exist
+DIR=$(dirname "$PATH_ARG")
+if [ "$DIR" != "/" ] && [ -n "$DIR" ]; then
+	mkdir -p "$DIR"
+fi
+
+if [ "$ENCODING" = "base64" ]; then
+	# Decode base64 and write
+	base64 -d > "$PATH_ARG"
+else
+	# Write utf-8 content
+	cat > "$PATH_ARG"
+fi

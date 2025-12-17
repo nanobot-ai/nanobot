@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/ui"
+	"github.com/nanobot-ai/nanobot/packages/ui"
 )
 
 func getCookieID(req *http.Request) string {
