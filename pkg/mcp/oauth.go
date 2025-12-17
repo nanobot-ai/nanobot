@@ -202,9 +202,22 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 		return nil, fmt.Errorf("failed to create state: %w", err)
 	}
 
+	authEndpoint, err := url.Parse(authorizationServerMetadata.AuthorizationEndpoint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse authorization endpoint: %w", err)
+	}
+
 	// Redirect user to consent page to ask for permission
 	// for the scopes specified above.
-	authURL := conf.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier), oauth2.SetAuthURLParam("resource", connectURL))
+	authCodeURLOpts := []oauth2.AuthCodeOption{oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier)}
+	if authEndpoint.Host != "login.microsoftonline.com" {
+		// This is a hacky workaround to avoid providing the `resource` parameter to Microsoft Entra.
+		// Entra does not like the resource parameter, and including it will often cause things to fail.
+		// VSCode does something similar to this.
+		authCodeURLOpts = append(authCodeURLOpts, oauth2.SetAuthURLParam("resource", connectURL))
+	}
+
+	authURL := conf.AuthCodeURL(state, authCodeURLOpts...)
 	handled, err := o.callbackHandler.HandleAuthURL(ctx, c.displayName, authURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to handle auth url %s: %w", authURL, err)
