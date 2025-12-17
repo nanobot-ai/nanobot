@@ -41,7 +41,7 @@
 	--border: 1px;
 	--depth: 0;
 	--noise: 0;
-	--logo-url: /assets/nanobot_dark.svg;
+	--logo-url: /assets/nanobot.svg;
 }
 
 @plugin "daisyui/theme" {
@@ -78,7 +78,7 @@
 	--border: 1px;
 	--depth: 0;
 	--noise: 0;
-	--logo-url: /assets/nanobot.svg;
+	--logo-url: /assets/nanobot_dark.svg;
 }
 
 /* Enhanced code block styling */
