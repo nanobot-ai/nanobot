@@ -50,7 +50,7 @@
 	"dependencies": {
 		"@lucide/svelte": "^0.540.0",
 		"@mcp-ui/client": "^5.9.0",
-		"@modelcontextprotocol/sdk": "^1.17.5",
+		"@modelcontextprotocol/sdk": "^1.24.0",
 		"daisyui": "^5.1.10",
 		"highlight.js": "^11.11.1",
 		"marked": "^16.2.1",
