@@ -198,6 +198,9 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	// for the scopes specified above.
 	authCodeURLOpts := []oauth2.AuthCodeOption{oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier)}
 	if authEndpoint.Host != "login.microsoftonline.com" {
+		// This is a hacky workaround to avoid providing the `resource` parameter to Microsoft Entra.
+		// Entra does not like the resource parameter, and including it will often cause things to fail.
+		// VSCode does something similar to this.
 		authCodeURLOpts = append(authCodeURLOpts, oauth2.SetAuthURLParam("resource", connectURL))
 	}
 
