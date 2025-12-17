@@ -1,5 +1,5 @@
 /* Obot Override Light Theme */
-:root:has(input.theme-controller[value=lofi]:checked), [data-theme=lofi] {
+/* :root:has(input.theme-controller[value=nanobotlight]:checked), [data-theme=nanobotlight] {
     --color-base-100: hsl(0 0 100);
     --color-base-200: hsl(0 0 95.5);
     --color-base-300: hsl(0 0 92.5);
@@ -10,8 +10,8 @@
     --color-secondary-content: hsl(0 0 0);
     --color-accent: #95bcfb;
     --color-accent-content: hsl(0 0 0);
-    --color-secondary: hsl(0 0 82.5);
-    --color-secondary-content: hsl(0 0 0);
+    --color-neutral: hsl(0 0 82.5);
+    --color-neutral-content: hsl(0 0 0);
     --color-info: #4f7ef3;
     --color-info-content: hsl(0 0 100);
     --color-success: oklch(72.3% 0.219 149.579);
@@ -29,10 +29,10 @@
     --depth: 0;
     --noise: 1;
     --logo-url: /assets/obot-workflow-logo-blue-black-text.svg
-}
+} */
 
 /* Obot Override Dark Theme */
-:root:has(input.theme-controller[value=black]:checked), [data-theme=black] {
+/* :root:has(input.theme-controller[value=nanobotdark]:checked), [data-theme=nanobotdark] {
     --color-base-100: hsl(0 0 0);
     --color-base-200: hsl(0 0 5.5);
     --color-base-300: hsl(0 0 12.5);
@@ -62,4 +62,4 @@
     --depth: 0;
     --noise: 1;
     --logo-url: /assets/obot-workflow-logo-blue-white-text.svg;
-}
+} */

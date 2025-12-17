@@ -20,7 +20,7 @@
 	let isLoading = $state(true);
 	let isSidebarCollapsed = $state(false);
 	let isMobileSidebarOpen = $state(false);
-	let currentTheme = $state('lofi');
+	let currentTheme = $state('nanobotlight');
 	let currentLogoUrl = $state('/assets/nanobot.svg');
 	let workspaceSupported = $state(false);
 	const root = resolve('/');
@@ -47,7 +47,7 @@
 			} else {
 				// Default to system preference
 				const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-				currentTheme = prefersDark ? 'black' : 'lofi';
+				currentTheme = prefersDark ? 'nanobotdark' : 'nanobotlight';
 			}
 			// Set theme on document
 			document.documentElement.setAttribute('data-theme', currentTheme);
@@ -114,7 +114,7 @@
 
 	function toggleTheme() {
 		if (browser) {
-			currentTheme = currentTheme === 'lofi' ? 'black' : 'lofi';
+			currentTheme = currentTheme === 'nanobotlight' ? 'nanobotdark' : 'nanobotlight';
 			document.documentElement.setAttribute('data-theme', currentTheme);
 			localStorage.setItem('theme', currentTheme);
 		}
@@ -208,7 +208,7 @@
 					class="btn btn-circle border-base-300 bg-base-100 shadow-lg btn-sm"
 					aria-label="Toggle theme"
 				>
-					{#if currentTheme === 'lofi'}
+					{#if currentTheme === 'nanobotlight'}
 						<Moon class="h-4 w-4" />
 					{:else}
 						<Sun class="h-4 w-4" />
