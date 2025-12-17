@@ -7,6 +7,14 @@
 		black --prefersdark;
 }
 
+:root:has(input.theme-controller[value=lofi]:checked), [data-theme=lofi] {
+	--logo-url: /assets/nanobot.svg;
+}
+
+:root:has(input.theme-controller[value=black]:checked), [data-theme=black] {
+	--logo-url: /assets/nanobot_dark.svg;
+}
+
 /* Enhanced code block styling */
 /*.prose pre {*/
 /*	@apply !overflow-x-auto !rounded-lg !bg-gray-900 !p-4;*/

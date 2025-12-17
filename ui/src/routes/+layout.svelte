@@ -1,7 +1,6 @@
 <script lang="ts">
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
-	import nanobotLogo from '$lib/assets/nanobot.svg';
 	import Threads from '$lib/components/Threads.svelte';
 	import WorkspaceList from '$lib/components/WorkspaceList.svelte';
 	import Notifications from '$lib/components/Notifications.svelte';
@@ -22,6 +21,7 @@
 	let isSidebarCollapsed = $state(false);
 	let isMobileSidebarOpen = $state(false);
 	let currentTheme = $state('lofi');
+	let currentLogoUrl = $state('/assets/nanobot.svg');
 	let workspaceSupported = $state(false);
 	const root = resolve('/');
 	const newThread = resolve('/');
@@ -61,6 +61,15 @@
 		threads = threadsData;
 		isLoading = false;
 	});
+
+	$effect(() => {
+		if (currentTheme) {
+			requestAnimationFrame(() => {
+				const logoUrlAttribute = getComputedStyle(document.documentElement).getPropertyValue('--logo-url');
+				currentLogoUrl = logoUrlAttribute || '/assets/nanobot.svg';
+			});
+		}
+	})
 
 	function toggleDesktopSidebar() {
 		if (browser && window.innerWidth >= 1024) {
@@ -114,6 +123,7 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
+	<link rel="stylesheet" href="/assets/theme.css" />
 </svelte:head>
 
 <!-- Unified responsive layout -->
@@ -132,7 +142,7 @@
 				class="flex h-15 items-center justify-between p-2 {!isSidebarCollapsed ? 'min-w-80' : ''}"
 			>
 				<a href={root} class="flex items-center gap-2 text-xl font-bold hover:opacity-80">
-					<img src={nanobotLogo} alt="Nanobot" class="h-12" />
+					<img src={currentLogoUrl} alt="Nanobot" class="h-12" />
 				</a>
 				<div class="flex items-center gap-1">
 					<a href={newThread} class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
@@ -224,7 +234,7 @@
 		<div class="absolute top-0 left-0 z-10 hidden h-15 items-center bg-transparent p-2 lg:flex">
 			<div class="flex items-center gap-2">
 				<a href={root} class="flex items-center gap-2 text-xl font-bold hover:opacity-80">
-					<img src={nanobotLogo} alt="Nanobot" class="h-12" />
+					<img src={currentLogoUrl} alt="Nanobot" class="h-12" />
 				</a>
 				<a href={newThread} class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
 					<SquarePen class="h-4 w-4" />
