@@ -1,0 +1,57 @@
+{
+	"name": "@nanobot-ai/sandbox",
+	"version": "0.0.1",
+	"type": "module",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": "./src/index.ts",
+		"./package.json": "./package.json"
+	},
+	"publishConfig": {
+		"exports": {
+			".": {
+				"types": "./dist/index.d.ts",
+				"import": "./dist/index.js"
+			},
+			"./package.json": "./package.json"
+		}
+	},
+	"bin": {
+		"sb": "./dist/cli.js"
+	},
+	"files": [
+		"dist"
+	],
+	"keywords": [
+		"mcp",
+		"nanobot",
+		"sandbox",
+		"docker"
+	],
+	"author": "Darren Shepherd <darren@obot.ai>",
+	"license": "MIT",
+	"scripts": {
+		"build": "tsup",
+		"dev": "tsup --watch",
+		"test": "tsx --test",
+		"lint": "biome lint .",
+		"lint:fix": "biome lint --write .",
+		"format": "biome format --write .",
+		"format:check": "biome format .",
+		"check": "biome check . && pnpm run typecheck",
+		"check:fix": "biome check --write .",
+		"typecheck": "tsc --noEmit",
+		"ci": "pnpm run check && pnpm run test && pnpm run build",
+		"prepublishOnly": "pnpm run ci"
+	},
+	"dependencies": {
+		"@remix-run/file-storage": "^0.13.0",
+		"@standard-schema/spec": "^1.0.0",
+		"commander": "^4.1.1"
+	},
+	"devDependencies": {
+		"tsup": "^8.5.1"
+	}
+}

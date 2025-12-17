@@ -1,0 +1,41 @@
+{
+	"name": "@nanobot-ai/workspace-client",
+	"version": "0.0.0",
+	"type": "module",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": "./src/index.ts",
+		"./package.json": "./package.json"
+	},
+	"publishConfig": {
+		"exports": {
+			".": {
+				"types": "./dist/index.d.ts",
+				"import": "./dist/index.js"
+			},
+			"./package.json": "./package.json"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "tsup",
+		"dev": "tsup --watch",
+		"test": "tsx --test",
+		"lint": "biome lint .",
+		"lint:fix": "biome lint --write .",
+		"format": "biome format --write .",
+		"format:check": "biome format .",
+		"check": "biome check . && npm run typecheck",
+		"check:fix": "biome check --write .",
+		"typecheck": "tsc --noEmit",
+		"ci": "npm run check && npm run test && npm run build"
+	},
+	"devDependencies": {
+		"@types/node": "^22.10.5",
+		"tsup": "^8.3.5"
+	}
+}

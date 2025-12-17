@@ -1,2 +1,2 @@
-//go:generate go run -tags package ./ui
+//go:generate go run -tags package ./packages/ui
 package main
