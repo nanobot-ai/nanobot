@@ -1,173 +1,14 @@
 <script lang="ts">
 	import '$lib/../app.css';
+	import DragDropList from '$lib/components/DragDropList.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
-	import { GripVertical, Plus } from '@lucide/svelte';
+	import { EllipsisVertical, GripVertical, Plus, ReceiptText, Sparkles, ToolCase, Trash2 } from '@lucide/svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 
-    let currentFocusedElement = $state<HTMLElement | null>(null);
-    let taskBlockHandle = $state<HTMLElement | null>(null);
-    let taskBlockHandleYPosition = $state(0);
     let scrollContainer = $state<HTMLElement | null>(null);
-    let tasksContainer = $state<HTMLElement | null>(null);
-    let taskListContainer = $state<HTMLElement | null>(null);
 
-    // Drag & drop state
-    let isDragging = $state(false);
-    let draggedTaskIndex = $state<number | null>(null);
-    let dropTargetIndex = $state<number | null>(null);
-    let dragGhost = $state<HTMLElement | null>(null);
-    let dragOffsetY = $state(0);
-
-    function updateHandlePosition() {
-        if (!currentFocusedElement || !scrollContainer || !tasksContainer) return;
-        
-        const elementTop = currentFocusedElement.offsetTop;
-        const elementBottom = elementTop + currentFocusedElement.offsetHeight;
-        const scrollTop = scrollContainer.scrollTop;
-        const tasksContainerOffset = tasksContainer.offsetTop;
-        
-        // Calculate where the viewport top is relative to the tasks container
-        const viewportTopRelative = scrollTop - tasksContainerOffset;
-        
-        // Clamp: stay at element top, or stick to viewport top (but not past element bottom)
-        const clampedPosition = Math.max(elementTop, Math.min(viewportTopRelative, elementBottom - 40));
-        
-        taskBlockHandleYPosition = clampedPosition;
-    }
-
-    function getTaskIndexFromElement(element: HTMLElement): number | null {
-        if (!taskListContainer) return null;
-        const taskElements = Array.from(taskListContainer.children).filter(
-            (el) => !el.classList.contains('drop-indicator')
-        );
-        const index = taskElements.indexOf(element);
-        return index >= 0 ? index : null;
-    }
-
-    function startDrag(e: MouseEvent) {
-        if (!currentFocusedElement || !taskListContainer) return;
-        
-        e.preventDefault();
-        
-        const index = getTaskIndexFromElement(currentFocusedElement);
-        if (index === null) return;
-        
-        isDragging = true;
-        draggedTaskIndex = index;
-        
-        // Create ghost clone
-        const rect = currentFocusedElement.getBoundingClientRect();
-        dragOffsetY = e.clientY - rect.top;
-        
-        const ghost = currentFocusedElement.cloneNode(true) as HTMLElement;
-        ghost.classList.add('drag-ghost');
-        ghost.style.position = 'fixed';
-        ghost.style.width = `${rect.width}px`;
-        ghost.style.left = `${rect.left}px`;
-        ghost.style.top = `${e.clientY - dragOffsetY}px`;
-        ghost.style.pointerEvents = 'none';
-        ghost.style.zIndex = '1000';
-        ghost.style.opacity = '0.7';
-        ghost.style.transform = 'scale(1.02)';
-        ghost.style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
-        document.body.appendChild(ghost);
-        dragGhost = ghost;
-        
-        // Add event listeners
-        document.addEventListener('mousemove', handleDragMove);
-        document.addEventListener('mouseup', endDrag);
-    }
-
-    function handleDragMove(e: MouseEvent) {
-        if (!isDragging || !dragGhost || !taskListContainer || draggedTaskIndex === null) return;
-        
-        // Move ghost
-        dragGhost.style.top = `${e.clientY - dragOffsetY}px`;
-        
-        // Calculate drop target - filter out drop indicators
-        const taskElements = Array.from(taskListContainer.children).filter(
-            (el) => !el.classList.contains('drop-indicator')
-        ) as HTMLElement[];
-        let newDropIndex: number | null = null;
-        
-        for (let i = 0; i < taskElements.length; i++) {
-            const taskEl = taskElements[i];
-            const rect = taskEl.getBoundingClientRect();
-            const midY = rect.top + rect.height / 2;
-            
-            if (e.clientY < midY) {
-                newDropIndex = i;
-                break;
-            }
-        }
-        
-        // If we didn't find a position, drop at the end
-        if (newDropIndex === null) {
-            newDropIndex = taskElements.length;
-        }
-        
-        // If hovering over the dragged item (index or index+1), keep indicator at original position
-        // Both positions result in "no change", so show consistent indicator
-        if (newDropIndex === draggedTaskIndex || newDropIndex === draggedTaskIndex + 1) {
-            newDropIndex = draggedTaskIndex;
-        }
-        
-        dropTargetIndex = newDropIndex;
-    }
-
-    function endDrag() {
-        if (!isDragging) return;
-        
-        // Remove ghost
-        if (dragGhost) {
-            dragGhost.remove();
-            dragGhost = null;
-        }
-        
-        // Reorder tasks if we have a valid drop target and position changed
-        if (dropTargetIndex !== null && draggedTaskIndex !== null) {
-            // Skip if dropping at original position (no change)
-            const isUnchanged = dropTargetIndex === draggedTaskIndex || dropTargetIndex === draggedTaskIndex + 1;
-            
-            if (!isUnchanged) {
-                const tasks = [...workflow.tasks];
-                const [removed] = tasks.splice(draggedTaskIndex, 1);
-                
-                // Adjust index if dropping after the original position
-                const insertIndex = dropTargetIndex > draggedTaskIndex ? dropTargetIndex - 1 : dropTargetIndex;
-                tasks.splice(insertIndex, 0, removed);
-                
-                workflow.tasks = tasks;
-            }
-        }
-        
-        // Reset state
-        isDragging = false;
-        draggedTaskIndex = null;
-        dropTargetIndex = null;
-        currentFocusedElement = null;
-        
-        // Remove event listeners
-        document.removeEventListener('mousemove', handleDragMove);
-        document.removeEventListener('mouseup', endDrag);
-    }
-
-	// The existing chat might have been set by / so don't recreate it because that will
-	// loose the event stream.
-	
-    // const chat = page.data.chat || new ChatService();
-	// const notification = getNotificationContext();
-
-	// $effect(() => {
-	// 	if (!page.params.id) return;
-	// 	chat.setChatId(page.params.id).catch((e) => {
-	// 		console.error('Error setting chat ID:', e);
-	// 		notification.error(e.message);
-	// 	});
-	// });
-
-	// onDestroy(() => {
-	// 	chat.close();
-	// });
+    let taskBlockEditing = new SvelteMap<number, boolean>();
+    let taskDescription = new SvelteMap<number, boolean>();
 
     let workflow = $state({
 		name: 'Onboarding Workflow',
@@ -267,100 +108,102 @@ Send the drafted email.
 			}
 		]
 	});
+
+    function toggleTaskBlockEditing(id: number, enabled: boolean) {
+        taskBlockEditing.set(id, enabled);
+    }
+
+    function toggleTaskDescription(id: number, enabled: boolean) {
+        taskDescription.set(id, enabled);
+    }
 </script>
 
 <svelte:head>
     <title>Nanobot | Workflows</title>
 </svelte:head>
 
-<div class="flex flex-col gap-4 p-4 overflow-y-auto max-h-dvh" bind:this={scrollContainer} onscroll={updateHandlePosition}>
+<div class="flex flex-col p-4 overflow-y-auto max-h-dvh" bind:this={scrollContainer}>
     <div class="flex flex-col w-full">
-        <input name="title" class="input input-ghost input-xl w-full placeholder:text-base-content/30" type="text" placeholder="Workflow title" />
+        <input name="title" class="input input-ghost input-xl w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Workflow title" />
         <input name="description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Workflow description" />
     </div>
-    <div class="w-full relative" bind:this={tasksContainer} onmouseleave={() => currentFocusedElement = null} role="presentation">
-        <div class="task-block-handle" data-show={currentFocusedElement !== null && !isDragging} bind:this={taskBlockHandle} style="top: {taskBlockHandleYPosition}px;">
-            <button class="btn btn-ghost btn-square"><Plus class="size-6 text-base-content/50" /></button>
-            <button class="btn btn-ghost btn-square cursor-grab" onmousedown={startDrag}><GripVertical class="size-6 text-base-content/50" /></button>
-        </div>
-        <div class="flex flex-col gap-4" bind:this={taskListContainer}>
-            {#each workflow.tasks as task, index (task.id)}
-                {#if dropTargetIndex === index}
-                    <div class="drop-indicator"></div>
-                {/if}
-                <div class="w-full px-22" 
-                    class:dragging={isDragging && draggedTaskIndex === index}
-                    onmouseenter={(e) => {
-                        if (isDragging) return;
-                        currentFocusedElement = e.currentTarget as HTMLElement;
-                        updateHandlePosition();
-                    }}
-                    role="presentation"
-                >
-                    <div class="flex flex-col gap-4 bg-base-200 rounded-box p-4 pb-8 workflow-task">
-                        <div class="flex flex-col gap-2">
-                            <input name="task-name" class="input input-ghost input-lg w-full font-semibold placeholder:text-base-content/30" type="text" placeholder="Task name" />
-                            <input name="task-description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Task description" />
-                        </div>
-                        <MarkdownEditor value={task.content} />
-                    </div>
+    <DragDropList bind:items={workflow.tasks} scrollContainerEl={scrollContainer}>
+        {#snippet blockHandle({ startDrag })}
+            <div class="flex items-center gap-2">
+                <button class="btn btn-ghost btn-square btn-sm" popoverTarget="add-to-workflow" style="anchor-name: --add-to-workflow-anchor;">
+                    <Plus class="text-base-content/50" />
+                </button>
+                
+                <ul class="dropdown menu w-48 rounded-box bg-base-200 dark:bg-base-300 shadow-sm"
+                    popover="auto" id="add-to-workflow" style="position-anchor: --add-to-workflow-anchor;">
+                    <li><button class="">Add task</button></li>
+                    <li><button class="">Add tool</button></li>
+                </ul>
+
+                <button class="btn btn-ghost btn-square cursor-grab btn-sm" onmousedown={startDrag}><GripVertical class="text-base-content/50" /></button>
+            </div>
+        {/snippet}
+        {#snippet children({ item: task })}
+            <div class="flex flex-col gap-4 bg-base-200 rounded-box p-4 pb-8 workflow-task relative">
+                <div class="absolute top-3 right-3 z-2">
+                    {@render menu(task.id)}
                 </div>
-            {/each}
-            {#if dropTargetIndex === workflow.tasks.length}
-                <div class="drop-indicator"></div>
-            {/if}
-        </div>
-    </div>
+                <div class="flex flex-col gap-2 pr-12">
+                    <input name="task-name" class="input input-ghost input-lg w-full font-semibold placeholder:text-base-content/30" type="text" placeholder="Task name" bind:value={task.name} />
+                    <input name="task-description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Task description" bind:value={task.description} />
+                </div>
+                <MarkdownEditor value={task.content} blockEditEnabled={taskBlockEditing.get(task.id) ?? false} />
+            </div>
+        {/snippet}
+    </DragDropList>
 </div>
+
+{#snippet menu(id: number)}
+    <button class="btn btn-ghost btn-square btn-sm" popoverTarget={`task-${id}-action`} style={`anchor-name: --task-${id}-action-anchor;`}>
+        <EllipsisVertical class="text-base-content/50" />
+    </button>
+
+    <ul class="dropdown flex flex-col gap-1 dropdown-end dropdown-bottom menu w-64 rounded-box bg-base-200 dark:bg-base-300 shadow-sm"
+        popover="auto" id={`task-${id}-action`} style={`position-anchor: --task-${id}-action-anchor;`}>
+        <li>
+            <label for={`task-${id}-description`} class="flex gap-2 justify-between items-center">
+                <span class="flex items-center gap-2">
+                    <ReceiptText class="size-4" />
+                    Description
+                </span>
+                <input type="checkbox" class="toggle toggle-sm" id={`task-${id}-description`} 
+                    checked={taskDescription.get(id) ?? false}
+                    onchange={(e) => toggleTaskDescription(id, (e.target as HTMLInputElement)?.checked ?? false)}
+                />
+            </label>
+        </li>
+        <li>
+            <label for={`task-${id}-block-editing`} class="flex gap-2 justify-between items-center">
+                <span class="flex items-center gap-2">
+                    <ToolCase class="size-4" />
+                    Enable block editing
+                </span>
+                <input type="checkbox" class="toggle toggle-sm" id={`task-${id}-block-editing`} 
+                    checked={taskBlockEditing.get(id) ?? false}
+                    onchange={(e) => toggleTaskBlockEditing(id, (e.target as HTMLInputElement)?.checked ?? false)}
+                />
+            </label>
+        </li>
+        <li>
+            <button class="flex items-center gap-2">
+                <Sparkles class="size-4" /> Improve with AI
+            </button>
+        </li>
+        <li>
+            <button class="flex items-center gap-2">
+                <Trash2 class="size-4" /> Delete task
+            </button>
+        </li>
+    </ul>
+{/snippet}
 
 <style>
     .workflow-task :global(.milkdown) {
         background: var(--color-base-200);
-    }
-
-    .task-block-handle {
-        position: absolute;
-        display: flex;
-        top: 0;
-        left: 0;
-        z-index: 2;
-        opacity: 0;
-        transition: all 0.2s ease-in-out;
-    }
-
-    .task-block-handle[data-show="true"] {
-        opacity: 1;
-    }
-
-    .dragging {
-        opacity: 0.3;
-    }
-
-    .drop-indicator {
-        height: 12px;
-        background: var(--color-primary);
-        border-radius: 2px;
-        margin: -2px 5.5rem;
-        position: relative;
-    }
-
-    .drop-indicator::before,
-    .drop-indicator::after {
-        content: '';
-        position: absolute;
-        width: 12px;
-        height: 12px;
-        background: var(--color-primary);
-        border-radius: 50%;
-        top: 50%;
-        transform: translateY(-50%);
-    }
-
-    .drop-indicator::before {
-        left: -6px;
-    }
-
-    .drop-indicator::after {
-        right: -6px;
     }
 </style>
