@@ -108,3 +108,12 @@ body {
 	height: 100%;
 	overflow: hidden;
 }
+
+.input-ghost {
+    @layer daisyui.l1.l2 {
+        &:focus, &:focus-within {
+            border-color: var(--color-primary);
+			outline-color: var(--color-primary);
+        }
+    }
+}
