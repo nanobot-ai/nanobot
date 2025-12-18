@@ -253,7 +253,7 @@
 	{/if}
 
 	<!-- Main content area -->
-	<div class="h-dvh flex-1 md:max-w-[calc(100%-320px)]">
+	<div class="h-dvh flex-1 w-full md:max-w-[calc(100%-320px)]">
 		{@render children?.()}
 	</div>
 </div>

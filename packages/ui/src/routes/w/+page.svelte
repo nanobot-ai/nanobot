@@ -2,13 +2,17 @@
 	import '$lib/../app.css';
 	import DragDropList from '$lib/components/DragDropList.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
-	import { EllipsisVertical, GripVertical, Plus, ReceiptText, Sparkles, ToolCase, Trash2 } from '@lucide/svelte';
+	import MessageInput from '$lib/components/MessageInput.svelte';
+	import { EllipsisVertical, GripVertical, MessageCircleMore, Plus, ReceiptText, Sparkles, ToolCase, Trash2 } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
+	import { fly } from 'svelte/transition';
 
     let scrollContainer = $state<HTMLElement | null>(null);
 
     let taskBlockEditing = new SvelteMap<number, boolean>();
     let taskDescription = new SvelteMap<number, boolean>();
+
+    let showMessageInput = $state(false);
 
     let workflow = $state({
 		name: 'Onboarding Workflow',
@@ -156,6 +160,20 @@ Send the drafted email.
             </div>
         {/snippet}
     </DragDropList>
+    
+    <div class="sticky bottom-0 right-0 self-end flex flex-col gap-4">
+        {#if showMessageInput}
+            <div class="bg-base-200 border border-base-300 rounded-box w-sm md:w-2xl"
+                transition:fly={{ x: 100, duration: 200 }}
+            >
+                <MessageInput />
+            </div>  
+        {/if}
+
+        <button class="float-right btn btn-lg btn-circle btn-primary self-end" onclick={() => showMessageInput = !showMessageInput}>
+            <MessageCircleMore class="size-6" />
+        </button>
+    </div>
 </div>
 
 {#snippet menu(id: number)}
