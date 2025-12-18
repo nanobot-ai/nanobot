@@ -171,7 +171,7 @@
 			<div class="flex-1 overflow-hidden {!isSidebarCollapsed ? 'min-w-80' : ''}">
 				<div class="flex h-full flex-col">
 					<!-- Threads section (takes up ~40% of available space) -->
-					<div class='flex-shrink-0 overflow-y-auto'>
+					<div class='shrink-0 overflow-y-auto'>
 						<Threads
 							{threads}
 							onRename={handleRenameThread}
@@ -253,7 +253,7 @@
 	{/if}
 
 	<!-- Main content area -->
-	<div class="h-dvh flex-1">
+	<div class="h-dvh flex-1 md:max-w-[calc(100%-320px)]">
 		{@render children?.()}
 	</div>
 </div>
