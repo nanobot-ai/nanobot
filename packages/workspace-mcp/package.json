@@ -16,6 +16,9 @@
 		"typecheck": "tsc --noEmit",
 		"ci": "npm run check && npm run test && npm run build"
 	},
+	"exports": {
+		".": "./server.ts"
+	},
 	"dependencies": {
 		"@nanobot-ai/workspace-client": "workspace:*",
 		"@nanobot-ai/nanomcp": "workspace:*",

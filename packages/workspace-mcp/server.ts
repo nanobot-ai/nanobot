@@ -45,6 +45,8 @@ const server = new Server(
 	},
 );
 
-await server.serve(
-	process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 9011,
-);
+export default server;
+
+if (import.meta.main) {
+	await server.serve(9011);
+}

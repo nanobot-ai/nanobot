@@ -41,18 +41,20 @@ export class Server {
 		return this.router.fetch(...args);
 	};
 
+	requestListener(): http.RequestListener {
+		return createRequestListener(async (request) => {
+			try {
+				return await this.fetch(request);
+			} catch (error) {
+				console.error(error);
+				return new Response("Internal Server Error", { status: 500 });
+			}
+		});
+	}
+
 	serve = async (port?: number) => {
 		port = port || parseInt(process.env.PORT || "9010", 10);
-		const server = http.createServer(
-			createRequestListener(async (request) => {
-				try {
-					return await this.fetch(request);
-				} catch (error) {
-					console.error(error);
-					return new Response("Internal Server Error", { status: 500 });
-				}
-			}),
-		);
+		const server = http.createServer(this.requestListener());
 
 		server.listen(port, () => {
 			console.log(`Server is running on http://localhost:${port}`);

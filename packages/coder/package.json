@@ -18,7 +18,7 @@
 		"prepublishOnly": "pnpm run ci"
 	},
 	"exports": {
-		".": "./src/index.ts",
+		".": "./server.ts",
 		"./tools/*": "./src/tools/*"
 	},
 	"dependencies": {

@@ -97,13 +97,16 @@ export type ListResourceTemplates = (
 export const defineConfig = (config: Config) => config;
 
 /**
- * Merge two config objects, checking for conflicts
- * @param config1 - The first config object
- * @param config2 - The second config object
+ * Merge multiple config objects, checking for conflicts
+ * @param config - The config objects
  * @returns The merged config
  * @throws Error if there are conflicting tool names or resource handlers
  */
-export function mergeConfig(config1: Config, config2: Config): Config {
+export function mergeConfig(...config: Config[]): Config {
+	return config.reduce((acc, curr) => _mergeConfig(acc, curr), {});
+}
+
+function _mergeConfig(config1: Config, config2: Config): Config {
 	const merged: Config = {};
 
 	// Merge tools

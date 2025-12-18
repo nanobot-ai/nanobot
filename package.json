@@ -10,17 +10,10 @@
 			"node-pty"
 		]
 	},
-	"workspaces": [
-		"packages/agentconfig",
-		"packages/coder",
-		"packages/nanomcp",
-		"packages/sandbox",
-		"packages/skills",
-		"packages/tasks",
-		"packages/workspace-client",
-		"packages/workspace-mcp"
-	],
 	"scripts": {
+		"dev": "cd ./packages/ui && pnpm run dev",
+		"check": "pnpm -r run check",
+		"check:fix": "pnpm -r run check:fix",
 		"ci": "pnpm -r run ci"
 	},
 	"devDependencies": {

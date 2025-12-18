@@ -1,11 +1,22 @@
 {
-	"name": "@nanobot-ai/tasks",
-	"version": "0.0.0",
+	"name": "@nanobot-ai/services",
+	"version": "0.0.1",
 	"private": true,
 	"type": "module",
+	"exports": {
+		".": "./src/services.ts"
+	},
+	"keywords": [
+		"mcp",
+		"nanobot",
+		"sandbox",
+		"docker"
+	],
+	"author": "Darren Shepherd <darren@obot.ai>",
+	"license": "MIT",
 	"scripts": {
-		"build": "echo OK",
-		"dev": "NODE_ENV=development tsx --watch server.ts",
+		"build": "tsup",
+		"dev": "tsx --watch ./src/services.ts",
 		"test": "tsx --test",
 		"lint": "biome lint .",
 		"lint:fix": "biome lint --write .",
@@ -17,17 +28,14 @@
 		"ci": "pnpm run check && pnpm run test && pnpm run build",
 		"prepublishOnly": "pnpm run ci"
 	},
-	"exports": {
-		".": "./server.ts"
-	},
 	"dependencies": {
+		"@nanobot-ai/agentconfig": "workspace:*",
 		"@nanobot-ai/coder": "workspace:*",
 		"@nanobot-ai/nanomcp": "workspace:*",
-		"@nanobot-ai/workspace-client": "workspace:*",
-		"js-yaml": "^4.1.1",
-		"zod-to-json-schema": "^3.25.0"
+		"@nanobot-ai/tasks": "workspace:*",
+		"@nanobot-ai/workspace-mcp": "workspace:*"
 	},
 	"devDependencies": {
-		"@types/js-yaml": "^4.0.9"
+		"tsup": "^8.5.1"
 	}
 }
