@@ -8,11 +8,12 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { createVariablePillPlugin } from './variablePillPlugin';
+	import { onMount } from 'svelte';
 
     let scrollContainer = $state<HTMLElement | null>(null);
 
-    let taskBlockEditing = new SvelteMap<number, boolean>();
-    let taskDescription = new SvelteMap<number, boolean>();
+    let taskBlockEditing = new SvelteMap<number | string, boolean>();
+    let taskDescription = new SvelteMap<number | string, boolean>();
 
     let currentRun = $state<unknown | null>(null);
     let showCurrentRun = $state(false);
@@ -129,6 +130,14 @@ Send the drafted email.
 		]
 	});
 
+    onMount(() => {
+        workflow.tasks.forEach((task) => {
+            if (task.description) {
+                taskDescription.set(task.id, true);
+            }
+        })
+    })
+
     function toggleTaskBlockEditing(id: number, enabled: boolean) {
         taskBlockEditing.set(id, enabled);
     }
@@ -189,14 +198,18 @@ Send the drafted email.
                 </div>
             {/snippet}
             {#snippet children({ item: task })}
-                <div class="flex flex-col gap-4 bg-base-200 rounded-box p-4 pb-8 workflow-task relative">
+                <div class="flex flex-col gap-2 bg-base-200 rounded-box p-4 pb-8 workflow-task relative">
                     <div class="absolute top-3 right-3 z-2">
                         {@render menu(task.id)}
                     </div>
-                    <div class="flex flex-col gap-2 pr-12">
+                    
+                    <div class="flex flex-col pr-12">
                         <input name="task-name" class="input input-ghost input-lg w-full font-semibold placeholder:text-base-content/30" type="text" placeholder="Task name" bind:value={task.name} />
-                        <input name="task-description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Task description" bind:value={task.description} />
+                        {#if taskDescription.get(task.id) ?? false}
+                            <input name="task-description" class="input text-[16px] input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Task description" bind:value={task.description} />
+                        {/if}
                     </div>
+                   
                     <MarkdownEditor value={task.content} blockEditEnabled={taskBlockEditing.get(task.id) ?? false} plugins={[variablePillPlugin]} />
                 </div>
             {/snippet}
@@ -222,7 +235,8 @@ Send the drafted email.
     {#if showCurrentRun}
         <div transition:fly={{ x: 100, duration: 200 }} class="md:min-w-[520px] bg-base-200 h-dvh">
             <div class="w-full h-full flex flex-col max-h-dvh overflow-y-auto">
-                <div class="w-full flex justify-end p-4">
+                <div class="w-full flex justify-between items-center pr-4 bg-base-100">
+                    <h4 class="text-lg font-semibold border-l-4 border-primary p-4 pr-0">{workflow.name} | Run {'{id}'}</h4>
                     <button class="btn btn-ghost btn-square btn-sm" onclick={() => showCurrentRun = false}>
                         <X class="size-4" />
                     </button>
