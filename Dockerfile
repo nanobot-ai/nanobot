@@ -15,10 +15,6 @@ COPY . .
 # Build the binary
 RUN CGO_ENABLED=0 go build -o nanobot .
 
-FROM runtime AS release
-
-COPY nanobot /usr/local/bin/nanobot
-
 # Final stage
 FROM cgr.dev/chainguard/wolfi-base:latest AS runtime
 
@@ -39,6 +35,12 @@ VOLUME ["/data"]
 ENTRYPOINT ["/usr/local/bin/nanobot"]
 CMD ["run"]
 
+# Release image
+FROM runtime AS release
+
+COPY nanobot /usr/local/bin/nanobot
+
+# Dev image
 FROM runtime AS dev
 
 # Copy the binary from builder

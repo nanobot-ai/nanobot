@@ -1,0 +1,13 @@
+{
+	"/": [
+		"src/routes/+page.ts",
+		"src/routes/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/c/[id]": [
+		"src/routes/+layout.ts"
+	],
+	"/w/[workspaceId]/t/[taskId]": [
+		"src/routes/+layout.ts"
+	]
+}
