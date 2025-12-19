@@ -2,13 +2,15 @@
     import { Crepe } from '@milkdown/crepe';
     import '@milkdown/crepe/theme/common/style.css';
     import '@milkdown/crepe/theme/frame.css';
+	import type { MilkdownPlugin } from '@milkdown/kit/ctx';
 
     interface Props {
         value: string;
         blockEditEnabled: boolean;
+        plugins: MilkdownPlugin[];
     }
 
-    let { value, blockEditEnabled }: Props = $props();
+    let { value, blockEditEnabled, plugins = [] }: Props = $props();
 
     let editorNode: HTMLElement | null = null;
     let isCrepeReady = false;
@@ -24,6 +26,11 @@
                 [Crepe.Feature.BlockEdit]: enableBlockEdit
             },
         });
+
+        // Apply any additional plugins
+		for (const plugin of plugins) {
+			instance.editor.use(plugin);
+		}
         
         await instance.create();
 

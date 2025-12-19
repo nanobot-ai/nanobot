@@ -34,7 +34,7 @@
 	{/if}
 </svelte:head>
 
-<div class="grid grid-cols-1 md:flex md:flex-row">
+<div class="grid grid-cols-1 md:flex md:flex-row md:grow">
 	<Workspace messages={chat.messages} onSendMessage={chat.sendMessage} />
 	<ThreadFromChat {chat}/>
 </div>
