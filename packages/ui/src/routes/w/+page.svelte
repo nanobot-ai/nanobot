@@ -148,7 +148,9 @@ Send the drafted email.
                     {:else}
                         <input name="title" class="input input-ghost input-xl w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Workflow title" />
                     {/if}
-                    <button class="btn btn-primary w-48" onclick={() => showCurrentRun = true}>
+                    <button class="btn btn-primary w-48" onclick={() => {
+                        showCurrentRun = true;
+                    }}>
                         Run <Play class="size-4" /> 
                     </button>
                 </div>
@@ -205,7 +207,7 @@ Send the drafted email.
     </div>
 
     {#if showCurrentRun}
-        <div transition:fly={{ x: 100, duration: 200 }} class="min-w-[320px] max-w-[60%] bg-base-200 h-dvh">
+        <div transition:fly={{ x: 100, duration: 200 }} class="md:min-w-[520px] bg-base-200 h-dvh">
             <div class="w-full h-full flex flex-col max-h-dvh overflow-y-auto">
                 <div class="w-full flex justify-end p-4">
                     <button class="btn btn-ghost btn-square btn-sm" onclick={() => showCurrentRun = false}>
