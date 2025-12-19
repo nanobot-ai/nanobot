@@ -1,0 +1,248 @@
+{
+  ".svelte-kit/generated/server/internal.js": {
+    "file": "internal.js",
+    "name": "internal",
+    "src": ".svelte-kit/generated/server/internal.js",
+    "isEntry": true,
+    "imports": [
+      "_internal.js",
+      "_environment.js",
+      "_paths.js"
+    ]
+  },
+  "_Thread.js": {
+    "file": "chunks/Thread.js",
+    "name": "Thread",
+    "imports": [
+      "_index.js",
+      "_chat.svelte.js"
+    ]
+  },
+  "_chat.Bnxpj5AT.css": {
+    "file": "_app/immutable/assets/chat.Bnxpj5AT.css",
+    "src": "_chat.Bnxpj5AT.css"
+  },
+  "_chat.svelte.js": {
+    "file": "chunks/chat.svelte.js",
+    "name": "chat.svelte",
+    "imports": [
+      "_index.js",
+      "_mcpclient.js"
+    ],
+    "css": [
+      "_app/immutable/assets/chat.Bnxpj5AT.css"
+    ]
+  },
+  "_client.js": {
+    "file": "chunks/client.js",
+    "name": "client",
+    "imports": [
+      "_state.svelte.js",
+      "_exports.js",
+      "_utils.js",
+      "_index3.js"
+    ]
+  },
+  "_environment.js": {
+    "file": "chunks/environment.js",
+    "name": "environment"
+  },
+  "_exports.js": {
+    "file": "chunks/exports.js",
+    "name": "exports"
+  },
+  "_false.js": {
+    "file": "chunks/false.js",
+    "name": "false"
+  },
+  "_index.js": {
+    "file": "chunks/index.js",
+    "name": "index",
+    "imports": [
+      "_false.js"
+    ]
+  },
+  "_index2.js": {
+    "file": "chunks/index2.js",
+    "name": "index",
+    "imports": [
+      "_client.js",
+      "_index.js"
+    ]
+  },
+  "_index3.js": {
+    "file": "chunks/index3.js",
+    "name": "index",
+    "imports": [
+      "_index.js"
+    ]
+  },
+  "_internal.js": {
+    "file": "chunks/internal.js",
+    "name": "internal",
+    "imports": [
+      "_index.js",
+      "_environment.js",
+      "_paths.js"
+    ]
+  },
+  "_mcpclient.js": {
+    "file": "chunks/mcpclient.js",
+    "name": "mcpclient",
+    "imports": [
+      "_index.js"
+    ]
+  },
+  "_paths.js": {
+    "file": "chunks/paths.js",
+    "name": "paths"
+  },
+  "_routing.js": {
+    "file": "chunks/routing.js",
+    "name": "routing"
+  },
+  "_shared.js": {
+    "file": "chunks/shared.js",
+    "name": "shared",
+    "imports": [
+      "_utils.js"
+    ]
+  },
+  "_state.svelte.js": {
+    "file": "chunks/state.svelte.js",
+    "name": "state.svelte",
+    "imports": [
+      "_index.js"
+    ]
+  },
+  "_utils.js": {
+    "file": "chunks/utils.js",
+    "name": "utils"
+  },
+  "_workspaces.svelte.js": {
+    "file": "chunks/workspaces.svelte.js",
+    "name": "workspaces.svelte",
+    "imports": [
+      "_mcpclient.js"
+    ]
+  },
+  "node_modules/.pnpm/@sveltejs+kit@2.38.0_@sveltejs+vite-plugin-svelte@6.2.0_svelte@5.38.8_vite@7.1.5_jiti@2_973d8077fed30e00f37242869fad11b9/node_modules/@sveltejs/kit/src/runtime/app/server/remote/index.js": {
+    "file": "remote-entry.js",
+    "name": "remote-entry",
+    "src": "node_modules/.pnpm/@sveltejs+kit@2.38.0_@sveltejs+vite-plugin-svelte@6.2.0_svelte@5.38.8_vite@7.1.5_jiti@2_973d8077fed30e00f37242869fad11b9/node_modules/@sveltejs/kit/src/runtime/app/server/remote/index.js",
+    "isEntry": true,
+    "imports": [
+      "_shared.js",
+      "_false.js",
+      "_paths.js",
+      "_environment.js"
+    ]
+  },
+  "node_modules/.pnpm/@sveltejs+kit@2.38.0_@sveltejs+vite-plugin-svelte@6.2.0_svelte@5.38.8_vite@7.1.5_jiti@2_973d8077fed30e00f37242869fad11b9/node_modules/@sveltejs/kit/src/runtime/components/svelte-5/error.svelte": {
+    "file": "entries/fallbacks/error.svelte.js",
+    "name": "entries/fallbacks/error.svelte",
+    "src": "node_modules/.pnpm/@sveltejs+kit@2.38.0_@sveltejs+vite-plugin-svelte@6.2.0_svelte@5.38.8_vite@7.1.5_jiti@2_973d8077fed30e00f37242869fad11b9/node_modules/@sveltejs/kit/src/runtime/components/svelte-5/error.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index.js",
+      "_index2.js"
+    ]
+  },
+  "node_modules/.pnpm/@sveltejs+kit@2.38.0_@sveltejs+vite-plugin-svelte@6.2.0_svelte@5.38.8_vite@7.1.5_jiti@2_973d8077fed30e00f37242869fad11b9/node_modules/@sveltejs/kit/src/runtime/server/index.js": {
+    "file": "index.js",
+    "name": "index",
+    "src": "node_modules/.pnpm/@sveltejs+kit@2.38.0_@sveltejs+vite-plugin-svelte@6.2.0_svelte@5.38.8_vite@7.1.5_jiti@2_973d8077fed30e00f37242869fad11b9/node_modules/@sveltejs/kit/src/runtime/server/index.js",
+    "isEntry": true,
+    "imports": [
+      "_false.js",
+      "_paths.js",
+      "_exports.js",
+      "_utils.js",
+      "_index3.js",
+      "_internal.js",
+      "_routing.js",
+      "_shared.js"
+    ]
+  },
+  "src/lib/assets/nanobot.svg": {
+    "file": "_app/immutable/assets/nanobot.Bn3X0Wtr.svg",
+    "src": "src/lib/assets/nanobot.svg"
+  },
+  "src/routes/+layout.svelte": {
+    "file": "entries/pages/_layout.svelte.js",
+    "name": "entries/pages/_layout.svelte",
+    "src": "src/routes/+layout.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index.js",
+      "_chat.svelte.js",
+      "_exports.js",
+      "_utils.js",
+      "_state.svelte.js",
+      "_workspaces.svelte.js",
+      "_client.js",
+      "_mcpclient.js",
+      "_paths.js",
+      "_routing.js"
+    ],
+    "css": [
+      "_app/immutable/assets/_layout.t5HqxhbQ.css"
+    ],
+    "assets": [
+      "_app/immutable/assets/nanobot.Bn3X0Wtr.svg"
+    ]
+  },
+  "src/routes/+layout.ts": {
+    "file": "entries/pages/_layout.ts.js",
+    "name": "entries/pages/_layout.ts",
+    "src": "src/routes/+layout.ts",
+    "isEntry": true
+  },
+  "src/routes/+page.svelte": {
+    "file": "entries/pages/_page.svelte.js",
+    "name": "entries/pages/_page.svelte",
+    "src": "src/routes/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index.js",
+      "_chat.svelte.js",
+      "_Thread.js",
+      "_exports.js",
+      "_utils.js",
+      "_state.svelte.js",
+      "_client.js"
+    ]
+  },
+  "src/routes/+page.ts": {
+    "file": "entries/pages/_page.ts.js",
+    "name": "entries/pages/_page.ts",
+    "src": "src/routes/+page.ts",
+    "isEntry": true
+  },
+  "src/routes/c/[id]/+page.svelte": {
+    "file": "entries/pages/c/_id_/_page.svelte.js",
+    "name": "entries/pages/c/_id_/_page.svelte",
+    "src": "src/routes/c/[id]/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index.js",
+      "_chat.svelte.js",
+      "_index2.js",
+      "_Thread.js",
+      "_mcpclient.js"
+    ]
+  },
+  "src/routes/w/[workspaceId]/t/[taskId]/+page.svelte": {
+    "file": "entries/pages/w/_workspaceId_/t/_taskId_/_page.svelte.js",
+    "name": "entries/pages/w/_workspaceId_/t/_taskId_/_page.svelte",
+    "src": "src/routes/w/[workspaceId]/t/[taskId]/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index.js",
+      "_exports.js",
+      "_utils.js",
+      "_state.svelte.js",
+      "_workspaces.svelte.js"
+    ]
+  }
+}
