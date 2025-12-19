@@ -7,7 +7,9 @@
 .vscode
 bin/*
 nanobot
-node_modules/
 releases/*
 examples/customer/tools/travel2.sqlite
 *.db
+
+.svelte-kit/
+node_modules/

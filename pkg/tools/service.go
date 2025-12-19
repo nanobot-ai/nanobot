@@ -571,23 +571,6 @@ func (o CallOptions) Merge(other CallOptions) (result CallOptions) {
 	return
 }
 
-func (s *Service) getTarget(ctx context.Context, config types.Config, server, tool string) (any, error) {
-	if a, ok := config.Agents[server]; ok {
-		return a, nil
-	}
-	tools, err := s.ListTools(ctx, ListToolsOptions{
-		Servers: []string{server},
-		Tools:   []string{tool},
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(tools) == 1 && len(tools[0].Tools) == 1 {
-		return tools[0].Tools[0], nil
-	}
-	return nil, fmt.Errorf("unknown target %s/%s", server, tool)
-}
-
 func (s *Service) RunHook(ctx context.Context, in, out any, target string) (hasOutput bool, _ error) {
 	server, tool, _ := strings.Cut(target, "/")
 	result, err := s.Call(ctx, server, tool, in)

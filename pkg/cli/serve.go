@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nanobot-ai/nanobot/pkg/auth"
 	"github.com/nanobot-ai/nanobot/pkg/confirm"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
@@ -19,16 +20,11 @@ import (
 )
 
 type Run struct {
+	Auth
 	ListenAddress                string            `usage:"Address to listen on" default:"localhost:8080" short:"a"`
 	DisableUI                    bool              `usage:"Disable the UI"`
 	ForceFetchToolList           bool              `usage:"Always fetch tools when listing instead of using session cache"`
 	HealthzPath                  string            `usage:"Path to serve healthz on"`
-	TrustedIssuer                string            `usage:"Trusted issuer for JWT tokens"`
-	JWKS                         string            `usage:"Base64 encoded JWKS blob for validating JWT tokens"`
-	TrustedAudiences             []string          `usage:"Trusted audiences for JWT tokens"`
-	TokenExchangeEndpoint        string            `usage:"Endpoint for token exchange"`
-	TokenExchangeClientID        string            `usage:"Client ID for token exchange"`
-	TokenExchangeClientSecret    string            `usage:"Client secret for token exchange"`
 	AuditLogSendURL              string            `usage:"URL to send audit logs to"`
 	AuditLogToken                string            `usage:"Token to send audit logs with"`
 	AuditLogMetadata             map[string]string `usage:"Metadata to send with audit logs"`
@@ -37,6 +33,8 @@ type Run struct {
 	Roots                        []string          `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
 	n                            *Nanobot
 }
+
+type Auth auth.Auth
 
 func NewRun(n *Nanobot) *Run {
 	return &Run{
@@ -106,9 +104,9 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		Roots:                     roots,
 		MaxConcurrency:            r.n.MaxConcurrency,
 		CallbackHandler:           callbackHandler,
-		TokenExchangeEndpoint:     r.TokenExchangeEndpoint,
-		TokenExchangeClientID:     r.TokenExchangeClientID,
-		TokenExchangeClientSecret: r.TokenExchangeClientSecret,
+		TokenExchangeEndpoint:     r.Auth.OAuthTokenURL,
+		TokenExchangeClientID:     r.Auth.OAuthClientID,
+		TokenExchangeClientSecret: r.Auth.OAuthClientSecret,
 	}
 
 	cfgPath := "nanobot.default"
@@ -152,9 +150,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 	}
 
 	return r.n.runMCP(cmd.Context(), cfgFactory, runtime, callbackHandler, auditLogCollector, mcpOpts{
-		TrustedIssuer:      r.TrustedIssuer,
-		JWKS:               r.JWKS,
-		TrustedAudiences:   r.TrustedAudiences,
+		Auth:               auth.Auth(r.Auth),
 		ListenAddress:      r.ListenAddress,
 		HealthzPath:        r.HealthzPath,
 		ForceFetchToolList: r.ForceFetchToolList,
