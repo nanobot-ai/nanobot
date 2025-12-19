@@ -6,7 +6,7 @@
 		/** Key function to get unique ID from each item */
 		getKey?: (item: T) => string | number;
 		/** Snippet for rendering the block handle buttons */
-		blockHandle?: Snippet<[{ startDrag: (e: MouseEvent) => void }]>;
+		blockHandle?: Snippet<[{ startDrag: (e: MouseEvent) => void; currentItem: T | null }]>;
 		/** Snippet for rendering each item */
 		children: Snippet<[{ item: T; index: number; isDragging: boolean }]>;
 		/** Called when items are reordered */
@@ -31,6 +31,7 @@
 	}: Props<any> = $props();
 
 	let currentFocusedElement = $state<HTMLElement | null>(null);
+	let currentItem = $state<(typeof items)[number] | null>(null);
 	let handleElement = $state<HTMLElement | null>(null);
 	let handleYPosition = $state(0);
 	let internalScrollContainer = $state<HTMLElement | null>(null);
@@ -277,7 +278,10 @@
 	<div
 		class="drag-drop-items-container"
 		bind:this={itemsContainer}
-		onmouseleave={() => (currentFocusedElement = null)}
+		onmouseleave={() => {
+			currentFocusedElement = null;
+			currentItem = null;
+		}}
 		role="presentation"
 	>
 		<div
@@ -287,7 +291,7 @@
 			style="top: {handleYPosition}px;"
 		>
 			{#if blockHandle}
-				{@render blockHandle({ startDrag })}
+				{@render blockHandle({ startDrag, currentItem })}
 			{/if}
 		</div>
 		<div class="drag-drop-list-container" bind:this={listContainer}>
@@ -302,6 +306,7 @@
 					onmouseenter={(e) => {
 						if (isDragging) return;
 						currentFocusedElement = e.currentTarget as HTMLElement;
+						currentItem = item;
 						updateHandlePosition();
 					}}
 					role="presentation"
