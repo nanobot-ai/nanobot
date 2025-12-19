@@ -12,8 +12,11 @@
 	import { Menu, X, SidebarOpen, SidebarClose, Sun, Moon, SquarePen } from '@lucide/svelte';
 	import type { Chat } from '$lib/types';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 
 	let { children } = $props();
+
+	let inverse = $derived(page.data.inverse ?? false);
 
 	let threads = $state<Chat[]>([]);
 	let isLoading = $state(true);
@@ -134,7 +137,8 @@
 	<!-- Sidebar - responsive behavior -->
 	<div
 		class="
-		bg-base-200 transition-all duration-300 ease-in-out
+		transition-all duration-300 ease-in-out
+		{inverse ? 'bg-base-100 dark:bg-base-200' : 'bg-base-200'}
 		{isSidebarCollapsed ? 'hidden lg:block lg:w-0' : 'hidden lg:block lg:w-80'}
 		{isMobileSidebarOpen ? 'fixed inset-y-0 left-0 z-40 block! w-80' : 'lg:relative'}
 	"
@@ -189,6 +193,7 @@
 							onDelete={handleDeleteThread}
 							{isLoading}
 							onThreadClick={closeMobileSidebar}
+							{inverse}
 						/>
 					</div>
 				</div>
@@ -264,7 +269,11 @@
 	{/if}
 
 	<!-- Main content area -->
-	<div class="h-dvh flex grow transition-all transition-discrete {isSidebarCollapsed ? 'md:max-w-full' : 'md:max-w-[calc(100%-320px)]'}">
+	<div class="
+		h-dvh flex grow transition-all transition-discrete 
+		{isSidebarCollapsed ? 'md:max-w-full' : 'md:max-w-[calc(100%-320px)]'}
+		{inverse ? 'bg-base-200 dark:bg-base-100' : 'bg-base-100'}
+	">
 		{@render children?.()}
 	</div>
 </div>

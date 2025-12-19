@@ -97,8 +97,8 @@
     :global(.milkdown) {
         --crepe-color-background: var(--color-base-100);
         --crepe-color-on-background: var(--color-base-content);
-        --crepe-color-surface: var(--color-base-300);
-        --crepe-color-surface-low: var(--color-base-300);
+        --crepe-color-surface: var(--color-base-200);
+        --crepe-color-surface-low: var(--color-base-100);
         --crepe-color-on-surface: var(--color-base-content);
         --crepe-color-on-surface-variant: color-mix(in oklch, var(--color-base-content) 50%, transparent);
         --crepe-color-outline: color-mix(in oklch, var(--color-base-content) 50%, transparent);
@@ -109,7 +109,7 @@
         --crepe-color-on-inverse: var(--color-neutral-content);
         --crepe-color-inline-code: var(--color-error);
         --crepe-color-error: var(--color-error);
-        --crepe-color-hover: var(--color-base-200);
+        --crepe-color-hover: var(--color-base-300);
         --crepe-color-selected: var(--color-base-300);
         --crepe-color-inline-area: var(--color-base-300);
     }
@@ -124,5 +124,9 @@
     :global(.milkdown .ProseMirror.block-editor-enabled) {
         padding-left: 5.5rem;
         padding-right: 5.5rem;
+    }
+
+    :global(.milkdown .milkdown-code-block) {
+        border-radius: var(--radius-box);
     }
 </style>

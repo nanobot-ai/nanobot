@@ -10,9 +10,10 @@
 		onDelete: (threadId: string) => void;
 		isLoading?: boolean;
 		onThreadClick?: () => void;
+		inverse?: boolean;
 	}
 
-	let { threads, onRename, onDelete, isLoading = false, onThreadClick }: Props = $props();
+	let { threads, onRename, onDelete, isLoading = false, onThreadClick, inverse }: Props = $props();
 
 	let editingThreadId = $state<string | null>(null);
 	let editTitle = $state('');
@@ -92,7 +93,7 @@
 			{/each}
 		{:else}
 			{#each threads as thread (thread.id)}
-				<div class="group flex items-center border-b border-base-200 hover:bg-base-100">
+				<div class="group flex items-center border-b {inverse ? 'border-base-100 hover:bg-base-200' : 'border-base-200 hover:bg-base-100'}">
 					<!-- Thread title area (clickable) -->
 					<button
 						class="flex-1 truncate p-3 text-left transition-colors focus:outline-none"
