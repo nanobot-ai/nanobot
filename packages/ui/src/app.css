@@ -81,6 +81,8 @@
 	--logo-url: /assets/nanobot_dark.svg;
 }
 
+@custom-variant dark (&:where([data-theme=nanobotdark], [data-theme=nanobotdark] *));
+
 /* Enhanced code block styling */
 /*.prose pre {*/
 /*	@apply !overflow-x-auto !rounded-lg !bg-gray-900 !p-4;*/
