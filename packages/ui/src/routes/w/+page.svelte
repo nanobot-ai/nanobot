@@ -152,7 +152,10 @@ Send the drafted email.
 </svelte:head>
 
 <div class="flex w-full h-dvh">
-    <div class="flex flex-col p-4 pt-0 overflow-y-auto max-h-dvh {layout.isSidebarCollapsed ? 'mt-10 transition-all duration-200 ease-in-out' : ''}" 
+    <div class="
+        flex flex-col p-4 pt-0 overflow-y-auto max-h-dvh transition-all duration-200 ease-in-out 
+        {layout.isSidebarCollapsed ? 'mt-10' : ''}
+    " 
         bind:this={scrollContainer}
         onscroll={() => {
             showAlternateHeader = (scrollContainer?.scrollTop ?? 0) > 100;
@@ -181,17 +184,42 @@ Send the drafted email.
                 {/if}
             </div>
         </div>
-        <DragDropList bind:items={workflow.tasks} scrollContainerEl={scrollContainer}>
-            {#snippet blockHandle({ startDrag })}
+        <DragDropList bind:items={workflow.tasks} scrollContainerEl={scrollContainer}
+            class={showCurrentRun ? '' : 'md:pr-22'}
+        >
+            {#snippet blockHandle({ startDrag, currentItem })}
                 <div class="flex items-center gap-2">
                     <button class="btn btn-ghost btn-square btn-sm" popoverTarget="add-to-workflow" style="anchor-name: --add-to-workflow-anchor;">
                         <Plus class="text-base-content/50" />
                     </button>
                     
-                    <ul class="dropdown menu w-48 rounded-box bg-base-200 dark:bg-base-300 shadow-sm"
+                    <ul class="dropdown menu w-72 rounded-box bg-base-100 dark:bg-base-300 shadow-sm"
                         popover="auto" id="add-to-workflow" style="position-anchor: --add-to-workflow-anchor;">
-                        <li><button class="">Add task</button></li>
-                        <li><button class="">Add tool</button></li>
+                        <li>
+                            <button class="justify-between"
+                                onclick={(e) => {
+                                    console.log({currentItem});
+                                    const currentIndex = workflow.tasks.findIndex((task) => task.id === currentItem?.id);
+                                    const newTask = {
+                                        id: crypto.randomUUID(),
+                                        name: '',
+                                        description: '',
+                                        content: ''
+                                    };
+                                    if (e.metaKey) {
+                                        workflow.tasks.splice(currentIndex, 0, newTask);
+                                    } else {
+                                        workflow.tasks.splice(currentIndex + 1, 0, newTask);
+                                    }
+                                }}
+                            >
+                                <span>Add new task</span>
+                                <span class="text-[11px] text-base-content/50">
+                                    click / <kbd class="kbd ">⌘</kbd> + click
+                                </span>
+                            </button>
+                        </li>
+                        <li><button>Add a tool</button></li>
                     </ul>
 
                     <button class="btn btn-ghost btn-square cursor-grab btn-sm" onmousedown={startDrag}><GripVertical class="text-base-content/50" /></button>
@@ -257,7 +285,7 @@ Send the drafted email.
         <EllipsisVertical class="text-base-content/50" />
     </button>
 
-    <ul class="dropdown flex flex-col gap-1 dropdown-end dropdown-bottom menu w-64 rounded-box bg-base-200 dark:bg-base-300 shadow-sm"
+    <ul class="dropdown flex flex-col gap-1 dropdown-end dropdown-bottom menu w-64 rounded-box bg-base-100 dark:bg-base-300 shadow-sm"
         popover="auto" id={`task-${id}-action`} style={`position-anchor: --task-${id}-action-anchor;`}>
         <li>
             <label for={`task-${id}-description`} class="flex gap-2 justify-between items-center">

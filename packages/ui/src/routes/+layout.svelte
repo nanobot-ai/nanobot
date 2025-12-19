@@ -271,7 +271,7 @@
 	<!-- Main content area -->
 	<div class="
 		h-dvh flex grow transition-all transition-discrete 
-		{isSidebarCollapsed ? 'md:max-w-full' : 'md:max-w-[calc(100%-320px)]'}
+		{isSidebarCollapsed ? 'md:max-w-full w-full' : 'md:max-w-[calc(100%-320px)]'}
 		{inverse ? 'bg-base-200 dark:bg-base-100' : 'bg-base-100'}
 	">
 		{@render children?.()}
