@@ -19,7 +19,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Clone and build agentfs
 WORKDIR /build
-RUN git clone https://github.com/tursodatabase/agentfs && cd agentfs && git pull -r origin main
+RUN git clone --branch overlay https://github.com/tursodatabase/agentfs && cd agentfs
 WORKDIR /build/agentfs/cli
 RUN cargo build --release
 

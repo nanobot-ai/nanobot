@@ -110,7 +110,7 @@ When working on the UI, Nanobot automatically forwards requests to the developme
 
 ### Frontend Architecture
 
-**Tech Stack:** Svelte 5 (runes-based reactivity), SvelteKit with static adapter, TypeScript, TailwindCSS 4, DaisyUI
+**Tech Stack:** Svelte 5 (runes-based reactivity), SvelteKit with static adapter, TypeScript, TailwindCSS 4, DaisyUI, Lucide Icons (@lucide/svelte)
 
 **Key Files:**
 
@@ -118,6 +118,12 @@ When working on the UI, Nanobot automatically forwards requests to the developme
 - `src/lib/types.ts` - TypeScript type definitions for chat, agents, messages, tools
 - `src/lib/components/` - Reusable Svelte components
 - `hooks.ts` (root) - TypeScript definitions for agent hooks (synced with Go types in `pkg/types/hooks.go`)
+
+**UI Components:**
+
+- Use Lucide icons (`@lucide/svelte`) for all icons in the UI
+- DaisyUI components for consistent styling
+- Svelte 5 runes for reactive state management
 
 **UI Communication:**
 
@@ -215,3 +221,4 @@ When implementing MCP features, refer to:
 - Go: Follow standard Go conventions, use `gofmt`
 - TypeScript/Svelte: Uses Prettier and ESLint (configs in `ui/`)
 - Use Svelte 5 runes (`$state`, `$derived`, `$effect`) rather than legacy store patterns
+- Icons: Always use Lucide icons from `@lucide/svelte` (e.g., `import { IconName } from '@lucide/svelte'`)

@@ -1,9 +1,4 @@
 import { Server } from "@nanobot-ai/nanomcp";
-import {
-	listResource,
-	listResourceTemplates,
-	readResource,
-} from "./src/lib/resources.ts";
 import DeleteFile from "./src/tools/fs-deletefile.ts";
 import ListDir from "./src/tools/fs-listdir.ts";
 import ReadTextFile from "./src/tools/fs-readtextfile.ts";
@@ -36,11 +31,6 @@ const server = new Server(
 			terminalWait: TerminalWait,
 			sessionCreate: SessionCreate,
 			sessionDelete: SessionDelete,
-		},
-		resources: {
-			list: listResource,
-			read: readResource,
-			templates: listResourceTemplates,
 		},
 	},
 );

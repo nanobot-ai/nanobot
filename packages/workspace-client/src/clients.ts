@@ -21,7 +21,7 @@ export function getWorkspaceClient(
 
 	if (!client) {
 		const serverUrl =
-			url || process.env.WORKSPACE_URL || "http://localhost:9011/mcp";
+			url || process.env.WORKSPACE_URL || "http://localhost:5173/mcp";
 		client = new WorkspaceClient({
 			url: serverUrl,
 			sessionId: workspaceId,

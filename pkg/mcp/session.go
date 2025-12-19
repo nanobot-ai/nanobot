@@ -465,7 +465,7 @@ func (s *Session) marshalResponse(m Message, out any) error {
 		return nil
 	}
 	if m.Error != nil {
-		return fmt.Errorf("error from server: %s", m.Error.Message)
+		return fmt.Errorf("error from server: %w", m.Error)
 	}
 	if m.Result == nil {
 		return ErrNoResult

@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/tools"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
@@ -20,12 +21,14 @@ type Server struct {
 	tools        mcp.ServerTools
 	toolsService *tools.Service
 	store        *Store
+	sessionStore *session.Store
 }
 
-func NewServer(store *Store, toolsService *tools.Service) *Server {
+func NewServer(store *Store, toolsService *tools.Service, sessionStore *session.Store) *Server {
 	s := &Server{
 		store:        store,
 		toolsService: toolsService,
+		sessionStore: sessionStore,
 	}
 
 	s.tools = mcp.NewServerTools(
@@ -100,6 +103,35 @@ func (s *Server) workspaceDelete(ctx context.Context, uri string) (*mcp.Resource
 	return &mcp.Resource{
 		URI:  uri,
 		Name: path,
+	}, nil
+}
+
+func (s *Server) sessionDelete(ctx context.Context, uri string) (*mcp.Resource, error) {
+	if s.sessionStore == nil {
+		return nil, fmt.Errorf("session store not available")
+	}
+
+	_, accountID := types.GetSessionAndAccountID(ctx)
+
+	sessionID := strings.TrimPrefix(uri, "session://")
+
+	// Verify the session exists and belongs to this account
+	sess, err := s.sessionStore.GetByIDByAccountID(ctx, sessionID, accountID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("session not found or access denied")
+	} else if err != nil {
+		return nil, err
+	}
+
+	// Delete the session
+	err = s.sessionStore.Delete(ctx, sess.SessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &mcp.Resource{
+		URI:  uri,
+		Name: sess.Description,
 	}, nil
 }
 
@@ -182,6 +214,10 @@ func (s *Server) createResource(ctx context.Context, params CreateArtifactParams
 func (s *Server) deleteResource(ctx context.Context, params DeleteResourceParams) (*mcp.Resource, error) {
 	if strings.HasPrefix(params.URI, "workspace://") {
 		return s.workspaceDelete(ctx, params.URI)
+	}
+
+	if strings.HasPrefix(params.URI, "session://") {
+		return s.sessionDelete(ctx, params.URI)
 	}
 
 	_, accountID := types.GetSessionAndAccountID(ctx)

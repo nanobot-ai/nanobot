@@ -2,6 +2,7 @@ import http from "node:http";
 import process from "node:process";
 import {
 	createRouter,
+	Route,
 	type RouteMap,
 	type Router,
 	route,
@@ -23,7 +24,7 @@ export class Server {
 		this.config = config;
 
 		const routes = route({
-			mcp: "/*",
+			mcp: "/mcp",
 		});
 		this.router = createRouter({
 			middleware: [

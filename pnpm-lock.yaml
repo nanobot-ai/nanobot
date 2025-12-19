@@ -116,6 +116,12 @@ importers:
       '@nanobot-ai/workspace-mcp':
         specifier: workspace:*
         version: link:../workspace-mcp
+      '@nanobot-ai/workspace-resources':
+        specifier: workspace:*
+        version: link:../workspace-resources
+      '@remix-run/fetch-router':
+        specifier: ^0.13.0
+        version: 0.13.0(@remix-run/headers@0.18.0)(@remix-run/route-pattern@0.15.3)(@remix-run/session@0.2.1)
     devDependencies:
       tsup:
         specifier: ^8.5.1
@@ -276,6 +282,15 @@ importers:
       node-pty:
         specifier: ^1.0.0
         version: 1.0.0
+
+  packages/workspace-resources:
+    dependencies:
+      '@nanobot-ai/nanomcp':
+        specifier: workspace:*
+        version: link:../nanomcp
+      '@nanobot-ai/workspace-client':
+        specifier: workspace:*
+        version: link:../workspace-client
 
 packages:
 

@@ -33,6 +33,7 @@
 	}
 
 	let {
+		// Do not use _chat variable anywhere except these assignments
 		messages,
 		prompts,
 		resources,
@@ -44,7 +45,7 @@
 		elicitations,
 		onElicitationResult,
 		agent,
-		isLoading = false
+		isLoading,
 	}: Props = $props();
 
 	let messagesContainer: HTMLElement;

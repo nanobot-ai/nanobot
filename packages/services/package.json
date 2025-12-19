@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"exports": {
-		".": "./src/services.ts"
+		".": "./server.ts"
 	},
 	"keywords": [
 		"mcp",
@@ -16,7 +16,7 @@
 	"license": "MIT",
 	"scripts": {
 		"build": "tsup",
-		"dev": "tsx --watch ./src/services.ts",
+		"dev": "tsx --watch server.ts",
 		"test": "tsx --test",
 		"lint": "biome lint .",
 		"lint:fix": "biome lint --write .",
@@ -33,7 +33,9 @@
 		"@nanobot-ai/coder": "workspace:*",
 		"@nanobot-ai/nanomcp": "workspace:*",
 		"@nanobot-ai/tasks": "workspace:*",
-		"@nanobot-ai/workspace-mcp": "workspace:*"
+		"@nanobot-ai/workspace-mcp": "workspace:*",
+		"@nanobot-ai/workspace-resources": "workspace:*",
+		"@remix-run/fetch-router": "^0.13.0"
 	},
 	"devDependencies": {
 		"tsup": "^8.5.1"

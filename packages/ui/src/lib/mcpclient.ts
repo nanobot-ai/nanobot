@@ -45,12 +45,20 @@ export class SimpleClient {
 		path?: string;
 		baseUrl?: string;
 		fetcher?: typeof fetch;
+		workspaceId?: string;
+		workspaceShared?: boolean;
 		sessionId?: string;
 	}) {
 		const baseUrl = opts?.baseUrl || '';
 		const path = opts?.path || UIPath;
 		this.#url = `${baseUrl}${path}`;
 		this.#fetcher = opts?.fetcher || fetch;
+		if (opts?.workspaceId) {
+			this.#url += `${this.#url.includes('?') ? '&' : '?'}workspace=${opts.workspaceId}`;
+			if (opts.workspaceShared) {
+				this.#url += `&shared=true`;
+			}
+		}
 
 		// If sessionId provided in options, use it and mark as external
 		if (opts?.sessionId) {
@@ -176,7 +184,7 @@ export class SimpleClient {
 				// Parse response to check for errors
 				const initData = (await initResp.json()) as JSONRPCResponse;
 				if (initData.error) {
-					throw new Error(`Initialize error: ${initData.error.message}`);
+					throw new Error(`Initialize error: ${initData.error}`);
 				}
 
 				// Store session ID and initialize result
@@ -256,9 +264,9 @@ export class SimpleClient {
 		try {
 			// check for a protocol error
 			const data = (await resp.json()) as JSONRPCResponse;
-			if (data.error?.message) {
-				logError(data.error.message);
-				throw new Error(data.error.message);
+			if (data.error) {
+				logError(data.error);
+				throw Error(`${data.error.message}: ${JSON.stringify(data.error)}`);
 			}
 		} catch (e) {
 			// If it's already an Error, rethrow it
@@ -327,8 +335,8 @@ export class SimpleClient {
 
 		const data = (await resp.json()) as JSONRPCResponse;
 		if (data.error) {
-			logError(data.error.message);
-			throw new Error(data.error.message);
+			logError(data.error);
+			throw new Error(`${data.error.message}: ${JSON.stringify(data.error)}`);
 		}
 
 		return data.result;
@@ -337,7 +345,7 @@ export class SimpleClient {
 	async callMCPTool<T>(
 		name: string,
 		opts?: {
-			payload?: Record<string, unknown>;
+			payload?: unknown;
 			progressToken?: string;
 			async?: boolean;
 			abort?: AbortController;
@@ -367,16 +375,22 @@ export class SimpleClient {
 	}
 
 	async listResources<T extends Resources = Resources>(opts?: {
-		prefix?: string;
+		prefix?: string | string[];
 		abort?: AbortController;
 	}): Promise<T> {
+		const prefixes = opts?.prefix
+			? Array.isArray(opts.prefix)
+				? opts.prefix
+				: [opts.prefix]
+			: undefined;
+
 		const result = (await this.exchange(
 			'resources/list',
 			{
-				...(opts?.prefix && {
+				...(prefixes && {
 					_meta: {
 						'ai.nanobot': {
-							prefix: opts.prefix
+							prefix: prefixes.length === 1 ? prefixes[0] : prefixes
 						}
 					}
 				})
@@ -384,16 +398,24 @@ export class SimpleClient {
 			{ abort: opts?.abort }
 		)) as T;
 
-		if (opts?.prefix) {
+		if (prefixes) {
 			return {
 				...result,
-				resources: result.resources.filter(
-					({ name }) => opts?.prefix && name.startsWith(opts.prefix)
+				resources: result.resources.filter(({ uri }) =>
+					prefixes.some((prefix) => uri.startsWith(prefix))
 				)
 			};
 		}
 
 		return result;
+	}
+
+	async readResource(
+		uri: string,
+		opts?: { abort?: AbortController }
+	): Promise<{ contents: ResourceContents[] }> {
+		const result = await this.exchange('resources/read', { uri }, { abort: opts?.abort });
+		return result as { contents: ResourceContents[] };
 	}
 
 	/**
@@ -461,11 +483,9 @@ export class SimpleClient {
 	async #fetchResourceDetails(uri: string): Promise<ResourceContents | null> {
 		try {
 			// Use resources/read to get the resource details
-			const result = (await this.exchange('resources/read', { uri })) as {
-				resources?: ResourceContents[];
-			};
-			if (result.resources?.length) {
-				return result.resources[0];
+			const result = await this.readResource(uri);
+			if (result.contents?.length) {
+				return result.contents[0] as ResourceContents;
 			}
 		} catch (e) {
 			logError(

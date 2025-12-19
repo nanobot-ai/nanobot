@@ -117,7 +117,7 @@ func (s *Store) GetTokenConfig(ctx context.Context, url string) (*oauth2.Config,
 	)
 	session := mcp.SessionFromContext(ctx)
 	if !session.Get(types.AccountIDSessionKey, &accountID) {
-		return nil, nil, fmt.Errorf("account ID not found in session")
+		return nil, nil, nil
 	}
 	err := s.db.WithContext(ctx).Where("account_id = ? and url = ?", accountID, url).First(&token).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {

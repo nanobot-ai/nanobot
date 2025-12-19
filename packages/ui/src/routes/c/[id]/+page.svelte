@@ -6,6 +6,7 @@
 	import { onDestroy } from 'svelte';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
 	import Workspace from '$lib/components/Workspace.svelte';
+	import ThreadFromChat from "$lib/components/ThreadFromChat.svelte";
 
 	// The existing chat might have been set by / so don't recreate it because that will
 	// loose the event stream.
@@ -35,19 +36,5 @@
 
 <div class="grid grid-cols-1 md:flex md:flex-row">
 	<Workspace messages={chat.messages} onSendMessage={chat.sendMessage} />
-
-	<Thread
-		messages={chat.messages}
-		isLoading={chat.isLoading}
-		onFileUpload={chat.uploadFile}
-		onSendMessage={chat.sendMessage}
-		cancelUpload={chat.cancelUpload}
-		prompts={chat.prompts}
-		resources={chat.resources}
-		elicitations={chat.elicitations}
-		agent={chat.agent}
-		uploadingFiles={chat.uploadingFiles}
-		uploadedFiles={chat.uploadedFiles}
-		onElicitationResult={chat.replyToElicitation}
-	/>
+	<ThreadFromChat {chat}/>
 </div>

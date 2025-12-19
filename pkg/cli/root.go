@@ -316,7 +316,7 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 
 	s := &http.Server{
 		Addr:    address,
-		Handler: handler,
+		Handler: api.Cors(handler),
 	}
 
 	context.AfterFunc(ctx, func() {

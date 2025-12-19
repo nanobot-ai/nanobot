@@ -1,11 +1,11 @@
 <script lang="ts">
 	import '$lib/../app.css';
-	import Thread from '$lib/components/Thread.svelte';
 	import { ChatService } from '$lib/chat.svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
+	import ThreadFromChat from "$lib/components/ThreadFromChat.svelte";
 
 	const chat = new ChatService();
 	let doClose = true;
@@ -39,17 +39,4 @@
 	{/if}
 </svelte:head>
 
-<Thread
-	messages={chat.messages}
-	isLoading={chat.isLoading}
-	onSendMessage={chat.sendMessage}
-	onFileUpload={chat.uploadFile}
-	cancelUpload={chat.cancelUpload}
-	prompts={chat.prompts}
-	resources={chat.resources}
-	elicitations={chat.elicitations}
-	agent={chat.agent}
-	uploadingFiles={chat.uploadingFiles}
-	uploadedFiles={chat.uploadedFiles}
-	onElicitationResult={chat.replyToElicitation}
-/>
+<ThreadFromChat {chat} />

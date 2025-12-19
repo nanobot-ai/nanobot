@@ -68,44 +68,41 @@ export async function amendConfig(
 	if (config.agent) {
 		await amendAgent(client, config.agent);
 	}
+
 	await addMcpServers(client, config);
 
-	if (!config.mcpServers) {
-		config.mcpServers = {};
-	}
-
-	config.mcpServers.task = {
-		url: "http://localhost:9014/mcp",
+	config.mcpServers = {
+		...(config.mcpServers || {}),
+		task: {
+			url: "http://localhost:5173/mcp/tasks",
+			headers: {
+				"X-Nanobot-Workspace-Id": workspaceId,
+			},
+		},
+		coder: {
+			url: "http://localhost:5173/mcp/coder",
+			headers: {
+				"X-Nanobot-Workspace-Id": workspaceId,
+			},
+		},
+		workspaceResources: {
+			url: "http://localhost:5173/mcp/workspace-resources",
+			headers: {
+				"X-Nanobot-Workspace-Id": workspaceId,
+			},
+		},
 	};
-	config.mcpServers.coder = {
-		url: "http://localhost:9013/mcp",
-	};
 
-	if (config.mcpServers && config.agent) {
-		for (const mcpServerName in config.mcpServers) {
-			if (!config.agent.mcpServers) {
-				config.agent.mcpServers = [];
-			}
-			if (!config.agent.mcpServers.includes(mcpServerName)) {
-				config.agent.mcpServers.push(mcpServerName);
-			}
-		}
-
-		if (!config.agent.resources) {
-			config.agent.resources = [];
-		}
-
-		config.agent.resources.push("nanobot.workspace.provider");
-	}
-
-	if (config.mcpServers) {
-		for (const mcpServerName in config.mcpServers) {
-			const mcpServer = config.mcpServers[mcpServerName];
-			if (!mcpServer.headers) {
-				mcpServer.headers = {};
-			}
-			mcpServer.headers["X-Nanobot-Workspace-Id"] = `${workspaceId}`;
-		}
+	if (config.agent) {
+		config.agent.resources = [
+			...(config.agent.resources ?? []),
+			"workspaceResources",
+		];
+		config.agent.mcpServers = [
+			...(config.agent.mcpServers ?? []),
+			"task",
+			"coder",
+		];
 	}
 
 	return config;

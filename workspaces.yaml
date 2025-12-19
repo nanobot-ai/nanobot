@@ -1,0 +1,13 @@
+publish:
+  mcpServers: nanobot.workspace
+  entrypoint: main
+
+agents:
+  main:
+    hooks:
+          config: nanobot.workspace.provider/config
+
+mcpServers:
+  nanobot.workspace: {}
+  nanobot.workspace.provider:
+    url: http://localhost:5173/mcp

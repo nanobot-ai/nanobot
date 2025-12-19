@@ -26,14 +26,15 @@ func Handler(sessionManager *session.Manager, callBackAddress string) http.Handl
 
 	routes(s, mux)
 
-	return cors(mux)
+	return mux
 }
 
-func cors(h http.Handler) http.Handler {
+func Cors(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", r.Header.Get("Access-Control-Request-Headers"))
+		w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)

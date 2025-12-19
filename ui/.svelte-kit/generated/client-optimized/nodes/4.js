@@ -1,1 +1,0 @@
-export { default as component } from "../../../../src/routes/w/[workspaceId]/t/[taskId]/+page.svelte";

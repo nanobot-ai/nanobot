@@ -72,12 +72,19 @@ export class McpRequestHandler {
 			server.server.setRequestHandler(
 				ListResourcesRequestSchema,
 				async (request, ctx): Promise<ListResourcesResult> => {
-					if (!cfg.list) {
-						return { resources: [] };
+					try {
+						if (!cfg.list) {
+							return { resources: [] };
+						}
+						return cfg.list(this.#toContext(baseCtx, server, ctx), {
+							cursor: request.params?.cursor,
+						});
+					} catch (e: unknown) {
+						console.log(
+							`Uncaught exception listing resources ${e instanceof Error ? e.message : String(e)}`,
+						);
+						throw e;
 					}
-					return cfg.list(this.#toContext(baseCtx, server, ctx), {
-						cursor: request.params?.cursor,
-					});
 				},
 			);
 		}
@@ -86,16 +93,23 @@ export class McpRequestHandler {
 			server.server.setRequestHandler(
 				ReadResourceRequestSchema,
 				async (request, ctx): Promise<ReadResourceResult> => {
-					const content = await cfg.read?.(
-						this.#toContext(baseCtx, server, ctx),
-						request.params.uri,
-					);
-					if (!content) {
-						return { contents: [] };
+					try {
+						const content = await cfg.read?.(
+							this.#toContext(baseCtx, server, ctx),
+							request.params.uri,
+						);
+						if (!content) {
+							return { contents: [] };
+						}
+						return {
+							contents: [content],
+						};
+					} catch (e: unknown) {
+						console.log(
+							`Uncaught exception reading resource ${e instanceof Error ? e.message : String(e)}`,
+						);
+						throw e;
 					}
-					return {
-						contents: [content],
-					};
 				},
 			);
 		}
@@ -153,7 +167,14 @@ export class McpRequestHandler {
 				},
 				// biome-ignore lint/suspicious/noExplicitAny: Bridging AnyTool (type-erased) to MCP SDK callback, both use any
 				(args: any, ctx) => {
-					return tool.handler(args, this.#toContext(baseCtx, server, ctx));
+					try {
+						return tool.handler(args, this.#toContext(baseCtx, server, ctx));
+					} catch (e: unknown) {
+						console.log(
+							`Uncaught exception ${e instanceof Error ? e.message : String(e)}`,
+						);
+						throw e;
+					}
 				},
 			);
 		}

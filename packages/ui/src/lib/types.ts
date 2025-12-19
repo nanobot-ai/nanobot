@@ -1,3 +1,5 @@
+import type { ChatService } from '$lib/chat.svelte';
+
 export interface Agent {
 	name?: string;
 	description?: string;
@@ -325,6 +327,10 @@ export interface UploadingFile {
 
 // Workspace types
 export const WorkspaceMimeType = 'application/vnd.nanobot.workspace+json';
+export const SessionMimeType = 'application/vnd.nanobot.session+json';
+
+// Forward declaration for WorkspaceClient
+export type { SimpleClient } from './mcpclient';
 
 export interface Workspace extends Icons {
 	id: string;
@@ -334,69 +340,40 @@ export interface Workspace extends Icons {
 	color?: string;
 }
 
-export type WorkspaceItemType = 'task' | 'agent' | 'conversation';
-
-export interface WorkspaceItem {
+export interface Session {
 	id: string;
-	workspaceId: string;
-	type: WorkspaceItemType;
 	title: string;
-	created: string;
-	status?: 'active' | 'completed' | 'archived';
-	metadata?: Record<string, unknown>;
 }
 
-// Task flowchart types
-export interface TaskNodeInput {
+export interface SessionDetails {
 	id: string;
-	name: string;
-	description: string;
-	required: boolean;
-}
-
-export interface TaskNode {
-	id: string;
-	type: 'start' | 'process' | 'decision' | 'end';
-	label: string;
-	content: string; // Markdown content
-	position: { x: number; y: number };
-	completed?: boolean;
-	tools?: string[]; // Tool IDs assigned to this node
-	agents?: string[]; // Agent IDs assigned to this node
-	tasks?: string[]; // Task IDs assigned to this node
-	inputs?: TaskNodeInput[]; // Input fields for start nodes
-}
-
-export interface TaskEdge {
-	id: string;
-	source: string;
-	target: string;
-	label?: string; // For decision branches (Yes/No)
-}
-
-export interface TaskFlowchart {
-	taskId: string;
-	nodes: TaskNode[];
-	edges: TaskEdge[];
+	title?: string;
+	createdAt: string;
+	updatedAt?: string;
+	workspaceId?: string;
+	sessionWorkspaceId?: string;
 }
 
 export interface WorkspaceFile {
-	id: string;
-	workspaceId: string;
-	path: string; // Full path like "src/components/Button.tsx"
-	created: string;
-	modified?: string;
-	size?: number;
-	mimeType?: string;
+	name: string;
 }
 
-// Tree node for rendering file tree
-export interface FileTreeNode {
-	name: string;
-	path: string;
-	isDirectory: boolean;
-	children?: FileTreeNode[];
-	file?: WorkspaceFile;
+export interface WorkspaceClient {
+	// Properties
+	readonly id: string;
+	readonly workspace: Workspace;
+	readonly files: WorkspaceFile[];
+	readonly sessions: Session[];
+	readonly loading: boolean;
+
+	readFile(path: string): Promise<Blob>;
+	writeFile(path: string, data: Blob | string): Promise<void>;
+	createFile(path: string, data: Blob | string): Promise<void>;
+	deleteFile(path: string): Promise<void>;
+	deleteSession(sessionId: string): Promise<void>;
+	getSessionDetails(sessionId: string): Promise<SessionDetails>;
+	getSession(sessionId: string): Promise<ChatService>;
+	newSession(opts?: { editor?: boolean }): Promise<ChatService>;
 }
 
 export interface InitializationResult {
