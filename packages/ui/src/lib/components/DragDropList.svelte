@@ -103,7 +103,7 @@
 		ghost.style.pointerEvents = 'none';
 		ghost.style.zIndex = '1000';
 		ghost.style.opacity = '0.7';
-		ghost.style.transform = 'scale(1.02)';
+		ghost.style.transform = 'scale(0.98)';
 		document.body.appendChild(ghost);
 		dragGhost = ghost;
 
