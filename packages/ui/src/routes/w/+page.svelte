@@ -158,7 +158,7 @@ Send the drafted email.
             showAlternateHeader = (scrollContainer?.scrollTop ?? 0) > 100;
         }}
     >
-        <div class="sticky top-0 left-0 w-full bg-base-100 z-10 py-4">
+        <div class="sticky top-0 left-0 w-full bg-base-200 dark:bg-base-100 z-10 py-4">
             <div in:fade class="flex flex-col grow">
                 <div class="flex w-full items-center gap-4">
                     {#if showAlternateHeader}
@@ -198,7 +198,7 @@ Send the drafted email.
                 </div>
             {/snippet}
             {#snippet children({ item: task })}
-                <div class="flex flex-col gap-2 bg-base-200 rounded-box p-4 pb-8 workflow-task relative">
+                <div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 pb-8 workflow-task relative">
                     <div class="absolute top-3 right-3 z-2">
                         {@render menu(task.id)}
                     </div>
@@ -218,7 +218,7 @@ Send the drafted email.
         {#if !showCurrentRun}
             <div in:fade={{ duration: 200 }} class="sticky bottom-0 right-0 self-end flex flex-col gap-4 z-10">
                 {#if showMessageInput}
-                    <div class="bg-base-200 border border-base-300 rounded-selector w-sm md:w-2xl"
+                    <div class="bg-base-100 dark:bg-base-200 border border-base-300 rounded-selector w-sm md:w-2xl"
                         transition:fly={{ x: 100, duration: 200 }}
                     >
                         <MessageInput />
@@ -233,7 +233,7 @@ Send the drafted email.
     </div>
 
     {#if showCurrentRun}
-        <div transition:fly={{ x: 100, duration: 200 }} class="md:min-w-[520px] bg-base-200 h-dvh">
+        <div transition:fly={{ x: 100, duration: 200 }} class="md:min-w-[520px] bg-base-100 h-dvh">
             <div class="w-full h-full flex flex-col max-h-dvh overflow-y-auto">
                 <div class="w-full flex justify-between items-center pr-4 bg-base-100">
                     <h4 class="text-lg font-semibold border-l-4 border-primary p-4 pr-0">{workflow.name} | Run {'{id}'}</h4>
@@ -297,7 +297,15 @@ Send the drafted email.
 {/snippet}
 
 <style>
-    .workflow-task :global(.milkdown) {
-        background: var(--color-base-200);
+    :root[data-theme=nanobotlight] {
+        .workflow-task :global(.milkdown) {
+            background: var(--color-base-100);
+        }
+    }
+
+    :root[data-theme=nanobotdark] {
+        .workflow-task :global(.milkdown) {
+            background: var(--color-base-200);
+        }
     }
 </style>
