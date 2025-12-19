@@ -169,9 +169,15 @@ importers:
       '@milkdown/crepe':
         specifier: ^7.17.3
         version: 7.17.3(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.4)(typescript@5.9.3)
+      '@milkdown/ctx':
+        specifier: ^7.17.3
+        version: 7.17.3
       '@milkdown/kit':
         specifier: ^7.17.3
         version: 7.17.3(@codemirror/language@6.11.3)(@codemirror/state@6.5.2)(@codemirror/view@6.39.4)(typescript@5.9.3)
+      '@milkdown/prose':
+        specifier: ^7.17.3
+        version: 7.17.3
       daisyui:
         specifier: ^5.1.10
         version: 5.5.14

@@ -125,3 +125,25 @@ body {
 *[popover]:popover-open {
 	display: block;
 }
+
+/* Variable pill styles */
+.variable-pill-completed {
+	position: relative;
+	cursor: default;
+}
+
+.variable-pill-completed::after {
+	content: '×';
+	position: absolute;
+	right: 0.25rem;
+	top: 50%;
+	transform: translateY(-50%);
+	font-size: 0.875rem;
+	line-height: 1;
+	opacity: 0.6;
+	cursor: pointer;
+}
+
+.variable-pill-completed:hover::after {
+	opacity: 1;
+}
