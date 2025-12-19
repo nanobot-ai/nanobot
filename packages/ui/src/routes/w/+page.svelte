@@ -7,6 +7,7 @@
 	import { EllipsisVertical, GripVertical, MessageCircleMore, Play, Plus, ReceiptText, Sparkles, ToolCase, Trash2, X } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
+	import { createVariablePillPlugin } from './variablePillPlugin';
 
     let scrollContainer = $state<HTMLElement | null>(null);
 
@@ -20,6 +21,14 @@
     let showAlternateHeader = $state(false);
     
     const layout = getLayoutContext();
+    const variablePillPlugin = createVariablePillPlugin({
+		onVariableAddition: (variable: string) => {
+            console.log('variable added', variable);
+        },
+		onVariableDeletion: (variable: string) => {
+            console.log('variable deleted', variable);
+        },
+	});
 
     let workflow = $state({
 		name: 'Onboarding Workflow',
@@ -146,7 +155,9 @@ Send the drafted email.
                     {#if showAlternateHeader}
                         <p in:fade class="flex grow text-xl font-semibold">{workflow.name}</p>
                     {:else}
-                        <input name="title" class="input input-ghost input-xl w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Workflow title" />
+                        <input name="title" class="input input-ghost input-xl w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Workflow title" 
+                            bind:value={workflow.name}
+                        />
                     {/if}
                     <button class="btn btn-primary w-48" onclick={() => {
                         showCurrentRun = true;
@@ -155,7 +166,9 @@ Send the drafted email.
                     </button>
                 </div>
                 {#if !showAlternateHeader}
-                    <input out:slide={{ axis: 'y' }} name="description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Workflow description" />
+                    <input out:slide={{ axis: 'y' }} name="description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Workflow description"
+                        bind:value={workflow.description}
+                    />
                 {/if}
             </div>
         </div>
@@ -184,13 +197,13 @@ Send the drafted email.
                         <input name="task-name" class="input input-ghost input-lg w-full font-semibold placeholder:text-base-content/30" type="text" placeholder="Task name" bind:value={task.name} />
                         <input name="task-description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Task description" bind:value={task.description} />
                     </div>
-                    <MarkdownEditor value={task.content} blockEditEnabled={taskBlockEditing.get(task.id) ?? false} />
+                    <MarkdownEditor value={task.content} blockEditEnabled={taskBlockEditing.get(task.id) ?? false} plugins={[variablePillPlugin]} />
                 </div>
             {/snippet}
         </DragDropList>
         
         {#if !showCurrentRun}
-            <div in:fade={{ duration: 200 }} class="sticky bottom-0 right-0 self-end flex flex-col gap-4">
+            <div in:fade={{ duration: 200 }} class="sticky bottom-0 right-0 self-end flex flex-col gap-4 z-10">
                 {#if showMessageInput}
                     <div class="bg-base-200 border border-base-300 rounded-selector w-sm md:w-2xl"
                         transition:fly={{ x: 100, duration: 200 }}
