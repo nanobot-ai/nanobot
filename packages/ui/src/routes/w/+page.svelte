@@ -3,16 +3,23 @@
 	import DragDropList from '$lib/components/DragDropList.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import MessageInput from '$lib/components/MessageInput.svelte';
-	import { EllipsisVertical, GripVertical, MessageCircleMore, Plus, ReceiptText, Sparkles, ToolCase, Trash2 } from '@lucide/svelte';
+	import { getLayoutContext } from '$lib/context/layout.svelte';
+	import { EllipsisVertical, GripVertical, MessageCircleMore, Play, Plus, ReceiptText, Sparkles, ToolCase, Trash2, X } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { fly } from 'svelte/transition';
+	import { fade, fly, slide } from 'svelte/transition';
 
     let scrollContainer = $state<HTMLElement | null>(null);
 
     let taskBlockEditing = new SvelteMap<number, boolean>();
     let taskDescription = new SvelteMap<number, boolean>();
 
+    let currentRun = $state<unknown | null>(null);
+    let showCurrentRun = $state(false);
+
     let showMessageInput = $state(false);
+    let showAlternateHeader = $state(false);
+    
+    const layout = getLayoutContext();
 
     let workflow = $state({
 		name: 'Onboarding Workflow',
@@ -126,54 +133,94 @@ Send the drafted email.
     <title>Nanobot | Workflows</title>
 </svelte:head>
 
-<div class="flex flex-col p-4 overflow-y-auto max-h-dvh" bind:this={scrollContainer}>
-    <div class="flex flex-col w-full">
-        <input name="title" class="input input-ghost input-xl w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Workflow title" />
-        <input name="description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Workflow description" />
-    </div>
-    <DragDropList bind:items={workflow.tasks} scrollContainerEl={scrollContainer}>
-        {#snippet blockHandle({ startDrag })}
-            <div class="flex items-center gap-2">
-                <button class="btn btn-ghost btn-square btn-sm" popoverTarget="add-to-workflow" style="anchor-name: --add-to-workflow-anchor;">
-                    <Plus class="text-base-content/50" />
+<div class="flex w-full h-dvh">
+    <div class="flex flex-col p-4 pt-0 overflow-y-auto max-h-dvh {layout.isSidebarCollapsed ? 'mt-10 transition-all duration-200 ease-in-out' : ''}" 
+        bind:this={scrollContainer}
+        onscroll={() => {
+            showAlternateHeader = (scrollContainer?.scrollTop ?? 0) > 100;
+        }}
+    >
+        <div class="sticky top-0 left-0 w-full bg-base-100 z-10 py-4">
+            <div in:fade class="flex flex-col grow">
+                <div class="flex w-full items-center gap-4">
+                    {#if showAlternateHeader}
+                        <p in:fade class="flex grow text-xl font-semibold">{workflow.name}</p>
+                    {:else}
+                        <input name="title" class="input input-ghost input-xl w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Workflow title" />
+                    {/if}
+                    <button class="btn btn-primary w-48" onclick={() => showCurrentRun = true}>
+                        Run <Play class="size-4" /> 
+                    </button>
+                </div>
+                {#if !showAlternateHeader}
+                    <input out:slide={{ axis: 'y' }} name="description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Workflow description" />
+                {/if}
+            </div>
+        </div>
+        <DragDropList bind:items={workflow.tasks} scrollContainerEl={scrollContainer}>
+            {#snippet blockHandle({ startDrag })}
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-ghost btn-square btn-sm" popoverTarget="add-to-workflow" style="anchor-name: --add-to-workflow-anchor;">
+                        <Plus class="text-base-content/50" />
+                    </button>
+                    
+                    <ul class="dropdown menu w-48 rounded-box bg-base-200 dark:bg-base-300 shadow-sm"
+                        popover="auto" id="add-to-workflow" style="position-anchor: --add-to-workflow-anchor;">
+                        <li><button class="">Add task</button></li>
+                        <li><button class="">Add tool</button></li>
+                    </ul>
+
+                    <button class="btn btn-ghost btn-square cursor-grab btn-sm" onmousedown={startDrag}><GripVertical class="text-base-content/50" /></button>
+                </div>
+            {/snippet}
+            {#snippet children({ item: task })}
+                <div class="flex flex-col gap-4 bg-base-200 rounded-box p-4 pb-8 workflow-task relative">
+                    <div class="absolute top-3 right-3 z-2">
+                        {@render menu(task.id)}
+                    </div>
+                    <div class="flex flex-col gap-2 pr-12">
+                        <input name="task-name" class="input input-ghost input-lg w-full font-semibold placeholder:text-base-content/30" type="text" placeholder="Task name" bind:value={task.name} />
+                        <input name="task-description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Task description" bind:value={task.description} />
+                    </div>
+                    <MarkdownEditor value={task.content} blockEditEnabled={taskBlockEditing.get(task.id) ?? false} />
+                </div>
+            {/snippet}
+        </DragDropList>
+        
+        {#if !showCurrentRun}
+            <div in:fade={{ duration: 200 }} class="sticky bottom-0 right-0 self-end flex flex-col gap-4">
+                {#if showMessageInput}
+                    <div class="bg-base-200 border border-base-300 rounded-selector w-sm md:w-2xl"
+                        transition:fly={{ x: 100, duration: 200 }}
+                    >
+                        <MessageInput />
+                    </div>  
+                {/if}
+
+                <button class="float-right btn btn-lg btn-circle btn-primary self-end" onclick={() => showMessageInput = !showMessageInput}>
+                    <MessageCircleMore class="size-6" />
                 </button>
-                
-                <ul class="dropdown menu w-48 rounded-box bg-base-200 dark:bg-base-300 shadow-sm"
-                    popover="auto" id="add-to-workflow" style="position-anchor: --add-to-workflow-anchor;">
-                    <li><button class="">Add task</button></li>
-                    <li><button class="">Add tool</button></li>
-                </ul>
-
-                <button class="btn btn-ghost btn-square cursor-grab btn-sm" onmousedown={startDrag}><GripVertical class="text-base-content/50" /></button>
             </div>
-        {/snippet}
-        {#snippet children({ item: task })}
-            <div class="flex flex-col gap-4 bg-base-200 rounded-box p-4 pb-8 workflow-task relative">
-                <div class="absolute top-3 right-3 z-2">
-                    {@render menu(task.id)}
-                </div>
-                <div class="flex flex-col gap-2 pr-12">
-                    <input name="task-name" class="input input-ghost input-lg w-full font-semibold placeholder:text-base-content/30" type="text" placeholder="Task name" bind:value={task.name} />
-                    <input name="task-description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Task description" bind:value={task.description} />
-                </div>
-                <MarkdownEditor value={task.content} blockEditEnabled={taskBlockEditing.get(task.id) ?? false} />
-            </div>
-        {/snippet}
-    </DragDropList>
-    
-    <div class="sticky bottom-0 right-0 self-end flex flex-col gap-4">
-        {#if showMessageInput}
-            <div class="bg-base-200 border border-base-300 rounded-box w-sm md:w-2xl"
-                transition:fly={{ x: 100, duration: 200 }}
-            >
-                <MessageInput />
-            </div>  
         {/if}
-
-        <button class="float-right btn btn-lg btn-circle btn-primary self-end" onclick={() => showMessageInput = !showMessageInput}>
-            <MessageCircleMore class="size-6" />
-        </button>
     </div>
+
+    {#if showCurrentRun}
+        <div transition:fly={{ x: 100, duration: 200 }} class="min-w-[320px] max-w-[60%] bg-base-200 h-dvh">
+            <div class="w-full h-full flex flex-col max-h-dvh overflow-y-auto">
+                <div class="w-full flex justify-end p-4">
+                    <button class="btn btn-ghost btn-square btn-sm" onclick={() => showCurrentRun = false}>
+                        <X class="size-4" />
+                    </button>
+                </div>
+                <div class="flex grow p-4 pt-0">
+                    Thread content here
+                </div>
+                <div class="sticky bottom-0 left-0 w-full">
+                    <MessageInput />
+                </div>
+            </div>
+        </div>
+    {/if}
 </div>
 
 {#snippet menu(id: number)}

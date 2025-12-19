@@ -6,6 +6,7 @@
 	import { defaultChatApi } from '$lib/chat.svelte';
 	import { NotificationStore } from '$lib/stores/notifications.svelte';
 	import { setNotificationContext } from '$lib/context/notifications.svelte';
+	import { setLayoutContext } from '$lib/context/layout.svelte';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { Menu, X, SidebarOpen, SidebarClose, Sun, Moon, SquarePen } from '@lucide/svelte';
@@ -26,6 +27,16 @@
 
 	// Set notification context for global access
 	setNotificationContext(notifications);
+
+	// Set layout context for children to access sidebar state
+	setLayoutContext({
+		get isSidebarCollapsed() {
+			return isSidebarCollapsed;
+		},
+		get isMobileSidebarOpen() {
+			return isMobileSidebarOpen;
+		}
+	});
 
 	onMount(async () => {
 		// Load sidebar state from localStorage (desktop only)
@@ -253,7 +264,7 @@
 	{/if}
 
 	<!-- Main content area -->
-	<div class="h-dvh flex-1 w-full md:max-w-[calc(100%-320px)]">
+	<div class="h-dvh flex grow transition-all transition-discrete {isSidebarCollapsed ? 'md:max-w-full' : 'md:max-w-[calc(100%-320px)]'}">
 		{@render children?.()}
 	</div>
 </div>
