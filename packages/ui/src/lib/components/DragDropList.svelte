@@ -297,7 +297,7 @@
 					data-active={dropTargetIndex !== null && dropTargetIndex === index}
 				></div>
 				<div
-					class="drag-drop-item w-full px-22 {itemClass}"
+					class="drag-drop-item w-full pl-22 {itemClass}"
 					class:dragging={isDragging && draggedIndex === index}
 					onmouseenter={(e) => {
 						if (isDragging) return;
