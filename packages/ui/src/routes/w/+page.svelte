@@ -211,6 +211,8 @@ Send the drafted email.
                                     } else {
                                         workflow.tasks.splice(currentIndex + 1, 0, newTask);
                                     }
+
+                                    (document.activeElement as HTMLElement)?.blur();
                                 }}
                             >
                                 <span>Add new task</span>
