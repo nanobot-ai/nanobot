@@ -3,20 +3,18 @@
 
 	interface Props<T> {
 		items: T[];
-		/** Key function to get unique ID from each item */
 		getKey?: (item: T) => string | number;
-		/** Snippet for rendering the block handle buttons */
 		blockHandle?: Snippet<[{ startDrag: (e: MouseEvent) => void; currentItem: T | null }]>;
-		/** Snippet for rendering each item */
 		children: Snippet<[{ item: T; index: number; isDragging: boolean }]>;
-		/** Called when items are reordered */
 		onreorder?: (items: T[]) => void;
-		/** External scroll container element (if scrolling happens in a parent) */
 		scrollContainerEl?: HTMLElement | null;
-		/** Class for the outer container */
 		class?: string;
-		/** Class for each item wrapper */
-		itemClass?: string;
+		classes?: {
+			dropIndicator?: string;
+			item?: string;
+		};
+		as?: 'div' | 'ul'
+		childrenAs?: 'li' | 'div'
 	}
 
 	let {
@@ -27,7 +25,9 @@
 		onreorder,
 		scrollContainerEl = null,
 		class: className = '',
-		itemClass = ''
+		classes = {},
+		as = 'div',
+		childrenAs = 'div',
 	}: Props<any> = $props();
 
 	let currentFocusedElement = $state<HTMLElement | null>(null);
@@ -258,7 +258,6 @@
 		isDragging = false;
 		draggedIndex = null;
 		dropTargetIndex = null;
-		currentFocusedElement = null;
 
 		// Remove event listeners
 		document.removeEventListener('mousemove', handleDragMove);
@@ -284,41 +283,44 @@
 		}}
 		role="presentation"
 	>
-		<div
-			class="block-handle"
-			data-show={currentFocusedElement !== null && !isDragging}
-			bind:this={handleElement}
-			style="top: {handleYPosition}px;"
-		>
-			{#if blockHandle}
-				{@render blockHandle({ startDrag, currentItem })}
-			{/if}
-		</div>
-		<div class="drag-drop-list-container" bind:this={listContainer}>
+		{#if blockHandle}
+			<div
+				class="block-handle"
+				data-show={currentFocusedElement !== null && !isDragging}
+				bind:this={handleElement}
+				style="top: {handleYPosition}px;"
+			>
+				{#if blockHandle}
+					{@render blockHandle({ startDrag, currentItem })}
+				{/if}
+			</div>
+		{/if}
+		<svelte:element this={as} class="drag-drop-list-container" bind:this={listContainer}>
 			{#each items as item, index (getKey(item))}
 				<div
-					class="drop-indicator"
+					class="drop-indicator {classes.dropIndicator}"
 					data-active={dropTargetIndex !== null && dropTargetIndex === index}
 				></div>
-				<div
-					class="drag-drop-item w-full pl-22 {itemClass}"
+				<svelte:element this={childrenAs}
+					class="drag-drop-item w-full {classes.item}"
 					class:dragging={isDragging && draggedIndex === index}
-					onmouseenter={(e) => {
+					onmouseenter={(e: MouseEvent) => {
 						if (isDragging) return;
 						currentFocusedElement = e.currentTarget as HTMLElement;
 						currentItem = item;
 						updateHandlePosition();
 					}}
 					role="presentation"
+					onmousedown={!blockHandle ? startDrag : undefined}
 				>
 					{@render children({ item, index, isDragging: isDragging && draggedIndex === index })}
-				</div>
+				</svelte:element>
 			{/each}
 			<div
 				class="drop-indicator"
 				data-active={dropTargetIndex !== null && dropTargetIndex === items.length}
 			></div>
-		</div>
+		</svelte:element>
 	</div>
 </div>
 
@@ -357,9 +359,7 @@
 	.drop-indicator {
 		background: transparent;
 		border-radius: 0.25rem;
-		height: 0.5rem;
 		position: relative;
-		margin: 0.5rem 5.5rem;
 	}
 
 	.drop-indicator[data-active='true'] {

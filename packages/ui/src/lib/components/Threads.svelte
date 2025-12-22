@@ -69,12 +69,12 @@
 
 <div class="flex h-full flex-col">
 	<!-- Header -->
-	<div class="flex-shrink-0 p-2">
+	<div class="shrink-0 p-2">
 		<h2 class="font-semibold text-base-content/60">Conversations</h2>
 	</div>
 
 	<!-- Thread list -->
-	<div class="flex-1 overflow-y-auto">
+	<div class="flex-1">
 		{#if isLoading}
 			<!-- Skeleton UI when loading -->
 			{#each Array(5).fill(null) as _, index (index)}
@@ -93,7 +93,7 @@
 			{/each}
 		{:else}
 			{#each threads as thread (thread.id)}
-				<div class="group flex items-center border-b {inverse ? 'border-base-100 hover:bg-base-200' : 'border-base-200 hover:bg-base-100'}">
+				<div class="group flex px-1 items-center border-b {inverse ? 'border-base-100 hover:bg-base-200' : 'border-base-200 hover:bg-base-100'}">
 					<!-- Thread title area (clickable) -->
 					<button
 						class="flex-1 truncate p-3 text-left transition-colors focus:outline-none"
@@ -149,7 +149,7 @@
 								<MoreVertical class="h-4 w-4" />
 							</div>
 							<ul
-								class="dropdown-content menu z-[1] w-32 rounded-box border bg-base-100 p-2 shadow"
+								class="dropdown-content menu z-1 w-32 rounded-box bg-base-100 dark:bg-base-300 shadow-sm p-2 border border-base-300"
 							>
 								<li>
 									<button onclick={() => startRename(thread.id, thread.title)} class="text-sm">
