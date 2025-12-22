@@ -186,6 +186,10 @@ Send the drafted email.
         </div>
         <DragDropList bind:items={workflow.tasks} scrollContainerEl={scrollContainer}
             class={showCurrentRun ? '' : 'md:pr-22'}
+            classes={{
+                dropIndicator: 'mx-22 my-2 h-2',
+                item: 'pl-22'
+            }}
         >
             {#snippet blockHandle({ startDrag, currentItem })}
                 <div class="flex items-center gap-2">
@@ -287,7 +291,7 @@ Send the drafted email.
         <EllipsisVertical class="text-base-content/50" />
     </button>
 
-    <ul class="dropdown flex flex-col gap-1 dropdown-end dropdown-bottom menu w-64 rounded-box bg-base-100 dark:bg-base-300 shadow-sm"
+    <ul class="dropdown flex flex-col gap-1 dropdown-end dropdown-bottom menu w-64 rounded-box bg-base-100 dark:bg-base-300 shadow-sm border border-base-300"
         popover="auto" id={`task-${id}-action`} style={`position-anchor: --task-${id}-action-anchor;`}>
         <li>
             <label for={`task-${id}-description`} class="flex gap-2 justify-between items-center">
