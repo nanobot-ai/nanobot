@@ -13,6 +13,7 @@
 	import type { Chat } from '$lib/types';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import Workspaces from '$lib/components/Workspaces.svelte';
 
 	let { children } = $props();
 
@@ -27,6 +28,8 @@
 	const root = resolve('/');
 	const newThread = resolve('/');
 	const notifications = new NotificationStore();
+
+	let scrollContainer = $state<HTMLElement | null>(null);
 
 	// Set notification context for global access
 	setNotificationContext(notifications);
@@ -183,10 +186,10 @@
 			</div>
 
 			<!-- Threads and Workspaces list -->
-			<div class="flex-1 overflow-hidden {!isSidebarCollapsed ? 'min-w-80' : ''}">
-				<div class="flex h-full flex-col">
+			<div class="overflow-y-auto h-[calc(100%-3.5rem)] {!isSidebarCollapsed ? 'min-w-80' : ''}" bind:this={scrollContainer}>
+				<div class="flex flex-col">
 					<!-- Threads section (takes up ~40% of available space) -->
-					<div class='shrink-0 overflow-y-auto'>
+					<div class='shrink-0'>
 						<Threads
 							{threads}
 							onRename={handleRenameThread}
@@ -195,6 +198,10 @@
 							onThreadClick={closeMobileSidebar}
 							{inverse}
 						/>
+					</div>
+
+					<div class="shrink-0">
+						<Workspaces scrollContainerEl={scrollContainer} {inverse} />
 					</div>
 				</div>
 			</div>
