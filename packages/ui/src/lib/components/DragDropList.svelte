@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import type { Snippet } from 'svelte';
 
 	interface Props<T> {
@@ -243,6 +244,9 @@
 			const isUnchanged = dropTargetIndex === draggedIndex || dropTargetIndex === draggedIndex + 1;
 
 			if (!isUnchanged) {
+				// Save scroll position before reordering
+				const savedScrollTop = scrollContainer?.scrollTop ?? 0;
+
 				const newItems = [...items];
 				const [removed] = newItems.splice(draggedIndex, 1);
 
@@ -252,6 +256,13 @@
 
 				items = newItems;
 				onreorder?.(newItems);
+
+				// Restore scroll position after DOM update
+				tick().then(() => {
+					if (scrollContainer) {
+						scrollContainer.scrollTop = savedScrollTop;
+					}
+				});
 			}
 		}
 
@@ -318,7 +329,7 @@
 				</svelte:element>
 			{/each}
 			<div
-				class="drop-indicator"
+				class="drop-indicator {classes.dropIndicator}"
 				data-active={dropTargetIndex !== null && dropTargetIndex === items.length}
 			></div>
 		</svelte:element>

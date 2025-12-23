@@ -4,6 +4,7 @@
     import '@milkdown/crepe/theme/frame.css';
 	import type { MilkdownPlugin } from '@milkdown/kit/ctx';
     import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
+	import { untrack } from 'svelte';
 
     interface Props {
         value: string;
@@ -14,6 +15,7 @@
 
     let { value, blockEditEnabled, plugins = [], onChange }: Props = $props();
 
+    let prevValue = $state(untrack(() => value));
     let editorNode: HTMLElement | null = null;
     let isCrepeReady = false;
     let crepe: Crepe | null = null;
@@ -35,8 +37,11 @@
                 ctx.get(listenerCtx).markdownUpdated((_, markdown, prevMarkdown) => {
                     if (isFirstUpdate) {
                         isFirstUpdate = false;
-                        return;
+                        if (prevValue !== '') {
+                            return;
+                        }
                     }
+                    
                     if (markdown === prevMarkdown) return;
                     onChange?.(markdown);
                 });

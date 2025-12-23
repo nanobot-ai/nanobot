@@ -4,7 +4,7 @@
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import MessageInput from '$lib/components/MessageInput.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
-	import { EllipsisVertical, GripVertical, MessageCircleMore, Play, Plus, ReceiptText, Sparkles, ToolCase, Trash2, X } from '@lucide/svelte';
+	import { EllipsisVertical, GripVertical, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, Sparkles, ToolCase, Trash2, X } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { createVariablePillPlugin } from '$lib/plugins/variablePillPlugin';
@@ -18,16 +18,21 @@
 
     let { data } = $props();
     let workspaceId = $derived(data.workspaceId);
-    let searchParams = $derived(page.url.searchParams);
-    let workspace = $state<WorkspaceClient | null>(null);
+    let urlTaskId = $derived(page.url.searchParams.get('id') ?? '');
 
+    let workspace = $state<WorkspaceClient | null>(null);
     let taskId = $state('');
     let task = $state<Task | null>(null);
     let loading = $state(false);
     let initialLoadComplete = $state(false);
+
+    let showTaskTitle = $state(false);
+    let showTaskDescription = $state(false);
+
+    let lastSavedTaskJson = '';
+
     let saveTimeout: ReturnType<typeof setTimeout> | null = null;
     let saveAbortController: AbortController | null = null;
-    let lastSavedTaskJson = '';
     
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
@@ -45,6 +50,12 @@
         workspace = workspaceService.getWorkspace(workspaceId);
     })
 
+    $effect(() => {
+        if (task && task.steps[0] && task.steps[0].name !== task.name) {
+            task.name = task.steps[0].name;
+        }
+    })
+
     function debouncedSave() {
         if (saveTimeout) {
             clearTimeout(saveTimeout);
@@ -57,14 +68,15 @@
         
         const taskSnapshot = $state.snapshot(task);
         saveTimeout = setTimeout(async () => {
-            if (!taskSnapshot) {
-                console.error('task snapshot is null');
+            if (!taskSnapshot || !taskSnapshot.name) {
+                console.error('task snapshot is null or name is empty');
                 return;
             }
 
             const url = new URL(page.url);
             if (!url.searchParams.get('id')) {
-                taskId = crypto.randomUUID();
+                // use task name to make id -- all lowercase, alphanumeric only, no special characters, underscores instead of spaces
+                taskId = taskSnapshot.name.toLowerCase().replace(/ /g, '_').replace(/[^a-z0-9_]/g, '');
                 url.searchParams.set('id', taskId);
                 goto(url.toString(), { replaceState: true, keepFocus: true });
             }
@@ -72,6 +84,7 @@
             saveAbortController = new AbortController();
             const signal = saveAbortController.signal;
 
+            // const changes = getTaskChanges(taskSnapshot, JSON.parse(lastSavedTaskJson) as Task);
             const outputFiles = compileOutputFiles(taskSnapshot, taskId);
             for (const file of outputFiles) {
                 // Check if this save operation was cancelled
@@ -81,6 +94,7 @@
                 }
                 
                 const exists = workspace?.files.find((f) => f.name === file.id);
+                console.log({ exists, file, workspaceFiles: workspace?.files });
                 try {
                     if (exists) {
                         console.log('update file', { file });
@@ -96,11 +110,11 @@
                     }
                 }
             }
-        }, 500);
+        }, 1000);
     }
 
     $effect(() => {
-        if (!task) return;
+        if (!task || !task.name) return;
         
         // Serialize to track all nested changes (name, description, steps, and step properties)
         const taskJson = JSON.stringify(task);
@@ -115,6 +129,7 @@
             return;
         }
         lastSavedTaskJson = taskJson;
+        console.log('test');
         
         debouncedSave();
     });
@@ -133,6 +148,9 @@
             }
         }
 
+        showTaskTitle = task.name !== task.steps[0].name;
+        showTaskDescription = task.description.length > 0;
+
         // Mark this as the "saved" state so the effect doesn't trigger a save
         lastSavedTaskJson = JSON.stringify(task);
         loading = false;
@@ -140,15 +158,14 @@
     }
 
     $effect(() => {
-        const urlTaskId = searchParams.get('id') ?? '';
         const files = workspace?.files ?? [];
         
         if (urlTaskId && workspace && workspace.id === workspaceId && urlTaskId !== taskId && files.length > 0) {
             compileTask(urlTaskId, files);
-        } else if (!urlTaskId && !initialLoadComplete) {
-            // Set initial task without triggering save (only once)
+        } else if (!urlTaskId && (!initialLoadComplete || taskId)) {
             task = setupEmptyTask();
-            // Mark this as the "saved" state so the effect doesn't trigger a save
+            taskId = '';
+            stepDescription.clear();
             lastSavedTaskJson = JSON.stringify(task);
             initialLoadComplete = true;
         }
@@ -206,16 +223,51 @@
                     <div class="flex w-full items-center gap-4">
                         {#if showAlternateHeader}
                             <p in:fade class="flex grow text-xl font-semibold">{task.name}</p>
-                        {:else}
+                        {:else if showTaskTitle}
                             <input name="title" class="input input-ghost input-xl w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Task title" 
                                 bind:value={task.name}
                             />
+                        {:else}
+                            <div class="w-full"></div>
                         {/if}
-                        <button class="btn btn-primary w-48" onclick={handleRun}>
-                            Run <Play class="size-4" /> 
-                        </button>
+                        <div class="flex shrink-0 items-center gap-1">
+                            <button class="btn btn-primary w-48" onclick={handleRun}>
+                                Run <Play class="size-4" /> 
+                            </button>
+                            <button class="btn btn-ghost btn-square" popoverTarget="task-actions" style="anchor-name: --task-actions-anchor;">
+                                <EllipsisVertical class="text-base-content/50" />
+                            </button>
+                        
+                            <ul class="dropdown flex flex-col gap-1 dropdown-end dropdown-bottom menu w-64 rounded-box bg-base-100 dark:bg-base-300 shadow-sm border border-base-300"
+                                popover="auto" id="task-actions" style="position-anchor: --task-actions-anchor;">
+                                <li>
+                                    <label for="task-title" class="flex gap-2 justify-between items-center">
+                                        <span class="flex items-center gap-2">
+                                            <PencilLine class="size-4" />
+                                            Task title
+                                        </span>
+                                        <input type="checkbox" class="toggle toggle-sm" id="task-title" 
+                                            checked={showTaskTitle}
+                                            onchange={(e) => showTaskTitle = (e.target as HTMLInputElement)?.checked ?? false}
+                                        />
+                                    </label>
+                                </li>
+                                <li>
+                                    <label for="task-description" class="flex gap-2 justify-between items-center">
+                                        <span class="flex items-center gap-2">
+                                            <ReceiptText class="size-4" />
+                                            Task description
+                                        </span>
+                                        <input type="checkbox" class="toggle toggle-sm" id="task-description" 
+                                            checked={showTaskDescription}
+                                            onchange={(e) => showTaskDescription = (e.target as HTMLInputElement)?.checked ?? false}
+                                        />
+                                    </label>
+                                </li>
+                            </ul>
+                        </div>
                     </div>
-                    {#if !showAlternateHeader}
+                    {#if !showAlternateHeader && showTaskDescription}
                         <input out:slide={{ axis: 'y' }} name="description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Task description"
                             bind:value={task.description}
                         />
@@ -242,7 +294,7 @@
                                     onclick={(e) => {
                                         const currentIndex = task!.steps.findIndex((step) => step.id === currentItem?.id);
                                         const newStep = {
-                                            id: crypto.randomUUID(),
+                                            id: `step${task!.steps.length}`,
                                             name: '',
                                             description: '',
                                             content: ''
@@ -297,7 +349,7 @@
                 <button class="btn btn-primary btn-square tooltip" data-tip="Add new step"
                     onclick={() => {
                         const newStep = {
-                            id: crypto.randomUUID(),
+                            id: `step${task!.steps.length}`,
                             name: '',
                             description: '',
                             content: ''
@@ -393,6 +445,8 @@
             <button class="flex items-center gap-2"
                 onclick={() => {
                     task!.steps = task!.steps.filter((step) => step.id !== id);
+                    const filename = `.nanobot/tasks/${taskId}/${id}.md`;
+                    workspace?.deleteFile(filename);
                 }}
             >
                 <Trash2 class="size-4" /> Delete step
