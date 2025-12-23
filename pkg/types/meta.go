@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -11,6 +12,8 @@ import (
 var (
 	MetaPrefix          = "ai.nanobot.meta/"
 	ToolCallConfirmType = "toolcall/confirm"
+
+	AsyncMetaKey = "ai.nanobot.async"
 )
 
 type ToolCallConfirm struct {
@@ -112,4 +115,23 @@ func MarshalMeta(obj any) ([]byte, error) {
 		data[k] = toString
 	}
 	return json.Marshal(data)
+}
+
+func Meta(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	return map[string]any{MetaNanobot: m}
+}
+
+func IsModelTool(t mcp.Tool) bool {
+	uiAttr, _ := t.Meta["ui"].(map[string]any)
+	visibility, _ := uiAttr["visibility"].([]string)
+	return len(visibility) == 0 || slices.Contains(visibility, "model")
+}
+
+func IsUITool(t mcp.Tool) bool {
+	uiAttr, _ := t.Meta["ui"].(map[string]any)
+	visibility, _ := uiAttr["visibility"].([]string)
+	return len(visibility) == 0 || slices.Contains(visibility, "app")
 }

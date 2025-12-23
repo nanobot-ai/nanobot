@@ -295,6 +295,7 @@ type Tool struct {
 	InputSchema  json.RawMessage  `json:"inputSchema,omitzero"`
 	OutputSchema json.RawMessage  `json:"outputSchema,omitzero"`
 	Annotations  *ToolAnnotations `json:"annotations,omitempty"`
+	Meta         map[string]any   `json:"_meta,omitzero"`
 }
 
 type Icons struct {

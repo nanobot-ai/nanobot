@@ -72,6 +72,9 @@ func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, age
 		toolMapping := toolMappings[key]
 
 		tool := toolMapping.Target
+		if !types.IsModelTool(tool.Tool) {
+			continue
+		}
 		req.Tools = append(req.Tools, types.ToolUseDefinition{
 			Name:        key,
 			Parameters:  schema.ValidateAndFixToolSchema(tool.InputSchema),

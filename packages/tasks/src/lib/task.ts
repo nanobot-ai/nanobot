@@ -5,9 +5,16 @@ import { load } from "js-yaml";
 export type Task = {
 	id: string;
 	name: string;
-	description: string;
+	description?: string;
 	instructions: string;
+	inputs?: TaskInput[];
 	baseDir: string;
+};
+
+export type TaskInput = {
+	name: string;
+	description: string;
+	default?: string;
 };
 
 const emptyTask: Task = {
@@ -68,6 +75,24 @@ async function getTaskByDirectoryName(
 		instructions: parsedContent,
 		baseDir: taskDir,
 	};
+}
+
+export async function getTasksDescription(client: WorkspaceClient) {
+	const tasks = await getTasks(client);
+	const available = tasks
+		.map((s) => {
+			`Name: ${s.name}\nDescription: ${s.description}`;
+			if (s.inputs) {
+				return `${s.name}: ${s.description}\nInputs:\n${s.inputs.map((i) => ` - ${i.name}: ${i.description}`).join("\n")}`;
+			} else {
+				return `${s.name}: ${s.description}`;
+			}
+		})
+		.join("---\n");
+	if (!available) {
+		return "No tasks available";
+	}
+	return;
 }
 
 export async function getTasks(client: WorkspaceClient) {

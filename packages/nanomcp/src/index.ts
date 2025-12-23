@@ -6,3 +6,4 @@ export { toolResult } from "./lib/result.ts";
 export { Server } from "./lib/router.ts";
 export * from "./lib/types.ts";
 export { hooks };
+export { SimpleClient as Client } from "./lib/mcpclient.ts";

@@ -17,6 +17,7 @@ type RequestedSchema = ElicitRequestFormParams["requestedSchema"];
 export type Context = {
 	sessionId?: string;
 	auth?: AuthInfo;
+	threadId?: string;
 	workspaceId: string;
 	signal: AbortSignal;
 	elicit?: (message: string, schema: RequestedSchema) => Promise<ElicitResult>;
@@ -25,18 +26,6 @@ export type Context = {
 
 // Base type for heterogeneous tool collections (type-erased)
 export type AnyTool = Tool<ZodType, ZodType>;
-export type AnyTool2 = {
-	title?: string;
-	description?: string | DescriptionCallback;
-	enabled?: EnabledCallback;
-	inputSchema: ZodType;
-	outputSchema?: ZodType;
-	messages?: {
-		invoking?: string;
-		invoked?: string;
-	};
-	handler: ToolCallback<ZodType>;
-};
 
 // Strongly-typed generic tool (for tool definitions)
 export type Tool<

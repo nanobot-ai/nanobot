@@ -2,7 +2,6 @@ import http from "node:http";
 import process from "node:process";
 import {
 	createRouter,
-	Route,
 	type RouteMap,
 	type Router,
 	route,

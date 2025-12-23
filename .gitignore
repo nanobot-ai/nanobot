@@ -10,6 +10,7 @@ nanobot
 releases/*
 examples/customer/tools/travel2.sqlite
 *.db
+/workspace
 
 .svelte-kit/
 node_modules/
