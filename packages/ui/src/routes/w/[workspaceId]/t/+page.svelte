@@ -8,7 +8,7 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { createVariablePillPlugin } from '$lib/plugins/variablePillPlugin';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { WorkspaceService } from '$lib/workspace.svelte';
 	import type { WorkspaceClient, WorkspaceFile } from '$lib/types';
@@ -23,7 +23,6 @@
     let workspace = $state<WorkspaceClient | null>(null);
     let taskId = $state('');
     let task = $state<Task | null>(null);
-    let loading = $state(false);
     let initialLoadComplete = $state(false);
 
     let showTaskTitle = $state(false);
@@ -50,12 +49,6 @@
         workspace = workspaceService.getWorkspace(workspaceId);
     })
 
-    $effect(() => {
-        if (task && task.steps[0] && task.steps[0].name !== task.name) {
-            task.name = task.steps[0].name;
-        }
-    })
-
     function debouncedSave() {
         if (saveTimeout) {
             clearTimeout(saveTimeout);
@@ -68,17 +61,23 @@
         
         const taskSnapshot = $state.snapshot(task);
         saveTimeout = setTimeout(async () => {
-            if (!taskSnapshot || !taskSnapshot.name) {
-                console.error('task snapshot is null or name is empty');
+            if (!taskSnapshot) {
+                console.error('task snapshot is empty');
                 return;
             }
 
             const url = new URL(page.url);
             if (!url.searchParams.get('id')) {
+                const nameToUse = taskSnapshot.name.trim() || taskSnapshot.steps[0].name.trim();
                 // use task name to make id -- all lowercase, alphanumeric only, no special characters, underscores instead of spaces
-                taskId = taskSnapshot.name.toLowerCase().replace(/ /g, '_').replace(/[^a-z0-9_]/g, '');
-                url.searchParams.set('id', taskId);
-                goto(url.toString(), { replaceState: true, keepFocus: true });
+                taskId = nameToUse.toLowerCase().replace(/ /g, '_').replace(/[^a-z0-9_]/g, '');
+                if (taskId) {
+                    url.searchParams.set('id', taskId);
+                    goto(url.toString(), { replaceState: true, keepFocus: true });
+                } else {
+                    console.info('skipping save, initial task name or step name required');
+                    return;
+                }
             }
 
             saveAbortController = new AbortController();
@@ -89,12 +88,11 @@
             for (const file of outputFiles) {
                 // Check if this save operation was cancelled
                 if (signal.aborted) {
-                    console.log('save operation cancelled');
+                    console.info('save operation cancelled');
                     return;
                 }
                 
                 const exists = workspace?.files.find((f) => f.name === file.id);
-                console.log({ exists, file, workspaceFiles: workspace?.files });
                 try {
                     if (exists) {
                         console.log('update file', { file });
@@ -114,13 +112,13 @@
     }
 
     $effect(() => {
-        if (!task || !task.name) return;
+        if (!task) return;
         
         // Serialize to track all nested changes (name, description, steps, and step properties)
         const taskJson = JSON.stringify(task);
         
         // Skip during loading or before initial load completes
-        if (loading || !initialLoadComplete) {
+        if (!initialLoadComplete) {
             return;
         }
         
@@ -129,15 +127,15 @@
             return;
         }
         lastSavedTaskJson = taskJson;
-        console.log('test');
         
         debouncedSave();
     });
 
     async function compileTask(idToUse: string, files: WorkspaceFile[]){
         if (!workspace) return;
+        initialLoadComplete = false;
+        task = null;
 
-        loading = true;
         task = await convertToTask(workspace, files, idToUse);
         taskId = idToUse;
 
@@ -148,28 +146,33 @@
             }
         }
 
-        showTaskTitle = task.name !== task.steps[0].name;
-        showTaskDescription = task.description.length > 0;
+        showTaskTitle = (task.name || '').length > 0;
+        showTaskDescription = (task.description || '').length > 0;
 
         // Mark this as the "saved" state so the effect doesn't trigger a save
         lastSavedTaskJson = JSON.stringify(task);
-        loading = false;
         initialLoadComplete = true;
     }
 
     $effect(() => {
         const files = workspace?.files ?? [];
         
+        console.log({ urlTaskId, workspaceId, taskId })
         if (urlTaskId && workspace && workspace.id === workspaceId && urlTaskId !== taskId && files.length > 0) {
             compileTask(urlTaskId, files);
-        } else if (!urlTaskId && (!initialLoadComplete || taskId)) {
+        }
+    })
+
+
+    afterNavigate(() => {
+       if (!urlTaskId) {
             task = setupEmptyTask();
             taskId = '';
             stepDescription.clear();
             lastSavedTaskJson = JSON.stringify(task);
             initialLoadComplete = true;
-        }
-    })
+       } 
+    });
     
     let scrollContainer = $state<HTMLElement | null>(null);
 
@@ -230,7 +233,7 @@
                         {:else}
                             <div class="w-full"></div>
                         {/if}
-                        <div class="flex shrink-0 items-center gap-1">
+                        <div class="flex shrink-0 items-center gap-2">
                             <button class="btn btn-primary w-48" onclick={handleRun}>
                                 Run <Play class="size-4" /> 
                             </button>
@@ -345,7 +348,7 @@
                 {/snippet}
             </DragDropList>
 
-            <div class="flex items-center justify-center mt-4">
+            <div class="flex items-center justify-center">
                 <button class="btn btn-primary btn-square tooltip" data-tip="Add new step"
                     onclick={() => {
                         const newStep = {
