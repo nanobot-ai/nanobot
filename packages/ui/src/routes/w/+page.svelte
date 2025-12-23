@@ -7,7 +7,7 @@
 	import { EllipsisVertical, GripVertical, MessageCircleMore, Play, Plus, ReceiptText, Sparkles, ToolCase, Trash2, X } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
-	import { createVariablePillPlugin } from './variablePillPlugin';
+	import { createVariablePillPlugin } from '$lib/plugins/variablePillPlugin';
 	import { onMount } from 'svelte';
 
     let scrollContainer = $state<HTMLElement | null>(null);
