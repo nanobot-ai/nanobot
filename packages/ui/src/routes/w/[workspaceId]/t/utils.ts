@@ -21,7 +21,6 @@ async function parseFrontmatterMarkdown(fileContent: Blob): Promise<ParsedConten
     }
 
     const [, frontmatter, content] = match;
-    console.log({ frontmatter, content });
     
     // Parse simple frontmatter key-value pairs
     const metadata: Record<string, string> = {};
@@ -48,7 +47,6 @@ export async function compileFileContents(workspace: WorkspaceClient, files: Wor
     if (!taskId) { return []; }
 
     const validFiles = files.filter((file) => file.name.startsWith(`.nanobot/tasks/${taskId}/`));
-    console.log({ validFiles });
     const parsedFiles: ParsedFile[] = [];
     for (const file of validFiles) {
         const content = await workspace?.readFile(file.name);
@@ -72,8 +70,7 @@ export async function convertToTask(workspace: WorkspaceClient, files: Workspace
     if (files) {
         parsedFiles = await compileFileContents(workspace, files, taskId);
     }
-    console.log({ parsedFiles });
-
+    
     const steps: Step[] = [];
     let pointer: ParsedFile | undefined = parsedFiles.length > 1 ? parsedFiles.find((file) => {
         // find the first file
