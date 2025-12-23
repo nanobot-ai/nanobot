@@ -94,7 +94,10 @@ export class DockerDriver implements SandboxDriver {
 		};
 	}
 
-	async createSandbox(config: SandboxConfig): Promise<Record<string, unknown>> {
+	async createSandbox(
+		config: SandboxConfig,
+		opts?: { recreate?: boolean },
+	): Promise<Record<string, unknown>> {
 		const containerName = `sandbox-${config.id}`;
 
 		// Create local directory for this sandbox
@@ -105,11 +108,13 @@ export class DockerDriver implements SandboxDriver {
 			const parentDataDir = join(this.config.localDataDir, config.parentId);
 
 			if (existsSync(parentDataDir)) {
-				// Copy parent directory to new sandbox directory
-				await cp(parentDataDir, localDataDir, { recursive: true });
-				console.log(
-					`Copied parent data from ${parentDataDir} to ${localDataDir}`,
-				);
+				if (!opts?.recreate) {
+					// Copy parent directory to new sandbox directory
+					await cp(parentDataDir, localDataDir, { recursive: true });
+					console.log(
+						`Copied parent data from ${parentDataDir} to ${localDataDir}`,
+					);
+				}
 			} else {
 				// Parent directory doesn't exist, create empty one
 				await mkdir(localDataDir, { recursive: true });
@@ -204,8 +209,14 @@ export class DockerDriver implements SandboxDriver {
 			"SYS_ADMIN",
 		];
 
-		if (config.baseUri && existsSync(config.baseUri)) {
+		if (config.baseUri) {
+			if (!existsSync(config.baseUri)) {
+				throw new Error(`Base URI ${config.baseUri} does not exist`);
+			}
+
 			args.push("-v", `${config.baseUri}:/base:ro`);
+			// TODO: remove this, it's a hack to make overlay work until agentfs is fixed
+			args.push("-v", `${config.baseUri}:/workspace`);
 		}
 
 		// Add environment variables
@@ -227,7 +238,7 @@ export class DockerDriver implements SandboxDriver {
 		console.log(
 			`Starting Docker container ${this.config.image} docker ${args.join(" ")}...`,
 		);
-		await this.execDocker(args);
+		await execDocker(args);
 
 		return {
 			image: this.config.image,
@@ -242,14 +253,14 @@ export class DockerDriver implements SandboxDriver {
 
 		try {
 			// Stop the container
-			await this.execDocker(["stop", containerId]);
+			await execDocker(["stop", containerId]);
 		} catch (_error) {
 			// Container might already be stopped, continue to remove
 		}
 
 		try {
 			// Remove the container
-			await this.execDocker(["rm", containerId]);
+			await execDocker(["rm", containerId]);
 		} catch (_error) {
 			// Container might already be removed, ignore
 		}
@@ -273,36 +284,31 @@ export class DockerDriver implements SandboxDriver {
 			throw new Error(`Sandbox ${config.id} not created yet`);
 		}
 
+		if (!(await this.#containerExists(config.id))) {
+			await this.createSandbox(config, { recreate: true });
+		}
+
 		return new DockerSandbox(config.id, driverConfig, config.meta ?? {});
 	}
 
-	private async execDocker(args: string[]): Promise<string> {
-		return new Promise((resolve, reject) => {
-			const proc = spawn("docker", args);
+	/**
+	 * Check if the container exists
+	 */
+	async #containerExists(id: string): Promise<boolean> {
+		try {
+			const output = await execDocker(["inspect", `sandbox-${id}`]);
+			const inspection = JSON.parse(output);
 
-			let stdout = "";
-			let stderr = "";
+			// Check if container is running
+			if (inspection[0]?.State?.Running !== true) {
+				await execDocker(["rm", "-f", `sandbox-${id}`]);
+				return false;
+			}
 
-			proc.stdout.on("data", (data) => {
-				stdout += data.toString();
-			});
-
-			proc.stderr.on("data", (data) => {
-				stderr += data.toString();
-			});
-
-			proc.on("close", (code) => {
-				if (code !== 0) {
-					reject(new Error(`Docker command failed: ${stderr || stdout}`));
-				} else {
-					resolve(stdout);
-				}
-			});
-
-			proc.on("error", (error) => {
-				reject(error);
-			});
-		});
+			return true;
+		} catch (_error) {
+			return false;
+		}
 	}
 }
 
@@ -325,78 +331,6 @@ class DockerSandbox implements Sandbox {
 
 	resolvePath(path: string): string {
 		return this.#_resolvePath(path);
-	}
-
-	/**
-	 * Check if the container exists
-	 */
-	private async containerExists(): Promise<boolean> {
-		try {
-			await this.execDocker(["inspect", `sandbox-${this.id}`]);
-			return true;
-		} catch (_error) {
-			return false;
-		}
-	}
-
-	/**
-	 * Recreate the container if it doesn't exist
-	 */
-	private async ensureContainerExists(): Promise<void> {
-		const exists = await this.containerExists();
-		if (exists) {
-			return;
-		}
-
-		console.warn(
-			`Container sandbox-${this.id} not found, recreating sandbox ${this.id}...`,
-		);
-
-		// Recreate the container using the driver's createSandbox logic
-		// We need to reconstruct the container with the same ID and config
-
-		const containerName = `sandbox-${this.id}`;
-		const localDataDir = this.driverConfig.localDataDir;
-
-		if (!localDataDir) {
-			throw new Error(
-				`Cannot recreate container: localDataDir not available in driver config`,
-			);
-		}
-
-		// Build docker run command (similar to createSandbox)
-		const args = [
-			"run",
-			"-d", // Detached mode
-			"--name",
-			containerName,
-			"-w",
-			this.workdir,
-			// Bind mount local directory to /.data in container
-			"-v",
-			`${localDataDir}:/.data:rw`,
-			// Add FUSE device
-			"--device",
-			"/dev/fuse",
-			// Add SYS_ADMIN capability for FUSE
-			"--cap-add",
-			"SYS_ADMIN",
-		];
-
-		// Build configuration JSON to pass to entrypoint
-		const entrypointConfig = {
-			id: this.id,
-			workdir: this.workdir,
-			meta: this.meta,
-		};
-
-		// Pass JSON config as argument to entrypoint
-		args.push(this.driverConfig.image, JSON.stringify(entrypointConfig));
-
-		console.log(`Recreating Docker container ${containerName}...`);
-		await this.execDocker(args);
-
-		console.log(`Container ${containerName} recreated successfully`);
 	}
 
 	#_resolvePath(path: string): string {
@@ -639,7 +573,7 @@ class DockerSandbox implements Sandbox {
 		dockerArgs.push(containerId, ...execArgs);
 
 		// Execute in detached mode
-		await this.execDocker(dockerArgs);
+		await execDocker(dockerArgs);
 
 		return processId;
 	}
@@ -797,60 +731,7 @@ class DockerSandbox implements Sandbox {
 		}
 	}
 
-	private async execDocker(args: string[]): Promise<string> {
-		return new Promise((resolve, reject) => {
-			const proc = spawn("docker", args);
-
-			let stdout = "";
-			let stderr = "";
-
-			proc.stdout.on("data", (data) => {
-				stdout += data.toString();
-			});
-
-			proc.stderr.on("data", (data) => {
-				stderr += data.toString();
-			});
-
-			proc.on("close", (code) => {
-				if (code !== 0) {
-					reject(new Error(`Docker command failed: ${stderr || stdout}`));
-				} else {
-					resolve(stdout);
-				}
-			});
-
-			proc.on("error", (error) => {
-				reject(error);
-			});
-		});
-	}
-
 	private async execInContainer(
-		args: string[],
-		stdin?: string,
-		opts?: { cwd?: string; env?: Record<string, string> },
-	): Promise<string> {
-		try {
-			return await this.#_execInContainer(args, stdin, opts);
-		} catch (error) {
-			if (await this.containerExists()) {
-				throw error;
-			}
-			// Try to recreate the container and retry the operation once
-			console.warn(
-				`Container operation failed, checking if container exists...`,
-			);
-
-			await this.ensureContainerExists();
-
-			// Retry the operation once after recreating
-			console.log(`Retrying operation after container recreation...`);
-			return await this.#_execInContainer(args, stdin, opts);
-		}
-	}
-
-	async #_execInContainer(
 		args: string[],
 		stdin?: string,
 		opts?: { cwd?: string; env?: Record<string, string> },
@@ -910,4 +791,33 @@ class DockerSandbox implements Sandbox {
 			}
 		});
 	}
+}
+
+async function execDocker(args: string[]): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const proc = spawn("docker", args);
+
+		let stdout = "";
+		let stderr = "";
+
+		proc.stdout.on("data", (data) => {
+			stdout += data.toString();
+		});
+
+		proc.stderr.on("data", (data) => {
+			stderr += data.toString();
+		});
+
+		proc.on("close", (code) => {
+			if (code !== 0) {
+				reject(new Error(`Docker command failed: ${stderr || stdout}`));
+			} else {
+				resolve(stdout);
+			}
+		});
+
+		proc.on("error", (error) => {
+			reject(error);
+		});
+	});
 }

@@ -6,6 +6,12 @@ GO_LD_FLAGS := "-s -w $(GIT_TAG)"
 build:
 	go build -ldflags=$(GO_LD_FLAGS) -o bin/nanobot .
 
+sandbox-test:
+	cd packages/sandbox/src/lib && docker build -t sandbox-test .
+
+sandbox-test-no-cache:
+	cd packages/sandbox/src/lib && docker build --no-cache -t sandbox-test .
+
 validate:
 	@echo "Running Go validation checks..."
 	@echo "==> Running go fmt..."
@@ -34,4 +40,4 @@ validate:
 	@pnpm run ci
 	@echo "✓ All validation checks passed!"
 
-.PHONY: build validate
+.PHONY: build sandbox-test sandbox-test-no-cache validate

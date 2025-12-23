@@ -19,7 +19,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Clone and build agentfs
 WORKDIR /build
-RUN git clone --branch overlay https://github.com/tursodatabase/agentfs && cd agentfs
+RUN git clone --branch main https://github.com/tursodatabase/agentfs && cd agentfs
 WORKDIR /build/agentfs/cli
 RUN cargo build --release
 
@@ -30,6 +30,7 @@ FROM ubuntu:24.04
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
+    ripgrep \
     git \
     curl \
     wget \
@@ -42,6 +43,7 @@ RUN apt-get update && apt-get install -y \
     jq \
     xz-utils \
     build-essential \
+    python-is-python3 \
     python3 \
     python3-pip \
     python3-venv \

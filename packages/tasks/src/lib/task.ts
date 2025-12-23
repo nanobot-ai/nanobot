@@ -3,6 +3,7 @@ import type { WorkspaceClient } from "@nanobot-ai/workspace-client";
 import { load } from "js-yaml";
 
 export type Task = {
+	id: string;
 	name: string;
 	description: string;
 	instructions: string;
@@ -10,6 +11,7 @@ export type Task = {
 };
 
 const emptyTask: Task = {
+	id: "",
 	name: "",
 	description: "",
 	instructions: "",
@@ -49,7 +51,7 @@ async function getTaskByDirectoryName(
 ) {
 	const taskDir = await client.resolvePath(path.join(tasksRoot, taskName));
 	const content = await client.readTextFile(
-		path.join(tasksRoot, taskName, "start.md"),
+		path.join(tasksRoot, taskName, "TASK.md"),
 		{ ignoreNotFound: true },
 	);
 	if (!content) {
@@ -60,9 +62,9 @@ async function getTaskByDirectoryName(
 	const { frontMatter, instructions: parsedContent } =
 		parseYAMLFrontMatter(content);
 	return {
-		name: taskName,
-		description:
-			frontMatter.task_description || frontMatter.step_description || "",
+		id: taskName,
+		name: frontMatter.task_name || frontMatter.name || taskName,
+		description: frontMatter.task_description || frontMatter.description || "",
 		instructions: parsedContent,
 		baseDir: taskDir,
 	};

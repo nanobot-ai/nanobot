@@ -17,7 +17,6 @@
     List
   } from '@lucide/svelte';
   import type {SessionDetails} from "$lib/types";
-  import Thread from '$lib/components/Thread.svelte';
   import type {ChatService} from '$lib/chat.svelte';
   import ThreadFromChat from "$lib/components/ThreadFromChat.svelte";
 
@@ -325,7 +324,7 @@
     loading = true;
     error = null;
     try {
-      activeSession = await selectedWorkspace.newSession({ editor: true });
+      activeSession = await selectedWorkspace.newSession({ editor: false });
       await refreshFiles(); // Refresh to show the new session
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);

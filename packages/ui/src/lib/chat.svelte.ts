@@ -233,21 +233,51 @@ export class ChatAPI {
 		onEvent: (e: Event) => void,
 		opts?: {
 			events?: string[];
+			batchInterval?: number;
 		}
 	): () => void {
 		console.log('Subscribing to thread:', threadId);
 		const eventSource = new EventSource(`${this.baseUrl}/api/events/${threadId}`);
+
+		// Batching setup
+		const batchInterval = opts?.batchInterval ?? 200; // Default 200ms
+		let eventBuffer: Event[] = [];
+		let batchTimer: ReturnType<typeof setTimeout> | null = null;
+
+		const flushBuffer = () => {
+			if (eventBuffer.length === 0) return;
+
+			// Process all buffered events at once
+			const eventsToProcess = [...eventBuffer];
+			eventBuffer = [];
+
+			for (const event of eventsToProcess) {
+				onEvent(event);
+			}
+		};
+
+		const scheduleBatch = () => {
+			if (batchTimer === null) {
+				batchTimer = setTimeout(() => {
+					flushBuffer();
+					batchTimer = null;
+				}, batchInterval);
+			}
+		};
+
 		eventSource.onmessage = (e) => {
 			const data = JSON.parse(e.data);
-			onEvent({
+			eventBuffer.push({
 				type: 'message',
 				message: data
 			});
+			scheduleBatch();
 		};
+
 		for (const type of opts?.events ?? []) {
 			eventSource.addEventListener(type, (e) => {
 				const idInt = parseInt(e.lastEventId);
-				onEvent({
+				const event: Event = {
 					id: idInt || e.lastEventId,
 					type: type as
 						| 'history-start'
@@ -257,19 +287,49 @@ export class ChatAPI {
 						| 'elicitation/create'
 						| 'error',
 					data: JSON.parse(e.data)
-				});
+				};
+
+				// Certain events should be processed immediately (not batched)
+				if (type === 'history-start' || type === 'history-end' || type === 'chat-done') {
+					// Flush any pending events first
+					flushBuffer();
+					if (batchTimer !== null) {
+						clearTimeout(batchTimer);
+						batchTimer = null;
+					}
+					// Then process this event immediately
+					onEvent(event);
+				} else {
+					eventBuffer.push(event);
+					scheduleBatch();
+				}
 			});
 		}
+
 		eventSource.onerror = (e) => {
+			// Flush buffer before processing error
+			flushBuffer();
+			if (batchTimer !== null) {
+				clearTimeout(batchTimer);
+				batchTimer = null;
+			}
 			onEvent({ type: 'error', error: String(e) });
 			console.error('EventSource failed:', e);
 			eventSource.close();
 		};
+
 		eventSource.onopen = () => {
 			console.log('EventSource connected for thread:', threadId);
 		};
 
-		return () => eventSource.close();
+		return () => {
+			// Clean up: flush remaining events and clear timer
+			flushBuffer();
+			if (batchTimer !== null) {
+				clearTimeout(batchTimer);
+			}
+			eventSource.close();
+		};
 	}
 }
 

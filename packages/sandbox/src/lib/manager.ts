@@ -134,7 +134,18 @@ export class Manager implements SandboxManager {
 			throw new Error(`Sandbox ${id} not found`);
 		}
 
-		return await validate(sandboxConfigSchema, JSON.parse(await file.text()));
+		const cfg = await validate(
+			sandboxConfigSchema,
+			JSON.parse(await file.text()),
+		);
+		if (cfg.parentId && !cfg.baseUri) {
+			const parentConfig = await this.#getSandboxConfig(cfg.parentId);
+			if (parentConfig.baseUri) {
+				cfg.baseUri = parentConfig.baseUri;
+			}
+		}
+
+		return cfg;
 	}
 
 	async getSandbox(id: string): Promise<Sandbox | null> {

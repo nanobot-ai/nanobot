@@ -2,7 +2,7 @@
 # Entrypoint script for sandbox container
 # Takes a JSON configuration as the first argument
 
-set -e
+set -e -x
 
 CONFIG_JSON="$1"
 
@@ -30,7 +30,12 @@ DB_FILE="/.data/.agentfs/${SANDBOX_ID}.db"
 if [ ! -f "$DB_FILE" ]; then
 	echo "No database found, initializing new agentfs database..."
 	cd /.data
-	if ! agentfs init "$SANDBOX_ID" --force 2>&1; then
+	BASE_ARGS=""
+	if [ -d /base ]; then
+	  echo "Using /base as base directory for initialization"
+	  BASE_ARGS="--base /base"
+  fi
+	if ! agentfs init "$SANDBOX_ID" --force $BASE_ARGS 2>&1; then
 		echo "Error: Failed to initialize database" >&2
 		exit 1
 	fi
@@ -66,8 +71,15 @@ if [ -n "$BASE_URI" ]; then
 	fi
 fi
 
+
+if [ -d /base ]; then
+  sleep infinity
+  exit 1
+fi
+
 # Create mount point if it doesn't exist
 mkdir -p "$WORKDIR"
+
 
 # Mount agentfs to the workspace and run in foreground
 echo "Mounting agentfs at $WORKDIR..."
