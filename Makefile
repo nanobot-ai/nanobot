@@ -4,6 +4,7 @@ GIT_TAG := $(shell git describe --tags --exact-match 2>/dev/null | xargs -I {} e
 GO_LD_FLAGS := "-s -w $(GIT_TAG)"
 
 build:
+	go generate ./...
 	go build -ldflags=$(GO_LD_FLAGS) -o bin/nanobot .
 
 sandbox-test:

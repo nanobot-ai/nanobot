@@ -1,4 +1,7 @@
 version: 2
+before:
+  hooks:
+    - go generate ./...
 dist: releases
 snapshot:
   version_template: "{{ .Summary }}"
