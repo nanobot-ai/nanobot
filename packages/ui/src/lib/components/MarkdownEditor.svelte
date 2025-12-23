@@ -3,14 +3,16 @@
     import '@milkdown/crepe/theme/common/style.css';
     import '@milkdown/crepe/theme/frame.css';
 	import type { MilkdownPlugin } from '@milkdown/kit/ctx';
+    import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 
     interface Props {
         value: string;
         blockEditEnabled: boolean;
         plugins: MilkdownPlugin[];
+        onChange?: (value: string) => void;
     }
 
-    let { value, blockEditEnabled, plugins = [] }: Props = $props();
+    let { value, blockEditEnabled, plugins = [], onChange }: Props = $props();
 
     let editorNode: HTMLElement | null = null;
     let isCrepeReady = false;
@@ -26,6 +28,20 @@
                 [Crepe.Feature.BlockEdit]: enableBlockEdit
             },
         });
+
+        let isFirstUpdate = true;
+        instance.editor
+            .config((ctx) => {
+                ctx.get(listenerCtx).markdownUpdated((_, markdown, prevMarkdown) => {
+                    if (isFirstUpdate) {
+                        isFirstUpdate = false;
+                        return;
+                    }
+                    if (markdown === prevMarkdown) return;
+                    onChange?.(markdown);
+                });
+            })
+            .use(listener);
 
         // Apply any additional plugins
 		for (const plugin of plugins) {

@@ -1,5 +1,5 @@
 import type { WorkspaceClient, WorkspaceFile } from "$lib/types";
-import type { ParsedContent, ParsedFile, Task } from "./types";
+import type { ParsedContent, ParsedFile, Step, Task } from "./types";
 
 async function parseYaml(fileContent: Blob): Promise<ParsedContent> {
     const text = await fileContent.text();
@@ -43,9 +43,10 @@ async function parseYaml(fileContent: Blob): Promise<ParsedContent> {
     };
 }
 
-export async function compileFileContents(workspace: WorkspaceClient, files: WorkspaceFile[]) {
-    const validFiles = files.filter((file) => file.name.startsWith('tasks/'));
-    
+export async function compileFileContents(workspace: WorkspaceClient, files: WorkspaceFile[], taskId: string = '') {
+    if (!taskId) { return []; }
+
+    const validFiles = files.filter((file) => file.name.startsWith(`tasks/${taskId}/`));
     const parsedFiles: ParsedFile[] = [];
     for (const file of validFiles) {
         const content = await workspace?.readFile(file.name);
@@ -53,7 +54,7 @@ export async function compileFileContents(workspace: WorkspaceClient, files: Wor
             const parsedContent = await parseYaml(content);
             parsedFiles.push({
                 ...parsedContent,
-                fileName: file.name,
+                id: file.name.replace(`tasks/${taskId}/`, '').replace('.yaml', ''),
             });
         }
     }
@@ -61,7 +62,54 @@ export async function compileFileContents(workspace: WorkspaceClient, files: Wor
     return parsedFiles;
 }
 
-export function compileOutputFiles(task: Task) {
+export async function convertToTask(workspace: WorkspaceClient, files: WorkspaceFile[], taskId: string) {
+    let name = '';
+    let description = '';
+    
+    let parsedFiles: ParsedFile[] = [];
+    if (files) {
+        parsedFiles = await compileFileContents(workspace, files, taskId);
+    }
+
+    const steps: Step[] = [];
+    let pointer: ParsedFile | undefined = parsedFiles.length > 1 ? parsedFiles.find((file) => {
+        // find the first file
+        // it can have a next but is not the next of any other file
+        return !parsedFiles.some((compareFile) => compareFile.next === file.id);
+    }) : parsedFiles?.[0];
+
+    if (pointer) {
+        name = pointer.taskName;
+        description = pointer.taskDescription;
+
+        steps.push({
+            id: pointer.id,
+            name: pointer.name,
+            description: pointer.description,
+            content: pointer.content,
+        })
+    }
+
+    while (pointer) {
+        pointer = pointer.next ? parsedFiles.find((file) => file.id === pointer?.next) : undefined;
+        if (pointer) {
+            steps.push({
+                id: pointer.id,
+                name: pointer.name,
+                description: pointer.description,
+                content: pointer.content,
+            })
+        }
+    }
+
+    return {
+        name,
+        description,
+        steps
+    }
+}
+
+export function compileOutputFiles(task: Task, taskId: string) {
     const { name: taskName, description: taskDescription } = task;
     const files = task.steps.map((step, index) => {
         const metadata: Record<string, string> = {
@@ -84,7 +132,7 @@ export function compileOutputFiles(task: Task) {
         const data = new Blob([yamlContent], { type: 'text/yaml' });
 
         return {
-            id: step.id,
+            id: `tasks/${taskId}/${step.id}.yaml`,
             data,
         };
     });
@@ -97,7 +145,7 @@ export function setupEmptyTask() {
         description: '',
         steps: [
             {
-                id: `tasks/${crypto.randomUUID()}.yaml`,
+                id: crypto.randomUUID(),
                 name: '',
                 description: '',
                 content: '',

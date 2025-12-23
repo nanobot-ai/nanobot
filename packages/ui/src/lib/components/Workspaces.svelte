@@ -309,11 +309,16 @@
                             {@const workspaceInstance = workspaceData.get(workspace.id)}
                             {@const tasks = (workspaceInstance?.files ?? [])
                                 .filter((f: { name: string }) => f.name.startsWith('tasks/'))
-                                .map((f: { name: string }) => f.name.replace('tasks/', '').replace('.yaml', ''))
+                                .reduce<Record<string, boolean>>((acc, f: { name: string }) => {
+                                    // get the taskId that is /tasks/{taskId}/{filename}.yaml
+                                    const taskId = f.name.split('/')[1];
+                                    acc[taskId] = true;
+                                    return acc;
+                                }, {})
                             }
                         
                             <ul>
-                                {@render workspaceChild(workspace.id, 'Tasks', ListTodo, tasks, () => createTask(workspace.id))}
+                                {@render workspaceChild(workspace.id, 'Tasks', ListTodo, Object.keys(tasks), () => createTask(workspace.id))}
                                 {@render workspaceChild(workspace.id, 'Agents', Bot, [])}
                                 {@render workspaceChild(workspace.id, 'Conversations', MessageSquare, [])}
                             </ul>
@@ -348,7 +353,7 @@
                 {/if}
             </div>
         </summary>
-        <ul class="flex grow">
+        <ul>
             {#if items.length === 0}
                 <li class="w-full">
                     <p class="p-2 italic text-base-content/30 flex hover:bg-transparent cursor-default">No {title.toLowerCase()}. Click <Plus class="size-2.5 inline-flex" /> to get started.</p>
