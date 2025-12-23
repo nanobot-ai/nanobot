@@ -400,8 +400,19 @@
         {/if}
     </div>
 {:else}
-    <div class="flex justify-center items-center p-12 grow">
-        <span class="loading loading-spinner loading-xl"></span>
+    <div class="w-full flex flex-col gap-8">
+        <div class="flex w-full items-center justify-between pt-4 px-4">
+            <div></div>
+            <div class="flex items-center gap-2">
+                <div class="skeleton rounded-field w-48 h-10"></div>
+                <div class="skeleton rounded-field size-10"></div>
+            </div>
+        </div>
+        <div class="flex flex-col gap-4 mx-22 bg-base-100/30 dark:bg-base-200/70 rounded-box p-4">
+            <div class="skeleton h-10 w-full"></div>
+            <div class="skeleton h-10 w-full"></div>
+            <div class="skeleton h-32 w-full"></div>
+        </div>
     </div>
 {/if}
 
