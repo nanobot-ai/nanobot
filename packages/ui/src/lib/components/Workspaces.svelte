@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { WorkspaceService } from "$lib/workspace.svelte";
+	import { WorkspaceInstance, WorkspaceService } from "$lib/workspace.svelte";
 	import { Bot, ChevronDown, ChevronRight, CircleX, Edit, Folder, FolderOpen, GripVertical, ListTodo, MessageSquare, MoreVertical, PaintBucket, Plus, Save, Trash2 } from "@lucide/svelte";
 	import { onMount, tick } from "svelte";
 	import type { Component } from "svelte";
 	import DragDropList from "./DragDropList.svelte";
+	import { SvelteMap } from "svelte/reactivity";
 
     interface Props {
         inverse?: boolean;
@@ -26,12 +27,17 @@
     let loading = $state(false);
     let error = $state<string | null>(null);
 
+    let loadingWorkspace = new SvelteMap<string, boolean>();
+    let workspaceData = new SvelteMap<string, WorkspaceInstance>();
+
     let newWorkspace = $state<WorkspaceManifest | null>(null);
     let newWorkspaceEl = $state<HTMLInputElement | null>(null);
     const workspaceService = new WorkspaceService();
 
     let editingWorkspace = $state<Workspace | null>(null);
     let editingWorkspaceEl = $state<HTMLInputElement | null>(null);
+
+    let creating = $state(false);
 
     onMount(() => {
         loadWorkspaces();
@@ -112,6 +118,26 @@
             loading = false;
         }
     }
+
+    async function createTask(workspaceId: string) {
+        if (creating) return;
+
+        creating = true;
+        try {
+            const selectedWorkspace = workspaceService.getWorkspace(workspaceId) as WorkspaceInstance;
+            const response = await selectedWorkspace.createFile(`tasks/task-${crypto.randomUUID()}.yaml`, `---
+task_name: 
+task_description:
+name:
+description:
+---
+`);
+        } catch (e) {
+            error = e instanceof Error ? e.message : String(e);
+        } finally {
+            loading = false;
+        }
+    }
 </script>
 
 <div class="flex h-full flex-col">
@@ -161,19 +187,26 @@
             classes={{
                 dropIndicator: 'mx-2 my-0.5 h-0.5',
                 item: 'relative group overflow-visible',
+                itemsContainer: 'w-full',
             }}
             as="ul"
             childrenAs="li"
         >
             {#snippet children({ item: workspace })}
                 <details class="workspace-details flex flex-col w-full overflow-visible">
-                    <summary class="flex items-center justify-between rounded-none list-none [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200' : 'hover:bg-base-100'}" onclick={(e) => e.preventDefault()}>
+                    <summary class="flex px-2 items-center justify-between rounded-none list-none [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200' : 'hover:bg-base-100'}" onclick={(e) => e.preventDefault()}>
                         <div class="flex grow items-center gap-2">
                             <button class="chevron-icon shrink-0 btn btn-square btn-ghost btn-xs" 
                                 onmousedown={(e) => e.stopPropagation()} 
-                                onclick={(e) => {
+                                onclick={async (e) => {
                                     const details = e.currentTarget.closest('details');
                                     if (details) details.open = !details.open;
+                                    if (details && details.open) {
+                                        loadingWorkspace.set(workspace.id, true);
+                                        workspaceData.set(workspace.id, workspaceService.getWorkspace(workspace.id) as WorkspaceInstance);
+                                        workspaceData.get(workspace.id)?.load();
+                                        loadingWorkspace.set(workspace.id, false);
+                                    }
                                 }}
                             >
                                 <ChevronRight class="size-4 chevron-closed" />
@@ -273,11 +306,23 @@
                         </div>
                     </summary>
                     <div onmousedown={(e) => e.stopPropagation()} role="presentation">
-                        <ul>
-                            {@render workspaceChild('Tasks', ListTodo, ['todo'])}
-                            {@render workspaceChild('Agents', Bot, ['todo'])}
-                            {@render workspaceChild('Conversations', MessageSquare, ['todo'])}
-                        </ul>
+                        {#if loadingWorkspace.get(workspace.id)}
+                            <div class="flex justify-center items-center p-2">
+                                <span class="loading loading-spinner loading-sm"></span>
+                            </div>
+                        {:else}
+                            {@const workspaceInstance = workspaceData.get(workspace.id)}
+                            {@const tasks = (workspaceInstance?.files ?? [])
+                                .filter((f: { name: string }) => f.name.startsWith('tasks/'))
+                                .map((f: { name: string }) => f.name.replace('tasks/', ''))
+                            }
+                        
+                            <ul>
+                                {@render workspaceChild('Tasks', ListTodo, tasks, () => createTask(workspace.id))}
+                                {@render workspaceChild('Agents', Bot, ['todo'])}
+                                {@render workspaceChild('Conversations', MessageSquare, ['todo'])}
+                            </ul>
+                        {/if}
                     </div>
                 </details>
             {/snippet}
@@ -285,21 +330,28 @@
     {/if}
 </div>
 
-{#snippet workspaceChild(title: string, Icon: Component, items: string[])}
-<li>
-    <details class="workspace-details pr-2">
-        <summary class="flex py-2 items-center gap-2 [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200' : 'hover:bg-base-100'}">
-            <span class="chevron-icon shrink-0">
-                <ChevronRight class="size-4 chevron-closed" />
-                <ChevronDown class="size-4 chevron-open" />
-            </span>
-            <Icon class="size-4" />
-            <h3 class="text-sm font-medium">{title}</h3>
+{#snippet workspaceChild(title: string, Icon: Component, items: string[], onCreate?: () => void)}
+<li class="flex grow">
+    <details class="workspace-details w-full">
+        <summary class="flex rounded-r-none px-2 items-center justify-between gap-2 [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200' : 'hover:bg-base-100'}">
+            <div class="flex items-center gap-2">
+                <span class="chevron-icon shrink-0">
+                    <ChevronRight class="size-4 chevron-closed" />
+                    <ChevronDown class="size-4 chevron-open" />
+                </span>
+                <Icon class="size-4" />
+                <h3 class="text-sm font-medium">{title}</h3>
+            </div>
+            {#if onCreate}
+                <button class="btn btn-square btn-ghost btn-sm" onclick={onCreate}>
+                    <Plus class="size-4" />
+                </button>
+            {/if}
         </summary>
-        <ul>
+        <ul class="flex grow">
             {#each items as item, index (index)}
-                <li>
-                    <a href="/">{item}</a>
+                <li class="w-full">
+                    <a href="/w/{item}" class="block p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200' : 'hover:bg-base-100'}">{item}</a>
                 </li>
             {/each}
         </ul>
