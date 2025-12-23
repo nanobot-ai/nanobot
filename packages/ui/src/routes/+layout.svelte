@@ -18,6 +18,7 @@
 	let { children } = $props();
 
 	let inverse = $derived(page.data.inverse ?? false);
+	let showWorkspaces = $derived(page.data.showWorkspaces ?? false);
 
 	let threads = $state<Chat[]>([]);
 	let isLoading = $state(true);
@@ -200,9 +201,11 @@
 						/>
 					</div>
 
-					<div class="shrink-0">
-						<Workspaces scrollContainerEl={scrollContainer} {inverse} />
-					</div>
+					{#if showWorkspaces}
+						<div class="shrink-0">
+							<Workspaces scrollContainerEl={scrollContainer} {inverse} />
+						</div>
+					{/if}
 				</div>
 			</div>
 
