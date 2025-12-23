@@ -21,5 +21,5 @@ export type ParsedContent = {
 };
 
 export type ParsedFile = {
-    fileName: string;
+    id: string;
 } & ParsedContent;

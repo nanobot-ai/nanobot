@@ -8,22 +8,25 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { createVariablePillPlugin } from '$lib/plugins/variablePillPlugin';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { WorkspaceService } from '$lib/workspace.svelte';
 	import type { WorkspaceClient, WorkspaceFile } from '$lib/types';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
-	import type { Task, Step, ParsedFile } from './types';
-	import { compileFileContents, compileOutputFiles, setupEmptyTask } from './utils';
+	import type { Task } from './types';
+	import { compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
 
     let { data } = $props();
     let workspaceId = $derived(data.workspaceId);
     let searchParams = $derived(page.url.searchParams);
-    let taskId = $state('');
     let workspace = $state<WorkspaceClient | null>(null);
+
+    let taskId = $state('');
     let task = $state<Task | null>(null);
     let loading = $state(false);
     let initialLoadComplete = $state(false);
     let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+    let saveAbortController: AbortController | null = null;
     let lastSavedTaskJson = '';
     
     const notifications = getNotificationContext();
@@ -47,6 +50,11 @@
             clearTimeout(saveTimeout);
         }
         
+        // Abort any ongoing save operation
+        if (saveAbortController) {
+            saveAbortController.abort();
+        }
+        
         const taskSnapshot = $state.snapshot(task);
         saveTimeout = setTimeout(async () => {
             if (!taskSnapshot) {
@@ -54,17 +62,40 @@
                 return;
             }
 
-            console.log('saving task...', taskSnapshot);
-            const outputFiles = compileOutputFiles(taskSnapshot);
+            const url = new URL(page.url);
+            if (!url.searchParams.get('id')) {
+                taskId = crypto.randomUUID();
+                url.searchParams.set('id', taskId);
+                goto(url.toString(), { replaceState: true, keepFocus: true });
+            }
+
+            saveAbortController = new AbortController();
+            const signal = saveAbortController.signal;
+
+            const outputFiles = compileOutputFiles(taskSnapshot, taskId);
             for (const file of outputFiles) {
+                // Check if this save operation was cancelled
+                if (signal.aborted) {
+                    console.log('save operation cancelled');
+                    return;
+                }
+                
                 const exists = workspace?.files.find((f) => f.name === file.id);
-                if (exists) {
-                    console.log('update file', { file });
-                } else {
-                    console.log('create file', { file });
+                try {
+                    if (exists) {
+                        console.log('update file', { file });
+                        await workspace?.writeFile(file.id, file.data);
+                    } else {
+                        console.log('create file', { file });
+                        await workspace?.createFile(file.id, file.data);
+                    }
+                } catch (error) {
+                    // Only log errors if the operation wasn't cancelled
+                    if (!signal.aborted) {
+                        console.error('failed to save file', { file, error });
+                    }
                 }
             }
-            // TODO: implement actual save
         }, 500);
     }
 
@@ -88,58 +119,19 @@
         debouncedSave();
     });
 
-    async function compileTask(files: WorkspaceFile[]){
+    async function compileTask(idToUse: string, files: WorkspaceFile[]){
+        if (!workspace) return;
+
         loading = true;
-        let name = '';
-        let description = '';
-        
-        let parsedFiles: ParsedFile[] = [];
-        if (workspace) {
-            parsedFiles = await compileFileContents(workspace, files);
-        }
+        task = await convertToTask(workspace, files, idToUse);
+        taskId = idToUse;
 
-        let steps: Step[] = [];
-        let pointer: ParsedFile | undefined = parsedFiles.length > 1 ? parsedFiles.find((file) => {
-            // find the first file
-            // it can have a next but is not the next of any other file
-            return !parsedFiles.some((file) => file.next === file.fileName);
-        }) : parsedFiles?.[0];
-
-        if (pointer) {
-            name = pointer.taskName;
-            description = pointer.taskDescription;
-
-            steps.push({
-                id: pointer.fileName,
-                name: pointer.name,
-                description: pointer.description,
-                content: pointer.content,
-            })
-        }
-
-        while (pointer) {
-            pointer = pointer.next ? parsedFiles.find((file) => file.fileName === pointer?.next) : undefined;
-            if (pointer) {
-                steps.push({
-                    id: pointer.fileName,
-                    name: pointer.name,
-                    description: pointer.description,
-                    content: pointer.content,
-                })
-            }
-        }
-        
-        task = {
-            name,
-            description,
-            steps,
-        };
-
-        task.steps.forEach((step) => {
+        stepDescription.clear();
+        for (const step of task.steps) {
             if (step.description) {
                 stepDescription.set(step.id, true);
             }
-        })
+        }
 
         // Mark this as the "saved" state so the effect doesn't trigger a save
         lastSavedTaskJson = JSON.stringify(task);
@@ -148,10 +140,12 @@
     }
 
     $effect(() => {
-        taskId = searchParams.get('id') ?? '';
-        if (taskId && workspace && workspace.id === workspaceId) {
-            compileTask(workspace.files);
-        } else if (!taskId && !initialLoadComplete) {
+        const urlTaskId = searchParams.get('id') ?? '';
+        const files = workspace?.files ?? [];
+        
+        if (urlTaskId && workspace && workspace.id === workspaceId && urlTaskId !== taskId && files.length > 0) {
+            compileTask(urlTaskId, files);
+        } else if (!urlTaskId && !initialLoadComplete) {
             // Set initial task without triggering save (only once)
             task = setupEmptyTask();
             // Mark this as the "saved" state so the effect doesn't trigger a save
@@ -183,7 +177,7 @@
     function handleRun() {
         if (!task) return;
         if (task.steps.length === 0 || task.steps.every((step) => !step.content)) {
-            notifications.error('Steps Required', 'Please add at least one step to the workflow before running it.');
+            notifications.error('Steps Required', 'Please add at least one step to the task before running it.');
             return;
         }
 
@@ -196,7 +190,7 @@
     <title>Nanobot | Tasks</title>
 </svelte:head>
 
-{#if task}
+{#if initialLoadComplete && task}
     <div class="flex w-full h-dvh">
         <div class="
             flex flex-col grow p-4 pt-0 overflow-y-auto max-h-dvh transition-all duration-200 ease-in-out 
@@ -213,7 +207,7 @@
                         {#if showAlternateHeader}
                             <p in:fade class="flex grow text-xl font-semibold">{task.name}</p>
                         {:else}
-                            <input name="title" class="input input-ghost input-xl w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Workflow title" 
+                            <input name="title" class="input input-ghost input-xl w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Task title" 
                                 bind:value={task.name}
                             />
                         {/if}
@@ -222,7 +216,7 @@
                         </button>
                     </div>
                     {#if !showAlternateHeader}
-                        <input out:slide={{ axis: 'y' }} name="description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Workflow description"
+                        <input out:slide={{ axis: 'y' }} name="description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Task description"
                             bind:value={task.description}
                         />
                     {/if}
@@ -237,18 +231,18 @@
             >
                 {#snippet blockHandle({ startDrag, currentItem })}
                     <div class="flex items-center gap-2">
-                        <button class="btn btn-ghost btn-square btn-sm" popoverTarget="add-to-workflow" style="anchor-name: --add-to-workflow-anchor;">
+                        <button class="btn btn-ghost btn-square btn-sm" popoverTarget="add-to-task" style="anchor-name: --add-to-task-anchor;">
                             <Plus class="text-base-content/50" />
                         </button>
                         
                         <ul class="dropdown menu w-72 rounded-box bg-base-100 dark:bg-base-300 shadow-sm"
-                            popover="auto" id="add-to-workflow" style="position-anchor: --add-to-workflow-anchor;">
+                            popover="auto" id="add-to-task" style="position-anchor: --add-to-task-anchor;">
                             <li>
                                 <button class="justify-between"
                                     onclick={(e) => {
                                         const currentIndex = task!.steps.findIndex((step) => step.id === currentItem?.id);
                                         const newStep = {
-                                            id: `tasks/${crypto.randomUUID()}.yaml`,
+                                            id: crypto.randomUUID(),
                                             name: '',
                                             description: '',
                                             content: ''
@@ -275,7 +269,7 @@
                     </div>
                 {/snippet}
                 {#snippet children({ item: step })}
-                    <div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 pb-8 workflow-step relative">
+                    <div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 pb-8 task-step relative">
                         <div class="absolute top-3 right-3 z-2">
                             {@render menu(step.id)}
                         </div>
@@ -287,7 +281,14 @@
                             {/if}
                         </div>
                     
-                        <MarkdownEditor value={step.content} blockEditEnabled={stepBlockEditing.get(step.id) ?? false} plugins={[variablePillPlugin]} />
+                        <MarkdownEditor 
+                            value={step.content} 
+                            blockEditEnabled={stepBlockEditing.get(step.id) ?? false} 
+                            plugins={[variablePillPlugin]} 
+                            onChange={(value) => {
+                                step.content = value;
+                            }}
+                        />
                     </div>
                 {/snippet}
             </DragDropList>
@@ -296,7 +297,7 @@
                 <button class="btn btn-primary btn-square tooltip" data-tip="Add new step"
                     onclick={() => {
                         const newStep = {
-                            id: `/tasks/${crypto.randomUUID()}.yaml`,
+                            id: crypto.randomUUID(),
                             name: '',
                             description: '',
                             content: ''
@@ -345,6 +346,10 @@
                 </div>
             </div>
         {/if}
+    </div>
+{:else}
+    <div class="flex justify-center items-center p-12 grow">
+        <span class="loading loading-spinner loading-xl"></span>
     </div>
 {/if}
 
@@ -398,13 +403,13 @@
 
 <style>
     :root[data-theme=nanobotlight] {
-        .workflow-step :global(.milkdown) {
+        .task-step :global(.milkdown) {
             background: var(--color-base-100);
         }
     }
 
     :root[data-theme=nanobotdark] {
-        .workflow-step :global(.milkdown) {
+        .task-step :global(.milkdown) {
             background: var(--color-base-200);
         }
     }
