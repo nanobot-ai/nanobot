@@ -221,7 +221,7 @@
                 showAlternateHeader = (scrollContainer?.scrollTop ?? 0) > 100;
             }}
         >
-            <div class="sticky top-0 left-0 w-full bg-base-200 dark:bg-base-100 z-10 py-4">
+            <div class="sticky top-0 left-0 w-full bg-base-200 dark:bg-base-100 z-10 {showAlternateHeader ? 'py-2' : ''}">
                 <div in:fade class="flex flex-col grow">
                     <div class="flex w-full items-center gap-4">
                         {#if showAlternateHeader}
