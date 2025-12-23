@@ -12,6 +12,7 @@
 		classes?: {
 			dropIndicator?: string;
 			item?: string;
+			itemsContainer?: string;
 		};
 		as?: 'div' | 'ul'
 		childrenAs?: 'li' | 'div'
@@ -275,7 +276,7 @@
 	onscroll={updateHandlePosition}
 >
 	<div
-		class="drag-drop-items-container"
+		class="drag-drop-items-container {classes.itemsContainer}"
 		bind:this={itemsContainer}
 		onmouseleave={() => {
 			currentFocusedElement = null;
