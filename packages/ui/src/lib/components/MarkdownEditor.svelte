@@ -79,9 +79,12 @@
             const node = editorNode;
             
             destroyEditor();
-            createEditor(node, enableBlockEdit).then((instance) => {
-                crepe = instance;
-                isCrepeReady = true;
+            // Use untrack to prevent `value` (accessed in createEditor) from becoming a dependency
+            untrack(() => {
+                createEditor(node, enableBlockEdit).then((instance) => {
+                    crepe = instance;
+                    isCrepeReady = true;
+                });
             });
         }
 
