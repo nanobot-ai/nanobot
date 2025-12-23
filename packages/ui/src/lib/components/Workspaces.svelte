@@ -5,6 +5,8 @@
 	import type { Component } from "svelte";
 	import DragDropList from "./DragDropList.svelte";
 	import { SvelteMap } from "svelte/reactivity";
+	import { resolve } from '$app/paths';
+	import { goto } from "$app/navigation";
 
     interface Props {
         inverse?: boolean;
@@ -124,14 +126,7 @@
 
         creating = true;
         try {
-            const selectedWorkspace = workspaceService.getWorkspace(workspaceId) as WorkspaceInstance;
-            const response = await selectedWorkspace.createFile(`tasks/task-${crypto.randomUUID()}.yaml`, `---
-task_name: 
-task_description:
-name:
-description:
----
-`);
+            goto(resolve(`/w/${workspaceId}/t`));
         } catch (e) {
             error = e instanceof Error ? e.message : String(e);
         } finally {
@@ -314,13 +309,13 @@ description:
                             {@const workspaceInstance = workspaceData.get(workspace.id)}
                             {@const tasks = (workspaceInstance?.files ?? [])
                                 .filter((f: { name: string }) => f.name.startsWith('tasks/'))
-                                .map((f: { name: string }) => f.name.replace('tasks/', ''))
+                                .map((f: { name: string }) => f.name.replace('tasks/', '').replace('.yaml', ''))
                             }
                         
                             <ul>
-                                {@render workspaceChild('Tasks', ListTodo, tasks, () => createTask(workspace.id))}
-                                {@render workspaceChild('Agents', Bot, ['todo'])}
-                                {@render workspaceChild('Conversations', MessageSquare, ['todo'])}
+                                {@render workspaceChild(workspace.id, 'Tasks', ListTodo, tasks, () => createTask(workspace.id))}
+                                {@render workspaceChild(workspace.id, 'Agents', Bot, [])}
+                                {@render workspaceChild(workspace.id, 'Conversations', MessageSquare, [])}
                             </ul>
                         {/if}
                     </div>
@@ -330,7 +325,7 @@ description:
     {/if}
 </div>
 
-{#snippet workspaceChild(title: string, Icon: Component, items: string[], onCreate?: () => void)}
+{#snippet workspaceChild(workspaceId: string, title: string, Icon: Component, items: string[], onCreate?: () => void)}
 <li class="flex grow">
     <details class="workspace-details w-full">
         <summary class="flex rounded-r-none px-2 items-center justify-between gap-2 [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200' : 'hover:bg-base-100'}">
@@ -342,18 +337,33 @@ description:
                 <Icon class="size-4" />
                 <h3 class="text-sm font-medium">{title}</h3>
             </div>
-            {#if onCreate}
-                <button class="btn btn-square btn-ghost btn-sm" onclick={onCreate}>
-                    <Plus class="size-4" />
-                </button>
-            {/if}
+            <div class="flex items-center gap-2">
+                <div class="badge badge-sm">{items.length}</div>
+                {#if onCreate}
+                    <button class="btn btn-square btn-ghost btn-sm" onclick={onCreate}>
+                        <Plus class="size-4" />
+                    </button>
+                {:else}
+                    <div class="size-8"></div>
+                {/if}
+            </div>
         </summary>
         <ul class="flex grow">
-            {#each items as item, index (index)}
+            {#if items.length === 0}
                 <li class="w-full">
-                    <a href="/w/{item}" class="block p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200' : 'hover:bg-base-100'}">{item}</a>
+                    <p class="p-2 italic text-base-content/30 flex hover:bg-transparent cursor-default">No {title.toLowerCase()}. Click <Plus class="size-2.5 inline-flex" /> to get started.</p>
                 </li>
-            {/each}
+            {:else}
+                {#each items as item, index (index)}
+                    <li class="w-full">
+                        {#if title === 'Tasks'}
+                            <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="block p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200' : 'hover:bg-base-100'}">{item}</a>
+                        {:else}
+                            <p class="p-2 w-full overflow-hidden truncate">{item}</p>
+                        {/if}
+                    </li>
+                {/each}
+            {/if}
         </ul>
     </details>
 </li>
