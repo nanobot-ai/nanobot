@@ -205,7 +205,7 @@ Send the drafted email.
                                     console.log({currentItem});
                                     const currentIndex = workflow.tasks.findIndex((task) => task.id === currentItem?.id);
                                     const newTask = {
-                                        id: crypto.randomUUID(),
+                                        id: '',
                                         name: '',
                                         description: '',
                                         content: ''

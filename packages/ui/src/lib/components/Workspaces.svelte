@@ -39,8 +39,6 @@
     let editingWorkspace = $state<Workspace | null>(null);
     let editingWorkspaceEl = $state<HTMLInputElement | null>(null);
 
-    let creating = $state(false);
-
     onMount(() => {
         loadWorkspaces();
     });
@@ -122,16 +120,10 @@
     }
 
     async function createTask(workspaceId: string) {
-        if (creating) return;
-
-        creating = true;
-        try {
-            goto(resolve(`/w/${workspaceId}/t`));
-        } catch (e) {
-            error = e instanceof Error ? e.message : String(e);
-        } finally {
-            loading = false;
-        }
+        const url = new URL(window.location.origin + resolve(`/w/${workspaceId}/t`));
+        // Explicitly clear any existing search params
+        url.search = '';
+        goto(url.pathname, { replaceState: false, invalidateAll: true });
     }
 </script>
 
@@ -308,10 +300,9 @@
                         {:else}
                             {@const workspaceInstance = workspaceData.get(workspace.id)}
                             {@const tasks = (workspaceInstance?.files ?? [])
-                                .filter((f: { name: string }) => f.name.startsWith('tasks/'))
+                                .filter((f: { name: string }) => f.name.startsWith('.nanobot/tasks/'))
                                 .reduce<Record<string, boolean>>((acc, f: { name: string }) => {
-                                    // get the taskId that is /tasks/{taskId}/{filename}.yaml
-                                    const taskId = f.name.split('/')[1];
+                                    const taskId = f.name.split('/')[2];
                                     acc[taskId] = true;
                                     return acc;
                                 }, {})
@@ -343,7 +334,7 @@
                 <h3 class="text-sm font-medium">{title}</h3>
             </div>
             <div class="flex items-center gap-2">
-                <div class="badge badge-sm">{items.length}</div>
+                <div class="badge badge-sm {items.length > 0 ? 'badge-primary' : 'badge-ghost'}">{items.length}</div>
                 {#if onCreate}
                     <button class="btn btn-square btn-ghost btn-sm" onclick={onCreate}>
                         <Plus class="size-4" />

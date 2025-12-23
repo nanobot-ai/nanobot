@@ -1,11 +1,11 @@
 import type { WorkspaceClient, WorkspaceFile } from "$lib/types";
 import type { ParsedContent, ParsedFile, Step, Task } from "./types";
 
-async function parseYaml(fileContent: Blob): Promise<ParsedContent> {
+async function parseFrontmatterMarkdown(fileContent: Blob): Promise<ParsedContent> {
     const text = await fileContent.text();
     
     // Split by frontmatter delimiter (---)
-    // Format: ---\n<yaml>\n---\n<content>
+    // Format: ---\n<frontmatter>\n---\n<content>
     const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/;
     const match = text.match(frontmatterRegex);
     
@@ -21,8 +21,9 @@ async function parseYaml(fileContent: Blob): Promise<ParsedContent> {
     }
 
     const [, frontmatter, content] = match;
+    console.log({ frontmatter, content });
     
-    // Parse simple YAML key-value pairs
+    // Parse simple frontmatter key-value pairs
     const metadata: Record<string, string> = {};
     for (const line of frontmatter.split('\n')) {
         const colonIndex = line.indexOf(':');
@@ -46,15 +47,16 @@ async function parseYaml(fileContent: Blob): Promise<ParsedContent> {
 export async function compileFileContents(workspace: WorkspaceClient, files: WorkspaceFile[], taskId: string = '') {
     if (!taskId) { return []; }
 
-    const validFiles = files.filter((file) => file.name.startsWith(`tasks/${taskId}/`));
+    const validFiles = files.filter((file) => file.name.startsWith(`.nanobot/tasks/${taskId}/`));
+    console.log({ validFiles });
     const parsedFiles: ParsedFile[] = [];
     for (const file of validFiles) {
         const content = await workspace?.readFile(file.name);
         if (content) {
-            const parsedContent = await parseYaml(content);
+            const parsedContent = await parseFrontmatterMarkdown(content);
             parsedFiles.push({
                 ...parsedContent,
-                id: file.name.replace(`tasks/${taskId}/`, '').replace('.yaml', ''),
+                id: file.name.replace(`.nanobot/tasks/${taskId}/`, '').replace('.md', ''),
             });
         }
     }
@@ -70,6 +72,7 @@ export async function convertToTask(workspace: WorkspaceClient, files: Workspace
     if (files) {
         parsedFiles = await compileFileContents(workspace, files, taskId);
     }
+    console.log({ parsedFiles });
 
     const steps: Step[] = [];
     let pointer: ParsedFile | undefined = parsedFiles.length > 1 ? parsedFiles.find((file) => {
@@ -123,16 +126,17 @@ export function compileOutputFiles(task: Task, taskId: string) {
             metadata['task_description'] = taskDescription;
         }
 
-        // Build YAML frontmatter
+        // Build Markdown frontmatter
         const frontmatterLines = Object.entries(metadata)
             .filter(([, value]) => value) // Skip empty values
             .map(([key, value]) => `${key}: ${value}`);
         
-        const yamlContent = `---\n${frontmatterLines.join('\n')}\n---\n${step.content}`;
-        const data = new Blob([yamlContent], { type: 'text/yaml' });
+        const content = `---\n${frontmatterLines.join('\n')}\n---\n${step.content}`;
+        const data = new Blob([content], { type: 'text/markdown' });
+        const stepId = step.id || `step${index}`
 
         return {
-            id: `tasks/${taskId}/${step.id}.yaml`,
+            id: `.nanobot/tasks/${taskId}/${stepId}.md`,
             data,
         };
     });
@@ -145,7 +149,7 @@ export function setupEmptyTask() {
         description: '',
         steps: [
             {
-                id: crypto.randomUUID(),
+                id: '',
                 name: '',
                 description: '',
                 content: '',
@@ -153,3 +157,16 @@ export function setupEmptyTask() {
         ],
     };
 }
+
+// export function getTaskChanges(task: Task, prevTask: Task) {
+//     const hasOrderChanged = task.steps.some((step, index) => step.id !== prevTask.steps[index].id);
+//     const hasTaskNameChanged = task.name !== prevTask.name;
+//     const hasTaskDescriptionChanged = task.description !== prevTask.description;
+
+//     const hasStepsChanged = task.steps.filter((step) => {
+//         const prevStep = prevTask.steps.find((s) => s.id === step.id);
+//         return prevStep?.content !== step.content || prevStep?.name !== step.name || prevStep?.description !== step.description;
+//     });
+
+//     return 
+// }
