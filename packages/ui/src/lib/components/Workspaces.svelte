@@ -334,7 +334,7 @@
                 <h3 class="text-sm font-medium">{title}</h3>
             </div>
             <div class="flex items-center gap-2">
-                <div class="badge badge-sm {items.length > 0 ? 'badge-primary' : 'badge-ghost'}">{items.length}</div>
+                <div class="badge badge-sm badge-ghost">{items.length}</div>
                 {#if onCreate}
                     <button class="btn btn-square btn-ghost btn-sm" onclick={onCreate}>
                         <Plus class="size-4" />
