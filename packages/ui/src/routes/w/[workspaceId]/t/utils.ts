@@ -32,6 +32,7 @@ async function parseFrontmatterMarkdown(fileContent: Blob): Promise<ParsedConten
         name: input.name ?? '',
         description: input.description ?? '',
         default: input.default ?? '',
+        id: crypto.randomUUID()
     }));
 
     return {
@@ -115,7 +116,7 @@ export async function convertToTask(workspace: WorkspaceClient, files: Workspace
     }
 }
 
-export function compileOutputFiles(task: Task, taskId: string) {
+export function compileOutputFiles(task: Task, visibleInputs: Input[], taskId: string) {
     const { name: taskName, description: taskDescription, inputs } = task;
     const files = task.steps.map((step, index) => {
         let id = `.nanobot/tasks/${taskId}/STEP_${index}.md`;
@@ -129,7 +130,16 @@ export function compileOutputFiles(task: Task, taskId: string) {
             metadata['task_name'] = taskName;
             metadata['task_description'] = taskDescription;
             if (inputs.length > 0) {
-                metadata['inputs'] = inputs;
+                const metadataInputs = [
+                    ...visibleInputs.filter((input) => input.name),
+                    ...inputs.filter((input) => !visibleInputs.some((visibleInput) => visibleInput.name === input.name)),
+                ];
+                metadata['inputs'] = metadataInputs
+                    .map((input) => ({
+                        name: input.name,
+                        description: input.description,
+                        default: input.default,
+                    }));
             }
             id = `.nanobot/tasks/${taskId}/TASK.md`;
         }
@@ -169,12 +179,12 @@ export function setupEmptyTask(): Task {
     };
 }
 
-export function compileArguments(steps: Step[]) {
+export function compileInputs(steps: Step[]) {
     return steps.reduce<Record<string, string>>((acc, step) => {
-        const contentArguments = step.content.match(/\$\w+/g);
-        if (contentArguments) {
-            for (const arg of contentArguments) {
-                acc[arg] = '';
+        const contentInputs = step.content.match(/\$\w+/g);
+        if (contentInputs) {
+            for (const input of contentInputs) {
+                acc[input] = '';
             }
         }
         return acc;

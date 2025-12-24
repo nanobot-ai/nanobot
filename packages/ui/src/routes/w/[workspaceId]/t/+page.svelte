@@ -4,7 +4,7 @@
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import MessageInput from '$lib/components/MessageInput.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
-	import { EllipsisVertical, GripVertical, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, Sparkles, ToolCase, Trash2, X } from '@lucide/svelte';
+	import { ChevronRight, EllipsisVertical, EyeClosed, GripVertical, HandHelping, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, Sparkles, ToolCase, Trash2, X } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { createVariablePillPlugin } from '$lib/plugins/variablePillPlugin';
@@ -13,8 +13,10 @@
 	import { WorkspaceService } from '$lib/workspace.svelte';
 	import type { WorkspaceClient, WorkspaceFile } from '$lib/types';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
-	import type { Task } from './types';
-	import { compileArguments, compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
+	import { type Input, type Task } from './types';
+	import { compileInputs, compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
+	import StepActions from './StepActions.svelte';
+	import InputActions from './InputActions.svelte';
 
     let { data } = $props();
     let workspaceId = $derived(data.workspaceId);
@@ -28,23 +30,72 @@
     let showTaskTitle = $state(false);
     let showTaskDescription = $state(false);
 
-    let argsModal = $state<HTMLDialogElement | null>(null);
-    let args = $state<Record<string, string>>({});
+    let inputsModal = $state<HTMLDialogElement | null>(null);
+    let requiredInputs = $state<Record<string, string>>({});
 
+    let scrollContainer = $state<HTMLElement | null>(null);
+
+    let stepBlockEditing = new SvelteMap<number | string, boolean>();
+    let stepDescription = new SvelteMap<number | string, boolean>();
+
+    // TODO:
+    let currentRun = $state<unknown | null>(null);
+    let showCurrentRun = $state(false);
+
+    let showMessageInput = $state(false);
+    let showAlternateHeader = $state(false);
     let lastSavedTaskJson = '';
+    let lastSavedVisibleInputsJson = '';
 
     let saveTimeout: ReturnType<typeof setTimeout> | null = null;
     let saveAbortController: AbortController | null = null;
-    
+
+    let visibleInputs = $state<Input[]>([]);
+    let inputDescription = new SvelteMap<string, boolean>();
+    let inputDefault = new SvelteMap<string, boolean>();
+    let hiddenInputs = $derived(task?.inputs.filter((input) => !visibleInputs.some((visibleInput) => visibleInput.name === input.name)) ?? []);
+
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
     const workspaceService = new WorkspaceService();
     const variablePillPlugin = createVariablePillPlugin({
 		onVariableAddition: (variable: string) => {
-            console.log('variable added', variable);
+            const exists = task?.inputs.find((input) => input.name === variable) || visibleInputs.find((input) => input.name === variable);
+            if (!exists) {
+                const newInput: Input = {
+                    id: crypto.randomUUID(),
+                    name: variable,
+                    description: '',
+                    default: ''
+                };
+                task!.inputs.push(newInput);
+                notifications.action(
+                    `${variable}`, 
+                    'A new variable has been added. Would you like to add more details to it now?',
+                    () => {
+                        visibleInputs.push(newInput);
+                    },
+                );
+            }
         },
 		onVariableDeletion: (variable: string) => {
-            console.log('variable deleted', variable);
+            const stillExists = task?.steps.some((step) => step.content.includes(`$${variable}`));
+            if (!stillExists) {
+                const hasVisible = visibleInputs.some((input) => input.name === variable);
+                if (hasVisible) {
+                    notifications.action(
+                        `${variable}`,
+                        'Would you like to remove the variable details from this task?',
+                        () => {
+                            task!.inputs = task!.inputs.filter((input) => input.name !== variable);
+                            visibleInputs = visibleInputs.filter((input) => input.name !== variable);
+                        }
+                    )
+                } else {
+                    task!.inputs = task!.inputs.filter((input) => input.name !== variable);
+                }
+                
+            }
         },
 	});
 
@@ -63,6 +114,7 @@
         }
         
         const taskSnapshot = $state.snapshot(task);
+        const visibleInputsSnapshot = $state.snapshot(visibleInputs);
         saveTimeout = setTimeout(async () => {
             if (!taskSnapshot) {
                 console.error('task snapshot is empty');
@@ -86,8 +138,7 @@
             saveAbortController = new AbortController();
             const signal = saveAbortController.signal;
 
-            // const changes = getTaskChanges(taskSnapshot, JSON.parse(lastSavedTaskJson) as Task);
-            const outputFiles = compileOutputFiles(taskSnapshot, taskId);
+            const outputFiles = compileOutputFiles(taskSnapshot, visibleInputsSnapshot, taskId);
             for (const file of outputFiles) {
                 // Check if this save operation was cancelled
                 if (signal.aborted) {
@@ -119,6 +170,7 @@
         
         // Serialize to track all nested changes (name, description, steps, and step properties)
         const taskJson = JSON.stringify(task);
+        const visibleInputsJson = JSON.stringify(visibleInputs);
         
         // Skip during loading or before initial load completes
         if (!initialLoadComplete) {
@@ -126,11 +178,11 @@
         }
         
         // Only save if task actually changed from last saved state
-        if (taskJson === lastSavedTaskJson) {
+        if (taskJson === lastSavedTaskJson && visibleInputsJson === lastSavedVisibleInputsJson) {
             return;
         }
         lastSavedTaskJson = taskJson;
-        
+        lastSavedVisibleInputsJson = visibleInputsJson;
         debouncedSave();
     });
 
@@ -149,11 +201,28 @@
             }
         }
 
+        // set up visible inputs
+        visibleInputs = [];
+        inputDescription.clear();
+        inputDefault.clear();
+        for (const input of task.inputs) {
+            if (input.description.length || input.default?.length) {
+                visibleInputs.push(input);
+                if (input.description.length) {
+                    inputDescription.set(input.id, true);
+                }
+                if (input.default?.length) {
+                    inputDefault.set(input.id, true);
+                }
+            }
+        }
+
         showTaskTitle = (task.name || '').length > 0;
         showTaskDescription = (task.description || '').length > 0;
 
         // Mark this as the "saved" state so the effect doesn't trigger a save
         lastSavedTaskJson = JSON.stringify(task);
+        lastSavedVisibleInputsJson = JSON.stringify(visibleInputs);
         initialLoadComplete = true;
     }
 
@@ -172,29 +241,10 @@
             taskId = '';
             stepDescription.clear();
             lastSavedTaskJson = JSON.stringify(task);
+            lastSavedVisibleInputsJson = JSON.stringify(visibleInputs);
             initialLoadComplete = true;
        } 
     });
-    
-    let scrollContainer = $state<HTMLElement | null>(null);
-
-    let stepBlockEditing = new SvelteMap<number | string, boolean>();
-    let stepDescription = new SvelteMap<number | string, boolean>();
-
-    // TODO:
-    let currentRun = $state<unknown | null>(null);
-    let showCurrentRun = $state(false);
-
-    let showMessageInput = $state(false);
-    let showAlternateHeader = $state(false);
-    
-    function toggleStepBlockEditing(id: string, enabled: boolean) {
-        stepBlockEditing.set(id, enabled);
-    }
-
-    function toggleStepDescription(id: string, enabled: boolean) {
-        stepDescription.set(id, enabled);
-    }
 
     function handleRun() {
         if (!task) return;
@@ -203,9 +253,9 @@
             return;
         }
 
-        args = compileArguments(task.steps);
-        if (Object.keys(args).length > 0) { 
-            argsModal?.showModal();
+        requiredInputs = compileInputs(task.steps);
+        if (Object.keys(requiredInputs).length > 0) { 
+            inputsModal?.showModal();
         } else {
             showCurrentRun = true;
         }
@@ -233,7 +283,7 @@
                         {#if showAlternateHeader}
                             <p in:fade class="flex grow text-xl font-semibold">{task.name}</p>
                         {:else if showTaskTitle}
-                            <input name="title" class="input input-ghost input-xl w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Task title" 
+                            <input name="title" class="input input-ghost input-lg w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Task title" 
                                 bind:value={task.name}
                             />
                         {:else}
@@ -283,8 +333,47 @@
                     {/if}
                 </div>
             </div>
+            {#if visibleInputs.length > 0}
+                <DragDropList bind:items={visibleInputs} scrollContainerEl={scrollContainer}
+                    class={showCurrentRun ? '' : 'md:pr-22'}
+                    classes={{
+                        dropIndicator: 'mx-22 my-2 h-2',
+                        item: 'pl-22'
+                    }}
+                >
+                    {#snippet blockHandle({ startDrag })}
+                        <div class="flex items-center gap-2">
+                            <InputActions task={task!} availableInputs={hiddenInputs} 
+                                onAddInput={(input) => {
+                                    visibleInputs.push(input);
+                                }}
+                            />
+                            {#if visibleInputs.length > 1}
+                                <button class="btn btn-ghost btn-square cursor-grab btn-sm" onmousedown={startDrag}><GripVertical class="text-base-content/50" /></button>
+                            {/if}
+                        </div>
+                    {/snippet}
+                    {#snippet children({ item: input })}
+                        <div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 pb-8 task-step relative">
+                            <div class="absolute top-3 right-3 z-2">
+                                {@render inputMenu(input.id, input.name)}
+                            </div>
+                            
+                            <div class="flex flex-col gap-2 pr-12">
+                                <label class="input w-full">
+                                    <span class="label h-full font-semibold text-primary bg-primary/15 mr-0">$</span>
+                                    <input type="text" class="font-semibold placeholder:font-normal" bind:value={input.name} placeholder="Argument name (ex. CompanyName)"/>
+                                </label>
+
+                                <input name="input-description" class="input w-full placeholder:text-base-content/30" type="text" placeholder="What is this argument for?" bind:value={input.description} />
+                                <input name="input-default" class="input w-full placeholder:text-base-content/30" type="text" placeholder="Default value (ex. Obot)" bind:value={input.default} />
+                            </div>
+                        </div>
+                    {/snippet}
+                </DragDropList>
+            {/if}
             <DragDropList bind:items={task.steps} scrollContainerEl={scrollContainer}
-                class={showCurrentRun ? '' : 'md:pr-22'}
+                class="{visibleInputs.length > 0 ? '-mt-6' : ''} {showCurrentRun ? '' : 'md:pr-22'}"
                 classes={{
                     dropIndicator: 'mx-22 my-2 h-2',
                     item: 'pl-22'
@@ -292,47 +381,21 @@
             >
                 {#snippet blockHandle({ startDrag, currentItem })}
                     <div class="flex items-center gap-2">
-                        <button class="btn btn-ghost btn-square btn-sm" popoverTarget="add-to-task" style="anchor-name: --add-to-task-anchor;">
-                            <Plus class="text-base-content/50" />
-                        </button>
-                        
-                        <ul class="dropdown menu w-72 rounded-box bg-base-100 dark:bg-base-300 shadow-sm"
-                            popover="auto" id="add-to-task" style="position-anchor: --add-to-task-anchor;">
-                            <li>
-                                <button class="justify-between"
-                                    onclick={(e) => {
-                                        const currentIndex = task!.steps.findIndex((step) => step.id === currentItem?.id);
-                                        const newStep = {
-                                            id: task!.steps.length.toString(),
-                                            name: '',
-                                            description: '',
-                                            content: ''
-                                        };
-                                        if (e.metaKey) {
-                                            task!.steps.splice(currentIndex, 0, newStep);
-                                        } else {
-                                            task!.steps.splice(currentIndex + 1, 0, newStep);
-                                        }
-
-                                        (document.activeElement as HTMLElement)?.blur();
-                                    }}
-                                >
-                                    <span>Add new step</span>
-                                    <span class="text-[11px] text-base-content/50">
-                                        click / <kbd class="kbd ">⌘</kbd> + click
-                                    </span>
-                                </button>
-                            </li>
-                            <li><button>Add a tool</button></li>
-                        </ul>
-
+                        <StepActions 
+                            task={task!} 
+                            item={currentItem} 
+                            availableInputs={hiddenInputs} 
+                            onAddInput={(input) => {
+                                visibleInputs.push(input);
+                            }} 
+                        />
                         <button class="btn btn-ghost btn-square cursor-grab btn-sm" onmousedown={startDrag}><GripVertical class="text-base-content/50" /></button>
                     </div>
                 {/snippet}
                 {#snippet children({ item: step })}
                     <div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 pb-8 task-step relative">
                         <div class="absolute top-3 right-3 z-2">
-                            {@render menu(step.id)}
+                            {@render stepMenu(step.id)}
                         </div>
                         
                         <div class="flex flex-col pr-12">
@@ -425,7 +488,72 @@
     </div>
 {/if}
 
-{#snippet menu(id: string)}
+{#snippet inputMenu(id: string, name: string)}
+    <button class="btn btn-ghost btn-square btn-sm" popoverTarget={`input-${id}-action`} style={`anchor-name: --input-${id}-action-anchor;`}>
+        <EllipsisVertical class="text-base-content/50" />
+    </button>
+
+    <ul class="dropdown flex flex-col gap-1 dropdown-end dropdown-bottom menu w-64 rounded-box bg-base-100 dark:bg-base-300 shadow-sm border border-base-300"
+        popover="auto" id={`input-${id}-action`} style={`position-anchor: --input-${id}-action-anchor;`}>
+        <li>
+            <label for={`step-${id}-description`} class="flex gap-2 justify-between items-center">
+                <span class="flex items-center gap-2">
+                    <ReceiptText class="size-4" />
+                    Description
+                </span>
+                <input type="checkbox" class="toggle toggle-sm" id={`step-${id}-description`} 
+                    checked={stepDescription.get(id) ?? false}
+                    onchange={(e) => {
+                        inputDescription.set(id, (e.target as HTMLInputElement)?.checked ?? false);
+                    }}
+                />
+            </label>
+        </li>
+        <li>
+            <label for={`step-${id}-description`} class="flex gap-2 justify-between items-center">
+                <span class="flex items-center gap-2">
+                    <HandHelping class="size-4" />
+                    Default value
+                </span>
+                <input type="checkbox" class="toggle toggle-sm" id={`step-${id}-description`} 
+                    checked={stepDescription.get(id) ?? false}
+                    onchange={(e) => {
+                        inputDefault.set(id, (e.target as HTMLInputElement)?.checked ?? false);
+                    }}
+                />
+            </label>
+        </li>
+        
+        <li>
+            <button class="flex items-center gap-2">
+                <Sparkles class="size-4" /> Improve with AI
+            </button>
+        </li>
+        {#if name.length > 0 && task!.inputs.some((input) => input.name === name)}
+            <li>
+                <button class="flex items-center gap-2"
+                    onclick={() => {
+                        visibleInputs = visibleInputs.filter((input) => input.id !== id);
+                    }}
+                >
+                    <EyeClosed class="size-4" /> Hide argument
+                </button>
+            </li>
+        {:else}
+            <li>
+                <button class="flex items-center gap-2"
+                    onclick={() => {
+                        visibleInputs = visibleInputs.filter((input) => input.id !== id);
+                    }}
+                >
+                    <EyeClosed class="size-4" /> Delete argument
+                </button>
+            </li>
+        {/if}
+    </ul>
+{/snippet}
+
+{#snippet stepMenu(id: string)}
     <button class="btn btn-ghost btn-square btn-sm" popoverTarget={`step-${id}-action`} style={`anchor-name: --step-${id}-action-anchor;`}>
         <EllipsisVertical class="text-base-content/50" />
     </button>
@@ -440,7 +568,9 @@
                 </span>
                 <input type="checkbox" class="toggle toggle-sm" id={`step-${id}-description`} 
                     checked={stepDescription.get(id) ?? false}
-                    onchange={(e) => toggleStepDescription(id, (e.target as HTMLInputElement)?.checked ?? false)}
+                    onchange={(e) => {
+                        stepDescription.set(id, (e.target as HTMLInputElement)?.checked ?? false);
+                    }}
                 />
             </label>
         </li>
@@ -452,7 +582,9 @@
                 </span>
                 <input type="checkbox" class="toggle toggle-sm" id={`step-${id}-block-editing`} 
                     checked={stepBlockEditing.get(id) ?? false}
-                    onchange={(e) => toggleStepBlockEditing(id, (e.target as HTMLInputElement)?.checked ?? false)}
+                    onchange={(e) => {
+                        stepBlockEditing.set(id, (e.target as HTMLInputElement)?.checked ?? false);
+                    }}
                 />
             </label>
         </li>
@@ -475,14 +607,14 @@
     </ul>
 {/snippet}
 
-<dialog bind:this={argsModal} class="modal">
+<dialog bind:this={inputsModal} class="modal">
   <div class="modal-box bg-base-200 dark:bg-base-100 p-0">
     <h4 class="text-lg font-semibold p-4 py-2 bg-base-100 dark:bg-base-200">Run Task</h4>
     <div class="p-4">
-        {#each Object.entries(args) as [key, value], index}
+        {#each Object.entries(requiredInputs) as [key], index}
             <label class="input w-full">
                 <span class="label h-full font-semibold text-primary bg-primary/15">{key}</span>
-                <input type="text" bind:value={args[index]} />
+                <input type="text" bind:value={requiredInputs[key]} />
             </label>
         {/each}
     </div>

@@ -48,46 +48,61 @@
 			in:slide={{ duration: 300 }}
 			out:slide={{ duration: 200 }}
 		>
-			<div class="flex items-start gap-3">
-				<!-- Notification icon -->
-				<div class="flex-shrink-0">
-					{#if notification.type === 'success'}
-						<CheckCircle class="h-5 w-5" />
-					{:else if notification.type === 'error'}
-						<AlertCircle class="h-5 w-5" />
-					{:else if notification.type === 'warning'}
-						<AlertTriangle class="h-5 w-5" />
-					{:else}
-						<Info class="h-5 w-5" />
-					{/if}
-				</div>
-
-				<!-- Notification content -->
-				<div class="min-w-0 flex-1">
-					<div class="text-sm font-medium break-all">
-						{notification.title}
+			<div class="flex items-start gap-3 {notification.type === 'action' ? 'flex-col' : ''}">
+				<div class="flex items-center gap-3">
+					<!-- Notification icon -->
+					<div class="shrink-0">
+						{#if notification.type === 'success'}
+							<CheckCircle class="h-5 w-5" />
+						{:else if notification.type === 'error'}
+							<AlertCircle class="h-5 w-5" />
+						{:else if notification.type === 'warning'}
+							<AlertTriangle class="h-5 w-5" />
+						{:else}
+							<Info class="h-5 w-5" />
+						{/if}
 					</div>
-					{#if notification.message}
-						<div class="mt-1 text-xs break-all opacity-80">
-							{notification.message}
+
+					<!-- Notification content -->
+					<div class="min-w-0 flex-1">
+						<div class="text-sm font-medium break-all">
+							{notification.title}
 						</div>
-					{/if}
+						{#if notification.message}
+							<div class="mt-1 text-xs {notification.type === 'action' ? 'wrap-break-word' : 'break-all'} opacity-80">
+								{notification.message}
+							</div>
+						{/if}
+					</div>
 				</div>
+				{#if notification.type === 'action'}
+					<div class="flex items-center gap-2 self-end">
+						{#if notification.onConfirm}
+							<button class="btn btn-primary btn-xs" onclick={notification.onConfirm}>Confirm</button>
+						{/if}
+
+						{#if notification.onCancel}
+							<button class="btn btn-secondary btn-xs" onclick={notification.onCancel}>Cancel</button>
+						{/if}
+					</div>
+				{/if}
 			</div>
 
 			<!-- Floating buttons -->
 			<div
 				class="absolute top-1 right-1 flex gap-1 rounded p-1 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100"
-			>
-				<!-- Copy button -->
-				<button
-					type="button"
-					class="btn btn-ghost btn-xs"
-					onclick={() => copyNotificationContent(notification)}
-					title="Copy notification"
-				>
-					<Copy class="h-3 w-3" />
-				</button>
+			>	
+				{#if notification.type !== 'action'}
+					<!-- Copy button -->
+					<button
+						type="button"
+						class="btn btn-ghost btn-xs"
+						onclick={() => copyNotificationContent(notification)}
+						title="Copy notification"
+					>
+						<Copy class="h-3 w-3" />
+					</button>
+				{/if}
 
 				<!-- Close button -->
 				<button
@@ -113,8 +128,8 @@
 		{#if notification.autoClose && notification.duration && notification.duration > 0}
 			<div class="mt-2 h-1 overflow-hidden rounded bg-black/10">
 				<div
-					class="h-full animate-pulse bg-current opacity-60"
-					style="animation: shrink {notification.duration}ms linear forwards;"
+					class="progress-bar h-full bg-primary opacity-60"
+					style="--duration: {notification.duration}ms;"
 				></div>
 			</div>
 		{/if}
@@ -129,5 +144,9 @@
 		to {
 			width: 0%;
 		}
+	}
+
+	.progress-bar {
+		animation: shrink var(--duration) linear forwards;
 	}
 </style>

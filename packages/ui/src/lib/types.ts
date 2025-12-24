@@ -149,12 +149,14 @@ export interface Event {
 
 export interface Notification {
 	id: string;
-	type: 'success' | 'error' | 'warning' | 'info';
+	type: 'success' | 'error' | 'warning' | 'info' | 'action';
 	title: string;
 	message?: string;
 	timestamp: Date;
 	autoClose?: boolean;
 	duration?: number; // milliseconds
+	onConfirm?: () => void;
+	onCancel?: () => void;
 }
 
 export interface Prompts {
