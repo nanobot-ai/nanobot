@@ -1,7 +1,8 @@
 export type Input = {
     name: string;
     description: string;
-    default: string;
+    default?: string;
+    id: string;
 }
 
 export type Step = {
