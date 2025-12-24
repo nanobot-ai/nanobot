@@ -155,15 +155,14 @@ export function setupEmptyTask() {
     };
 }
 
-// export function getTaskChanges(task: Task, prevTask: Task) {
-//     const hasOrderChanged = task.steps.some((step, index) => step.id !== prevTask.steps[index].id);
-//     const hasTaskNameChanged = task.name !== prevTask.name;
-//     const hasTaskDescriptionChanged = task.description !== prevTask.description;
-
-//     const hasStepsChanged = task.steps.filter((step) => {
-//         const prevStep = prevTask.steps.find((s) => s.id === step.id);
-//         return prevStep?.content !== step.content || prevStep?.name !== step.name || prevStep?.description !== step.description;
-//     });
-
-//     return 
-// }
+export function compileArguments(steps: Step[]) {
+    return steps.reduce<Record<string, string>>((acc, step) => {
+        const contentArguments = step.content.match(/\$\w+/g);
+        if (contentArguments) {
+            for (const arg of contentArguments) {
+                acc[arg] = '';
+            }
+        }
+        return acc;
+    }, {});
+}
