@@ -54,6 +54,7 @@
 		"daisyui": "^5.1.10",
 		"highlight.js": "^11.11.1",
 		"marked": "^16.4.2",
-		"marked-highlight": "^2.2.3"
+		"marked-highlight": "^2.2.3",
+		"yaml": "^2.7.0"
 	}
 }
