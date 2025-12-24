@@ -1,13 +1,11 @@
 <script lang="ts">
 	import '$lib/../app.css';
 	import DragDropList from '$lib/components/DragDropList.svelte';
-	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import MessageInput from '$lib/components/MessageInput.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
-	import { ChevronRight, EllipsisVertical, EyeClosed, GripVertical, HandHelping, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, Sparkles, ToolCase, Trash2, X } from '@lucide/svelte';
+	import { EllipsisVertical, GripVertical, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, X } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
-	import { createVariablePillPlugin } from '$lib/plugins/variablePillPlugin';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { WorkspaceService } from '$lib/workspace.svelte';
@@ -16,7 +14,9 @@
 	import { type Input, type Task } from './types';
 	import { compileInputs, compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
 	import StepActions from './StepActions.svelte';
-	import InputActions from './InputActions.svelte';
+	import TaskInputActions from './TaskInputActions.svelte';
+    import TaskInput from './TaskInput.svelte';
+	import Step from './Step.svelte';
 
     let { data } = $props();
     let workspaceId = $derived(data.workspaceId);
@@ -58,46 +58,6 @@
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
     const workspaceService = new WorkspaceService();
-    const variablePillPlugin = createVariablePillPlugin({
-		onVariableAddition: (variable: string) => {
-            const exists = task?.inputs.find((input) => input.name === variable) || visibleInputs.find((input) => input.name === variable);
-            if (!exists) {
-                const newInput: Input = {
-                    id: crypto.randomUUID(),
-                    name: variable,
-                    description: '',
-                    default: ''
-                };
-                task!.inputs.push(newInput);
-                notifications.action(
-                    `${variable}`, 
-                    'A new variable has been added. Would you like to add more details to it now?',
-                    () => {
-                        visibleInputs.push(newInput);
-                    },
-                );
-            }
-        },
-		onVariableDeletion: (variable: string) => {
-            const stillExists = task?.steps.some((step) => step.content.includes(`$${variable}`));
-            if (!stillExists) {
-                const hasVisible = visibleInputs.some((input) => input.name === variable);
-                if (hasVisible) {
-                    notifications.action(
-                        `${variable}`,
-                        'Would you like to remove the variable details from this task?',
-                        () => {
-                            task!.inputs = task!.inputs.filter((input) => input.name !== variable);
-                            visibleInputs = visibleInputs.filter((input) => input.name !== variable);
-                        }
-                    )
-                } else {
-                    task!.inputs = task!.inputs.filter((input) => input.name !== variable);
-                }
-                
-            }
-        },
-	});
 
     $effect(() => {
         workspace = workspaceService.getWorkspace(workspaceId);
@@ -343,7 +303,7 @@
                 >
                     {#snippet blockHandle({ startDrag })}
                         <div class="flex items-center gap-2">
-                            <InputActions task={task!} availableInputs={hiddenInputs} 
+                            <TaskInputActions task={task!} availableInputs={hiddenInputs} 
                                 onAddInput={(input) => {
                                     visibleInputs.push(input);
                                 }}
@@ -354,21 +314,19 @@
                         </div>
                     {/snippet}
                     {#snippet children({ item: input })}
-                        <div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 pb-8 task-step relative">
-                            <div class="absolute top-3 right-3 z-2">
-                                {@render inputMenu(input.id, input.name)}
-                            </div>
-                            
-                            <div class="flex flex-col gap-2 pr-12">
-                                <label class="input w-full">
-                                    <span class="label h-full font-semibold text-primary bg-primary/15 mr-0">$</span>
-                                    <input type="text" class="font-semibold placeholder:font-normal" bind:value={input.name} placeholder="Argument name (ex. CompanyName)"/>
-                                </label>
-
-                                <input name="input-description" class="input w-full placeholder:text-base-content/30" type="text" placeholder="What is this argument for?" bind:value={input.description} />
-                                <input name="input-default" class="input w-full placeholder:text-base-content/30" type="text" placeholder="Default value (ex. Obot)" bind:value={input.default} />
-                            </div>
-                        </div>
+                        <TaskInput 
+                            id={taskId} 
+                            task={task!} 
+                            {input} 
+                            {inputDescription}
+                            {inputDefault}
+                            onHideInput={(id) => {
+                                visibleInputs = visibleInputs.filter((input) => input.id !== id);
+                            }}
+                            onToggleInputDescription={(id, value) => inputDescription.set(id, value)}
+                            onToggleInputDefault={(id, value) => inputDefault.set(id, value)}
+                            {visibleInputs}
+                        />
                     {/snippet}
                 </DragDropList>
             {/if}
@@ -393,27 +351,18 @@
                     </div>
                 {/snippet}
                 {#snippet children({ item: step })}
-                    <div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 pb-8 task-step relative">
-                        <div class="absolute top-3 right-3 z-2">
-                            {@render stepMenu(step.id)}
-                        </div>
-                        
-                        <div class="flex flex-col pr-12">
-                            <input name="step-name" class="input input-ghost input-lg w-full font-semibold placeholder:text-base-content/30" type="text" placeholder="Step name" bind:value={step.name} />
-                            {#if stepDescription.get(step.id) ?? false}
-                                <input name="step-description" class="input text-[16px] input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Step description" bind:value={step.description} />
-                            {/if}
-                        </div>
-                    
-                        <MarkdownEditor 
-                            value={step.content} 
-                            blockEditEnabled={stepBlockEditing.get(step.id) ?? false} 
-                            plugins={[variablePillPlugin]} 
-                            onChange={(value) => {
-                                step.content = value;
-                            }}
-                        />
-                    </div>
+                    <Step 
+                        id={taskId} 
+                        task={task!} 
+                        {step}
+                        {stepDescription}
+                        {stepBlockEditing}
+                        onToggleStepDescription={(id, value) => stepDescription.set(id, value)}
+                        onToggleStepBlockEditing={(id, value) => stepBlockEditing.set(id, value)}
+                        onAddInput={(input) => visibleInputs.push(input)}
+                        onDeleteStep={(filename) => workspace?.deleteFile(filename)}
+                        {visibleInputs}
+                    />
                 {/snippet}
             </DragDropList>
 
@@ -488,125 +437,6 @@
     </div>
 {/if}
 
-{#snippet inputMenu(id: string, name: string)}
-    <button class="btn btn-ghost btn-square btn-sm" popoverTarget={`input-${id}-action`} style={`anchor-name: --input-${id}-action-anchor;`}>
-        <EllipsisVertical class="text-base-content/50" />
-    </button>
-
-    <ul class="dropdown flex flex-col gap-1 dropdown-end dropdown-bottom menu w-64 rounded-box bg-base-100 dark:bg-base-300 shadow-sm border border-base-300"
-        popover="auto" id={`input-${id}-action`} style={`position-anchor: --input-${id}-action-anchor;`}>
-        <li>
-            <label for={`step-${id}-description`} class="flex gap-2 justify-between items-center">
-                <span class="flex items-center gap-2">
-                    <ReceiptText class="size-4" />
-                    Description
-                </span>
-                <input type="checkbox" class="toggle toggle-sm" id={`step-${id}-description`} 
-                    checked={stepDescription.get(id) ?? false}
-                    onchange={(e) => {
-                        inputDescription.set(id, (e.target as HTMLInputElement)?.checked ?? false);
-                    }}
-                />
-            </label>
-        </li>
-        <li>
-            <label for={`step-${id}-description`} class="flex gap-2 justify-between items-center">
-                <span class="flex items-center gap-2">
-                    <HandHelping class="size-4" />
-                    Default value
-                </span>
-                <input type="checkbox" class="toggle toggle-sm" id={`step-${id}-description`} 
-                    checked={stepDescription.get(id) ?? false}
-                    onchange={(e) => {
-                        inputDefault.set(id, (e.target as HTMLInputElement)?.checked ?? false);
-                    }}
-                />
-            </label>
-        </li>
-        
-        <li>
-            <button class="flex items-center gap-2">
-                <Sparkles class="size-4" /> Improve with AI
-            </button>
-        </li>
-        {#if name.length > 0 && task!.inputs.some((input) => input.name === name)}
-            <li>
-                <button class="flex items-center gap-2"
-                    onclick={() => {
-                        visibleInputs = visibleInputs.filter((input) => input.id !== id);
-                    }}
-                >
-                    <EyeClosed class="size-4" /> Hide argument
-                </button>
-            </li>
-        {:else}
-            <li>
-                <button class="flex items-center gap-2"
-                    onclick={() => {
-                        visibleInputs = visibleInputs.filter((input) => input.id !== id);
-                    }}
-                >
-                    <EyeClosed class="size-4" /> Delete argument
-                </button>
-            </li>
-        {/if}
-    </ul>
-{/snippet}
-
-{#snippet stepMenu(id: string)}
-    <button class="btn btn-ghost btn-square btn-sm" popoverTarget={`step-${id}-action`} style={`anchor-name: --step-${id}-action-anchor;`}>
-        <EllipsisVertical class="text-base-content/50" />
-    </button>
-
-    <ul class="dropdown flex flex-col gap-1 dropdown-end dropdown-bottom menu w-64 rounded-box bg-base-100 dark:bg-base-300 shadow-sm border border-base-300"
-        popover="auto" id={`step-${id}-action`} style={`position-anchor: --step-${id}-action-anchor;`}>
-        <li>
-            <label for={`step-${id}-description`} class="flex gap-2 justify-between items-center">
-                <span class="flex items-center gap-2">
-                    <ReceiptText class="size-4" />
-                    Description
-                </span>
-                <input type="checkbox" class="toggle toggle-sm" id={`step-${id}-description`} 
-                    checked={stepDescription.get(id) ?? false}
-                    onchange={(e) => {
-                        stepDescription.set(id, (e.target as HTMLInputElement)?.checked ?? false);
-                    }}
-                />
-            </label>
-        </li>
-        <li>
-            <label for={`step-${id}-block-editing`} class="flex gap-2 justify-between items-center">
-                <span class="flex items-center gap-2">
-                    <ToolCase class="size-4" />
-                    Enable block editing
-                </span>
-                <input type="checkbox" class="toggle toggle-sm" id={`step-${id}-block-editing`} 
-                    checked={stepBlockEditing.get(id) ?? false}
-                    onchange={(e) => {
-                        stepBlockEditing.set(id, (e.target as HTMLInputElement)?.checked ?? false);
-                    }}
-                />
-            </label>
-        </li>
-        <li>
-            <button class="flex items-center gap-2">
-                <Sparkles class="size-4" /> Improve with AI
-            </button>
-        </li>
-        <li>
-            <button class="flex items-center gap-2"
-                onclick={() => {
-                    task!.steps = task!.steps.filter((step) => step.id !== id);
-                    const filename = `.nanobot/tasks/${taskId}/${id}.md`;
-                    workspace?.deleteFile(filename);
-                }}
-            >
-                <Trash2 class="size-4" /> Delete step
-            </button>
-        </li>
-    </ul>
-{/snippet}
-
 <dialog bind:this={inputsModal} class="modal">
   <div class="modal-box bg-base-200 dark:bg-base-100 p-0">
     <h4 class="text-lg font-semibold p-4 py-2 bg-base-100 dark:bg-base-200">Run Task</h4>
@@ -629,17 +459,3 @@
     <button>close</button>
   </form>
 </dialog>
-
-<style>
-    :root[data-theme=nanobotlight] {
-        .task-step :global(.milkdown) {
-            background: var(--color-base-100);
-        }
-    }
-
-    :root[data-theme=nanobotdark] {
-        .task-step :global(.milkdown) {
-            background: var(--color-base-200);
-        }
-    }
-</style>
