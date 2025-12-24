@@ -14,7 +14,7 @@
 	import type { WorkspaceClient, WorkspaceFile } from '$lib/types';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
 	import type { Task } from './types';
-	import { compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
+	import { compileArguments, compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
 
     let { data } = $props();
     let workspaceId = $derived(data.workspaceId);
@@ -27,6 +27,9 @@
 
     let showTaskTitle = $state(false);
     let showTaskDescription = $state(false);
+
+    let argsModal = $state<HTMLDialogElement | null>(null);
+    let args = $state<Record<string, string>>({});
 
     let lastSavedTaskJson = '';
 
@@ -201,8 +204,12 @@
             return;
         }
 
-        // TODO:
-        showCurrentRun = true;
+        args = compileArguments(task.steps);
+        if (Object.keys(args).length > 0) { 
+            argsModal?.showModal();
+        } else {
+            showCurrentRun = true;
+        }
     }
 </script>
 
@@ -221,7 +228,7 @@
                 showAlternateHeader = (scrollContainer?.scrollTop ?? 0) > 100;
             }}
         >
-            <div class="sticky top-0 left-0 w-full bg-base-200 dark:bg-base-100 z-10 {showAlternateHeader ? 'py-2' : ''}">
+            <div class="sticky top-0 left-0 w-full bg-base-200 dark:bg-base-100 z-10 py-4">
                 <div in:fade class="flex flex-col grow">
                     <div class="flex w-full items-center gap-4">
                         {#if showAlternateHeader}
@@ -468,6 +475,29 @@
         </li>
     </ul>
 {/snippet}
+
+<dialog bind:this={argsModal} class="modal">
+  <div class="modal-box bg-base-200 dark:bg-base-100 p-0">
+    <h4 class="text-lg font-semibold p-4 py-2 bg-base-100 dark:bg-base-200">Run Task</h4>
+    <div class="p-4">
+        {#each Object.entries(args) as [key, value], index}
+            <label class="input w-full">
+                <span class="label h-full font-semibold text-primary bg-primary/15">{key}</span>
+                <input type="text" bind:value={args[index]} />
+            </label>
+        {/each}
+    </div>
+    <div class="modal-action px-4 py-2 bg-base-100 dark:bg-base-200">
+        <form method="dialog">
+            <button class="btn btn-ghost">Cancel</button>
+            <button class="btn btn-primary">Run</button>
+        </form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
 
 <style>
     :root[data-theme=nanobotlight] {
