@@ -6,13 +6,19 @@
 	import { defaultChatApi } from '$lib/chat.svelte';
 	import { NotificationStore } from '$lib/stores/notifications.svelte';
 	import { setNotificationContext } from '$lib/context/notifications.svelte';
+	import { setLayoutContext } from '$lib/context/layout.svelte';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { Menu, X, SidebarOpen, SidebarClose, Sun, Moon, SquarePen } from '@lucide/svelte';
 	import type { Chat } from '$lib/types';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
+	import Workspaces from '$lib/components/Workspaces.svelte';
 
 	let { children } = $props();
+
+	let inverse = $derived(page.data.inverse ?? false);
+	let showWorkspaces = $derived(page.data.showWorkspaces ?? false);
 
 	let threads = $state<Chat[]>([]);
 	let isLoading = $state(true);
@@ -24,8 +30,20 @@
 	const newThread = resolve('/');
 	const notifications = new NotificationStore();
 
+	let scrollContainer = $state<HTMLElement | null>(null);
+
 	// Set notification context for global access
 	setNotificationContext(notifications);
+
+	// Set layout context for children to access sidebar state
+	setLayoutContext({
+		get isSidebarCollapsed() {
+			return isSidebarCollapsed;
+		},
+		get isMobileSidebarOpen() {
+			return isMobileSidebarOpen;
+		}
+	});
 
 	onMount(async () => {
 		// Load sidebar state from localStorage (desktop only)
@@ -123,7 +141,8 @@
 	<!-- Sidebar - responsive behavior -->
 	<div
 		class="
-		bg-base-200 transition-all duration-300 ease-in-out
+		transition-all duration-300 ease-in-out
+		{inverse ? 'bg-base-100 dark:bg-base-200' : 'bg-base-200'}
 		{isSidebarCollapsed ? 'hidden lg:block lg:w-0' : 'hidden lg:block lg:w-80'}
 		{isMobileSidebarOpen ? 'fixed inset-y-0 left-0 z-40 block! w-80' : 'lg:relative'}
 	"
@@ -168,18 +187,25 @@
 			</div>
 
 			<!-- Threads and Workspaces list -->
-			<div class="flex-1 overflow-hidden {!isSidebarCollapsed ? 'min-w-80' : ''}">
-				<div class="flex h-full flex-col">
+			<div class="overflow-y-auto h-[calc(100%-3.5rem)] {!isSidebarCollapsed ? 'min-w-80' : ''}" bind:this={scrollContainer}>
+				<div class="flex flex-col">
 					<!-- Threads section (takes up ~40% of available space) -->
-					<div class='flex-shrink-0 overflow-y-auto'>
+					<div class='shrink-0'>
 						<Threads
 							{threads}
 							onRename={handleRenameThread}
 							onDelete={handleDeleteThread}
 							{isLoading}
 							onThreadClick={closeMobileSidebar}
+							{inverse}
 						/>
 					</div>
+
+					{#if showWorkspaces}
+						<div class="shrink-0">
+							<Workspaces scrollContainerEl={scrollContainer} {inverse} />
+						</div>
+					{/if}
 				</div>
 			</div>
 
@@ -253,7 +279,11 @@
 	{/if}
 
 	<!-- Main content area -->
-	<div class="h-dvh flex-1">
+	<div class="
+		h-dvh flex grow transition-all transition-discrete 
+		{isSidebarCollapsed ? 'md:max-w-full w-full' : 'md:max-w-[calc(100%-320px)]'}
+		{inverse ? 'bg-base-200 dark:bg-base-100' : 'bg-base-100'}
+	">
 		{@render children?.()}
 	</div>
 </div>
