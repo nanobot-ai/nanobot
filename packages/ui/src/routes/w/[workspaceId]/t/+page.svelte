@@ -160,7 +160,6 @@
     $effect(() => {
         const files = workspace?.files ?? [];
         
-        console.log({ urlTaskId, workspaceId, taskId })
         if (urlTaskId && workspace && workspace.id === workspaceId && urlTaskId !== taskId && files.length > 0) {
             compileTask(urlTaskId, files);
         }
@@ -304,7 +303,7 @@
                                     onclick={(e) => {
                                         const currentIndex = task!.steps.findIndex((step) => step.id === currentItem?.id);
                                         const newStep = {
-                                            id: `step${task!.steps.length}`,
+                                            id: task!.steps.length.toString(),
                                             name: '',
                                             description: '',
                                             content: ''
@@ -359,7 +358,7 @@
                 <button class="btn btn-primary btn-square tooltip" data-tip="Add new step"
                     onclick={() => {
                         const newStep = {
-                            id: `step${task!.steps.length}`,
+                            id: task!.steps.length.toString(),
                             name: '',
                             description: '',
                             content: ''

@@ -1,3 +1,9 @@
+export type Input = {
+    name: string;
+    description: string;
+    default: string;
+}
+
 export type Step = {
     id: string;
     name: string;
@@ -8,12 +14,14 @@ export type Step = {
 export type Task = {
     name: string;
     description: string;
+    inputs: Input[];
     steps: Step[];
 }
 
 export type ParsedContent = {
     taskName: string;
     taskDescription: string;
+    inputs: Input[];
     next: string;
     name: string;
     description: string;

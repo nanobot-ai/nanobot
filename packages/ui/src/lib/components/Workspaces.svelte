@@ -119,11 +119,14 @@
         }
     }
 
-    async function createTask(workspaceId: string) {
+    async function createTask(e: MouseEvent, workspaceId: string) {
         const url = new URL(window.location.origin + resolve(`/w/${workspaceId}/t`));
-        // Explicitly clear any existing search params
         url.search = '';
-        goto(url.pathname, { replaceState: false, invalidateAll: true });
+        if (e.metaKey) {
+            window.open(url, '_blank');
+        } else {
+            goto(url.pathname, { replaceState: false, invalidateAll: true });
+        }
     }
 </script>
 
@@ -309,7 +312,7 @@
                             }
                         
                             <ul>
-                                {@render workspaceChild(workspace.id, 'Tasks', ListTodo, Object.keys(tasks), () => createTask(workspace.id))}
+                                {@render workspaceChild(workspace.id, 'Tasks', ListTodo, Object.keys(tasks), (e) => createTask(e, workspace.id))}
                                 {@render workspaceChild(workspace.id, 'Agents', Bot, [])}
                                 {@render workspaceChild(workspace.id, 'Conversations', MessageSquare, [])}
                             </ul>
@@ -321,7 +324,7 @@
     {/if}
 </div>
 
-{#snippet workspaceChild(workspaceId: string, title: string, Icon: Component, items: string[], onCreate?: () => void)}
+{#snippet workspaceChild(workspaceId: string, title: string, Icon: Component, items: string[], onCreate?: (e: MouseEvent) => void)}
 <li class="flex grow">
     <details class="workspace-details w-full">
         <summary class="flex rounded-r-none px-2 items-center justify-between gap-2 [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200' : 'hover:bg-base-100'}">

@@ -227,6 +227,7 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 				apply(tr, decorations) {
 					if (tr.docChanged) {
 						const newVariables = findAllVariables(tr.doc);
+						const previousKeys = new Set(previousVariables.map((v) => `${v.variable}:${v.start}`));
 
 						if (options.onVariableAddition) {
 							// For each variable that existed BEFORE this transaction,
@@ -254,6 +255,27 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 										completedVariables.add(key);
 									}
 								}
+							}
+						}
+
+						// Check newly introduced variables (e.g. from paste) that already have separators
+						for (const newVar of newVariables) {
+							const key = `${newVar.variable}:${newVar.start}`;
+
+							// Skip if this variable existed before or is already completed
+							if (previousKeys.has(key) || completedVariables.has(key)) {
+								continue;
+							}
+
+							// If this new variable already has a separator, mark it as completed
+							const hasSep = hasSeparatorAt(tr.doc, newVar.end);
+							const hasBlock = isFollowedByNewBlock(tr.doc, newVar.end);
+
+							if (hasSep || hasBlock) {
+								if (options.onVariableAddition) {
+									options.onVariableAddition(newVar.variable);
+								}
+								completedVariables.add(key);
 							}
 						}
 
