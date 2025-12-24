@@ -202,7 +202,6 @@ Send the drafted email.
                         <li>
                             <button class="justify-between"
                                 onclick={(e) => {
-                                    console.log({currentItem});
                                     const currentIndex = workflow.tasks.findIndex((task) => task.id === currentItem?.id);
                                     const newTask = {
                                         id: '',

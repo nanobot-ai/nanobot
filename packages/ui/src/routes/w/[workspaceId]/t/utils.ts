@@ -1,5 +1,6 @@
 import type { WorkspaceClient, WorkspaceFile } from "$lib/types";
-import type { ParsedContent, ParsedFile, Step, Task } from "./types";
+import type { Input, ParsedContent, ParsedFile, Step, Task } from "./types";
+import YAML from "yaml";
 
 async function parseFrontmatterMarkdown(fileContent: Blob): Promise<ParsedContent> {
     const text = await fileContent.text();
@@ -13,6 +14,7 @@ async function parseFrontmatterMarkdown(fileContent: Blob): Promise<ParsedConten
         return {
             taskName: '',
             taskDescription: '',
+            inputs: [],
             next: '',
             name: '',
             description: '',
@@ -22,23 +24,23 @@ async function parseFrontmatterMarkdown(fileContent: Blob): Promise<ParsedConten
 
     const [, frontmatter, content] = match;
     
-    // Parse simple frontmatter key-value pairs
-    const metadata: Record<string, string> = {};
-    for (const line of frontmatter.split('\n')) {
-        const colonIndex = line.indexOf(':');
-        if (colonIndex === -1) continue;
-        
-        const key = line.slice(0, colonIndex).trim();
-        const value = line.slice(colonIndex + 1).trim();
-        metadata[key] = value;
-    }
+    // Parse YAML frontmatter
+    const metadata = YAML.parse(frontmatter) ?? {};
+
+    // Normalize inputs array
+    const inputs: Input[] = (metadata.inputs ?? []).map((input: Partial<Input>) => ({
+        name: input.name ?? '',
+        description: input.description ?? '',
+        default: input.default ?? '',
+    }));
 
     return {
-        taskName: metadata['task_name'] ?? '',
-        taskDescription: metadata['task_description'] ?? '',
-        next: metadata['next'] ?? '',
-        name: metadata['name'] ?? '',
-        description: metadata['description'] ?? '',
+        taskName: metadata.task_name ?? '',
+        taskDescription: metadata.task_description ?? '',
+        inputs,
+        next: metadata.next ?? '',
+        name: metadata.name ?? '',
+        description: metadata.description ?? '',
         content: content.trim()
     };
 }
@@ -54,7 +56,7 @@ export async function compileFileContents(workspace: WorkspaceClient, files: Wor
             const parsedContent = await parseFrontmatterMarkdown(content);
             parsedFiles.push({
                 ...parsedContent,
-                id: file.name.replace(`.nanobot/tasks/${taskId}/`, '').replace('.md', ''),
+                id: file.name.replace(`.nanobot/tasks/${taskId}/`, ''),
             });
         }
     }
@@ -65,11 +67,13 @@ export async function compileFileContents(workspace: WorkspaceClient, files: Wor
 export async function convertToTask(workspace: WorkspaceClient, files: WorkspaceFile[], taskId: string) {
     let name = '';
     let description = '';
+    let inputs: Input[] = [];
     
     let parsedFiles: ParsedFile[] = [];
     if (files) {
         parsedFiles = await compileFileContents(workspace, files, taskId);
     }
+    console.log({ parsedFiles });
     
     const steps: Step[] = [];
     let pointer: ParsedFile | undefined = parsedFiles.length > 1 ? parsedFiles.find((file) => {
@@ -81,6 +85,7 @@ export async function convertToTask(workspace: WorkspaceClient, files: Workspace
     if (pointer) {
         name = pointer.taskName;
         description = pointer.taskDescription;
+        inputs = pointer.inputs;
 
         steps.push({
             id: pointer.id,
@@ -105,45 +110,54 @@ export async function convertToTask(workspace: WorkspaceClient, files: Workspace
     return {
         name,
         description,
+        inputs,
         steps
     }
 }
 
 export function compileOutputFiles(task: Task, taskId: string) {
-    const { name: taskName, description: taskDescription } = task;
+    const { name: taskName, description: taskDescription, inputs } = task;
     const files = task.steps.map((step, index) => {
-        const metadata: Record<string, string> = {
+        let id = `.nanobot/tasks/${taskId}/STEP_${index}.md`;
+        const metadata: Record<string, unknown> = {
             name: step.name,
             description: step.description,
-            next: index !== task.steps.length - 1 ? task.steps[index + 1].id : '',
+            next: index !== task.steps.length - 1 ? `STEP_${index+1}.md` : '',
         };
 
         if (index === 0) {
             metadata['task_name'] = taskName;
             metadata['task_description'] = taskDescription;
+            if (inputs.length > 0) {
+                metadata['inputs'] = inputs;
+            }
+            id = `.nanobot/tasks/${taskId}/TASK.md`;
         }
 
-        // Build Markdown frontmatter
-        const frontmatterLines = Object.entries(metadata)
-            .filter(([, value]) => value) // Skip empty values
-            .map(([key, value]) => `${key}: ${value}`);
+        // Remove empty string values for cleaner output
+        const cleanedMetadata = Object.fromEntries(
+            Object.entries(metadata).filter(([, value]) => value !== '' && value !== undefined)
+        );
+
+        // Serialize to YAML frontmatter
+        const frontmatter = YAML.stringify(cleanedMetadata).trim();
         
-        const content = `---\n${frontmatterLines.join('\n')}\n---\n${step.content}`;
+        const content = `---\n${frontmatter}\n---\n${step.content}`;
         const data = new Blob([content], { type: 'text/markdown' });
-        const stepId = step.id || `step${index}`
 
         return {
-            id: `.nanobot/tasks/${taskId}/${stepId}.md`,
+            id,
             data,
         };
     });
     return files;
 }
 
-export function setupEmptyTask() {
+export function setupEmptyTask(): Task {
     return {
         name: '',
         description: '',
+        inputs: [],
         steps: [
             {
                 id: '',
