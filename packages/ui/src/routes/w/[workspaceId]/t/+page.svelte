@@ -12,7 +12,7 @@
 	import type { WorkspaceClient, WorkspaceFile } from '$lib/types';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
 	import { type Input, type Task } from './types';
-	import { compileInputs, compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
+	import { compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
 	import StepActions from './StepActions.svelte';
 	import TaskInputActions from './TaskInputActions.svelte';
     import TaskInput from './TaskInput.svelte';
@@ -31,7 +31,7 @@
     let showTaskDescription = $state(false);
 
     let inputsModal = $state<HTMLDialogElement | null>(null);
-    let requiredInputs = $state<Record<string, string>>({});
+    let runFormData = $state<(Input & { value: string })[]>([]);
 
     let scrollContainer = $state<HTMLElement | null>(null);
 
@@ -213,10 +213,16 @@
             return;
         }
 
-        requiredInputs = compileInputs(task.steps);
-        if (Object.keys(requiredInputs).length > 0) { 
+        const visibleInputMapping = new Map(visibleInputs.map((input) => [input.id, input]));
+        if (task.inputs.length > 0) {
+            runFormData = task.inputs.map((input) => ({
+                ...input,
+                ...(visibleInputMapping.get(input.id) ?? {}),
+                value: input.default || visibleInputMapping.get(input.id)?.default || '',
+            }));
             inputsModal?.showModal();
         } else {
+            // do run without inputs
             showCurrentRun = true;
         }
     }
@@ -440,11 +446,11 @@
 <dialog bind:this={inputsModal} class="modal">
   <div class="modal-box bg-base-200 dark:bg-base-100 p-0">
     <h4 class="text-lg font-semibold p-4 py-2 bg-base-100 dark:bg-base-200">Run Task</h4>
-    <div class="p-4">
-        {#each Object.entries(requiredInputs) as [key], index}
+    <div class="p-4 flex flex-col gap-2">
+        {#each runFormData as input (input.id)}
             <label class="input w-full">
-                <span class="label h-full font-semibold text-primary bg-primary/15">{key}</span>
-                <input type="text" bind:value={requiredInputs[key]} />
+                <span class="label h-full font-semibold text-primary bg-primary/15">{input.name}</span>
+                <input type="text" bind:value={input.value} />
             </label>
         {/each}
     </div>

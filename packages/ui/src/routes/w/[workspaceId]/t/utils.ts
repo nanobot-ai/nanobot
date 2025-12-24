@@ -178,15 +178,3 @@ export function setupEmptyTask(): Task {
         ],
     };
 }
-
-export function compileInputs(steps: Step[]) {
-    return steps.reduce<Record<string, string>>((acc, step) => {
-        const contentInputs = step.content.match(/\$\w+/g);
-        if (contentInputs) {
-            for (const input of contentInputs) {
-                acc[input] = '';
-            }
-        }
-        return acc;
-    }, {});
-}
