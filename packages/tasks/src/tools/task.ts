@@ -12,7 +12,7 @@ const schema = z.object({
 });
 
 export default createTool({
-	title: "Start Task",
+	title: "Dispatch Task",
 	description: async (ctx) => {
 		const client = await ensureConnected(ctx.workspaceId);
 		const tasksDescriptions = await getTasksDescription(client);
@@ -53,8 +53,11 @@ ${tasksDescriptions}
 		const chatInput = {
 			type: "tool",
 			payload: {
-				name: task.name,
-				arguments: args,
+				name: "StartTask",
+				arguments: {
+					name: task.name,
+					arguments: args,
+				},
 			},
 		};
 

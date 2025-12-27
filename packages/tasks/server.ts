@@ -1,5 +1,7 @@
 import { Server } from "@nanobot-ai/nanomcp";
-import StartTask from "./src/tools/task.ts";
+import ExecuteTask from "./src/tools/execute-task.ts";
+import DispatchTask from "./src/tools/task.ts";
+import TaskStatus from "./src/tools/task-status.ts";
 
 const server = new Server(
 	{
@@ -8,7 +10,9 @@ const server = new Server(
 	},
 	{
 		tools: {
-			StartTask,
+			DispatchTask,
+			ExecuteTask,
+			TaskStatus,
 		},
 	},
 );

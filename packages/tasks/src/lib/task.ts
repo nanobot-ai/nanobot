@@ -26,7 +26,7 @@ const emptyTask: Task = {
 };
 
 function parseYAMLFrontMatter(text: string): {
-	frontMatter: Record<string, string>;
+	frontMatter: Record<string, unknown>;
 	instructions: string;
 } {
 	const match = text.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
@@ -55,10 +55,10 @@ export async function getTask(client: WorkspaceClient, taskName: string) {
 async function getTaskByDirectoryName(
 	client: WorkspaceClient,
 	taskName: string,
-) {
+): Promise<Task> {
 	const taskDir = await client.resolvePath(path.join(tasksRoot, taskName));
 	const content = await client.readTextFile(
-		path.join(tasksRoot, taskName, "TASK.md"),
+		path.join("./", tasksRoot, taskName, "TASK.md"),
 		{ ignoreNotFound: true },
 	);
 	if (!content) {
@@ -72,30 +72,31 @@ async function getTaskByDirectoryName(
 		id: taskName,
 		name: frontMatter.task_name || frontMatter.name || taskName,
 		description: frontMatter.task_description || frontMatter.description || "",
+		inputs: frontMatter.inputs || [],
 		instructions: parsedContent,
 		baseDir: taskDir,
-	};
+	} as Task;
 }
 
 export async function getTasksDescription(client: WorkspaceClient) {
 	const tasks = await getTasks(client);
 	const available = tasks
 		.map((s) => {
-			`Name: ${s.name}\nDescription: ${s.description}`;
+			const header = `NAME: ${s.name}\nDESCRIPTION: ${s.description || "No description provided"}`;
 			if (s.inputs) {
-				return `${s.name}: ${s.description}\nInputs:\n${s.inputs.map((i) => ` - ${i.name}: ${i.description}`).join("\n")}`;
+				return `${header}\nARGS:\n${s.inputs.map((i) => ` - ${i.name}: ${i.description}`).join("\n")}`;
 			} else {
-				return `${s.name}: ${s.description}`;
+				return header;
 			}
 		})
 		.join("---\n");
 	if (!available) {
 		return "No tasks available";
 	}
-	return;
+	return available;
 }
 
-export async function getTasks(client: WorkspaceClient) {
+export async function getTasks(client: WorkspaceClient): Promise<Task[]> {
 	const dirEntries = await client.listDir(tasksRoot, {
 		ignoreNotFound: true,
 	});

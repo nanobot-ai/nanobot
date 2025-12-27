@@ -157,6 +157,13 @@ export class McpRequestHandler {
 			}
 
 			const description = await this.#getDescription(baseCtx, name, tool);
+			const meta = tool.visibility
+				? {
+						ui: {
+							visibility: tool.visibility,
+						},
+					}
+				: undefined;
 
 			server.registerTool(
 				name,
@@ -164,6 +171,7 @@ export class McpRequestHandler {
 					description,
 					inputSchema: tool.inputSchema,
 					outputSchema: tool.outputSchema,
+					_meta: meta,
 				},
 				// biome-ignore lint/suspicious/noExplicitAny: Bridging AnyTool (type-erased) to MCP SDK callback, both use any
 				(args: any, ctx) => {
@@ -186,17 +194,19 @@ export class McpRequestHandler {
 		sessionIdRaw: string | undefined,
 	) {
 		const sessionId = sessionIdRaw ?? crypto.randomUUID();
+		const url = new URL(req.url);
+		const workspaceId =
+			req.headers.get("x-nanobot-workspace-id") ||
+			url.searchParams.get("workspace");
 		const baseCtx: Context = {
 			sessionId,
-			workspaceId: req.headers.get("x-nanobot-workspace-id") || sessionId,
+			workspaceId: workspaceId || sessionId,
 			signal: req.signal,
 		};
 
 		console.log(`New session: ${sessionId}`);
-		if (req.headers.get("x-nanobot-workspace-id")) {
-			console.log(
-				`Using workspace ID from header: ${req.headers.get("x-nanobot-workspace-id")}`,
-			);
+		if (workspaceId) {
+			console.log(`Using workspace ID: ${workspaceId}`);
 		}
 
 		await this.#setupTools(baseCtx, server);

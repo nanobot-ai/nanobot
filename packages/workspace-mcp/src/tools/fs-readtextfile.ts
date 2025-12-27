@@ -18,6 +18,9 @@ const schema = z.object({
 
 const outputSchema = z.object({
 	content: z.string().describe("The file content"),
+	encoding: z
+		.enum(["utf-8", "base64"])
+		.describe("The encoding used for the content"),
 	truncated: z.boolean().describe("Whether content was truncated"),
 });
 
@@ -57,6 +60,7 @@ export default createTool({
 
 			return toolResult.structured(result.content, {
 				content: result.content,
+				encoding,
 				truncated,
 			});
 		} catch (error) {

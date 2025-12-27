@@ -19,6 +19,7 @@ export function getWorkspaceClient(
 ): WorkspaceClient {
 	let client = clientsByWorkspaceId.get(workspaceId);
 
+	console.log(`Workspace client for workspaceId ${workspaceId} created`);
 	if (!client) {
 		const serverUrl =
 			url || process.env.WORKSPACE_URL || "http://localhost:5173/mcp";
