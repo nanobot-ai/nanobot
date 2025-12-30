@@ -648,6 +648,12 @@ definitions:
         type: string
         description: |
           The encryption key to use for encrypting and decrypting data.
+      apiKeyAuthUrl:
+        type: string
+        description: |
+          The URL for the API key authentication webhook. When set, API keys
+          (tokens starting with "ok1-") will be validated by calling this
+          endpoint instead of using JWT validation.
 
 type: object
 additionalProperties: false

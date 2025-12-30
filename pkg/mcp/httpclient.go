@@ -19,7 +19,16 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/log"
 )
 
-const SessionIDHeader = "Mcp-Session-Id"
+const (
+	SessionIDHeader = "Mcp-Session-Id"
+
+	// Token type URNs for RFC 8693 Token Exchange
+	tokenTypeJWT    = "urn:ietf:params:oauth:token-type:jwt"
+	tokenTypeAPIKey = "urn:obot:token-type:api-key"
+
+	// API key prefix for Obot-generated API keys
+	apiKeyPrefix = "ok1-"
+)
 
 type HTTPClient struct {
 	ctx          context.Context
@@ -778,7 +787,13 @@ func (s *HTTPClient) exchangeToken(ctx context.Context, subjectToken string) (st
 	data := url.Values{}
 	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
 	data.Set("subject_token", subjectToken)
-	data.Set("subject_token_type", "urn:ietf:params:oauth:token-type:jwt")
+
+	// Detect token type based on prefix
+	subjectTokenType := tokenTypeJWT
+	if strings.HasPrefix(subjectToken, apiKeyPrefix) {
+		subjectTokenType = tokenTypeAPIKey
+	}
+	data.Set("subject_token_type", subjectTokenType)
 	data.Set("requested_token_type", "urn:ietf:params:oauth:token-type:access_token")
 	data.Set("resource", s.baseURL)
 

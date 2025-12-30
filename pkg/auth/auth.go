@@ -27,6 +27,7 @@ type Auth struct {
 	JWKS              string   `usage:"JWKS public key for JWT tokens"`
 	TrustedAudiences  []string `usage:"Trusted audiences for JWT tokens"`
 	EncryptionKey     string   `usage:"Encryption key for storing sensitive data"`
+	APIKeyAuthURL     string   `usage:"URL for API key authentication webhook" env:"NANOBOT_RUN_API_KEY_AUTH_URL"`
 }
 
 func Wrap(ctx context.Context, env map[string]string, auth Auth, dsn, healthzPath string, next http.Handler) (http.Handler, error) {
@@ -150,6 +151,7 @@ func mcpProxy(auth Auth, dsn string, next http.Handler) (http.Handler, error) {
 		MCPPaths:          []string{"/mcp", "/api"},
 		OAuthJWKSURL:      auth.OAuthJWKSURL,
 		CookieNamePrefix:  "nanobot_",
+		APIKeyAuthURL:     auth.APIKeyAuthURL,
 	})
 	if err != nil {
 		return nil, err

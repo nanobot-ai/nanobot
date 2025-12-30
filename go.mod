@@ -2,6 +2,8 @@ module github.com/nanobot-ai/nanobot
 
 go 1.25.5
 
+replace github.com/obot-platform/mcp-oauth-proxy => ../mcp-oauth-proxy
+
 require (
 	github.com/adrg/xdg v0.5.3
 	github.com/dop251/goja v0.0.0-20250630131328-58d95d85e994
