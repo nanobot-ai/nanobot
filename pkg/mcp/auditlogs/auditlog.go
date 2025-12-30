@@ -2,6 +2,7 @@ package auditlogs
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -12,6 +13,7 @@ type MCPAuditLog struct {
 	Metadata         map[string]string  `json:"metadata,omitempty"`
 	CreatedAt        time.Time          `json:"createdAt"`
 	Subject          string             `json:"subject"`
+	APIKey           string             `json:"apiKey,omitempty"`
 	ClientName       string             `json:"clientName"`
 	ClientVersion    string             `json:"clientVersion"`
 	ClientIP         string             `json:"clientIP"`
@@ -38,4 +40,21 @@ type MCPWebhookStatus struct {
 	Name    string `json:"name"`
 	Status  string `json:"status"`
 	Message string `json:"message,omitempty"`
+}
+
+// RedactAPIKey redacts an API key in the format ok1-<user ID>-<key ID>-<secret>
+// to ok1-<user ID>-<key ID>-*****
+func RedactAPIKey(apiKey string) string {
+	// API keys have the format: ok1-<user ID>-<key ID>-<secret>
+	if !strings.HasPrefix(apiKey, "ok1-") {
+		return ""
+	}
+
+	parts := strings.SplitN(apiKey, "-", 4)
+	if len(parts) != 4 {
+		return ""
+	}
+
+	// Return redacted version: ok1-<user ID>-<key ID>-*****
+	return parts[0] + "-" + parts[1] + "-" + parts[2] + "-*****"
 }

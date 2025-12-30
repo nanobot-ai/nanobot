@@ -67,6 +67,14 @@ func buildAuditLog(req *http.Request, method string, sessionID string) auditlogs
 		clientIP = strings.Split(forwarded, ",")[0]
 	}
 
+	// Extract and redact API key from Authorization header
+	var redactedAPIKey string
+	if authHeader := req.Header.Get("Authorization"); authHeader != "" {
+		if token, ok := strings.CutPrefix(authHeader, "Bearer "); ok && strings.HasPrefix(token, "ok1") {
+			redactedAPIKey = auditlogs.RedactAPIKey(token)
+		}
+	}
+
 	// Copy headers and redact sensitive values
 	sanitizedHeaders := make(http.Header, len(req.Header))
 	for k, v := range req.Header {
@@ -83,6 +91,7 @@ func buildAuditLog(req *http.Request, method string, sessionID string) auditlogs
 		ClientIP:       strings.TrimSpace(clientIP),
 		CallType:       method,
 		SessionID:      sessionID,
+		APIKey:         redactedAPIKey,
 		UserAgent:      req.Header.Get("User-Agent"),
 		RequestHeaders: headersJSON,
 	}
@@ -384,6 +393,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 
 		streamingSession.session.Set("subject", auditLog.Subject)
 		streamingSession.session.Set("clientIP", auditLog.ClientIP)
+		streamingSession.session.Set("apiKey", auditLog.APIKey)
 
 		auditLog.ClientName = streamingSession.session.InitializeRequest.ClientInfo.Name
 		auditLog.ClientVersion = streamingSession.session.InitializeRequest.ClientInfo.Version

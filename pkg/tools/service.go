@@ -118,6 +118,7 @@ func buildAuditLog(msg *mcp.Message, session *mcp.Session) *auditlogs.MCPAuditLo
 
 	session.Get("subject", &auditLog.Subject)
 	session.Get("clientIP", &auditLog.ClientIP)
+	session.Get("apiKey", &auditLog.APIKey)
 
 	return auditLog
 }
