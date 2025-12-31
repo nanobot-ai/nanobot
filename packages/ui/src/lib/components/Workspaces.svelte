@@ -39,6 +39,8 @@
     let editingWorkspace = $state<Workspace | null>(null);
     let editingWorkspaceEl = $state<HTMLInputElement | null>(null);
 
+    let selectedColor = $state<string>('');
+
     onMount(() => {
         loadWorkspaces();
     });
@@ -128,6 +130,18 @@
             goto(url.pathname, { replaceState: false, invalidateAll: true });
         }
     }
+
+    const initialColorOptions = [
+        '#380067',
+        '#4f7ef3',
+        '#2ddcec',
+        '#ff4044',
+        '#fdcc11',
+        '#06eaa7',
+        '#ff7240',
+        '#840032',
+        '#4f772d'
+    ]
 </script>
 
 <div class="flex h-full flex-col">
@@ -219,62 +233,98 @@
                         </div>
                         <div class="shrink-0 flex items-center opacity-0 transition-opacity group-hover:opacity-100 relative z-30">
                             {#if editingWorkspace?.id !== workspace.id}
-                                <div class="dropdown dropdown-end" 
-                                    role="presentation"
-                                    onmousedown={(e) => e.stopPropagation()} 
+                                <button class="btn btn-ghost btn-square btn-sm" popoverTarget="workspace-actions-{workspace.id}" style="anchor-name: --workspace-actions-anchor-{workspace.id};"
+                                    onmousedown={(e) => e.stopPropagation()}
+                                    onclick={(e) => e.stopPropagation()}
                                 >
-                                    <div 
-                                        tabindex="0" 
-                                        role="button" 
-                                        class="btn btn-square btn-ghost btn-sm" 
+                                    <MoreVertical class="size-4" />
+                                </button>
+                                <ul class="dropdown menu w-48 rounded-box bg-base-100 dark:bg-base-300 shadow-sm overflow-visible"
+                                    popover="auto" id="workspace-actions-{workspace.id}" style="position-anchor: --workspace-actions-anchor-{workspace.id};">
+                                    <li>
+                                        <button 
+                                            onmousedown={(e) => e.stopPropagation()} 
+                                            onclick={async (e) => {
+                                                editingWorkspace = workspace;
+                                                e.currentTarget.blur();
+
+                                                await tick();
+                                                editingWorkspaceEl?.focus();
+                                            }} 
+                                            class="text-sm"
+                                        >
+                                            <Edit class="size-4" />
+                                            Rename
+                                        </button>
+                                    </li>
+                                    <li class="group/submenu relative" 
+                                        role="presentation"
+                                        onmousedown={(e) => e.stopPropagation()}
+                                        onmouseleave={(e) => {
+                                            if (!e.currentTarget.contains(document.activeElement)) {
+                                                selectedColor = '';
+                                            }
+                                        }}
+                                        onfocusout={(e) => {
+                                            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                                selectedColor = '';
+                                            }
+                                        }}
                                     >
-                                        <MoreVertical class="h-4 w-4" />
-                                    </div>
-                                    <ul
-                                        class="dropdown-content menu w-48 rounded-box border border-base-300 bg-base-100 dark:bg-base-300 p-2 shadow"
-                                    >
-                                        <li>
-                                            <button 
-                                                onmousedown={(e) => e.stopPropagation()} 
-                                                onclick={async (e) => {
-                                                    editingWorkspace = workspace;
-                                                    e.currentTarget.blur();
-    
-                                                    await tick();
-                                                    editingWorkspaceEl?.focus();
-                                                }} 
-                                                class="text-sm"
-                                            >
-                                                <Edit class="size-4" />
-                                                Rename
-                                            </button>
-                                        </li>
-                                        <li>
-                                            <button 
+                                        <div class="flex justify-between items-center">
+                                            <div class="flex items-center gap-2 text-sm">
+                                                <PaintBucket class="size-4" />
+                                                Change color
+                                            </div>
+                                            <ChevronRight class="size-3" />
+                                        </div>
+                                        <ul class="ml-0 menu -translate-y-2 bg-base-100 dark:bg-base-300 rounded-box shadow-md absolute left-full top-0 w-52 invisible opacity-0 group-hover/submenu:visible group-hover/submenu:opacity-100 group-focus-within/submenu:visible group-focus-within/submenu:opacity-100 transition-opacity z-50 before:hidden grid grid-cols-3 gap-0.5">
+                                            {#each initialColorOptions as color}
+                                                <li>
+                                                    <button class="text-sm justify-center flex border {color === selectedColor ? 'bg-base-300 border-primary' : 'border-transparent '}" 
+                                                        onclick={(_e) => {
+                                                            selectedColor = color;
+                                                        }} aria-label="Change color to {color}"
+                                                    >
+                                                        <div class="w-8 h-4 rounded-input" style="background-color: {color};"></div>
+                                                    </button>
+                                                </li>
+                                            {/each}
+                                            <li class="col-span-3 relative">
+                                                <button class="btn btn-sm btn-ghost z-10 pointer-events-none border {selectedColor && !initialColorOptions.includes(selectedColor) ? 'bg-base-300 border-primary' : 'border-transparent'}">
+                                                    {#if selectedColor === '' || initialColorOptions.includes(selectedColor)}
+                                                        Custom color
+                                                    {:else}
+                                                        <div class="w-full h-4 rounded-input" style="background-color: {selectedColor};"></div>
+                                                    {/if}
+                                                </button>
+                                                <input type="color" class="w-full absolute top-0 left-0 h-full" onmousedown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()} bind:value={selectedColor} />
+                                            </li>
+                                            <li class="col-span-3 mt-2">
+                                                <button class="btn button-soft btn-sm"
+                                                    disabled={!selectedColor}
+                                                    onclick={() => {
+                                                        // todo: save workspace with the selected color
+                                                    }}
+                                                >
+                                                    Apply
+                                                </button>
+                                            </li>
+                                        </ul>
+                                    </li>
+                                    <li>
+                                        <button 
                                             onmousedown={(e) => e.stopPropagation()} 
                                             onclick={(e) => {
                                                 // TODO:
-                                            }}
-                                            class="text-sm"
+                                            }} 
+                                            class="text-sm text-error"
                                         >
-                                                <PaintBucket class="size-4" />
-                                                Change color
-                                            </button>
-                                        </li>
-                                        <li>
-                                            <button 
-                                                onmousedown={(e) => e.stopPropagation()} 
-                                                onclick={(e) => {
-                                                    // TODO:
-                                                }} 
-                                                class="text-sm text-error"
-                                            >
-                                                <Trash2 class="size-4" />
-                                                Delete
-                                            </button>
-                                        </li>
-                                    </ul>
-                                </div>
+                                            <Trash2 class="size-4" />
+                                            Delete
+                                        </button>
+                                    </li>
+                                </ul>
                             {:else}
                                 <div class="flex items-center">
                                     <button class="btn btn-square btn-ghost btn-sm" 
