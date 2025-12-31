@@ -203,6 +203,7 @@
             lastSavedTaskJson = JSON.stringify(task);
             lastSavedVisibleInputsJson = JSON.stringify(visibleInputs);
             initialLoadComplete = true;
+            visibleInputs = [];
        } 
     });
 
