@@ -1,12 +1,12 @@
 <script lang="ts">
-	import { EllipsisVertical, ReceiptText, Sparkles, ToolCase, Trash2 } from "@lucide/svelte";
+	import { EllipsisVertical, ReceiptText, Sparkles, ToolCase, Trash2, Wrench, X } from "@lucide/svelte";
 	import type { Input, Step, Task } from "./types";
 	import MarkdownEditor from "$lib/components/MarkdownEditor.svelte";
 	import { createVariablePillPlugin } from "$lib/plugins/variablePillPlugin";
 	import { getNotificationContext } from "$lib/context/notifications.svelte";
+	import { getRegistryContext } from "$lib/context/registry.svelte";
 
     interface Props {
-        id: string;
         task: Task;
         step: Step;
         stepDescription: Map<string | number, boolean>;
@@ -15,12 +15,12 @@
         onDeleteStep: (filename: string) => void;
         onToggleStepDescription: (id: string, value: boolean) => void;
         onToggleStepBlockEditing: (id: string, value: boolean) => void;
+        onUpdateStep: (id: string, updates: Partial<Step>) => void;
         visibleInputs: Input[];
     }
 
     let { 
-        id,
-        task = $bindable(), 
+        task, 
         step, 
         stepDescription, 
         stepBlockEditing, 
@@ -28,10 +28,22 @@
         onDeleteStep,
         onToggleStepDescription, 
         onToggleStepBlockEditing,
+        onUpdateStep,
         visibleInputs,
     }: Props = $props();
     const notifications = getNotificationContext();
+    const registry = getRegistryContext();
+    let tools = $derived(
+        step.tools && step.tools.length > 0 && !registry.loading && registry.servers.length > 0 
+            ? step.tools.map((toolName) => registry.getServerByName(toolName)).filter((tool) => tool !== undefined) 
+            : []
+    );
     
+    function handleRemoveTool(toolName: string) {
+        step.tools = step.tools.filter((tool) => tool !== toolName);
+        onUpdateStep(step.id, { tools: step.tools });
+    }
+
     const variablePillPlugin = createVariablePillPlugin({
 		onVariableAddition: (variable: string) => {
             const exists = task?.inputs.find((input) => input.name === variable) || visibleInputs.find((input) => input.name === variable);
@@ -80,9 +92,15 @@
     </div>
     
     <div class="flex flex-col pr-12">
-        <input name="step-name" class="input input-ghost input-lg w-full font-semibold placeholder:text-base-content/30" type="text" placeholder="Step name" bind:value={step.name} />
+        <input name="step-name" class="input input-ghost input-lg w-full font-semibold placeholder:text-base-content/30" type="text" placeholder="Step name" 
+            value={step.name} 
+            oninput={(e) => onUpdateStep(step.id, { name: (e.target as HTMLInputElement).value })} 
+        />
         {#if stepDescription.get(step.id) ?? false}
-            <input name="step-description" class="input text-[16px] input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Step description" bind:value={step.description} />
+            <input name="step-description" class="input text-[16px] input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Step description" 
+                value={step.description} 
+                oninput={(e) => onUpdateStep(step.id, { description: (e.target as HTMLInputElement).value })} 
+            />
         {/if}
     </div>
 
@@ -90,10 +108,30 @@
         value={step.content} 
         blockEditEnabled={stepBlockEditing.get(step.id) ?? false} 
         plugins={[variablePillPlugin]} 
-        onChange={(value) => {
-            step.content = value;
-        }}
+        onChange={(value) => onUpdateStep(step.id, { content: value })}
     />
+
+    {#if tools.length > 0}
+        <div class="flex flex-wrap gap-2">
+            {#each tools as tool (tool.name)}
+            <div class="indicator group">
+                <div class="indicator-item group-hover:opacity-100 opacity-0 transition-opacity duration-150">
+                    <button class="btn btn-primary size-4 btn-circle tooltip" onclick={() => handleRemoveTool(tool.name)} data-tip="Remove tool">
+                        <X class="size-2" />
+                    </button>
+                </div>
+                <div class="badge dark:bg-base-200 size-fit py-1">
+                    {#if tool.icons?.[0]?.src}
+                        <img alt={tool.title} src={tool.icons[0].src} class="size-4"/>
+                    {:else}
+                        <Wrench class="size-4" />
+                    {/if}
+                    {tool.title}
+                </div>
+            </div>
+            {/each}
+        </div>
+    {/if}
 </div>
 
 

@@ -7,10 +7,10 @@
         item: Step;
         availableInputs: Input[];
         onAddInput: (input: Input) => void;
+        onOpenSelectTool: () => void;
     }
 
-    let { task = $bindable(), item, availableInputs, onAddInput }: Props = $props();
-
+    let { task = $bindable(), item, availableInputs, onAddInput, onOpenSelectTool }: Props = $props();
     function blur() {
         document.getElementById(`add-to-step-${item.id}`)?.hidePopover();
     }
@@ -30,7 +30,8 @@
                         id: task!.steps.length.toString(),
                         name: '',
                         description: '',
-                        content: ''
+                        content: '',
+                        tools: [],
                     };
                     if (e.metaKey) {
                         task!.steps.splice(currentIndex, 0, newStep);
@@ -85,7 +86,6 @@
                 </ul>
             </li>
         {/if}
-        
-        <li><button>Add a tool</button></li>
+        <li><button onclick={onOpenSelectTool}>Add a tool</button></li>
     </ul>
 {/if}

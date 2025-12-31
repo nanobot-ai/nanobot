@@ -3,6 +3,7 @@
 	import DragDropList from '$lib/components/DragDropList.svelte';
 	import MessageInput from '$lib/components/MessageInput.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
+	import { createRegistryStore, setRegistryContext } from '$lib/context/registry.svelte';
 	import { EllipsisVertical, GripVertical, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, X } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
@@ -11,12 +12,17 @@
 	import { WorkspaceService } from '$lib/workspace.svelte';
 	import type { WorkspaceClient, WorkspaceFile } from '$lib/types';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
-	import { type Input, type Task } from './types';
+	import { type Input, type Task, type Step as StepType } from './types';
 	import { compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
 	import StepActions from './StepActions.svelte';
 	import TaskInputActions from './TaskInputActions.svelte';
     import TaskInput from './TaskInput.svelte';
 	import Step from './Step.svelte';
+	import RegistryToolSelector from './RegistryToolSelector.svelte';
+	import { onMount } from 'svelte';
+
+	const registryStore = createRegistryStore();
+	setRegistryContext(registryStore);
 
     let { data } = $props();
     let workspaceId = $derived(data.workspaceId);
@@ -38,9 +44,11 @@
     let stepBlockEditing = new SvelteMap<number | string, boolean>();
     let stepDescription = new SvelteMap<number | string, boolean>();
 
-    // TODO:
     let currentRun = $state<unknown | null>(null);
     let showCurrentRun = $state(false);
+
+    let registryToolSelector = $state<ReturnType<typeof RegistryToolSelector> | null>(null);
+    let currentAddingToolForStep = $state<StepType | null>(null);
 
     let showMessageInput = $state(false);
     let showAlternateHeader = $state(false);
@@ -61,7 +69,8 @@
 
     $effect(() => {
         workspace = workspaceService.getWorkspace(workspaceId);
-    })
+        registryStore.fetch();
+    });
 
     function debouncedSave() {
         if (saveTimeout) {
@@ -353,19 +362,26 @@
                             onAddInput={(input) => {
                                 visibleInputs.push(input);
                             }} 
+                            onOpenSelectTool={() => {
+                                currentAddingToolForStep = currentItem;
+                                registryToolSelector?.showModal();
+                            }}
                         />
                         <button class="btn btn-ghost btn-square cursor-grab btn-sm" onmousedown={startDrag}><GripVertical class="text-base-content/50" /></button>
                     </div>
                 {/snippet}
                 {#snippet children({ item: step })}
                     <Step 
-                        id={taskId} 
-                        task={task!} 
+                        task={task!}
                         {step}
                         {stepDescription}
                         {stepBlockEditing}
                         onToggleStepDescription={(id, value) => stepDescription.set(id, value)}
                         onToggleStepBlockEditing={(id, value) => stepBlockEditing.set(id, value)}
+                        onUpdateStep={(id, updates) => {
+                            const idx = task!.steps.findIndex(s => s.id === id);
+                            if (idx !== -1) Object.assign(task!.steps[idx], updates);
+                        }}
                         onAddInput={(input) => visibleInputs.push(input)}
                         onDeleteStep={(filename) => workspace?.deleteFile(filename)}
                         {visibleInputs}
@@ -380,7 +396,8 @@
                             id: task!.steps.length.toString(),
                             name: '',
                             description: '',
-                            content: ''
+                            content: '',
+                            tools: [],
                         };
                         task!.steps.push(newStep);
                     }}
@@ -466,3 +483,13 @@
     <button>close</button>
   </form>
 </dialog>
+
+<RegistryToolSelector bind:this={registryToolSelector} 
+    omit={currentAddingToolForStep?.tools ?? []}
+    onToolsSelect={(names) => {
+        if (!currentAddingToolForStep) return;
+        const stepIndex = task?.steps.findIndex((step) => step.id === currentAddingToolForStep?.id);
+        if (stepIndex === undefined) return;
+        task!.steps[stepIndex].tools.push(...names);
+    }} 
+/>
