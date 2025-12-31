@@ -18,7 +18,8 @@ async function parseFrontmatterMarkdown(fileContent: Blob): Promise<ParsedConten
             next: '',
             name: '',
             description: '',
-            content: text.trim()
+            content: text.trim(),
+            tools: [],
         };
     }
 
@@ -35,10 +36,13 @@ async function parseFrontmatterMarkdown(fileContent: Blob): Promise<ParsedConten
         id: crypto.randomUUID()
     }));
 
+    const tools: string[] = (metadata.tools ?? []).map((tool: string) => tool) ?? [];
+
     return {
         taskName: metadata.task_name ?? '',
         taskDescription: metadata.task_description ?? '',
         inputs,
+        tools,
         next: metadata.next ?? '',
         name: metadata.name ?? '',
         description: metadata.description ?? '',
@@ -93,6 +97,7 @@ export async function convertToTask(workspace: WorkspaceClient, files: Workspace
             name: pointer.name,
             description: pointer.description,
             content: pointer.content,
+            tools: pointer.tools,
         })
     }
 
@@ -104,6 +109,7 @@ export async function convertToTask(workspace: WorkspaceClient, files: Workspace
                 name: pointer.name,
                 description: pointer.description,
                 content: pointer.content,
+                tools: pointer.tools,
             })
         }
     }
@@ -112,7 +118,7 @@ export async function convertToTask(workspace: WorkspaceClient, files: Workspace
         name,
         description,
         inputs,
-        steps
+        steps,
     }
 }
 
@@ -124,6 +130,7 @@ export function compileOutputFiles(task: Task, visibleInputs: Input[], taskId: s
             name: step.name,
             description: step.description,
             next: index !== task.steps.length - 1 ? `STEP_${index+1}.md` : '',
+            tools: step.tools,
         };
 
         if (index === 0) {
@@ -174,6 +181,7 @@ export function setupEmptyTask(): Task {
                 name: '',
                 description: '',
                 content: '',
+                tools: [],
             }
         ],
     };

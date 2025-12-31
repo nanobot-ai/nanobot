@@ -397,3 +397,22 @@ export interface InitializationResult {
 }
 
 export const UIPath = '/mcp?ui';
+
+export interface Server {
+    description: string;
+    icons: {
+        mimeType: string;
+        src: string;
+    }[];
+    name: string;
+    remotes?: {
+        type: string;
+        url: string;
+    }[];
+    repository?: {
+        source: string;
+        url: string;
+    };
+    title: string;
+    version: string;
+}

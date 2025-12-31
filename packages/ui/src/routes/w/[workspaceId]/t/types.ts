@@ -10,6 +10,7 @@ export type Step = {
     name: string;
     description: string;
     content: string;
+    tools: string[];
 }
 
 export type Task = {
@@ -27,6 +28,7 @@ export type ParsedContent = {
     name: string;
     description: string;
     content: string;
+    tools: string[];
 };
 
 export type ParsedFile = {
