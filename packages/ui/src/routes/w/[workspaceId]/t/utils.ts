@@ -78,14 +78,11 @@ export async function convertToTask(workspace: WorkspaceClient, files: Workspace
     if (files) {
         parsedFiles = await compileFileContents(workspace, files, taskId);
     }
-    console.log({ parsedFiles });
     
     const steps: Step[] = [];
-    let pointer: ParsedFile | undefined = parsedFiles.length > 1 ? parsedFiles.find((file) => {
-        // find the first file
-        // it can have a next but is not the next of any other file
-        return !parsedFiles.some((compareFile) => compareFile.next === file.id);
-    }) : parsedFiles?.[0];
+    let pointer: ParsedFile | undefined = parsedFiles.length > 1 
+        ? parsedFiles.find((file) => file.id === 'TASK.md') 
+        : parsedFiles?.[0];
 
     if (pointer) {
         name = pointer.taskName;
