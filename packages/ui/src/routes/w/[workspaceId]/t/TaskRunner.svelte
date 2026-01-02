@@ -117,7 +117,7 @@
 <div class="flex w-full h-dvh justify-center items-center flex-col relative">
     <div class="h-16 w-full flex p-4 items-center absolute top-0 left-0">
         {#if loading}
-        <h2 in:fade class="text-xl font-semibold">{name}</h2>
+        <h2 in:fade class="text-xl font-semibold flex items-center gap-2">{name} <LoaderCircle class="size-4 animate-spin shrink-0" /></h2>
         {/if}
     </div>
     {#if initialLoadComplete && task}
@@ -148,15 +148,14 @@
                 {#if !loading}
                     <div class="w-full" out:slide={{ duration: 300 }}>
                         <div class="w-full flex flex-col justify-center items-center" out:fly={{ y: -100, duration: 200 }} >
-                            <ListCheck class="size-8 text-base-content/20 mb-2" />
                             <h2 class="text-xl font-semibold">{name}</h2>
                             {#if description.length > 0}
-                                <p class="text-sm text-base-content/50 mt-1">{description}</p>
+                                <p class="text-xs text-base-content/50 mt-1">{description}</p>
                             {/if}
                             {#if tools.length > 0}
-                                <div class="flex flex-wrap gap-2 mt-2">
+                                <div class="flex flex-wrap gap-2 mt-2 mb-1">
                                     {#each tools as tool}
-                                        <div class="badge badge-outline badge-primary">
+                                        <div class="badge badge-sm badge-outline badge-primary">
                                             {#if tool.icons?.[0]?.src}
                                                 <img alt={tool.title} src={tool.icons[0].src} class="size-4" />
                                             {:else}
@@ -168,7 +167,8 @@
                                 </div>
                             {/if}
                             {#if runFormData.length > 0}
-                                <div class="pt-4 flex flex-col gap-2 w-full">
+                                <div class="mt-4 p-4 flex flex-col gap-2 w-full border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
+                                    <p class="text-xs text-primary">To get started, please fill out the following information:</p>
                                     <div>
                                         {#each runFormData as input (input.id)}
                                             <label class="input w-full validator">
