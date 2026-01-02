@@ -2,7 +2,7 @@
 	import { getNotificationContext } from "$lib/context/notifications.svelte";
 	import { getRegistryContext } from "$lib/context/registry.svelte";
 	import { SvelteMap } from "svelte/reactivity";
-	import { Check, Plus, Search, ServerIcon } from "@lucide/svelte";
+	import { Check, Plus, Search, ServerIcon, X } from "@lucide/svelte";
 	import type { Server } from "$lib/types";
 
     interface Props {
@@ -46,7 +46,9 @@
 <dialog bind:this={dialog} class="modal">
     <div class="modal-box bg-base-100 dark:bg-base-200 w-full md:w-7xl h-full max-w-full max-h-full md:max-w-[calc(100vw-2rem)] md:max-h-[calc(100vh-2rem)] overflow-y-auto">
         <form method="dialog">
-            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+                <X class="size-4" />
+            </button>
           </form>
         <div class="flex flex-col h-full">
             <h3 class="text-lg font-bold">Select tools to add</h3>

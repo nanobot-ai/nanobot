@@ -470,8 +470,13 @@
 {/if}
 
 <dialog bind:this={inputsModal} class="modal">
-  <div class="modal-box bg-base-200 dark:bg-base-100 p-0">
-    <h4 class="text-lg font-semibold p-4 py-2 bg-base-100 dark:bg-base-200">Run Task</h4>
+  <div class="modal-box bg-base-200 dark:bg-base-100 p-0 border border-transparent dark:border-base-300">
+    <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+            <X class="size-4" />
+        </button>
+      </form>
+    <h4 class="text-lg font-semibold p-4 bg-base-100 dark:bg-base-200">Run Task</h4>
     <div class="p-4 flex flex-col gap-2">
         {#each runFormData as input (input.id)}
             <label class="input w-full">
@@ -480,7 +485,7 @@
             </label>
         {/each}
     </div>
-    <div class="modal-action px-4 py-2 bg-base-100 dark:bg-base-200">
+    <div class="modal-action mt-0 px-4 py-2 bg-base-100 dark:bg-base-200">
         <form method="dialog">
             <button class="btn btn-ghost">Cancel</button>
             <button class="btn btn-primary">Run</button>

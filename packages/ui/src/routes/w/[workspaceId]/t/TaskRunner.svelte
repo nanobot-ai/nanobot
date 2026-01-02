@@ -6,7 +6,7 @@
 	import { convertToTask } from "./utils";
 	import type { Input, Task } from "./types";
 	import { fade, fly, slide } from "svelte/transition";
-	import { ListCheck, LoaderCircle, Play, Square, Wrench } from "@lucide/svelte";
+	import { LoaderCircle, Play, Square, Wrench } from "@lucide/svelte";
 	import { ChatService } from "$lib/chat.svelte";
 	import Messages from "$lib/components/Messages.svelte";
 
