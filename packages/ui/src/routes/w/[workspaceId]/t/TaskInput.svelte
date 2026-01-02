@@ -11,6 +11,7 @@
         onHideInput: (id: string) => void;
         onToggleInputDescription: (id: string, value: boolean) => void;
         onToggleInputDefault: (id: string, value: boolean) => void;
+        onSuggestImprovement: (content: string) => void;
     }
 
     let { 
@@ -22,6 +23,7 @@
         onHideInput,
         onToggleInputDescription,
         onToggleInputDefault,
+        onSuggestImprovement,
     }: Props = $props();
 </script>
 
@@ -78,7 +80,17 @@
         </li>
         
         <li>
-            <button class="flex items-center gap-2">
+            <button class="flex items-center gap-2"
+                onclick={() => onSuggestImprovement(`
+The user is asking for an improvement to the following input:
+Argument name: ${name}
+Argument description: ${input.description}
+Argument default value: ${input.default}
+
+Please provide a detailed improvement to the input. If the user has not provided a description, suggest one based on the argument name and default value.
+Do not suggest a default value if the user has not provided one.
+                `)}
+            >
                 <Sparkles class="size-4" /> Improve with AI
             </button>
         </li>
