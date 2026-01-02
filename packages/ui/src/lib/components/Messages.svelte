@@ -40,7 +40,7 @@
 	let showLoadingIndicator = $derived(isLoading && !hasMessageContent);
 </script>
 
-<div id="message-groups" class="flex flex-col space-y-4 pt-4">
+<div id="message-groups" class="w-full flex flex-col space-y-4 pt-4">
 	{#if messages.length === 0}
 		<AgentHeader {agent} {onSend} />
 	{:else}

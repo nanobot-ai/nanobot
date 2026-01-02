@@ -107,6 +107,7 @@
             return;
         }
         
+        // TODO: change below to hit running task with arguments once available
         chat.sendMessage('Write a very long story about the history of the universe. It should be a 1 minute read at least.');
         setTimeout(() => {
             loading = true

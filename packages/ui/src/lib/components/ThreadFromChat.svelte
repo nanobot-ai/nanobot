@@ -4,24 +4,26 @@
 
     interface Props {
         chat: ChatService
+        inline?: boolean;
     }
 
-    let {chat}: Props = $props();
+    let { chat, inline}: Props = $props();
 </script>
 
 {#key chat.chatId}
     <Thread
-            messages={chat.messages}
-            prompts={chat.prompts}
-            resources={chat.resources}
-            elicitations={chat.elicitations}
-            onElicitationResult={chat.replyToElicitation}
-            onSendMessage={chat.sendMessage}
-            onFileUpload={chat.uploadFile}
-            cancelUpload={chat.cancelUpload}
-            uploadingFiles={chat.uploadingFiles}
-            uploadedFiles={chat.uploadedFiles}
-            isLoading={chat.isLoading}
-            agent={chat.agent}
+        messages={chat.messages}
+        prompts={chat.prompts}
+        resources={chat.resources}
+        elicitations={chat.elicitations}
+        onElicitationResult={chat.replyToElicitation}
+        onSendMessage={chat.sendMessage}
+        onFileUpload={chat.uploadFile}
+        cancelUpload={chat.cancelUpload}
+        uploadingFiles={chat.uploadingFiles}
+        uploadedFiles={chat.uploadedFiles}
+        isLoading={chat.isLoading}
+        agent={chat.agent}
+        {inline}
     />
 {/key}

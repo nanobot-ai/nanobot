@@ -136,6 +136,10 @@
 		textareaRef.style.height = `${newHeight}px`;
 	}
 
+	export function focus() {
+		textareaRef?.focus();
+	}
+
 	// Auto-resize when message changes
 	$effect(() => {
 		if (textareaRef) {

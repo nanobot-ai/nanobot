@@ -19,7 +19,9 @@
     import TaskInput from './TaskInput.svelte';
 	import Step from './Step.svelte';
 	import RegistryToolSelector from './RegistryToolSelector.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { ChatService } from '$lib/chat.svelte';
+	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 
     type Props = {
         workspaceId: string;
@@ -47,7 +49,8 @@
     let stepDescription = new SvelteMap<number | string, boolean>();
 
     let currentRun = $state<unknown | null>(null);
-    let showCurrentRun = $state(false);
+    let showSidebarThread = $state(false);
+    let toggleableMessageInput = $state<ReturnType<typeof MessageInput> | null>(null);
 
     let registryToolSelector = $state<ReturnType<typeof RegistryToolSelector> | null>(null);
     let currentAddingToolForStep = $state<StepType | null>(null);
@@ -68,6 +71,7 @@
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
     const workspaceService = new WorkspaceService();
+    const chat = new ChatService();
 
     onMount(() => {
         workspace = workspaceService.getWorkspace(workspaceId);
@@ -245,9 +249,24 @@
             }));
             inputsModal?.showModal();
         } else {
-            // do run without inputs
-            showCurrentRun = true;
+            // no inputs provided, just run task
+            showSidebarThread = true;
         }
+    }
+
+    function submitRun() {
+        // TODO: change below to actually hit the run task endpoint once available
+        chat.sendMessage(
+            `
+                Fake a response to the user's message. Do not indicate that you are faking a response.
+                Utilize the following inputs:
+                ${JSON.stringify(runFormData)}
+
+                The following task has been provided:
+                ${task?.steps.map((step, index) => `Step ${index+1}: ${step.content}}`)}
+            `
+        )
+        showSidebarThread = true;
     }
 </script>
 
@@ -320,7 +339,7 @@
             </div>
             {#if visibleInputs.length > 0}
                 <DragDropList bind:items={visibleInputs} scrollContainerEl={scrollContainer}
-                    class={showCurrentRun ? '' : 'md:pr-22'}
+                    class={showSidebarThread ? '' : 'md:pr-22'}
                     classes={{
                         dropIndicator: 'mx-22 my-2 h-2',
                         item: 'pl-22'
@@ -355,7 +374,7 @@
                 </DragDropList>
             {/if}
             <DragDropList bind:items={task.steps} scrollContainerEl={scrollContainer}
-                class="{visibleInputs.length > 0 ? '-mt-6' : ''} {showCurrentRun ? '' : 'md:pr-22'}"
+                class="{visibleInputs.length > 0 ? '-mt-6' : ''} {showSidebarThread ? '' : 'md:pr-22'}"
                 classes={{
                     dropIndicator: 'mx-22 my-2 h-2',
                     item: 'pl-22'
@@ -416,38 +435,45 @@
 
             <div class="flex grow"></div>
 
-            {#if !showCurrentRun}
+            {#if !showSidebarThread}
                 <div in:fade={{ duration: 200 }} class="sticky bottom-0 right-0 self-end flex flex-col gap-4 z-10">
                     {#if showMessageInput}
                         <div class="bg-base-100 dark:bg-base-200 border border-base-300 rounded-selector w-sm md:w-2xl"
                             transition:fly={{ x: 100, duration: 200 }}
                         >
-                            <MessageInput />
+                            <MessageInput bind:this={toggleableMessageInput} onSend={(message) => {
+                                showSidebarThread = true;
+                                showMessageInput = false;
+                                return chat.sendMessage(message);
+                            }} />
                         </div>  
                     {/if}
 
-                    <button class="float-right btn btn-lg btn-circle btn-primary self-end" onclick={() => showMessageInput = !showMessageInput}>
+                    <button class="float-right btn btn-lg btn-circle btn-primary self-end" onclick={async () => {
+                        showMessageInput = !showMessageInput;
+                        await tick();
+                        toggleableMessageInput?.focus();
+                    }}>
                         <MessageCircleMore class="size-6" />
                     </button>
                 </div>
             {/if}
         </div>
 
-        {#if showCurrentRun}
+        {#if showSidebarThread}
             <div transition:fly={{ x: 100, duration: 200 }} class="md:min-w-[520px] bg-base-100 h-dvh">
-                <div class="w-full h-full flex flex-col max-h-dvh overflow-y-auto">
-                    <div class="w-full flex justify-between items-center pr-4 bg-base-100">
-                        <h4 class="text-lg font-semibold border-l-4 border-primary p-4 pr-0">{task.name} | Run {'{id}'}</h4>
-                        <button class="btn btn-ghost btn-square btn-sm" onclick={() => showCurrentRun = false}>
-                            <X class="size-4" />
-                        </button>
-                    </div>
-                    <div class="flex grow p-4 pt-0">
-                        Thread content here
-                    </div>
-                    <div class="sticky bottom-0 left-0 w-full">
-                        <MessageInput />
-                    </div>
+                <div class="w-full flex justify-between items-center p-4 bg-base-100">
+                    {#if currentRun}
+                        <h4 class="text-lg font-semibold border-l-4 border-primary">{task.name} | Run {'{id}'}</h4>
+                    {:else}
+                        <div class="w-full"></div>
+                    {/if}
+                    <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" data-tip="Close" onclick={() => showSidebarThread = false}>
+                        <X class="size-4" />
+                    </button>
+                </div>
+                <div class="w-full h-full flex flex-col max-h-[calc(100dvh-4rem)]">
+                    <ThreadFromChat inline {chat} />
                 </div>
             </div>
         {/if}
@@ -487,8 +513,8 @@
     </div>
     <div class="modal-action mt-0 px-4 py-2 bg-base-100 dark:bg-base-200">
         <form method="dialog">
-            <button class="btn btn-ghost">Cancel</button>
-            <button class="btn btn-primary">Run</button>
+            <button class="btn btn-ghost" onclick={() => inputsModal?.close()}>Cancel</button>
+            <button class="btn btn-primary" onclick={submitRun}>Run</button>
         </form>
     </div>
   </div>
