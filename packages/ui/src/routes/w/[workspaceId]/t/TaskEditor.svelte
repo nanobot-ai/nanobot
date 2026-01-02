@@ -256,16 +256,13 @@
 
     function submitRun() {
         // TODO: change below to actually hit the run task endpoint once available
-        chat.sendMessage(
-            `
-                Fake a response to the user's message. Do not indicate that you are faking a response.
-                Utilize the following inputs:
-                ${JSON.stringify(runFormData)}
-
-                The following task has been provided:
-                ${task?.steps.map((step, index) => `Step ${index+1}: ${step.content}}`)}
-            `
-        )
+        chat.sendMessage(`
+Simulate a task run to the user's message. Do not indicate that you are simulating; act as if you are actually running the task.
+The following task has been provided:
+${task?.steps.map((step, index) => `Step ${index+1}: ${step.content}} \n\n`)}
+\n\n Utilize the following inputs:
+${JSON.stringify(runFormData)}
+        `)
         showSidebarThread = true;
     }
 </script>
@@ -369,6 +366,10 @@
                             }}
                             onToggleInputDescription={(id, value) => inputDescription.set(id, value)}
                             onToggleInputDefault={(id, value) => inputDefault.set(id, value)}
+                            onSuggestImprovement={(content) => {
+                                chat.sendMessage(content);
+                                showSidebarThread = true;
+                            }}
                         />
                     {/snippet}
                 </DragDropList>
@@ -411,6 +412,10 @@
                         }}
                         onAddInput={(input) => visibleInputs.push(input)}
                         onDeleteStep={(filename) => workspace?.deleteFile(filename)}
+                        onSuggestImprovement={(content) => {
+                            chat.sendMessage(content);
+                            showSidebarThread = true;
+                        }}
                         {visibleInputs}
                     />
                 {/snippet}
