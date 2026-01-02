@@ -316,13 +316,11 @@ class DockerSandbox implements Sandbox {
 	readonly id: string;
 	private readonly workdir: string;
 	private readonly meta: SandboxMetadata;
-	private readonly driverConfig: DockerSandboxConfig;
 
 	constructor(id: string, config: DockerSandboxConfig, meta: SandboxMetadata) {
 		this.id = id;
 		this.workdir = config.workdir;
 		this.meta = meta;
-		this.driverConfig = config;
 	}
 
 	async getMeta(): Promise<SandboxMetadata> {

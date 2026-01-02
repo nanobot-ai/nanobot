@@ -42,7 +42,7 @@ export type Tool<
 		invoked?: string;
 	};
 	handler: ToolCallback<z.infer<InputSchema>>;
-	visibility?: Array<"model" | "app">;
+	visibility?: Array<"model" | "app" | "system">;
 };
 
 export type ToolCallback<T> = (

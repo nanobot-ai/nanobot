@@ -29,7 +29,7 @@ ${tasksDescriptions}
 		invoked: "Task execution started",
 	},
 	inputSchema: schema,
-	visibility: ["app"],
+	visibility: ["system"],
 	async handler({ taskName, arguments: taskArgs }, ctx) {
 		const client = await ensureConnected(ctx.workspaceId);
 		const task = await getTask(client, taskName);
