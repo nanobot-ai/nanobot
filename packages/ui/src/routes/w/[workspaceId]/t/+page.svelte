@@ -6,16 +6,15 @@
     let { data } = $props();
     let workspaceId = $derived(data.workspaceId);
     let urlTaskId = $derived(page.url.searchParams.get('id') ?? '');
-
-    const editor = false;
+    let runOnly = $derived(page.url.searchParams.get('run') === 'true');
 </script>
 
 <svelte:head>
     <title>Nanobot | Tasks</title>
 </svelte:head>
 
-{#if editor}
-    <TaskEditor {workspaceId} {urlTaskId} />
-{:else}
+{#if runOnly}
     <TaskRunner {workspaceId} {urlTaskId} />
+{:else}
+    <TaskEditor {workspaceId} {urlTaskId} />
 {/if}
