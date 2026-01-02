@@ -350,7 +350,6 @@
                             }}
                             onToggleInputDescription={(id, value) => inputDescription.set(id, value)}
                             onToggleInputDefault={(id, value) => inputDefault.set(id, value)}
-                            {visibleInputs}
                         />
                     {/snippet}
                 </DragDropList>

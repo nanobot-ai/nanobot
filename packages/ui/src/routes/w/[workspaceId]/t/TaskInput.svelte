@@ -11,7 +11,6 @@
         onHideInput: (id: string) => void;
         onToggleInputDescription: (id: string, value: boolean) => void;
         onToggleInputDefault: (id: string, value: boolean) => void;
-        visibleInputs: Input[];
     }
 
     let { 
@@ -23,7 +22,6 @@
         onHideInput,
         onToggleInputDescription,
         onToggleInputDefault,
-        visibleInputs,
     }: Props = $props();
 </script>
 
