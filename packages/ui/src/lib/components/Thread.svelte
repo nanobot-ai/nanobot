@@ -30,6 +30,7 @@
 		uploadedFiles?: UploadedFile[];
 		isLoading?: boolean;
 		agent?: Agent;
+		inline?: boolean;
 	}
 
 	let {
@@ -46,6 +47,7 @@
 		onElicitationResult,
 		agent,
 		isLoading,
+		inline,
 	}: Props = $props();
 
 	let messagesContainer: HTMLElement;
@@ -91,10 +93,10 @@
 	}
 </script>
 
-<div class="flex h-dvh w-full flex-col md:relative peer-[.workspace]:md:w-1/4">
+<div class="flex {inline ? 'h-full' : 'h-dvh'} w-full flex-col md:relative peer-[.workspace]:md:w-1/4">
 	<!-- Messages area - full height scrollable with bottom padding for floating input -->
 	<div class="w-full overflow-y-auto" bind:this={messagesContainer} onscroll={handleScroll}>
-		<div class="mx-auto max-w-4xl">
+		<div class="mx-auto max-w-4xl {inline ? 'pr-4' : ''}">
 			<!-- Prompts section - show when prompts available and no messages -->
 			{#if prompts && prompts.length > 0}
 				<div class="mb-6">
