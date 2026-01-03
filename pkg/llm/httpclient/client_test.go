@@ -368,7 +368,7 @@ func TestRetryableClient_NetworkError(t *testing.T) {
 
 	// Create a custom transport that simulates network errors
 	transport := &errorTransport{
-		attempts: &attempts,
+		attempts:  &attempts,
 		failUntil: 2,
 	}
 

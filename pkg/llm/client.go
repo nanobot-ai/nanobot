@@ -67,11 +67,30 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 		}
 	}
 
+	// Create progress accumulator to capture partial responses on error
+	var accumulator *progressAccumulator
+	if opt.ProgressToken != nil {
+		accumulator = newProgressAccumulator(opt.ProgressToken)
+		ctx = progress.WithInterceptor(ctx, accumulator.captureProgress)
+	}
+
+	var response *types.CompletionResponse
+	var err error
+
 	if strings.HasPrefix(req.Model, "claude") {
-		return c.anthropic.Complete(ctx, req, opts...)
+		response, err = c.anthropic.Complete(ctx, req, opts...)
+	} else if c.useCompletions {
+		response, err = c.completions.Complete(ctx, req, opts...)
+	} else {
+		response, err = c.responses.Complete(ctx, req, opts...)
 	}
-	if c.useCompletions {
-		return c.completions.Complete(ctx, req, opts...)
+
+	// If there's an error and we have accumulated partial progress, return it
+	if err != nil && accumulator != nil {
+		if partialResponse := accumulator.getPartialResponse(ctx, err); partialResponse != nil {
+			return partialResponse, nil // Return partial response, no error
+		}
 	}
-	return c.responses.Complete(ctx, req, opts...)
+
+	return response, err
 }
