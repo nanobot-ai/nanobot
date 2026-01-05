@@ -12,12 +12,15 @@
         stepDescription: Map<string | number, boolean>;
         stepBlockEditing: Map<string | number, boolean>;
         onAddInput: (input: Input) => void;
-        onDeleteStep: (filename: string) => void;
+        onAddTaskInput: (input: Input) => void;
+        onRemoveTaskInput: (inputName: string) => void;
+        onDeleteStep: (stepId: string, filename: string) => void;
         onToggleStepDescription: (id: string, value: boolean) => void;
         onToggleStepBlockEditing: (id: string, value: boolean) => void;
         onUpdateStep: (id: string, updates: Partial<Step>) => void;
         onSuggestImprovement: (content: string) => void;
         visibleInputs: Input[];
+        onUpdateVisibleInputs: (inputs: Input[]) => void;
     }
 
     let { 
@@ -26,12 +29,15 @@
         stepDescription, 
         stepBlockEditing, 
         onAddInput,
+        onAddTaskInput,
+        onRemoveTaskInput,
         onDeleteStep,
         onToggleStepDescription, 
         onToggleStepBlockEditing,
         onUpdateStep,
         onSuggestImprovement,
         visibleInputs,
+        onUpdateVisibleInputs,
     }: Props = $props();
     const notifications = getNotificationContext();
     const registry = getRegistryContext();
@@ -56,7 +62,7 @@
                     description: '',
                     default: ''
                 };
-                task!.inputs.push(newInput);
+                onAddTaskInput(newInput);
                 notifications.action(
                     `${variable}`, 
                     'A new variable has been added. Would you like to add more details to it now?',
@@ -67,7 +73,12 @@
             }
         },
 		onVariableDeletion: (variable: string) => {
-            const stillExists = task?.steps.some((step) => step.content.includes(`$${variable}`));
+            const stillExists = task?.steps.some((stepToCheck) => {
+                if (stepToCheck.id === step.id) {
+                    return false; // already know this step removed the variable so return false
+                }
+                return stepToCheck.content.includes(`$${variable}`);
+            });
             if (!stillExists) {
                 const hasVisible = visibleInputs.some((input) => input.name === variable);
                 if (hasVisible) {
@@ -75,14 +86,13 @@
                         `${variable}`,
                         'Would you like to remove the variable details from this task?',
                         () => {
-                            task!.inputs = task!.inputs.filter((input) => input.name !== variable);
-                            visibleInputs = visibleInputs.filter((input) => input.name !== variable);
+                            onRemoveTaskInput(variable);
+                            onUpdateVisibleInputs(visibleInputs.filter((input) => input.name !== variable));
                         }
                     )
                 } else {
-                    task!.inputs = task!.inputs.filter((input) => input.name !== variable);
+                    onRemoveTaskInput(variable);
                 }
-                
             }
         },
 	});
@@ -189,9 +199,8 @@ Please provide a detailed improvement to the step.
         <li>
             <button class="flex items-center gap-2"
                 onclick={() => {
-                    task!.steps = task!.steps.filter((step) => step.id !== id);
                     const filename = `.nanobot/tasks/${id}/${id}.md`;
-                    onDeleteStep(filename);
+                    onDeleteStep(id, filename);
                 }}
             >
                 <Trash2 class="size-4" /> Delete step

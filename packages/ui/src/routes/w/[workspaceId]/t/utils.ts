@@ -139,6 +139,7 @@ export function compileOutputFiles(task: Task, visibleInputs: Input[], taskId: s
                     ...inputs.filter((input) => !visibleInputs.some((visibleInput) => visibleInput.name === input.name)),
                 ];
                 metadata['inputs'] = metadataInputs
+                    .filter((input) => input.default || input.description || task.steps.some((step) => step.content.includes(`$${input.name}`)))
                     .map((input) => ({
                         name: input.name,
                         description: input.description,

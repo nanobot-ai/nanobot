@@ -413,12 +413,20 @@ ${JSON.stringify(runFormData)}
                             if (idx !== -1) Object.assign(task!.steps[idx], updates);
                         }}
                         onAddInput={(input) => visibleInputs.push(input)}
-                        onDeleteStep={(filename) => workspace?.deleteFile(filename)}
+                        onAddTaskInput={(input) => task!.inputs.push(input)}
+                        onRemoveTaskInput={(inputName) => {
+                            task!.inputs = task!.inputs.filter((input) => input.name !== inputName);
+                        }}
+                        onDeleteStep={(stepId, filename) => {
+                            task!.steps = task!.steps.filter((s) => s.id !== stepId);
+                            workspace?.deleteFile(filename);
+                        }}
                         onSuggestImprovement={(content) => {
                             chat.sendMessage(content);
                             showSidebarThread = true;
                         }}
                         {visibleInputs}
+                        onUpdateVisibleInputs={(inputs) => visibleInputs = inputs}
                     />
                 {/snippet}
             </DragDropList>
