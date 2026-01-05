@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { WorkspaceInstance, WorkspaceService } from "$lib/workspace.svelte";
-	import { Bot, ChevronDown, ChevronRight, CircleX, Edit, FileText, Folder, FolderOpen, GripVertical, ListTodo, MessageSquare, MoreVertical, PaintBucket, Plus, Save, Trash2 } from "@lucide/svelte";
+	import { Bot, ChevronDown, ChevronRight, CircleX, Edit, FileText, Folder, FolderOpen, ListTodo, MessageSquare, MoreVertical, PaintBucket, Plus, Save, Trash2 } from "@lucide/svelte";
 	import { onMount, tick } from "svelte";
 	import type { Component } from "svelte";
 	import DragDropList from "./DragDropList.svelte";

@@ -15,7 +15,7 @@
     }
 </script>
 
-<button class="btn btn-ghost btn-square btn-sm" popoverTarget="add-to-input" style="anchor-name: --add-to-input-anchor;">
+<button class="btn btn-ghost btn-square btn-sm tooltip tooltip-right" data-tip="Add..." popoverTarget="add-to-input" style="anchor-name: --add-to-input-anchor;">
     <Plus class="text-base-content/50" />
 </button>
 <ul class="dropdown menu w-72 rounded-box bg-base-100 dark:bg-base-300 shadow-sm overflow-visible"

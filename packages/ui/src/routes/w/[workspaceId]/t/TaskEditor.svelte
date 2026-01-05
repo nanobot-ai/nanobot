@@ -348,7 +348,9 @@ ${JSON.stringify(runFormData)}
                                 }}
                             />
                             {#if visibleInputs.length > 1}
-                                <button class="btn btn-ghost btn-square cursor-grab btn-sm" onmousedown={startDrag}><GripVertical class="text-base-content/50" /></button>
+                                <button class="btn btn-ghost btn-square cursor-grab btn-sm tooltip tooltip-right" data-tip="Drag to reorder" onmousedown={startDrag}>
+                                    <GripVertical class="text-base-content/50" />
+                                </button>
                             {/if}
                         </div>
                     {/snippet}
@@ -393,7 +395,9 @@ ${JSON.stringify(runFormData)}
                                 registryToolSelector?.showModal();
                             }}
                         />
-                        <button class="btn btn-ghost btn-square cursor-grab btn-sm" onmousedown={startDrag}><GripVertical class="text-base-content/50" /></button>
+                        <button class="btn btn-ghost btn-square cursor-grab btn-sm tooltip tooltip-right" onmousedown={startDrag} data-tip="Drag to reorder">
+                            <GripVertical class="text-base-content/50" />
+                        </button>
                     </div>
                 {/snippet}
                 {#snippet children({ item: step })}
