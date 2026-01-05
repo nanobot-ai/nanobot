@@ -174,6 +174,32 @@ function isFollowedByNewBlock(doc: Node, pos: number): boolean {
 	}
 }
 
+// Check if the position is at the end of the document content
+function isAtEndOfDocument(doc: Node, pos: number): boolean {
+	try {
+		const $pos = doc.resolve(pos);
+
+		// Check if we're at the end of the parent textblock
+		if ($pos.parentOffset !== $pos.parent.content.size) {
+			return false;
+		}
+
+		// Walk up the tree to check if we're at the end of the document
+		for (let depth = $pos.depth - 1; depth >= 0; depth--) {
+			const node = $pos.node(depth);
+			const index = $pos.index(depth);
+			// If there are more children after this one, we're not at the end
+			if (index + 1 < node.childCount) {
+				return false;
+			}
+		}
+
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 // Find a completed variable at or around the given position
 function findCompletedVariableAtPosition(
 	doc: Node,
@@ -210,15 +236,20 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 		// Track variables from previous state
 		let previousVariables: VariableMatch[] = [];
 		const completedVariables = new Set<string>(); // "variable:start" keys that already triggered
+		
+		// Debounce timers for newly introduced variables that already have separators
+		// This prevents spam when typing a variable in the middle of content
+		const pendingVariableTimers = new Map<string, ReturnType<typeof setTimeout>>();
+		const DEBOUNCE_MS = 500;
 
 		return new Plugin({
 			key: variablePillKey,
 			state: {
 				init(_, { doc }) {
 					previousVariables = findAllVariables(doc);
-					// Mark any variables that already have separators as completed
+					// Mark any variables that already have separators or are at end of document as completed
 					for (const v of previousVariables) {
-						if (hasSeparatorAt(doc, v.end) || isFollowedByNewBlock(doc, v.end)) {
+						if (hasSeparatorAt(doc, v.end) || isFollowedByNewBlock(doc, v.end) || isAtEndOfDocument(doc, v.end)) {
 							completedVariables.add(`${v.variable}:${v.start}`);
 						}
 					}
@@ -226,31 +257,61 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 				},
 				apply(tr, decorations) {
 					if (tr.docChanged) {
+						// Map completed variable positions through the transaction mapping
+						// This keeps positions valid when text is inserted/deleted before them
+						const remappedCompleted = new Set<string>();
+						for (const key of completedVariables) {
+							const [varName, startStr] = key.split(':');
+							const oldStart = parseInt(startStr, 10);
+							const newStart = tr.mapping.map(oldStart);
+							remappedCompleted.add(`${varName}:${newStart}`);
+						}
+						completedVariables.clear();
+						for (const key of remappedCompleted) {
+							completedVariables.add(key);
+						}
+						
+						// Also remap pending timer positions
+						const remappedTimers = new Map<string, ReturnType<typeof setTimeout>>();
+						for (const [key, timer] of pendingVariableTimers) {
+							const [varName, startStr] = key.split(':');
+							const oldStart = parseInt(startStr, 10);
+							const newStart = tr.mapping.map(oldStart);
+							remappedTimers.set(`${varName}:${newStart}`, timer);
+						}
+						pendingVariableTimers.clear();
+						for (const [key, timer] of remappedTimers) {
+							pendingVariableTimers.set(key, timer);
+						}
+						
 						const newVariables = findAllVariables(tr.doc);
-						const previousKeys = new Set(previousVariables.map((v) => `${v.variable}:${v.start}`));
+						const previousKeys = new Set(previousVariables.map((v) => `${v.variable}:${tr.mapping.map(v.start)}`));
 
 						if (options.onVariableAddition) {
 							// For each variable that existed BEFORE this transaction,
 							// check if it now has a separator (meaning user just typed one)
 							for (const prevVar of previousVariables) {
-								const key = `${prevVar.variable}:${prevVar.start}`;
+								// Map the old position to the new document
+								const mappedStart = tr.mapping.map(prevVar.start);
+								const key = `${prevVar.variable}:${mappedStart}`;
 
 								// Skip if already completed
 								if (completedVariables.has(key)) {
 									continue;
 								}
 
-								// Find the same variable in the new document
+								// Find the same variable in the new document (using mapped position)
 								const newVar = newVariables.find(
-									(v) => v.variable === prevVar.variable && v.start === prevVar.start
+									(v) => v.variable === prevVar.variable && v.start === mappedStart
 								);
 
 								// If the variable still exists, check if there's now a separator after it
 								if (newVar) {
 									const hasSep = hasSeparatorAt(tr.doc, newVar.end);
 									const hasBlock = isFollowedByNewBlock(tr.doc, newVar.end);
+									const atEnd = isAtEndOfDocument(tr.doc, newVar.end);
 
-									if (hasSep || hasBlock) {
+									if (hasSep || hasBlock || atEnd) {
 										options.onVariableAddition(prevVar.variable);
 										completedVariables.add(key);
 									}
@@ -258,24 +319,45 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 							}
 						}
 
-						// Check newly introduced variables (e.g. from paste) that already have separators
+						// Check newly introduced variables (e.g. from paste or typing in middle of content)
+						// that already have separators - debounce these to avoid spam when typing
 						for (const newVar of newVariables) {
 							const key = `${newVar.variable}:${newVar.start}`;
 
 							// Skip if this variable existed before or is already completed
 							if (previousKeys.has(key) || completedVariables.has(key)) {
+								// Clear any pending timer since the variable is stable now
+								if (pendingVariableTimers.has(key)) {
+									clearTimeout(pendingVariableTimers.get(key));
+									pendingVariableTimers.delete(key);
+								}
 								continue;
 							}
 
-							// If this new variable already has a separator, mark it as completed
+							// If this new variable already has a separator or is at end, debounce before marking as completed
 							const hasSep = hasSeparatorAt(tr.doc, newVar.end);
 							const hasBlock = isFollowedByNewBlock(tr.doc, newVar.end);
+							const atEnd = isAtEndOfDocument(tr.doc, newVar.end);
 
-							if (hasSep || hasBlock) {
-								if (options.onVariableAddition) {
-									options.onVariableAddition(newVar.variable);
+							if (hasSep || hasBlock || atEnd) {
+								// Clear any existing timer for this key
+								if (pendingVariableTimers.has(key)) {
+									clearTimeout(pendingVariableTimers.get(key));
 								}
-								completedVariables.add(key);
+								
+								// Set a debounced timer - only trigger if variable persists
+								const timer = setTimeout(() => {
+									pendingVariableTimers.delete(key);
+									// Double-check the variable still exists and isn't already completed
+									if (!completedVariables.has(key)) {
+										if (options.onVariableAddition) {
+											options.onVariableAddition(newVar.variable);
+										}
+										completedVariables.add(key);
+									}
+								}, DEBOUNCE_MS);
+								
+								pendingVariableTimers.set(key, timer);
 							}
 						}
 
@@ -292,6 +374,14 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 								const varName = key.split(':')[0];
 								deletedCompletedVars.push(varName);
 								completedVariables.delete(key);
+							}
+						}
+						
+						// Clean up pending timers for variables that no longer exist
+						for (const key of pendingVariableTimers.keys()) {
+							if (!currentKeys.has(key)) {
+								clearTimeout(pendingVariableTimers.get(key));
+								pendingVariableTimers.delete(key);
 							}
 						}
 
