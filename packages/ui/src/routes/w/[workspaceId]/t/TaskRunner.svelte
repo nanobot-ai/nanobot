@@ -170,7 +170,7 @@
                             {#if runFormData.length > 0}
                                 <div class="mt-4 p-4 flex flex-col gap-2 w-full border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
                                     <p class="text-xs text-primary">To get started, please fill out the following information:</p>
-                                    <div>
+                                    <div class="flex flex-col gap-2">
                                         {#each runFormData as input (input.id)}
                                             <label class="input w-full validator">
                                                 <span class="label h-full font-semibold text-primary bg-primary/15">{input.name}</span>
