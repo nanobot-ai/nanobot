@@ -5,7 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import ThreadFromChat from "$lib/components/ThreadFromChat.svelte";
+	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 
 	const chat = new ChatService();
 	let doClose = true;

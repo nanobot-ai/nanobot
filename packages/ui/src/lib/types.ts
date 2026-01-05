@@ -25,7 +25,6 @@ export interface ChatMessage {
 	created?: string;
 	role: 'user' | 'assistant';
 	items?: ChatMessageItem[];
-	hasMore?: boolean;
 }
 
 export type ChatMessageItem = ToolOutputItem | ChatMessageItemToolCall | ChatMessageItemReasoning;
@@ -102,7 +101,6 @@ export interface ChatMessageItemResource extends ChatMessageItemBase {
 
 export interface ChatMessageItemBase {
 	id: string;
-	hasMore?: boolean;
 	type:
 		| 'text'
 		| 'image'
