@@ -93,7 +93,7 @@
         }
     }
     
-    async function saveEdit() {
+    async function saveEditName() {
         if (!editingWorkspace?.name.trim()) {
             error = 'Workspace name is required';
             return;
@@ -238,6 +238,13 @@
                                     class="input input-bordered input-sm flex grow mr-2"
                                     bind:value={editingWorkspace.name}
                                     bind:this={editingWorkspaceEl}
+                                    onkeydown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            saveEditName();
+                                        } else if (e.key === 'Escape') {
+                                            editingWorkspace = null;
+                                        }
+                                    }}
                                 />
                             {:else}
                                 <h3 class="truncate text-sm font-medium relative z-20 flex grow">{workspace.name || 'Untitled'}</h3>
@@ -316,7 +323,19 @@
                                                 <button class="btn button-soft btn-sm"
                                                     disabled={!selectedColor}
                                                     onclick={() => {
-                                                        // todo: save workspace with the selected color
+                                                        loading = true;
+                                                        error = null;
+                                                        try {
+                                                            workspaceService.updateWorkspace({
+                                                                ...workspace,
+                                                                color: selectedColor,
+                                                            });
+                                                        } catch (e) {
+                                                            error = e instanceof Error ? e.message : String(e);
+                                                        } finally {
+                                                            selectedColor = '';
+                                                            loading = false;
+                                                        }
                                                     }}
                                                 >
                                                     Apply
@@ -349,7 +368,7 @@
                                     </button>
                                     <button class="btn btn-square btn-ghost btn-sm btn-primary"
                                         onmousedown={(e) => e.stopPropagation()} 
-                                        onclick={saveEdit}
+                                        onclick={saveEditName}
                                     >
                                         <Save class="size-4" />
                                     </button>
