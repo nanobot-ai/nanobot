@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { WorkspaceInstance, WorkspaceService } from "$lib/workspace.svelte";
-	import { Bot, ChevronDown, ChevronRight, CircleX, Edit, Folder, FolderOpen, GripVertical, ListTodo, MessageSquare, MoreVertical, PaintBucket, Plus, Save, Trash2 } from "@lucide/svelte";
+	import { Bot, ChevronDown, ChevronRight, CircleX, Edit, FileText, Folder, FolderOpen, GripVertical, ListTodo, MessageSquare, MoreVertical, PaintBucket, Plus, Save, Trash2 } from "@lucide/svelte";
 	import { onMount, tick } from "svelte";
 	import type { Component } from "svelte";
 	import DragDropList from "./DragDropList.svelte";
 	import { SvelteMap } from "svelte/reactivity";
 	import { resolve } from '$app/paths';
 	import { goto } from "$app/navigation";
+	import type { WorkspaceFile } from "$lib/types";
 
     interface Props {
         inverse?: boolean;
@@ -131,6 +132,10 @@
         }
     }
 
+    async function createFile(e: MouseEvent, workspaceId: string) {
+        // TODO:
+    }
+
     const initialColorOptions = [
         '#380067',
         '#4f7ef3',
@@ -161,7 +166,7 @@
         </div>
     {:else}
         {#if newWorkspace}
-            <div class="group flex py-1 items-center justify-between px-2 {inverse ? 'hover:bg-base-200' : 'hover:bg-base-100'}">
+            <div class="group flex py-1 items-center justify-between px-2 {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">
                 <input
                     type="text"
                     class="input input-bordered input-sm flex grow mr-2"
@@ -205,7 +210,7 @@
         >
             {#snippet children({ item: workspace })}
                 <details class="workspace-details flex flex-col w-full overflow-visible">
-                    <summary class="flex px-2 items-center justify-between rounded-none list-none [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200' : 'hover:bg-base-100'}" onclick={(e) => e.preventDefault()}>
+                    <summary class="flex px-2 items-center justify-between rounded-none list-none [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}" onclick={(e) => e.preventDefault()}>
                         <div class="flex grow items-center gap-2">
                             <button class="chevron-icon shrink-0 btn btn-square btn-ghost btn-xs" 
                                 onmousedown={(e) => e.stopPropagation()} 
@@ -367,12 +372,13 @@
                                     return acc;
                                 }, {})
                             }
-                            {console.log(workspaceInstance)}
+                            {@const files = (workspaceInstance?.files ?? []).filter((f: { name: string }) => !f.name.startsWith('.nanobot/tasks/'))}
                         
                             <ul>
                                 {@render workspaceChild(workspace.id, 'Tasks', ListTodo, Object.keys(tasks), (e) => createTask(e, workspace.id))}
                                 {@render workspaceChild(workspace.id, 'Agents', Bot, [])}
                                 {@render workspaceChild(workspace.id, 'Conversations', MessageSquare, [])}
+                                {@render workspaceChild(workspace.id, 'Files', FileText, files, (e) => createFile(e, workspace.id))}
                             </ul>
                         {/if}
                     </div>
@@ -382,10 +388,10 @@
     {/if}
 </div>
 
-{#snippet workspaceChild(workspaceId: string, title: string, Icon: Component, items: string[], onCreate?: (e: MouseEvent) => void)}
+{#snippet workspaceChild(workspaceId: string, title: string, Icon: Component, items: string[] | WorkspaceFile[], onCreate?: (e: MouseEvent) => void)}
 <li class="flex grow">
     <details class="workspace-details w-full">
-        <summary class="flex rounded-r-none px-2 items-center justify-between gap-2 [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200' : 'hover:bg-base-100'}">
+        <summary class="flex rounded-r-none px-2 items-center justify-between gap-2 [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">
             <div class="flex items-center gap-2">
                 <span class="chevron-icon shrink-0">
                     <ChevronRight class="size-4 chevron-closed" />
@@ -410,25 +416,43 @@
                 <li class="w-full">
                     <p class="p-2 italic text-base-content/30 flex hover:bg-transparent cursor-default">
                         No {title.toLowerCase()}. 
-                        {#if title === 'Tasks'}
-                        Click <Plus class="size-2.5 inline-flex" /> to get started.
+                        {#if onCreate}
+                            Click <Plus class="size-2.5 inline-flex" /> to get started.
                         {/if}
                     </p>
                 </li>
             {:else}
-                {#each items as item, index (index)}
-                    <li class="w-full">
-                        {#if title === 'Tasks'}
-                            <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="block p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200' : 'hover:bg-base-100'}">{item}</a>
-                        {:else}
-                            <p class="p-2 w-full overflow-hidden truncate">{item}</p>
-                        {/if}
-                    </li>
-                {/each}
+                {#if typeof items[0] === 'string'}
+                    {@render workspaceChildLinks(workspaceId, title, items as string[])}
+                {:else}
+                    {@render workspaceChildFiles(workspaceId, title, items as WorkspaceFile[])}
+                {/if}
             {/if}
         </ul>
     </details>
 </li>
+{/snippet}
+
+{#snippet workspaceChildLinks(workspaceId: string, title: string, items: string[])}
+    {#each items as item, index (index)}
+        <li class="w-full">
+            {#if title === 'Tasks'}
+                <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="block p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">{item}</a>
+            {:else}
+                <p class="p-2 w-full overflow-hidden truncate">{item}</p>
+            {/if}
+        </li>
+    {/each}
+{/snippet}
+
+{#snippet workspaceChildFiles(workspaceId: string, title: string, items: WorkspaceFile[])}
+    {#each items as item, index (index)}
+        <li class="w-full">
+            <button class="p-2 w-full overflow-hidden truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'} rounded-r-none">
+                {item.name}
+            </button>
+        </li>
+    {/each}
 {/snippet}
 
 <style>
