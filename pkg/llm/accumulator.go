@@ -27,92 +27,16 @@ func newProgressAccumulator(progressToken any) *progressAccumulator {
 
 // captureProgress intercepts and accumulates a progress message
 func (pa *progressAccumulator) captureProgress(_ context.Context, prog *types.CompletionProgress) {
-	// Accumulate the progress (progress.Send will be called by the provider)
-	if prog.Model != "" {
-		pa.response.Model = prog.Model
-	}
-	if prog.Agent != "" {
-		pa.response.Agent = prog.Agent
-	}
+	// Use types.AppendProgress to handle all the merging logic
+	pa.response = types.AppendProgress(pa.response, *prog)
 
-	progressItem := prog.Item
-
-	var (
-		currentMessageIndex = -1
-		currentItemIndex    = -1
-		currentItem         *types.CompletionItem
-		now                 = time.Now()
-	)
-
-	// Find existing message and item
-	for msgIndex, msg := range pa.response.InternalMessages {
-		if prog.MessageID == msg.ID {
-			currentMessageIndex = msgIndex
-			for itemIndex, item := range msg.Items {
-				if item.ID == prog.Item.ID {
-					currentItem = &pa.response.InternalMessages[msgIndex].Items[itemIndex]
-					currentItemIndex = itemIndex
-
-					if !progressItem.Partial {
-						pa.response.InternalMessages[msgIndex].Items[itemIndex] = progressItem
-						return
-					}
-				}
+	// Set HasMore flag on the current message if it exists
+	if len(pa.response.InternalMessages) > 0 {
+		for i := range pa.response.InternalMessages {
+			if pa.response.InternalMessages[i].ID == prog.MessageID {
+				pa.response.InternalMessages[i].HasMore = true
+				break
 			}
-		}
-	}
-
-	// Create new message if not found
-	if currentMessageIndex == -1 {
-		role := prog.Role
-		if role == "" {
-			role = "assistant"
-		}
-		pa.response.InternalMessages = append(pa.response.InternalMessages, types.Message{
-			ID:      prog.MessageID,
-			Created: &now,
-			Role:    role,
-			HasMore: true,
-			Items: []types.CompletionItem{
-				progressItem,
-			},
-		})
-		return
-	}
-
-	// Add new item to existing message if not found
-	if currentItemIndex == -1 {
-		pa.response.InternalMessages[currentMessageIndex].Items = append(
-			pa.response.InternalMessages[currentMessageIndex].Items,
-			progressItem,
-		)
-		return
-	}
-
-	// Update existing item (partial)
-	if currentItem == nil {
-		return
-	}
-
-	currentItem.HasMore = progressItem.HasMore
-	// At this point Partial is always true
-	if progressItem.Content != nil {
-		if currentItem.Content == nil {
-			currentItem.Content = &mcp.Content{}
-		}
-		currentItem.Content.Text += progressItem.Content.Text
-	} else if progressItem.ToolCall != nil && currentItem.ToolCall == nil {
-		currentItem.ToolCall = progressItem.ToolCall
-	} else if progressItem.ToolCall != nil {
-		currentItem.ToolCall.Arguments += progressItem.ToolCall.Arguments
-	} else if progressItem.Reasoning != nil && len(progressItem.Reasoning.Summary) > 0 {
-		if currentItem.Reasoning == nil {
-			currentItem.Reasoning = &types.Reasoning{}
-		}
-		if len(currentItem.Reasoning.Summary) == 0 {
-			currentItem.Reasoning.Summary = append(currentItem.Reasoning.Summary, progressItem.Reasoning.Summary[0])
-		} else {
-			currentItem.Reasoning.Summary[len(currentItem.Reasoning.Summary)-1].Text += progressItem.Reasoning.Summary[0].Text
 		}
 	}
 }
@@ -135,15 +59,14 @@ func (pa *progressAccumulator) getPartialResponse(ctx context.Context, err error
 			if item.Content != nil || item.Reasoning != nil {
 				// Remove Partial and HasMore flags for final response
 				item.Partial = false
-				item.HasMore = false
 				filteredItems = append(filteredItems, item)
 			}
 			// Skip incomplete tool calls (Partial or HasMore)
-			if item.ToolCall != nil && (item.Partial || item.HasMore) {
+			if item.ToolCall != nil && item.Partial {
 				continue
 			}
 			// Keep complete tool calls (though this is rare for error cases)
-			if item.ToolCall != nil && !item.Partial && !item.HasMore {
+			if item.ToolCall != nil && !item.Partial {
 				filteredItems = append(filteredItems, item)
 			}
 		}

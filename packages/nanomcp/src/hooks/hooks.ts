@@ -227,6 +227,11 @@ export type CompletionProgress = z.infer<typeof CompletionProgressSchema>;
 export const AgentConfigHookMCPServerSchema = z.object({
 	url: z.string(),
 	headers: z.record(z.string()).optional(),
+	toolOverrides: z.record(z.string(), z.object({
+		name: z.string().optional(),
+		description: z.string().optional(),
+		inputSchema: z.record(z.any()).optional(),
+	})).optional(),
 });
 
 export type AgentConfigHookMCPServer = z.infer<

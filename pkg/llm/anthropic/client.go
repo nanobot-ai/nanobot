@@ -136,7 +136,6 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 						Item: types.CompletionItem{
 							ID:      fmt.Sprintf("%s-%d", resp.ID, contentIndex),
 							Partial: true,
-							HasMore: true,
 							Content: &mcp.Content{
 								Type: "text",
 								Text: delta.Delta.Text,
@@ -154,7 +153,6 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 						Item: types.CompletionItem{
 							ID:      fmt.Sprintf("%s-%d", resp.ID, contentIndex),
 							Partial: true,
-							HasMore: true,
 							ToolCall: &types.ToolCall{
 								CallID:    resp.Content[contentIndex].ID,
 								Name:      resp.Content[contentIndex].Name,

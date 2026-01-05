@@ -79,6 +79,12 @@ export async function amendConfig(
 				"X-Nanobot-Workspace-Id": workspaceId,
 			},
 		},
+		skills: {
+			url: "http://localhost:5173/mcp/skills",
+			headers: {
+				"X-Nanobot-Workspace-Id": workspaceId,
+			},
+		},
 		coder: {
 			url: "http://localhost:5173/mcp/coder",
 			headers: {
@@ -102,6 +108,7 @@ export async function amendConfig(
 			...(config.agent.mcpServers ?? []),
 			"task",
 			"coder",
+			"skills"
 		];
 	}
 

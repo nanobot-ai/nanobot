@@ -12,7 +12,7 @@ const schema = z.object({
 });
 
 export default createTool({
-	title: "Dispatch Task",
+	title: "Start Task",
 	description: async (ctx) => {
 		const client = await ensureConnected(ctx.workspaceId);
 		const tasksDescriptions = await getTasksDescription(client);
@@ -24,8 +24,8 @@ ${tasksDescriptions}
 `;
 	},
 	messages: {
-		invoking: "Dispatching task",
-		invoked: "Task dispatched",
+		invoking: "Starting task",
+		invoked: "Task started",
 	},
 	inputSchema: schema,
 	async handler({ taskName, arguments: taskArgs }, ctx) {
@@ -75,7 +75,7 @@ ${tasksDescriptions}
 		const { id } = await chatClient.getSessionDetails();
 
 		return toolResult.structured(
-			`Task ${task.name} dispatched with ${args}. Task ID: ${id}`,
+			`Task ${task.name} started with ${args}. Task ID: ${id}`,
 			{
 				task: {
 					name: task.name,

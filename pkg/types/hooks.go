@@ -16,8 +16,9 @@ type AgentConfigHook struct {
 }
 
 type AgentConfigHookMCPServer struct {
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers"`
+	URL           string            `json:"url"`
+	Headers       map[string]string `json:"headers"`
+	ToolOverrides mcp.ToolOverrides `json:"toolOverrides,omitzero"`
 }
 
 func (a AgentConfigHookMCPServer) ToMCPServer() mcp.Server {

@@ -32,6 +32,7 @@
 		"@nanobot-ai/agentconfig": "workspace:*",
 		"@nanobot-ai/coder": "workspace:*",
 		"@nanobot-ai/nanomcp": "workspace:*",
+		"@nanobot-ai/skills": "workspace:*",
 		"@nanobot-ai/tasks": "workspace:*",
 		"@nanobot-ai/workspace-mcp": "workspace:*",
 		"@nanobot-ai/workspace-resources": "workspace:*",

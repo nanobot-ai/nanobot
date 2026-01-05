@@ -154,9 +154,6 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 				continue
 			}
 
-			// Determine if this is the final chunk for this choice
-			isFinished := choice.FinishReason != nil
-
 			// Handle role
 			if delta.Role != "" && resp.Choices[choice.Index].Message != nil {
 				resp.Choices[choice.Index].Message.Role = delta.Role
@@ -176,7 +173,6 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 					Item: types.CompletionItem{
 						ID:      fmt.Sprintf("%s-%d", resp.ID, choice.Index),
 						Partial: true,
-						HasMore: !isFinished,
 						Content: &mcp.Content{
 							Type: "text",
 							Text: *delta.Content,
@@ -199,7 +195,6 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 					Item: types.CompletionItem{
 						ID:      fmt.Sprintf("%s-reasoning-%d", resp.ID, choice.Index),
 						Partial: true,
-						HasMore: !isFinished,
 						Reasoning: &types.Reasoning{
 							Summary: []types.SummaryText{
 								{
@@ -239,7 +234,6 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 						Item: types.CompletionItem{
 							ID:      fmt.Sprintf("%s-t-%d", resp.ID, index),
 							Partial: true,
-							HasMore: !isFinished,
 							ToolCall: &types.ToolCall{
 								CallID:    toolCalls[index].ID,
 								Name:      toolCalls[index].Function.Name,

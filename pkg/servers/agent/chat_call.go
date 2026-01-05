@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/tools"
@@ -79,10 +78,7 @@ func appendProgress(ctx context.Context, session *mcp.Session, progressMessage *
 		return progressMessage, nil
 	}
 
-	var (
-		event    progressPayload
-		response types.CompletionResponse
-	)
+	var event progressPayload
 
 	if err := json.Unmarshal(progressMessage.Params, &event); err != nil {
 		return progressMessage, nil
@@ -91,98 +87,38 @@ func appendProgress(ctx context.Context, session *mcp.Session, progressMessage *
 		return progressMessage, nil
 	}
 
-	progressItem := event.Meta.Progress.Item
+	// Get the current response from the session
+	var response types.CompletionResponse
 	session.Get(progressSessionKey, &response)
-	defer session.Set(progressSessionKey, &response)
 
 	defer func() {
 		_ = session.SendPayload(ctx, "notifications/resources/updated", map[string]any{
 			"uri": types.ProgressURI,
 		})
 	}()
-	response.HasMore = true
 
+	// Handle tool call results specially - we need to find the matching tool call
+	// and add the result to it directly
+	progressItem := event.Meta.Progress.Item
 	if progressItem.ToolCallResult != nil {
 		for msgIndex, msg := range response.InternalMessages {
 			for itemIndex, item := range msg.Items {
-				if item.ToolCall != nil {
-					if item.ToolCall.CallID == progressItem.ToolCallResult.CallID {
-						response.InternalMessages[msgIndex].Items[itemIndex].ToolCallResult = progressItem.ToolCallResult
-					}
-				}
-			}
-		}
-		return nil, nil
-	}
-
-	var (
-		currentMessageIndex = -1
-		currentItemIndex    = -1
-		currentItem         *types.CompletionItem
-		now                 = time.Now()
-	)
-
-	for msgIndex, msg := range response.InternalMessages {
-		if event.Meta.Progress.MessageID == msg.ID {
-			currentMessageIndex = msgIndex
-			for itemIndex, item := range msg.Items {
-				if item.ID == event.Meta.Progress.Item.ID {
-					currentItem = &response.InternalMessages[msgIndex].Items[itemIndex]
-					currentItemIndex = itemIndex
-
-					if !progressItem.Partial {
-						response.InternalMessages[msgIndex].Items[itemIndex] = progressItem
-						return nil, nil
-					}
+				if item.ToolCall != nil && item.ToolCall.CallID == progressItem.ToolCallResult.CallID {
+					// Modify in place for tool call results to match existing behavior
+					response.InternalMessages[msgIndex].Items[itemIndex].ToolCallResult = progressItem.ToolCallResult
+					response.HasMore = true
+					session.Set(progressSessionKey, response)
+					return nil, nil
 				}
 			}
 		}
 	}
 
-	if currentMessageIndex == -1 {
-		role := event.Meta.Progress.Role
-		if role == "" {
-			role = "assistant"
-		}
-		response.InternalMessages = append(response.InternalMessages, types.Message{
-			ID:      event.Meta.Progress.MessageID,
-			Created: &now,
-			Role:    role,
-			HasMore: true,
-			Items: []types.CompletionItem{
-				progressItem,
-			},
-		})
-		return nil, nil
-	}
+	// Use types.AppendProgress for all other cases
+	updatedResponse := types.AppendProgress(response, *event.Meta.Progress)
+	updatedResponse.HasMore = true
 
-	if currentItemIndex == -1 {
-		response.InternalMessages[currentMessageIndex].Items = append(response.InternalMessages[currentMessageIndex].Items, progressItem)
-		// Sort items immediately to maintain correct display order during streaming
-		sortCompletionItems(&response.InternalMessages[currentMessageIndex])
-		return nil, nil
-	}
-
-	if currentItem == nil {
-		return nil, nil
-	}
-
-	currentItem.HasMore = progressItem.HasMore
-	// At this point Partial is always true
-	if progressItem.Content != nil {
-		currentItem.Content.Text += progressItem.Content.Text
-	} else if progressItem.ToolCall != nil && currentItem.ToolCall == nil {
-		currentItem.ToolCall = progressItem.ToolCall
-	} else if progressItem.ToolCall != nil {
-		currentItem.ToolCall.Arguments += progressItem.ToolCall.Arguments
-	} else if progressItem.Reasoning != nil && len(progressItem.Reasoning.Summary) > 0 {
-		if len(currentItem.Reasoning.Summary) == 0 {
-			currentItem.Reasoning.Summary = append(currentItem.Reasoning.Summary, progressItem.Reasoning.Summary[0])
-		} else {
-			currentItem.Reasoning.Summary[len(currentItem.Reasoning.Summary)-1].Text += progressItem.Reasoning.Summary[0].Text
-		}
-	}
-
+	session.Set(progressSessionKey, updatedResponse)
 	return nil, nil
 }
 

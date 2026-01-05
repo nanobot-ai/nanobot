@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libfuse3-dev \
     libunwind-dev \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust toolchain

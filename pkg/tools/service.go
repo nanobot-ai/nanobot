@@ -631,11 +631,6 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 		target = server + "/" + tool
 	}
 
-	targetType := "tool"
-	if _, ok := config.Agents[server]; ok {
-		targetType = "agent"
-	}
-
 	if session != nil && opt.ProgressToken != nil {
 		var (
 			tc        types.ToolCall
@@ -659,9 +654,6 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 				logProgressDone = false
 			}
 		}
-		tc.Target = target
-		tc.TargetType = targetType
-
 		if logProgressStart {
 			_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
 				ProgressToken: opt.ProgressToken,
@@ -669,7 +661,6 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 					types.CompletionProgressMetaKey: types.CompletionProgress{
 						MessageID: messageID,
 						Item: types.CompletionItem{
-							HasMore:  true,
 							ID:       itemID,
 							ToolCall: &tc,
 						},

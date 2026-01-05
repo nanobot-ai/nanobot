@@ -357,12 +357,17 @@ func TestCaptureProgress_ReasoningAccumulation(t *testing.T) {
 		t.Fatal("expected reasoning to be set")
 	}
 
-	if len(reasoning.Summary) != 1 {
-		t.Fatalf("expected 1 summary item, got %d", len(reasoning.Summary))
+	// AppendProgress appends summary arrays rather than concatenating text
+	if len(reasoning.Summary) != 2 {
+		t.Fatalf("expected 2 summary items, got %d", len(reasoning.Summary))
 	}
 
-	if reasoning.Summary[0].Text != "First Second" {
-		t.Errorf("expected accumulated text 'First Second', got '%s'", reasoning.Summary[0].Text)
+	if reasoning.Summary[0].Text != "First " {
+		t.Errorf("expected first summary 'First ', got '%s'", reasoning.Summary[0].Text)
+	}
+
+	if reasoning.Summary[1].Text != "Second" {
+		t.Errorf("expected second summary 'Second', got '%s'", reasoning.Summary[1].Text)
 	}
 }
 
@@ -457,7 +462,7 @@ func TestGetPartialResponse_FiltersIncompleteToolCalls(t *testing.T) {
 		Role:      "assistant",
 		Item: types.CompletionItem{
 			ID:      "item-3",
-			HasMore: true,
+			Partial: true,
 			ToolCall: &types.ToolCall{
 				CallID: "call-2",
 				Name:   "tool2",
@@ -473,7 +478,6 @@ func TestGetPartialResponse_FiltersIncompleteToolCalls(t *testing.T) {
 		Item: types.CompletionItem{
 			ID:      "item-4",
 			Partial: false,
-			HasMore: false,
 			ToolCall: &types.ToolCall{
 				CallID:    "call-3",
 				Name:      "tool3",
@@ -564,12 +568,12 @@ func TestGetPartialResponse_KeepsReasoningAndContent(t *testing.T) {
 		t.Error("expected content to be preserved")
 	}
 
-	// Verify Partial and HasMore flags are cleared
-	if result.Output.Items[0].Partial || result.Output.Items[0].HasMore {
-		t.Error("expected Partial and HasMore to be cleared for reasoning")
+	// Verify Partial flag is cleared
+	if result.Output.Items[0].Partial {
+		t.Error("expected Partial to be cleared for reasoning")
 	}
-	if result.Output.Items[1].Partial || result.Output.Items[1].HasMore {
-		t.Error("expected Partial and HasMore to be cleared for content")
+	if result.Output.Items[1].Partial {
+		t.Error("expected Partial to be cleared for content")
 	}
 }
 
