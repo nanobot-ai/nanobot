@@ -255,7 +255,7 @@
 
     async function submitRun() {
         // TODO: change below to actually hit the run task endpoint once available
-        runSession = await workspace?.newSession();
+        runSession = await workspace?.newSession({ editor: true});
         runSession?.sendMessage(`
 Simulate a task run to the user's message. Do not indicate that you are simulating; act as if you are actually running the task.
 The following task has been provided:
@@ -358,7 +358,7 @@ ${JSON.stringify(runFormData)}
                     {/snippet}
                     {#snippet children({ item: input })}
                         <TaskInput 
-                            id={taskId} 
+                            {taskId}
                             task={task!} 
                             {input} 
                             {inputDescription}
@@ -376,11 +376,7 @@ ${JSON.stringify(runFormData)}
                                 if (!chat) {
                                     chat = await workspace?.newSession({ editor: true });
                                 }
-                                chat?.sendMessage(content,
-                                    [{
-                                        uri: `.nanobot/tasks/${taskId}/TASK.md`,
-                                    }]
-                                );
+                                chat?.sendMessage(content);
                                 showSidebarThread = true;
                             }}
                         />
@@ -415,6 +411,7 @@ ${JSON.stringify(runFormData)}
                 {/snippet}
                 {#snippet children({ item: step })}
                     <Step 
+                        taskId={taskId}
                         task={task!}
                         {step}
                         {stepDescription}
@@ -438,13 +435,7 @@ ${JSON.stringify(runFormData)}
                             if (!chat) {
                                 chat = await workspace?.newSession({ editor: true });
                             }
-                            chat?.sendMessage(content, 
-                                [{
-                                    name: step.id,
-                                    uri: `.nanobot/tasks/${taskId}/${step.id}`,
-                                    mimeType: 'application/octet-stream',
-                                }]
-                            );
+                            chat?.sendMessage(content);
                             showSidebarThread = true;
                         }}
                         {visibleInputs}
@@ -525,12 +516,10 @@ ${JSON.stringify(runFormData)}
                 </div>
                 <div class="w-full flex-1 min-h-0 flex flex-col">
                     {#if runSession}
-                    {console.log('runsession')}
                         {#key runSession.chatId}
                             <ThreadFromChat inline chat={runSession} />
                         {/key}
                     {:else if chat}
-                    {console.log('chat')}
                         {#key chat.chatId}
                             <ThreadFromChat inline {chat} />
                         {/key}

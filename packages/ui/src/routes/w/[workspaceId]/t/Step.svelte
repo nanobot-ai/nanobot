@@ -7,6 +7,7 @@
 	import { getRegistryContext } from "$lib/context/registry.svelte";
 
     interface Props {
+        taskId: string;
         task: Task;
         step: Step;
         stepDescription: Map<string | number, boolean>;
@@ -24,6 +25,7 @@
     }
 
     let { 
+        taskId,
         task, 
         step, 
         stepDescription, 
@@ -185,7 +187,7 @@
         <li>
             <button class="flex items-center gap-2"
                 onclick={() => onSuggestImprovement(`
-The user is asking for an improvement to the following step for a task process:
+The user is asking for an improvement to the contents of the step file ".nanobot/tasks/${taskId}/${id}"
 Please provide concise improvements to the step.
 `)}
             >
@@ -195,7 +197,7 @@ Please provide concise improvements to the step.
         <li>
             <button class="flex items-center gap-2"
                 onclick={() => {
-                    const filename = `.nanobot/tasks/${id}/${id}.md`;
+                    const filename = `.nanobot/tasks/${taskId}/${id}`;
                     onDeleteStep(id, filename);
                 }}
             >

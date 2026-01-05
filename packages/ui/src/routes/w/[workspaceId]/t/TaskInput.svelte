@@ -3,7 +3,7 @@
 	import type { Input, Task } from "./types";
 
     interface Props {
-        id: string;
+        taskId: string;
         task: Task;
         input: Input;
         inputDescription: Map<string | number, boolean>;
@@ -16,6 +16,7 @@
     }
 
     let { 
+        taskId,
         task,
         input = $bindable(),
         inputDescription,
@@ -92,8 +93,10 @@ Argument name: ${name}
 Argument description: ${input.description}
 Argument default value: ${input.default}
 
-Please provide a detailed improvement to the input. If the user has not provided a description, suggest one based on the argument name and default value.
+Please provide a concise improvement to the input. If the user has not provided a description, suggest one based on the argument name and default value.
 Do not suggest a default value if the user has not provided one.
+
+Use the files under the ".nanobot/tasks/${taskId}" directory for context to help you improve the input.
                 `)}
             >
                 <Sparkles class="size-4" /> Improve with AI
