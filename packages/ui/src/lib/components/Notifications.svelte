@@ -78,11 +78,17 @@
 				{#if notification.type === 'action'}
 					<div class="flex items-center gap-2 self-end">
 						{#if notification.onConfirm}
-							<button class="btn btn-primary btn-xs" onclick={notification.onConfirm}>Confirm</button>
+							<button class="btn btn-primary btn-xs" onclick={() => {
+								notification.onConfirm?.();
+								handleClose(notification.id);
+							}}>Confirm</button>
 						{/if}
 
 						{#if notification.onCancel}
-							<button class="btn btn-secondary btn-xs" onclick={notification.onCancel}>Cancel</button>
+							<button class="btn btn-secondary btn-xs" onclick={() => {
+								notification.onCancel?.();
+								handleClose(notification.id);
+							}}>Cancel</button>
 						{/if}
 					</div>
 				{/if}
