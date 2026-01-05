@@ -43,6 +43,15 @@
 	// Use external scroll container if provided, otherwise use internal
 	let scrollContainer = $derived(scrollContainerEl ?? internalScrollContainer);
 
+	// Listen to scroll events on whichever scroll container is active
+	$effect(() => {
+		if (!blockHandle || !scrollContainer) return;
+		scrollContainer.addEventListener('scroll', updateHandlePosition);
+		return () => {
+			scrollContainer.removeEventListener('scroll', updateHandlePosition);
+		};
+	});
+
 	// Drag & drop state
 	let isDragging = $state(false);
 	let draggedIndex = $state<number | null>(null);
@@ -284,7 +293,6 @@
 <div
 	class="drag-drop-list {className}"
 	bind:this={internalScrollContainer}
-	onscroll={updateHandlePosition}
 >
 	<div
 		class="drag-drop-items-container {classes.itemsContainer}"
