@@ -9,6 +9,7 @@
         inputDescription: Map<string | number, boolean>;
         inputDefault: Map<string | number, boolean>;
         onHideInput: (id: string) => void;
+        onDeleteInput: (id: string) => void;
         onToggleInputDescription: (id: string, value: boolean) => void;
         onToggleInputDefault: (id: string, value: boolean) => void;
         onSuggestImprovement: (content: string) => void;
@@ -16,11 +17,12 @@
 
     let { 
         id, 
-        task = $bindable(), 
+        task,
         input = $bindable(),
         inputDescription,
         inputDefault,
         onHideInput,
+        onDeleteInput,
         onToggleInputDescription,
         onToggleInputDefault,
         onSuggestImprovement,
@@ -105,9 +107,7 @@ Do not suggest a default value if the user has not provided one.
         {:else}
             <li>
                 <button class="flex items-center gap-2"
-                    onclick={() => {
-                        task.inputs = task.inputs.filter((input) => input.id !== id);
-                    }}
+                    onclick={() => onDeleteInput(id)}
                 >
                     <EyeClosed class="size-4" /> Delete argument
                 </button>

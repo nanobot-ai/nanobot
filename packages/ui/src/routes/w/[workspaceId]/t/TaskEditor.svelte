@@ -364,6 +364,9 @@ ${JSON.stringify(runFormData)}
                             onHideInput={(id) => {
                                 visibleInputs = visibleInputs.filter((input) => input.id !== id);
                             }}
+                            onDeleteInput={(id) => {
+                                task!.inputs = task!.inputs.filter((input) => input.id !== id);
+                            }}
                             onToggleInputDescription={(id, value) => inputDescription.set(id, value)}
                             onToggleInputDefault={(id, value) => inputDefault.set(id, value)}
                             onSuggestImprovement={(content) => {
