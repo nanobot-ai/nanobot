@@ -7,7 +7,7 @@
 	import { SvelteMap } from "svelte/reactivity";
 	import { resolve } from '$app/paths';
 	import { goto } from "$app/navigation";
-	import type { WorkspaceFile } from "$lib/types";
+	import type { Session, WorkspaceFile } from "$lib/types";
 
     interface Props {
         inverse?: boolean;
@@ -392,12 +392,11 @@
                                 }, {})
                             }
                             {@const files = (workspaceInstance?.files ?? []).filter((f: { name: string }) => !f.name.startsWith('.nanobot/tasks/'))}
-                        
+                            {@const conversations = workspaceInstance?.sessions ?? []}
                             <ul>
-                                {@render workspaceChild(workspace.id, 'Tasks', ListTodo, Object.keys(tasks), (e) => createTask(e, workspace.id))}
-                                {@render workspaceChild(workspace.id, 'Agents', Bot, [])}
-                                {@render workspaceChild(workspace.id, 'Conversations', MessageSquare, [])}
-                                {@render workspaceChild(workspace.id, 'Files', FileText, files, (e) => createFile(e, workspace.id))}
+                                {@render tasksSection(workspace.id, tasks)}
+                                {@render conversationsSection(workspace.id, conversations)}
+                                {@render filesSection(workspace.id, files)}
                             </ul>
                         {/if}
                     </div>
@@ -407,71 +406,96 @@
     {/if}
 </div>
 
-{#snippet workspaceChild(workspaceId: string, title: string, Icon: Component, items: string[] | WorkspaceFile[], onCreate?: (e: MouseEvent) => void)}
+{#snippet empty(title: string, hasCreate?: boolean)}
+    <li class="w-full">
+        <p class="p-2 italic text-base-content/30 flex hover:bg-transparent cursor-default">
+            No {title.toLowerCase()}. 
+            {#if hasCreate}
+                Click <Plus class="size-2.5 inline-flex" /> to get started.
+            {/if}
+        </p>
+    </li>
+{/snippet}
+
+{#snippet sectionTitle(title: string, Icon: Component, items: unknown[], onCreate?: (e: MouseEvent) => void)}
+    <summary class="flex rounded-r-none px-2 items-center justify-between gap-2 [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">
+        <div class="flex items-center gap-2">
+            <span class="chevron-icon shrink-0">
+                <ChevronRight class="size-4 chevron-closed" />
+                <ChevronDown class="size-4 chevron-open" />
+            </span>
+            <Icon class="size-4" />
+            <h3 class="text-sm font-medium">{title}</h3>
+        </div>
+        <div class="flex items-center gap-2">
+            <div class="badge badge-sm badge-ghost">{items.length}</div>
+            {#if onCreate}
+                <button class="btn btn-square btn-ghost btn-sm" onclick={onCreate}>
+                    <Plus class="size-4" />
+                </button>
+            {:else}
+                <div class="size-8"></div>
+            {/if}
+        </div>
+    </summary>
+{/snippet}
+
+{#snippet tasksSection(workspaceId: string, tasks: Record<string, boolean>)}
+{@const items = Object.keys(tasks)}
 <li class="flex grow">
     <details class="workspace-details w-full">
-        <summary class="flex rounded-r-none px-2 items-center justify-between gap-2 [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">
-            <div class="flex items-center gap-2">
-                <span class="chevron-icon shrink-0">
-                    <ChevronRight class="size-4 chevron-closed" />
-                    <ChevronDown class="size-4 chevron-open" />
-                </span>
-                <Icon class="size-4" />
-                <h3 class="text-sm font-medium">{title}</h3>
-            </div>
-            <div class="flex items-center gap-2">
-                <div class="badge badge-sm badge-ghost">{items.length}</div>
-                {#if onCreate}
-                    <button class="btn btn-square btn-ghost btn-sm" onclick={onCreate}>
-                        <Plus class="size-4" />
-                    </button>
-                {:else}
-                    <div class="size-8"></div>
-                {/if}
-            </div>
-        </summary>
+        {@render sectionTitle('Tasks', ListTodo, items, (e) => createTask(e, workspaceId))}
         <ul>
             {#if items.length === 0}
-                <li class="w-full">
-                    <p class="p-2 italic text-base-content/30 flex hover:bg-transparent cursor-default">
-                        No {title.toLowerCase()}. 
-                        {#if onCreate}
-                            Click <Plus class="size-2.5 inline-flex" /> to get started.
-                        {/if}
-                    </p>
-                </li>
+                {@render empty('Tasks', true)}
             {:else}
-                {#if typeof items[0] === 'string'}
-                    {@render workspaceChildLinks(workspaceId, title, items as string[])}
-                {:else}
-                    {@render workspaceChildFiles(workspaceId, title, items as WorkspaceFile[])}
-                {/if}
+                {#each items as item, index (index)}
+                    <li class="w-full">
+                        <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="block p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">{item}</a>
+                    </li>
+                {/each}
             {/if}
         </ul>
     </details>
 </li>
 {/snippet}
 
-{#snippet workspaceChildLinks(workspaceId: string, title: string, items: string[])}
-    {#each items as item, index (index)}
-        <li class="w-full">
-            {#if title === 'Tasks'}
-                <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="block p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">{item}</a>
+{#snippet conversationsSection(workspaceId: string, conversations: Session[])}
+<li class="flex grow">
+    <details class="workspace-details w-full">
+        {@render sectionTitle('Conversations', MessageSquare, conversations)}
+        <ul>
+            {#if conversations.length === 0}
+                {@render empty('Conversations')}
             {:else}
-                <p class="p-2 w-full overflow-hidden truncate">{item}</p>
+                {#each conversations as conversation, index (index)}
+                    <li class="w-full">
+                        <a href={resolve(`/c/${conversation.id}`)} class="block p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">{conversation.title}</a>
+                    </li>
+                {/each}
             {/if}
-        </li>
-    {/each}
+        </ul>
+    </details>
+</li>
 {/snippet}
 
-{#snippet workspaceChildFiles(workspaceId: string, title: string, items: WorkspaceFile[])}
-    {#each items as item, index (index)}
-        <li class="w-full">
-            <button class="p-2 w-full overflow-hidden truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'} rounded-r-none">
-                {item.name}
-            </button>
-        </li>
-    {/each}
+{#snippet filesSection(workspaceId: string, files: WorkspaceFile[])}
+<li class="flex grow">
+    <details class="workspace-details w-full">
+        {@render sectionTitle('Files', FileText, files)}
+        <ul>
+            {#if files.length === 0}
+                {@render empty('Files')}
+            {:else}
+                {#each files as file, index (index)}
+                    <li class="w-full">
+                        <button class="block p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">{file.name}</button>
+                    </li>
+                {/each}
+            {/if}
+        </ul>
+    </details>
+</li>
 {/snippet}
 
 <style>
