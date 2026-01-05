@@ -1,5 +1,5 @@
 import { getContext, setContext } from 'svelte';
-import { PUBLIC_REGISTRY_ENDPOINT } from '$env/static/public';
+import { env } from '$env/dynamic/public';
 import type { Server } from '$lib/types';
 
 const REGISTRY_CONTEXT_KEY = Symbol('registry');
@@ -44,8 +44,12 @@ export function createRegistryStore(): RegistryStore {
 		loading = true;
 		error = null;
 
+		if (!env.PUBLIC_REGISTRY_ENDPOINT) {
+			throw new Error('Registry endpoint is not set');
+		}
+
 		try {
-			const response = await globalThis.fetch(PUBLIC_REGISTRY_ENDPOINT);
+			const response = await globalThis.fetch(env.PUBLIC_REGISTRY_ENDPOINT);
 			const data: RegistryResponse = await response.json();
 			servers = data.servers.map((server) => server.server);
 			lastFetchTime = Date.now();
