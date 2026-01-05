@@ -206,6 +206,10 @@
 							<Workspaces scrollContainerEl={scrollContainer} {inverse} />
 						</div>
 					{/if}
+
+					<div class="h-12">
+						<!-- placeholder so dark/light toggle doesn't block content -->
+					</div>
 				</div>
 			</div>
 
