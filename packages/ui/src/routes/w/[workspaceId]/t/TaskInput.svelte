@@ -16,7 +16,6 @@
     }
 
     let { 
-        id, 
         task,
         input = $bindable(),
         inputDescription,
@@ -40,8 +39,12 @@
             <input type="text" class="font-semibold placeholder:font-normal" bind:value={input.name} placeholder="Argument name (ex. CompanyName)"/>
         </label>
 
-        <input name="input-description" class="input w-full placeholder:text-base-content/30" type="text" placeholder="What is this argument for?" bind:value={input.description} />
-        <input name="input-default" class="input w-full placeholder:text-base-content/30" type="text" placeholder="Default value (ex. Obot)" bind:value={input.default} />
+        {#if inputDescription.get(input.id) ?? false}
+            <input name="input-description" class="input w-full placeholder:text-base-content/30" type="text" placeholder="What is this argument for?" bind:value={input.description} />
+        {/if}
+        {#if inputDefault.get(input.id) ?? false}
+            <input name="input-default" class="input w-full placeholder:text-base-content/30" type="text" placeholder="Default value (ex. Obot)" bind:value={input.default} />
+        {/if}
     </div>
 </div>
 
@@ -67,12 +70,12 @@
             </label>
         </li>
         <li>
-            <label for={`step-${id}-description`} class="flex gap-2 justify-between items-center">
+            <label for={`input-${id}-default`} class="flex gap-2 justify-between items-center">
                 <span class="flex items-center gap-2">
                     <HandHelping class="size-4" />
                     Default value
                 </span>
-                <input type="checkbox" class="toggle toggle-sm" id={`step-${id}-description`} 
+                <input type="checkbox" class="toggle toggle-sm" id={`input-${id}-default`} 
                     checked={inputDefault.get(id) ?? false}
                     onchange={(e) => {
                         onToggleInputDefault(id, (e.target as HTMLInputElement)?.checked ?? false);
