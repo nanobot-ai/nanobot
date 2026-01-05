@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,10 +26,33 @@ const (
 	// Token type URNs for RFC 8693 Token Exchange
 	tokenTypeJWT    = "urn:ietf:params:oauth:token-type:jwt"
 	tokenTypeAPIKey = "urn:obot:token-type:api-key"
-
-	// API key prefix for Obot-generated API keys
-	apiKeyPrefix = "ok1-"
 )
+
+// isJWT checks if the given token appears to be a JWT by validating its structure.
+// JWTs have three base64url-encoded parts separated by dots, with the header
+// containing a required "alg" field.
+func isJWT(token string) bool {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	// Try to decode the header (first part)
+	header, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		// Try with padding (some JWTs use standard base64url encoding)
+		header, err = base64.URLEncoding.DecodeString(parts[0])
+		if err != nil {
+			return false
+		}
+	}
+	// Check if header is valid JSON with "alg" field (required by JWT spec)
+	var headerMap map[string]any
+	if err := json.Unmarshal(header, &headerMap); err != nil {
+		return false
+	}
+	_, hasAlg := headerMap["alg"]
+	return hasAlg
+}
 
 type HTTPClient struct {
 	ctx          context.Context
@@ -788,10 +812,10 @@ func (s *HTTPClient) exchangeToken(ctx context.Context, subjectToken string) (st
 	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
 	data.Set("subject_token", subjectToken)
 
-	// Detect token type based on prefix
-	subjectTokenType := tokenTypeJWT
-	if strings.HasPrefix(subjectToken, apiKeyPrefix) {
-		subjectTokenType = tokenTypeAPIKey
+	// Detect token type based on format
+	subjectTokenType := tokenTypeAPIKey
+	if isJWT(subjectToken) {
+		subjectTokenType = tokenTypeJWT
 	}
 	data.Set("subject_token_type", subjectTokenType)
 	data.Set("requested_token_type", "urn:ietf:params:oauth:token-type:access_token")

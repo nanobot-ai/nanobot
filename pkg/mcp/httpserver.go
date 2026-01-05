@@ -70,7 +70,7 @@ func buildAuditLog(req *http.Request, method string, sessionID string) auditlogs
 	// Extract and redact API key from Authorization header
 	var redactedAPIKey string
 	if authHeader := req.Header.Get("Authorization"); authHeader != "" {
-		if token, ok := strings.CutPrefix(authHeader, "Bearer "); ok && strings.HasPrefix(token, "ok1") {
+		if token, ok := strings.CutPrefix(authHeader, "Bearer "); ok && !isJWT(token) {
 			redactedAPIKey = auditlogs.RedactAPIKey(token)
 		}
 	}
