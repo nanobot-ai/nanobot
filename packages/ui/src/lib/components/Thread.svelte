@@ -53,41 +53,60 @@
 	let messagesContainer: HTMLElement;
 	let showScrollButton = $state(false);
 	let previousLastMessageId = $state<string | null>(null);
+	let isFollowingBottom = $state(true); // Track if user wants to follow new content
 	let hasMessages = $derived(messages && messages.length > 0);
 	let selectedPrompt = $state<string | undefined>();
 
-	// Watch for changes to the last message ID and scroll to bottom
+	// Check if currently at or near the bottom
+	function isNearBottom(): boolean {
+		if (!messagesContainer) return true;
+		const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
+		return scrollTop + clientHeight >= scrollHeight - 50; // 50px threshold
+	}
+
+	// Watch for any message changes and scroll if following
 	$effect(() => {
 		if (!messagesContainer) return;
 
-		// Make this reactive to changes in messages
+		// Make this reactive to changes in messages array and content
 		void messages.length;
+		void messages.map((m) => m.items?.length);
 
 		const lastDiv = messagesContainer.querySelector('#message-groups > :last-child');
 		const currentLastMessageId = lastDiv?.getAttribute('data-message-id');
 
+		// New message appeared - always scroll and start following
 		if (currentLastMessageId && currentLastMessageId !== previousLastMessageId) {
-			// Wait for DOM update, then scroll to bottom
-			setTimeout(() => {
-				scrollToBottom();
-			}, 10);
+			isFollowingBottom = true;
 			previousLastMessageId = currentLastMessageId;
+		}
+
+		// Scroll to bottom if we're following
+		if (isFollowingBottom) {
+			// Use requestAnimationFrame to wait for DOM update
+			requestAnimationFrame(() => {
+				scrollToBottom(false);
+			});
 		}
 	});
 
 	function handleScroll() {
 		if (!messagesContainer) return;
 
-		const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
-		const isNearBottom = scrollTop + clientHeight >= scrollHeight - 10; // 10px threshold
-		showScrollButton = !isNearBottom;
+		const nearBottom = isNearBottom();
+		showScrollButton = !nearBottom;
+
+		// Update following state based on user scroll position
+		// If user scrolls up (away from bottom), stop following
+		// If user scrolls to bottom, resume following
+		isFollowingBottom = nearBottom;
 	}
 
-	function scrollToBottom() {
+	function scrollToBottom(smooth = true) {
 		if (messagesContainer) {
 			messagesContainer.scrollTo({
 				top: messagesContainer.scrollHeight,
-				behavior: 'smooth'
+				behavior: smooth ? 'smooth' : 'instant'
 			});
 		}
 	}
@@ -95,7 +114,7 @@
 
 <div class="flex {inline ? 'h-full' : 'h-dvh'} w-full flex-col md:relative peer-[.workspace]:md:w-1/4">
 	<!-- Messages area - full height scrollable with bottom padding for floating input -->
-	<div class="w-full overflow-y-auto" bind:this={messagesContainer} onscroll={handleScroll}>
+	<div class="w-full flex-1 min-h-0 overflow-y-auto" bind:this={messagesContainer} onscroll={handleScroll}>
 		<div class="mx-auto max-w-4xl {inline ? 'pr-4' : ''}">
 			<!-- Prompts section - show when prompts available and no messages -->
 			{#if prompts && prompts.length > 0}
@@ -134,7 +153,10 @@
 		{#if showScrollButton && hasMessages}
 			<button
 				class="btn mx-auto btn-circle border-base-300 bg-base-100 shadow-lg btn-md active:translate-y-0.5"
-				onclick={scrollToBottom}
+				onclick={() => {
+					isFollowingBottom = true;
+					scrollToBottom();
+				}}
 				aria-label="Scroll to bottom"
 			>
 				<ChevronDown class="size-5" />

@@ -476,8 +476,8 @@ ${JSON.stringify(runFormData)}
         </div>
 
         {#if showSidebarThread}
-            <div transition:fly={{ x: 100, duration: 200 }} class="md:min-w-[520px] bg-base-100 h-dvh">
-                <div class="w-full flex justify-between items-center p-4 bg-base-100">
+            <div transition:fly={{ x: 100, duration: 200 }} class="md:min-w-[520px] bg-base-100 h-dvh flex flex-col">
+                <div class="w-full flex justify-between items-center p-4 bg-base-100 shrink-0">
                     {#if currentRun}
                         <h4 class="text-lg font-semibold border-l-4 border-primary">{task.name} | Run {'{id}'}</h4>
                     {:else}
@@ -487,7 +487,7 @@ ${JSON.stringify(runFormData)}
                         <X class="size-4" />
                     </button>
                 </div>
-                <div class="w-full h-full flex flex-col max-h-[calc(100dvh-4rem)]">
+                <div class="w-full flex-1 min-h-0 flex flex-col">
                     <ThreadFromChat inline {chat} />
                 </div>
             </div>
