@@ -186,11 +186,7 @@
             <button class="flex items-center gap-2"
                 onclick={() => onSuggestImprovement(`
 The user is asking for an improvement to the following step for a task process:
-Step title: ${step.name}
-Step description: ${step.description}
-Step details: ${step.content}
-
-Please provide a detailed improvement to the step.
+Please provide concise improvements to the step.
 `)}
             >
                 <Sparkles class="size-4" /> Improve with AI

@@ -71,7 +71,8 @@
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
     const workspaceService = new WorkspaceService();
-    const chat = new ChatService();
+    let chat = $state<ChatService>();
+    let runSession = $state<ChatService>();
 
     onMount(() => {
         workspace = workspaceService.getWorkspace(workspaceId);
@@ -252,9 +253,10 @@
         }
     }
 
-    function submitRun() {
+    async function submitRun() {
         // TODO: change below to actually hit the run task endpoint once available
-        chat.sendMessage(`
+        runSession = await workspace?.newSession();
+        runSession?.sendMessage(`
 Simulate a task run to the user's message. Do not indicate that you are simulating; act as if you are actually running the task.
 The following task has been provided:
 ${task?.steps.map((step, index) => `Step ${index+1}: ${step.content}} \n\n`)}
@@ -370,8 +372,15 @@ ${JSON.stringify(runFormData)}
                             }}
                             onToggleInputDescription={(id, value) => inputDescription.set(id, value)}
                             onToggleInputDefault={(id, value) => inputDefault.set(id, value)}
-                            onSuggestImprovement={(content) => {
-                                chat.sendMessage(content);
+                            onSuggestImprovement={async (content) => {
+                                if (!chat) {
+                                    chat = await workspace?.newSession({ editor: true });
+                                }
+                                chat?.sendMessage(content,
+                                    [{
+                                        uri: `./nanobot/tasks/${taskId}/TASK.md`,
+                                    }]
+                                );
                                 showSidebarThread = true;
                             }}
                         />
@@ -425,8 +434,15 @@ ${JSON.stringify(runFormData)}
                             task!.steps = task!.steps.filter((s) => s.id !== stepId);
                             workspace?.deleteFile(filename);
                         }}
-                        onSuggestImprovement={(content) => {
-                            chat.sendMessage(content);
+                        onSuggestImprovement={async (content) => {
+                            if (!chat) {
+                                chat = await workspace?.newSession({ editor: true });
+                            }
+                            chat?.sendMessage(content, 
+                                [{
+                                    uri: `./nanobot/tasks/${taskId}/${step.id}.md`,
+                                }]
+                            );
                             showSidebarThread = true;
                         }}
                         {visibleInputs}
@@ -460,11 +476,17 @@ ${JSON.stringify(runFormData)}
                         <div class="bg-base-100 dark:bg-base-200 border border-base-300 rounded-selector w-sm md:w-2xl"
                             transition:fly={{ x: 100, duration: 200 }}
                         >
-                            <MessageInput bind:this={toggleableMessageInput} onSend={(message) => {
-                                showSidebarThread = true;
-                                showMessageInput = false;
-                                return chat.sendMessage(message);
-                            }} />
+                            <MessageInput bind:this={toggleableMessageInput} 
+                                onSend={async (message) => {
+                                    showSidebarThread = true;
+                                    showMessageInput = false;
+
+                                    if (!chat) {
+                                        chat = await workspace?.newSession({ editor: true });
+                                    }
+                                    return chat?.sendMessage(message);
+                                }} 
+                            />
                         </div>  
                     {/if}
 
@@ -487,12 +509,28 @@ ${JSON.stringify(runFormData)}
                     {:else}
                         <div class="w-full"></div>
                     {/if}
-                    <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" data-tip="Close" onclick={() => showSidebarThread = false}>
+                    <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" data-tip="Close" 
+                        onclick={() => {
+                            showSidebarThread = false;
+                            if (runSession) {
+                                runSession.close();
+                                runSession = undefined;
+                            }
+                        }}
+                    >
                         <X class="size-4" />
                     </button>
                 </div>
                 <div class="w-full flex-1 min-h-0 flex flex-col">
-                    <ThreadFromChat inline {chat} />
+                    {#if runSession}
+                        {#key runSession.chatId}
+                            <ThreadFromChat inline chat={runSession} />
+                        {/key}
+                    {:else if chat}
+                        {#key chat.chatId}
+                            <ThreadFromChat inline {chat} />
+                        {/key}
+                    {/if}
                 </div>
             </div>
         {/if}
