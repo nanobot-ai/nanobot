@@ -257,12 +257,12 @@
         // TODO: change below to actually hit the run task endpoint once available
         runSession = await workspace?.newSession({ editor: true});
         runSession?.sendMessage(`
-Simulate a task run to the user's message. Do not indicate that you are simulating; act as if you are actually running the task.
-The following task has been provided:
-${task?.steps.map((step, index) => `Step ${index+1}: ${step.content}} \n\n`)}
-\n\n Utilize the following inputs:
+Use the files under the ".nanobot/tasks/${taskId}" directory for context to help you simulate the task run.
+These are the following inputs to simulate the task run with: \n\n
 ${JSON.stringify(runFormData)}
-        `)
+
+\n\n Do not indicate that you are simulating; act as if you are actually running the task.
+`)
         showSidebarThread = true;
     }
 </script>
