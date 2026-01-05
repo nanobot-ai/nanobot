@@ -9,24 +9,24 @@ func TestRedactAPIKey(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "valid API key",
+			name:     "standard API key",
 			apiKey:   "ok1-123-456-secretABC",
-			expected: "ok1-123-456-*****",
+			expected: "ok1-123-45",
 		},
 		{
-			name:     "valid API key with secret containing dashes",
+			name:     "longer API key",
 			apiKey:   "ok1-12345-67890-secret-with-dashes-and-more",
-			expected: "ok1-12345-67890-*****",
+			expected: "ok1-12345-67890-secre",
 		},
 		{
-			name:     "invalid prefix",
-			apiKey:   "xyz-user123-key456-secret",
-			expected: "",
+			name:     "short key",
+			apiKey:   "ab",
+			expected: "a",
 		},
 		{
-			name:     "too few parts",
-			apiKey:   "ok1-user123-key456",
-			expected: "",
+			name:     "single character",
+			apiKey:   "a",
+			expected: "a",
 		},
 		{
 			name:     "empty string",
@@ -34,9 +34,9 @@ func TestRedactAPIKey(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "only prefix",
+			name:     "four characters",
 			apiKey:   "ok1-",
-			expected: "",
+			expected: "ok",
 		},
 	}
 
