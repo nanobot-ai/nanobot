@@ -17,7 +17,7 @@
 </script>
 
 {#if item}
-    <button class="btn btn-ghost btn-square btn-sm" popoverTarget={`add-to-step-${item.id}`} style="anchor-name: --add-to-step-${item.id}-anchor;">
+    <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-right" data-tip="Add..." popoverTarget={`add-to-step-${item.id}`} style="anchor-name: --add-to-step-${item.id}-anchor;">
         <Plus class="text-base-content/50" />
     </button>
     <ul class="dropdown menu w-72 rounded-box bg-base-100 dark:bg-base-300 shadow-sm overflow-visible"
@@ -42,8 +42,8 @@
                 }}
             >
                 <span>Add new step</span>
-                <span class="text-[11px] text-base-content/50">
-                    click / <kbd class="kbd ">⌘</kbd> + click
+                <span class="text-[11px]">
+                    <kbd class="kbd ">⌘</kbd> + click <span class="text-base-content/50">to add above</span>
                 </span>
             </button>
         </li>
