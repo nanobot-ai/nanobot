@@ -168,6 +168,13 @@
                     bind:value={newWorkspace.name}
                     bind:this={newWorkspaceEl}
                     placeholder="Add workspace name..."
+                    onkeydown={(e) => {
+                        if (e.key === 'Enter') {
+                            createWorkspace();
+                        } else if (e.key === 'Escape') {
+                            newWorkspace = null;
+                        }
+                    }}
                 />
 
                 <div class="flex items-center">
@@ -360,6 +367,7 @@
                                     return acc;
                                 }, {})
                             }
+                            {console.log(workspaceInstance)}
                         
                             <ul>
                                 {@render workspaceChild(workspace.id, 'Tasks', ListTodo, Object.keys(tasks), (e) => createTask(e, workspace.id))}
@@ -400,7 +408,12 @@
         <ul>
             {#if items.length === 0}
                 <li class="w-full">
-                    <p class="p-2 italic text-base-content/30 flex hover:bg-transparent cursor-default">No {title.toLowerCase()}. Click <Plus class="size-2.5 inline-flex" /> to get started.</p>
+                    <p class="p-2 italic text-base-content/30 flex hover:bg-transparent cursor-default">
+                        No {title.toLowerCase()}. 
+                        {#if title === 'Tasks'}
+                        Click <Plus class="size-2.5 inline-flex" /> to get started.
+                        {/if}
+                    </p>
                 </li>
             {:else}
                 {#each items as item, index (index)}
