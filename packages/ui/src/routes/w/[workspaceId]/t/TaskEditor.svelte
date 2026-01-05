@@ -378,7 +378,7 @@ ${JSON.stringify(runFormData)}
                                 }
                                 chat?.sendMessage(content,
                                     [{
-                                        uri: `./nanobot/tasks/${taskId}/TASK.md`,
+                                        uri: `.nanobot/tasks/${taskId}/TASK.md`,
                                     }]
                                 );
                                 showSidebarThread = true;
@@ -440,7 +440,9 @@ ${JSON.stringify(runFormData)}
                             }
                             chat?.sendMessage(content, 
                                 [{
-                                    uri: `./nanobot/tasks/${taskId}/${step.id}.md`,
+                                    name: step.id,
+                                    uri: `.nanobot/tasks/${taskId}/${step.id}`,
+                                    mimeType: 'application/octet-stream',
                                 }]
                             );
                             showSidebarThread = true;
@@ -523,10 +525,12 @@ ${JSON.stringify(runFormData)}
                 </div>
                 <div class="w-full flex-1 min-h-0 flex flex-col">
                     {#if runSession}
+                    {console.log('runsession')}
                         {#key runSession.chatId}
                             <ThreadFromChat inline chat={runSession} />
                         {/key}
                     {:else if chat}
+                    {console.log('chat')}
                         {#key chat.chatId}
                             <ThreadFromChat inline {chat} />
                         {/key}
