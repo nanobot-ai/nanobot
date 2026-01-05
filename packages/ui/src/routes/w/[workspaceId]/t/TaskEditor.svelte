@@ -124,10 +124,8 @@
                 const exists = workspace?.files.find((f) => f.name === file.id);
                 try {
                     if (exists) {
-                        console.log('update file', { file });
                         await workspace?.writeFile(file.id, file.data);
                     } else {
-                        console.log('create file', { file });
                         await workspace?.createFile(file.id, file.data);
                     }
                 } catch (error) {
