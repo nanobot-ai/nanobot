@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { EllipsisVertical, EyeClosed, HandHelping, ReceiptText, Sparkles } from "@lucide/svelte";
+	import { EllipsisVertical, EyeClosed, HandHelping, Info, ReceiptText, Sparkles } from "@lucide/svelte";
 	import type { Input, Task } from "./types";
 
     interface Props {
@@ -35,10 +35,19 @@
     </div>
     
     <div class="flex flex-col gap-2 pr-12">
-        <label class="input w-full">
-            <span class="label h-full font-semibold text-primary bg-primary/15 mr-0">$</span>
-            <input type="text" class="font-semibold placeholder:font-normal" bind:value={input.name} placeholder="Argument name (ex. CompanyName)"/>
-        </label>
+        <div class="tooltip">
+            <div class="tooltip-content bg-primary/20 z-20">
+                {#if input.name.length > 0}
+                    <div class="flex items-center gap-2">
+                        <p class="text-xs text-base-content/60">Include <span class="text-primary font-semibold">${input.name}</span> in any step to reference this argument.</p>
+                    </div>
+                {/if}
+            </div>
+            <label class="input w-full">
+                <span class="label h-full font-semibold text-primary bg-primary/15 mr-0">$</span>
+                <input type="text" class="font-semibold placeholder:font-normal" bind:value={input.name} placeholder="Argument name (ex. CompanyName)"/>
+            </label>
+        </div>
 
         {#if inputDescription.get(input.id) ?? false}
             <input name="input-description" class="input w-full placeholder:text-base-content/30" type="text" placeholder="What is this argument for?" bind:value={input.description} />
