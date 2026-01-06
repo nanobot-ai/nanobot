@@ -464,19 +464,16 @@
                         </button>
                         <ul 
                             id="popover-task-actions-{item}"
-                            class="dropdown menu w-52 rounded-box bg-base-100 shadow-sm"
+                            class="dropdown menu rounded-box bg-base-100 shadow-sm"
                             popover style="position-anchor:--task-actions-anchor-{item}"
                         >
                             <li>
-                                <button 
-                                    onmousedown={(e) => e.stopPropagation()} 
-                                    onclick={(e) => {
-                                        // TODO:
-                                    }} 
-                                    class="text-sm"
+                                <a 
+                                    href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)}
+                                    class="text-sm {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}"
                                 >
-                                    <Play class="size-4" /> Run task
-                                </button>
+                                    <Play class="size-4" /> Run
+                                </a>
                             </li>    
                             <li>
                                 <button 

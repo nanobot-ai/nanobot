@@ -192,7 +192,7 @@
                         {#if loading}
                             <Square class="size-4 shrink-0" />
                         {:else}
-                            Run Task
+                            Run 
                             <Play class="size-4 shrink-0" />
                         {/if}
                     </button>
