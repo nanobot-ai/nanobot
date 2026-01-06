@@ -8,6 +8,7 @@
 		blockHandle?: Snippet<[{ startDrag: (e: MouseEvent) => void; currentItem: T | null }]>;
 		children: Snippet<[{ item: T; index: number; isDragging: boolean }]>;
 		onreorder?: (items: T[]) => void;
+		useLongPress?: boolean;
 		scrollContainerEl?: HTMLElement | null;
 		class?: string;
 		classes?: {
@@ -26,6 +27,7 @@
 		blockHandle,
 		children,
 		onreorder,
+		useLongPress,
 		scrollContainerEl = null,
 		class: className = '',
 		classes = {},
@@ -42,10 +44,8 @@
 	let itemsContainer = $state<HTMLElement | null>(null);
 	let listContainer = $state<HTMLElement | null>(null);
 
-	// Use external scroll container if provided, otherwise use internal
 	let scrollContainer = $derived(scrollContainerEl ?? internalScrollContainer);
 
-	// Listen to scroll events on whichever scroll container is active
 	$effect(() => {
 		if (!blockHandle || !scrollContainer) return;
 		scrollContainer.addEventListener('scroll', updateHandlePosition);
@@ -54,18 +54,20 @@
 		};
 	});
 
-	// Drag & drop state
 	let isDragging = $state(false);
 	let draggedIndex = $state<number | null>(null);
 	let dropTargetIndex = $state<number | null>(null);
 	let dragGhost = $state<HTMLElement | null>(null);
 	let dragOffsetY = $state(0);
 
-	// Auto-scroll state
 	const SCROLL_THRESHOLD = 80; // pixels from edge to start scrolling
 	const SCROLL_SPEED = 12; // pixels per frame
 	let autoScrollAnimationId: number | null = null;
 	let lastMouseY = 0;
+
+	const LONG_PRESS_DURATION = 500; // 1 second
+	let longPressTimeoutId: ReturnType<typeof setTimeout> | null = null;
+	let pendingDragEvent: MouseEvent | null = null;
 
 	function updateHandlePosition() {
 		if (!currentFocusedElement || !scrollContainer || !itemsContainer) return;
@@ -104,7 +106,6 @@
 		isDragging = true;
 		draggedIndex = index;
 
-		// Create ghost clone
 		const rect = currentFocusedElement.getBoundingClientRect();
 		dragOffsetY = e.clientY - rect.top;
 
@@ -121,7 +122,6 @@
 		document.body.appendChild(ghost);
 		dragGhost = ghost;
 
-		// Add event listeners
 		document.addEventListener('mousemove', handleDragMove);
 		document.addEventListener('mouseup', endDrag);
 	}
@@ -157,12 +157,10 @@
 			if (scrollAmount !== 0) {
 				scrollContainer.scrollTop += scrollAmount;
 
-				// Update ghost position to stay with cursor
 				if (dragGhost) {
 					dragGhost.style.top = `${lastMouseY - dragOffsetY}px`;
 				}
 
-				// Re-calculate drop target after scrolling
 				updateDropTarget(lastMouseY);
 			}
 
@@ -199,7 +197,6 @@
 			}
 		}
 
-		// If we didn't find a position, drop at the end
 		if (newDropIndex === null) {
 			newDropIndex = itemElements.length;
 		}
@@ -218,7 +215,6 @@
 
 		lastMouseY = e.clientY;
 
-		// Move ghost
 		dragGhost.style.top = `${e.clientY - dragOffsetY}px`;
 
 		// Start auto-scroll if near edges
@@ -240,10 +236,8 @@
 	function endDrag() {
 		if (!isDragging) return;
 
-		// Stop auto-scroll
 		stopAutoScroll();
 
-		// Remove ghost
 		if (dragGhost) {
 			dragGhost.remove();
 			dragGhost = null;
@@ -277,18 +271,49 @@
 			}
 		}
 
-		// Reset state
 		isDragging = false;
 		draggedIndex = null;
 		dropTargetIndex = null;
 
-		// Remove event listeners
 		document.removeEventListener('mousemove', handleDragMove);
 		document.removeEventListener('mouseup', endDrag);
 	}
 
 	export function getIsDragging() {
 		return isDragging;
+	}
+
+	function cancelLongPress() {
+		if (longPressTimeoutId !== null) {
+			clearTimeout(longPressTimeoutId);
+			longPressTimeoutId = null;
+		}
+		pendingDragEvent = null;
+	}
+
+	function handleItemMouseDown(e: MouseEvent) {
+		if (blockHandle) return;
+
+		if (useLongPress) {
+			pendingDragEvent = e;
+			longPressTimeoutId = setTimeout(() => {
+				if (pendingDragEvent) {
+					startDrag(pendingDragEvent);
+				}
+				longPressTimeoutId = null;
+				pendingDragEvent = null;
+			}, LONG_PRESS_DURATION);
+		} else {
+			startDrag(e);
+		}
+	}
+
+	function handleItemMouseUp() {
+		cancelLongPress();
+	}
+
+	function handleItemMouseLeave() {
+		cancelLongPress();
 	}
 </script>
 
@@ -333,7 +358,9 @@
 						updateHandlePosition();
 					}}
 					role="presentation"
-					onmousedown={!blockHandle ? startDrag : undefined}
+					onmousedown={!blockHandle ? handleItemMouseDown : undefined}
+					onmouseup={!blockHandle ? handleItemMouseUp : undefined}
+					onmouseleave={!blockHandle ? handleItemMouseLeave : undefined}
 				>
 					{@render children({ item, index, isDragging: isDragging && draggedIndex === index })}
 				</svelte:element>

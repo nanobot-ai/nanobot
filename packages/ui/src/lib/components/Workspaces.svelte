@@ -47,6 +47,7 @@
     let editingWorkspaceEl = $state<HTMLInputElement | null>(null);
 
     let selectedColor = $state<string>('');
+    let summaryPointerDownTime = 0;
 
     onMount(() => {
         loadWorkspaces();
@@ -213,10 +214,15 @@
             }}
             as="ul"
             childrenAs="li"
+            useLongPress
         >
             {#snippet children({ item: workspace })}
                 <details class="workspace-details flex flex-col w-full overflow-visible">
-                    <summary class="flex px-2 items-center justify-between rounded-none list-none [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}" onclick={(e) => e.preventDefault()}>
+                    <summary 
+                        class="flex px-2 items-center justify-between rounded-none list-none [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}" 
+                        onpointerdown={() => { summaryPointerDownTime = Date.now(); }}
+                        onclick={(e) => { if (Date.now() - summaryPointerDownTime > 300) e.preventDefault(); }}
+                    >
                         <div class="flex grow items-center gap-2">
                             <button class="chevron-icon shrink-0 btn btn-square btn-ghost btn-xs" 
                                 onmousedown={(e) => e.stopPropagation()} 
