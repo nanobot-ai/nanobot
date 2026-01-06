@@ -1,13 +1,19 @@
 <script lang="ts">
     import type {ChatService} from "$lib/chat.svelte";
     import Thread from "$lib/components/Thread.svelte";
+	import type { Attachment } from "$lib/types";
 
     interface Props {
         chat: ChatService
         inline?: boolean;
+        files?: Attachment[];
     }
 
-    let { chat, inline}: Props = $props();
+    let { chat, inline, files = [] }: Props = $props();
+
+    function handleSendMessage(message: string, attachments?: Attachment[]) {
+        return chat.sendMessage(message, [...files, ...(attachments || [])]);
+    }
 </script>
 
 {#key chat.chatId}
@@ -17,7 +23,7 @@
         resources={chat.resources}
         elicitations={chat.elicitations}
         onElicitationResult={chat.replyToElicitation}
-        onSendMessage={chat.sendMessage}
+        onSendMessage={handleSendMessage}
         onFileUpload={chat.uploadFile}
         cancelUpload={chat.cancelUpload}
         uploadingFiles={chat.uploadingFiles}
