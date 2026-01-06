@@ -38,10 +38,10 @@ gofmt -w .
 
 ### Frontend (UI)
 
-The UI is a SvelteKit application located in the `./ui` directory. This project uses **pnpm** as the package manager.
+The UI is a SvelteKit application located in the `./packages/ui` directory. This project uses **pnpm** as the package manager.
 
 ```bash
-cd ui
+cd packages/ui
 
 # Install dependencies (if needed)
 pnpm install
