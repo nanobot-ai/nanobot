@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { WorkspaceInstance, WorkspaceService } from "$lib/workspace.svelte";
-	import { Bot, ChevronDown, ChevronRight, CircleX, Edit, FileText, Folder, FolderOpen, ListTodo, MessageSquare, MoreVertical, PaintBucket, Plus, Save, Trash2 } from "@lucide/svelte";
+	import { ChevronDown, ChevronRight, CircleX, EllipsisVertical, FileText, Folder, FolderOpen, ListTodo, MessageSquare, PaintBucket, PencilLine, Play, Plus, Save, Trash2 } from "@lucide/svelte";
 	import { onMount, tick } from "svelte";
 	import type { Component } from "svelte";
 	import DragDropList from "./DragDropList.svelte";
@@ -8,6 +8,7 @@
 	import { resolve } from '$app/paths';
 	import { goto } from "$app/navigation";
 	import type { Session, WorkspaceFile } from "$lib/types";
+	import ConfirmDelete from "./ConfirmDelete.svelte";
 
     interface Props {
         inverse?: boolean;
@@ -33,9 +34,14 @@
     let loadingWorkspace = new SvelteMap<string, boolean>();
     let workspaceData = new SvelteMap<string, WorkspaceInstance>();
 
+    const workspaceService = new WorkspaceService();
     let newWorkspace = $state<WorkspaceManifest | null>(null);
     let newWorkspaceEl = $state<HTMLInputElement | null>(null);
-    const workspaceService = new WorkspaceService();
+
+    let confirmDeleteWorkspaceId = $state<string | null>(null);
+    let confirmDeleteWorkspaceModal = $state<ReturnType<typeof ConfirmDelete> | null>(null);
+    let confirmDeleteTask = $state<{ taskId: string, workspaceId: string } | null>(null);
+    let confirmDeleteTaskModal = $state<ReturnType<typeof ConfirmDelete> | null>(null);
 
     let editingWorkspace = $state<Workspace | null>(null);
     let editingWorkspaceEl = $state<HTMLInputElement | null>(null);
@@ -257,7 +263,7 @@
                                     onclick={(e) => e.stopPropagation()}
                                     data-tip="Edit workspace"
                                 >
-                                    <MoreVertical class="size-4" />
+                                    <EllipsisVertical class="size-4" />
                                 </button>
                                 <ul class="dropdown menu w-48 rounded-box bg-base-100 dark:bg-base-300 shadow-sm overflow-visible"
                                     popover="auto" id="workspace-actions-{workspace.id}" style="position-anchor: --workspace-actions-anchor-{workspace.id};">
@@ -273,7 +279,7 @@
                                             }} 
                                             class="text-sm"
                                         >
-                                            <Edit class="size-4" />
+                                            <PencilLine class="size-4" />
                                             Rename
                                         </button>
                                     </li>
@@ -348,12 +354,12 @@
                                         <button 
                                             onmousedown={(e) => e.stopPropagation()} 
                                             onclick={(e) => {
-                                                // TODO:
+                                                confirmDeleteWorkspaceId = workspace.id;
+                                                confirmDeleteWorkspaceModal?.showModal();
                                             }} 
                                             class="text-sm text-error"
                                         >
-                                            <Trash2 class="size-4" />
-                                            Delete
+                                            <Trash2 class="size-4" /> Delete
                                         </button>
                                     </li>
                                 </ul>
@@ -451,8 +457,43 @@
                 {@render empty('Tasks', true)}
             {:else}
                 {#each items as item, index (index)}
-                    <li class="w-full">
-                        <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="block p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">{item}</a>
+                    <li class="flex w-full {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">
+                        <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="flex grow p-2 overflow-hidden rounded-r-none truncate hover:bg-transparent">{item}</a>
+                        <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left" popovertarget="popover-task-actions-{item}" style="anchor-name:--task-actions-anchor-{item}">
+                            <EllipsisVertical class="size-4 shrink-0" />
+                        </button>
+                        <ul 
+                            id="popover-task-actions-{item}"
+                            class="dropdown menu w-52 rounded-box bg-base-100 shadow-sm"
+                            popover style="position-anchor:--task-actions-anchor-{item}"
+                        >
+                            <li>
+                                <button 
+                                    onmousedown={(e) => e.stopPropagation()} 
+                                    onclick={(e) => {
+                                        // TODO:
+                                    }} 
+                                    class="text-sm text-error"
+                                >
+                                    <Play class="size-4" /> Run task
+                                </button>
+                            </li>    
+                            <li>
+                                <button 
+                                    onmousedown={(e) => e.stopPropagation()} 
+                                    onclick={(e) => {
+                                        confirmDeleteTask = {
+                                            taskId: item,
+                                            workspaceId,
+                                        };
+                                        confirmDeleteTaskModal?.showModal();
+                                    }} 
+                                    class="text-sm text-error"
+                                >
+                                    <Trash2 class="size-4" /> Delete
+                                </button>
+                            </li>
+                        </ul>
                     </li>
                 {/each}
             {/if}
@@ -498,6 +539,32 @@
     </details>
 </li>
 {/snippet}
+
+<ConfirmDelete
+    bind:this={confirmDeleteWorkspaceModal}
+    title="Delete this workspace?"
+    message="This workspace will be permanently deleted and cannot be recovered."
+    onConfirm={() => {
+        if (!confirmDeleteWorkspaceId) return;
+        workspaceService.deleteWorkspace(confirmDeleteWorkspaceId);
+        confirmDeleteWorkspaceModal?.close();
+    }}
+/>
+
+<ConfirmDelete 
+    bind:this={confirmDeleteTaskModal}
+    title="Delete this task?"
+    message="This task will be permanently deleted and cannot be recovered."
+    onConfirm={() => {
+        if (!confirmDeleteTask) return;
+        const workspace = workspaceService.getWorkspace(confirmDeleteTask.workspaceId);
+        const allTaskFiles = workspace.files.filter((f) => f.name.startsWith(`.nanobot/tasks/${confirmDeleteTask?.taskId}`));
+        for (const file of allTaskFiles) {
+            workspace.deleteFile(file.name);
+        }
+        confirmDeleteTaskModal?.close();
+    }}
+/>
 
 <style>
     /* Hide daisyUI's default menu marker */
