@@ -103,7 +103,6 @@
         
         // Extract step identifier (e.g., "TASK.md" or "STEP_1.md")
         const stepFile = relativePath.replace(taskPrefix, '');
-        console.debug('File modified by chat:', { filePath, stepFile, toolName: info.toolName });
         
         try {
             // Read and parse just the modified file
