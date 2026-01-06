@@ -252,9 +252,10 @@
                         </div>
                         <div class="shrink-0 flex items-center opacity-0 transition-opacity group-hover:opacity-100 relative z-30">
                             {#if editingWorkspace?.id !== workspace.id}
-                                <button class="btn btn-ghost btn-square btn-sm" popoverTarget="workspace-actions-{workspace.id}" style="anchor-name: --workspace-actions-anchor-{workspace.id};"
+                                <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" popoverTarget="workspace-actions-{workspace.id}" style="anchor-name: --workspace-actions-anchor-{workspace.id};"
                                     onmousedown={(e) => e.stopPropagation()}
                                     onclick={(e) => e.stopPropagation()}
+                                    data-tip="Edit workspace"
                                 >
                                     <MoreVertical class="size-4" />
                                 </button>
@@ -417,7 +418,7 @@
     </li>
 {/snippet}
 
-{#snippet sectionTitle(title: string, Icon: Component, items: unknown[], onCreate?: (e: MouseEvent) => void)}
+{#snippet sectionTitle(title: string, Icon: Component, items: unknown[], onCreate?: (e: MouseEvent) => void, createLabel?: string)}
     <summary class="flex rounded-r-none px-2 items-center justify-between gap-2 [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">
         <div class="flex items-center gap-2">
             <span class="chevron-icon shrink-0">
@@ -430,7 +431,7 @@
         <div class="flex items-center gap-2">
             <div class="badge badge-sm badge-ghost">{items.length}</div>
             {#if onCreate}
-                <button class="btn btn-square btn-ghost btn-sm" onclick={onCreate}>
+                <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left" onclick={onCreate} data-tip={createLabel ?? 'Create new...'}>
                     <Plus class="size-4" />
                 </button>
             {:else}
@@ -444,7 +445,7 @@
 {@const items = Object.keys(tasks)}
 <li class="flex grow">
     <details class="workspace-details w-full">
-        {@render sectionTitle('Tasks', ListTodo, items, (e) => createTask(e, workspaceId))}
+        {@render sectionTitle('Tasks', ListTodo, items, (e) => createTask(e, workspaceId), 'Create new task')}
         <ul>
             {#if items.length === 0}
                 {@render empty('Tasks', true)}
