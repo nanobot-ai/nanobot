@@ -2,16 +2,15 @@ module github.com/nanobot-ai/nanobot
 
 go 1.25.5
 
-replace github.com/obot-platform/mcp-oauth-proxy => ../mcp-oauth-proxy
-
 require (
 	github.com/adrg/xdg v0.5.3
 	github.com/dop251/goja v0.0.0-20250630131328-58d95d85e994
 	github.com/glebarez/sqlite v1.11.0
+	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/jsonschema-go v0.3.0
 	github.com/google/uuid v1.6.0
 	github.com/hexops/autogold/v2 v2.3.0
-	github.com/obot-platform/mcp-oauth-proxy v0.0.3-0.20251219153209-05acb93b2b5c
+	github.com/obot-platform/mcp-oauth-proxy v0.0.3-0.20260106135339-3745d9b14a30
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spf13/cobra v1.9.1
 	github.com/tidwall/gjson v1.18.0
@@ -36,7 +35,6 @@ require (
 	github.com/glebarez/go-sqlite v1.22.0 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
-	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20250630185457-6e76a2b096b5 // indirect
 	github.com/gorilla/handlers v1.5.2 // indirect
