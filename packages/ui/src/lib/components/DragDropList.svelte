@@ -15,8 +15,9 @@
 			item?: string;
 			itemsContainer?: string;
 		};
-		as?: 'div' | 'ul'
-		childrenAs?: 'li' | 'div'
+		as?: 'div' | 'ul';
+		childrenAs?: 'li' | 'div';
+		offset?: number;
 	}
 
 	let {
@@ -30,6 +31,7 @@
 		classes = {},
 		as = 'div',
 		childrenAs = 'div',
+		offset = 0,
 	}: Props<any> = $props();
 
 	let currentFocusedElement = $state<HTMLElement | null>(null);
@@ -74,7 +76,7 @@
 		const containerOffset = itemsContainer.offsetTop;
 
 		// Calculate where the viewport top is relative to the items container
-		const viewportTopRelative = scrollTop - containerOffset;
+		const viewportTopRelative = scrollTop - containerOffset - offset;
 
 		// Clamp: stay at element top, or stick to viewport top (but not past element bottom)
 		const clampedPosition = Math.max(elementTop, Math.min(viewportTopRelative, elementBottom - 40));
