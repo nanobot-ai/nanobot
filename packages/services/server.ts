@@ -1,8 +1,8 @@
 import AgentConfig from "@nanobot-ai/agentconfig";
 import Coder from "@nanobot-ai/coder";
 import { mergeConfig, Server } from "@nanobot-ai/nanomcp";
-import Tasks from "@nanobot-ai/tasks";
 import Skills from "@nanobot-ai/skills";
+import Tasks from "@nanobot-ai/tasks";
 import WorkspaceMcp from "@nanobot-ai/workspace-mcp";
 import WorkspaceResources from "@nanobot-ai/workspace-resources";
 
