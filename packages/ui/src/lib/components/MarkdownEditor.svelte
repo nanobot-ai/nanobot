@@ -45,6 +45,8 @@ import { replaceAll } from '@milkdown/kit/utils';
                     }
                     
                     if (markdown === prevMarkdown) return;
+                    if (!focused) return;
+                    console.log('markdown updated', markdown);
                     onChange?.(markdown);
                 });
             })
