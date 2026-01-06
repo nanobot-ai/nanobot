@@ -13,11 +13,11 @@ const schema = z.object({
 });
 
 export default createTool({
-	title: "Execute Task",
+	title: "Begin Task",
 	description: async (ctx) => {
 		const client = await ensureConnected(ctx.workspaceId);
 		const tasksDescriptions = await getTasksDescription(client);
-		return `Execute one of the following tasks directly (not in the background) with the given arguments. This tool will provide you with the task instructions to execute.
+		return `Execute one of the following tasks directly (not in the background) with the given arguments. This tool output will provide the task instructions to follow.
 
 <available_tasks>
 ${tasksDescriptions}
