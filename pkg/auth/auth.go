@@ -17,16 +17,18 @@ import (
 )
 
 type Auth struct {
-	OAuthClientID     string   `usage:"OAuth client ID"`
-	OAuthClientSecret string   `usage:"OAuth client secret"`
-	OAuthAuthorizeURL string   `usage:"OAuth authorize URL for third-party OAuth provider"`
-	OAuthTokenURL     string   `usage:"OAuth token URL for third-party OAuth provider"`
-	OAuthJWKSURL      string   `usage:"OAuth JWKS URL to trust in addition to tokens"`
-	OAuthScopes       []string `usage:"OAuth scopes to request during OAuth flow"`
-	TrustedIssuer     string   `usage:"Trusted issuer for JWT tokens"`
-	JWKS              string   `usage:"JWKS public key for JWT tokens"`
-	TrustedAudiences  []string `usage:"Trusted audiences for JWT tokens"`
-	EncryptionKey     string   `usage:"Encryption key for storing sensitive data"`
+	OAuthClientID        string   `usage:"OAuth client ID"`
+	OAuthClientSecret    string   `usage:"OAuth client secret"`
+	OAuthAuthorizeURL    string   `usage:"OAuth authorize URL for third-party OAuth provider"`
+	OAuthTokenURL        string   `usage:"OAuth token URL for third-party OAuth provider"`
+	OAuthJWKSURL         string   `usage:"OAuth JWKS URL to trust in addition to tokens"`
+	OAuthScopes          []string `usage:"OAuth scopes to request during OAuth flow"`
+	TrustedIssuer        string   `usage:"Trusted issuer for JWT tokens"`
+	JWKS                 string   `usage:"JWKS public key for JWT tokens"`
+	TrustedAudiences     []string `usage:"Trusted audiences for JWT tokens"`
+	EncryptionKey        string   `usage:"Encryption key for storing sensitive data"`
+	APIKeyAuthWebhookURL string   `usage:"URL for API key authentication webhook"`
+	MCPServerID          string   `usage:"ID of the MCP server to validate API keys for"`
 }
 
 func Wrap(ctx context.Context, env map[string]string, auth Auth, dsn, healthzPath string, next http.Handler) (http.Handler, error) {
@@ -140,16 +142,18 @@ func mcpProxy(auth Auth, dsn string, next http.Handler) (http.Handler, error) {
 	}
 
 	proxy, err := proxy.NewOAuthProxy(&proxytypes.Config{
-		DatabaseDSN:       dsn,
-		OAuthClientID:     auth.OAuthClientID,
-		OAuthClientSecret: auth.OAuthClientSecret,
-		OAuthAuthorizeURL: auth.OAuthAuthorizeURL,
-		ScopesSupported:   strings.Join(auth.OAuthScopes, ","),
-		EncryptionKey:     base64.StdEncoding.EncodeToString(hash[:]),
-		Mode:              "middleware",
-		MCPPaths:          []string{"/mcp", "/api"},
-		OAuthJWKSURL:      auth.OAuthJWKSURL,
-		CookieNamePrefix:  "nanobot_",
+		DatabaseDSN:          dsn,
+		OAuthClientID:        auth.OAuthClientID,
+		OAuthClientSecret:    auth.OAuthClientSecret,
+		OAuthAuthorizeURL:    auth.OAuthAuthorizeURL,
+		ScopesSupported:      strings.Join(auth.OAuthScopes, ","),
+		EncryptionKey:        base64.StdEncoding.EncodeToString(hash[:]),
+		Mode:                 "middleware",
+		MCPPaths:             []string{"/mcp", "/api"},
+		OAuthJWKSURL:         auth.OAuthJWKSURL,
+		CookieNamePrefix:     "nanobot_",
+		APIKeyAuthWebhookURL: auth.APIKeyAuthWebhookURL,
+		MCPServerID:          auth.MCPServerID,
 	})
 	if err != nil {
 		return nil, err

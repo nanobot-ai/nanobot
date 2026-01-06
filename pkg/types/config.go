@@ -146,6 +146,7 @@ type Auth struct {
 	OAuthScopes                      StringList     `json:"oauthScopes"`
 	OAuthAuthorizationServerMetadata map[string]any `json:"oauthAuthorizationServerMetadata"`
 	EncryptionKey                    string         `json:"encryptionKey"`
+	APIKeyAuthURL                    string         `json:"apiKeyAuthUrl"`
 }
 
 type EnvDef struct {

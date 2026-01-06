@@ -12,6 +12,7 @@ type MCPAuditLog struct {
 	Metadata         map[string]string  `json:"metadata,omitempty"`
 	CreatedAt        time.Time          `json:"createdAt"`
 	Subject          string             `json:"subject"`
+	APIKey           string             `json:"apiKey,omitempty"`
 	ClientName       string             `json:"clientName"`
 	ClientVersion    string             `json:"clientVersion"`
 	ClientIP         string             `json:"clientIP"`
@@ -38,4 +39,13 @@ type MCPWebhookStatus struct {
 	Name    string `json:"name"`
 	Status  string `json:"status"`
 	Message string `json:"message,omitempty"`
+}
+
+// RedactAPIKey redacts an API key, keeping only the first half
+func RedactAPIKey(apiKey string) string {
+	l := len(apiKey)
+	if l < 2 {
+		return apiKey
+	}
+	return apiKey[:l/2]
 }
