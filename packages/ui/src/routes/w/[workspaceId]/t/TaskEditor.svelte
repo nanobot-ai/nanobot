@@ -22,6 +22,7 @@
 	import { onMount, tick } from 'svelte';
 	import { ChatService } from '$lib/chat.svelte';
 	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
+	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
 
     type Props = {
         workspaceId: string;
@@ -42,6 +43,9 @@
 
     let inputsModal = $state<HTMLDialogElement | null>(null);
     let runFormData = $state<(Input & { value: string })[]>([]);
+
+    let confirmDeleteStep = $state<{ stepId: string, filename: string } | null>(null);
+    let confirmDeleteStepModal = $state<ReturnType<typeof ConfirmDelete> | null>(null);
 
     const headerHeight = 72;
     let scrollContainer = $state<HTMLElement | null>(null);
@@ -435,8 +439,11 @@ ${JSON.stringify(runFormData)}
                             task!.inputs = task!.inputs.filter((input) => input.name !== inputName);
                         }}
                         onDeleteStep={(stepId, filename) => {
-                            task!.steps = task!.steps.filter((s) => s.id !== stepId);
-                            workspace?.deleteFile(filename);
+                            confirmDeleteStep = {
+                                stepId,
+                                filename,
+                            };
+                            confirmDeleteStepModal?.showModal();
                         }}
                         onSuggestImprovement={async (content) => {
                             if (!chat) {
@@ -579,6 +586,17 @@ ${JSON.stringify(runFormData)}
     <button>close</button>
   </form>
 </dialog>
+
+<ConfirmDelete 
+    bind:this={confirmDeleteStepModal}
+    title="Delete this step?"
+    message="This step will be permanently deleted and cannot be recovered."
+    onConfirm={() => {
+        if (!confirmDeleteStep) return;
+        task!.steps = task!.steps.filter((s) => s.id !== confirmDeleteStep?.stepId);
+        workspace?.deleteFile(confirmDeleteStep?.filename ?? '');
+    }}
+/>
 
 <RegistryToolSelector bind:this={registryToolSelector} 
     omit={currentAddingToolForStep?.tools ?? []}
