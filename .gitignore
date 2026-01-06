@@ -2,7 +2,6 @@
 .cursorrules
 .envrc
 .idea
-.zed
 .venv
 .vscode
 bin/*
@@ -14,3 +13,8 @@ examples/customer/tools/travel2.sqlite
 
 .svelte-kit/
 node_modules/
+packages/ui/dist
+
+# Ignore zed files
+.zed/
+__debug_*

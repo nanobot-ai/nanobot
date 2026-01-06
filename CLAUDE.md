@@ -16,7 +16,7 @@ Nanobot is a standalone MCP (Model Context Protocol) host that enables building 
 ### Backend (Go)
 
 ```bash
-# Build the nanobot binary
+# Build the nanobot binary (automatically builds UI via go generate)
 make
 
 # Run nanobot with a configuration file
@@ -28,7 +28,8 @@ go test ./...
 # Run a specific test
 go test ./pkg/agents -run TestName
 
-# Generate code (used for Go code generation)
+# Generate code (builds UI and runs Go code generation)
+# NOTE: If building manually with `go build`, run this first to ensure UI is embedded
 go generate ./...
 
 # Format Go code
