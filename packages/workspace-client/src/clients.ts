@@ -37,7 +37,6 @@ export function getWorkspaceClient(
  * Ensure the workspace client is connected for the given workspaceId
  *
  * @param workspaceId - The workspace identifier
- * @param url - Optional workspace server URL
  * @returns Connected WorkspaceClient instance
  */
 export async function ensureConnected(
