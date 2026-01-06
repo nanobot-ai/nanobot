@@ -11,6 +11,7 @@ RUN rm -rf /var/lib/apt/lists/* && \
     curl \
     build-essential \
     pkg-config \
+    libssl-dev \
     libfuse3-dev \
     libunwind-dev \
     libssl-dev \
