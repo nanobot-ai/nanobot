@@ -43,7 +43,9 @@
     let inputsModal = $state<HTMLDialogElement | null>(null);
     let runFormData = $state<(Input & { value: string })[]>([]);
 
+    const headerHeight = 72;
     let scrollContainer = $state<HTMLElement | null>(null);
+    let argumentsList = $state<HTMLDivElement | null>(null);
 
     let stepBlockEditing = new SvelteMap<number | string, boolean>();
     let stepDescription = new SvelteMap<number | string, boolean>();
@@ -255,7 +257,7 @@
 
     async function submitRun() {
         // TODO: change below to actually hit the run task endpoint once available
-        runSession = await workspace?.newSession({ editor: true});
+        runSession = await workspace?.newSession();
         runSession?.sendMessage(`
 Use the files under the ".nanobot/tasks/${taskId}" directory for context to help you simulate the task run.
 These are the following inputs to simulate the task run with: \n\n
@@ -335,7 +337,10 @@ ${JSON.stringify(runFormData)}
                 </div>
             </div>
             {#if visibleInputs.length > 0}
-                <DragDropList bind:items={visibleInputs} scrollContainerEl={scrollContainer}
+            <div bind:this={argumentsList}>
+                <DragDropList 
+                    bind:items={visibleInputs} 
+                    scrollContainerEl={scrollContainer}
                     class={showSidebarThread ? '' : 'md:pr-22'}
                     classes={{
                         dropIndicator: 'mx-22 my-2 h-2',
@@ -382,6 +387,7 @@ ${JSON.stringify(runFormData)}
                         />
                     {/snippet}
                 </DragDropList>
+            </div>
             {/if}
             <DragDropList bind:items={task.steps} scrollContainerEl={scrollContainer}
                 class="{visibleInputs.length > 0 ? '-mt-6' : ''} {showSidebarThread ? '' : 'md:pr-22'}"
@@ -389,6 +395,7 @@ ${JSON.stringify(runFormData)}
                     dropIndicator: 'mx-22 my-2 h-2',
                     item: 'pl-22'
                 }}
+                offset={(argumentsList?.getBoundingClientRect().height ?? 0) - (headerHeight/2)}
             >
                 {#snippet blockHandle({ startDrag, currentItem })}
                     <div class="flex items-center gap-2">
