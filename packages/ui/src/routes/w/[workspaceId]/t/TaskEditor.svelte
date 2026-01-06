@@ -20,7 +20,7 @@
     import TaskInput from './TaskInput.svelte';
 	import Step from './Step.svelte';
 	import RegistryToolSelector from './RegistryToolSelector.svelte';
-	import { onMount, tick } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import { ChatService, type ToolCallInfo } from '$lib/chat.svelte';
 	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
@@ -137,9 +137,9 @@
         }
     }
 
-    /** Set up callbacks for a chat service instance */
-    function setupChatCallbacks(chatService: ChatService) {
-        chatService.setCallbacks({
+    async function setupTaskThread() {
+        chat = await workspace?.newSession({ editor: true });
+        chat?.setCallbacks({
             onFileModified: handleFileModified,
             onChatDone: () => {
                 console.debug('Chat done, reloading workspace files');
@@ -151,6 +151,10 @@
     onMount(() => {
         workspace = workspaceService.getWorkspace(workspaceId);
         registryStore.fetch();
+    });
+    
+    onDestroy(() => {
+        chat?.close();
     });
 
     function debouncedSave() {
@@ -330,7 +334,6 @@
     async function submitRun() {
         // TODO: change below to actually hit the run task endpoint once available
         runSession = await workspace?.newSession();
-        if (runSession) setupChatCallbacks(runSession);
         runSession?.sendMessage(`
 Use the files under the ".nanobot/tasks/${taskId}" directory for context to help you simulate the task run.
 These are the following inputs to simulate the task run with: \n\n
@@ -512,8 +515,7 @@ ${JSON.stringify(runFormData)}
                         onUpdateVisibleInputs={(inputs) => visibleInputs = inputs}
                         onSuggestImprovement={async (file) => {
                             if (!chat) {
-                                chat = await workspace?.newSession({ editor: true });
-                                if (chat) setupChatCallbacks(chat);
+                                setupTaskThread();
                             }
                             includeFileInMessage = file;
                             showMessageInput = true;
@@ -553,8 +555,7 @@ ${JSON.stringify(runFormData)}
                                     showMessageInput = false;
 
                                     if (!chat) {
-                                        chat = await workspace?.newSession({ editor: true });
-                                        if (chat) setupChatCallbacks(chat);
+                                        setupTaskThread();
                                     }
                                     return chat?.sendMessage(message, includeFileInMessage ? [includeFileInMessage] : undefined);
                                 }} 
