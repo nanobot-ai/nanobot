@@ -16,6 +16,12 @@ const driver = new DockerDriver({
 	image: SANDBOX_IMAGE,
 	workdir: "/workspace",
 	localDataDir: join(storageDir, "data"),
+	gid: process.env.SANDBOX_GID
+		? Number(process.env.SANDBOX_GID)
+		: process.getgid?.(),
+	uid: process.env.SANDBOX_UID
+		? Number(process.env.SANDBOX_UID)
+		: process.getuid?.(),
 });
 
 // Create sandbox manager

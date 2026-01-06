@@ -71,9 +71,9 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     cd $HOME/.local/bin && \
     mv uv uvx /usr/local/bin
 
-# Create sandbox user with UID 10000
-RUN groupadd -g 10000 sandbox && \
-    useradd -u 10000 -g 10000 -m -s /bin/bash sandbox && \
+# Create sandbox user with UID 1002
+RUN groupadd -g 1002 sandbox && \
+    useradd -u 1002 -g 1002 -m -s /bin/bash sandbox && \
     echo "sandbox ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # Copy agentfs binary from builder
@@ -88,13 +88,13 @@ RUN echo "user_allow_other" >> /etc/fuse.conf
 
 # Create necessary directories for sandbox user
 RUN mkdir -p /.data /workspace && \
-    chown -R 10000:10000 /.data /workspace
+    chown -R 1002:1002 /.data /workspace
 
 # Set working directory
 WORKDIR /workspace
 
 # Switch to sandbox user
-USER 10000:10000
+USER 1002:1002
 
 # Set entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

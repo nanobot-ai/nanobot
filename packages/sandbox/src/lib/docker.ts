@@ -48,6 +48,8 @@ import type { SandboxConfig, SandboxDriver } from "./manager.js";
 export interface DockerDriverConfig {
 	image?: string;
 	workdir?: string;
+	uid?: number;
+	gid?: number;
 	env?: Record<string, string>;
 	localDataDir?: string;
 }
@@ -88,6 +90,8 @@ export class DockerDriver implements SandboxDriver {
 		this.config = {
 			image: config?.image ?? "ubuntu:latest",
 			workdir: config?.workdir ?? "/workspace",
+			uid: config?.uid ?? 10000,
+			gid: config?.gid ?? 10000,
 			env: config?.env ?? {},
 			localDataDir:
 				config?.localDataDir ?? join(process.cwd(), "docker-sandbox"),
@@ -130,11 +134,15 @@ export class DockerDriver implements SandboxDriver {
 		// Set permissions based on current user
 		const currentUid = process.getuid ? process.getuid() : null;
 
-		if (currentUid === 0 || currentUid === 10000) {
-			// Running as root or as UID 10000, set ownership to 10000
+		if (currentUid === 0 || currentUid === this.config.uid) {
+			// Running as root or as UID ${this.config.uid}, set ownership to ${this.config.uid}
 			try {
 				await new Promise<void>((resolve, reject) => {
-					const proc = spawn("chown", ["-R", "10000:10000", localDataDir]);
+					const proc = spawn("chown", [
+						"-R",
+						`${this.config.uid}:${this.config.gid}`,
+						localDataDir,
+					]);
 					let stderr = "";
 
 					proc.stderr.on("data", (data) => {
@@ -155,12 +163,12 @@ export class DockerDriver implements SandboxDriver {
 				});
 			} catch (error) {
 				console.warn(
-					`Warning: Could not set ownership to UID 10000 for ${localDataDir}:`,
+					`Warning: Could not set ownership to UID ${this.config.uid} for ${localDataDir}:`,
 					error,
 				);
 			}
 		} else {
-			// Not running as root or UID 10000, make directory world-writable
+			// Not running as root or UID ${this.config.uid}, make directory world-writable
 			try {
 				await new Promise<void>((resolve, reject) => {
 					const proc = spawn("chmod", ["-R", "777", localDataDir]);
