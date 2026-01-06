@@ -999,7 +999,6 @@ func (s *Service) convertToSampleRequest(config types.Config, agent string, args
 					Type: "resource",
 					Resource: &mcp.EmbeddedResource{
 						Name:     attachment.Name,
-						URI:      attachment.URI,
 						MIMEType: mimeType,
 						Blob:     data,
 						Annotations: &mcp.ResourceAnnotations{
