@@ -12,6 +12,7 @@ type AgentConfigHook struct {
 	Agent      *Agent                              `json:"agent,omitempty"`
 	Meta       map[string]any                      `json:"_meta,omitempty"`
 	SessionID  string                              `json:"sessionId,omitempty"`
+	AccountID  string                              `json:"accountId,omitempty"`
 	MCPServers map[string]AgentConfigHookMCPServer `json:"mcpServers,omitempty"`
 }
 
@@ -23,8 +24,9 @@ type AgentConfigHookMCPServer struct {
 
 func (a AgentConfigHookMCPServer) ToMCPServer() mcp.Server {
 	return mcp.Server{
-		BaseURL: a.URL,
-		Headers: a.Headers,
+		BaseURL:       a.URL,
+		Headers:       a.Headers,
+		ToolOverrides: a.ToolOverrides,
 	}
 }
 

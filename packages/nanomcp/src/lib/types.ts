@@ -1,4 +1,9 @@
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
+import type { PromptCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type {
+	AnySchema,
+	ZodRawShapeCompat,
+} from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import type {
 	BlobResourceContents,
 	CallToolResult,
@@ -19,6 +24,10 @@ export type Context = {
 	auth?: AuthInfo;
 	threadId?: string;
 	workspaceId: string;
+	nanobot?: {
+		sessionId?: string | null;
+		accountId?: string | null;
+	};
 	signal: AbortSignal;
 	elicit?: (message: string, schema: RequestedSchema) => Promise<ElicitResult>;
 	sample?: (params: CreateMessageRequestParams) => Promise<CreateMessageResult>;
@@ -60,8 +69,25 @@ export const createTool = <
 	config: Tool<InputSchema, OutputSchema>,
 ) => config;
 
+export const createPrompt = <Args extends Record<string, AnySchema>>(
+	config: Prompt<Args>,
+) => config;
+
+export type AnyPrompt = Prompt<ZodRawShapeCompat>;
+
+export type Prompt<Args extends ZodRawShapeCompat> = {
+	name: string;
+	config: {
+		title?: string;
+		description?: string;
+		argsSchema?: Args;
+	};
+	callback?: PromptCallback<Args>;
+};
+
 export type Config = {
 	tools?: Record<string, AnyTool>;
+	prompts?: Record<string, AnyPrompt>;
 	resources?: {
 		list?: ListResources;
 		read?: ReadResource;
