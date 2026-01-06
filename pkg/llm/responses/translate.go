@@ -289,6 +289,12 @@ func contentToInputItem(content mcp.Content) (InputItemContent, bool) {
 					bytes, _ := base64.StdEncoding.DecodeString(content.Resource.Blob)
 					text = string(bytes)
 				}
+				// Include file reference so LLM knows the source path
+				if content.Resource.URI != "" {
+					text = fmt.Sprintf("File: %s\n\n%s", content.Resource.URI, text)
+				} else if content.Resource.Name != "" {
+					text = fmt.Sprintf("File: %s\n\n%s", content.Resource.Name, text)
+				}
 				return InputItemContent{
 					InputText: &InputText{
 						Text: text,
