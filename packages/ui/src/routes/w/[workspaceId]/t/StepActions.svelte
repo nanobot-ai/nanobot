@@ -49,7 +49,7 @@
         </li>
         <li>
             <button class="justify-between disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-default"
-                onclick={(e) => {
+                onclick={() => {
                     // TODO: import step
                     blur();
                 }}
@@ -85,7 +85,7 @@
                     <ChevronRight class="size-3" />
                 </span>
                 <ul class="ml-0 menu -translate-y-2 bg-base-100 dark:bg-base-300 rounded-box shadow-md absolute left-full top-0 w-52 invisible opacity-0 group-hover/submenu:visible group-hover/submenu:opacity-100 transition-opacity z-50 before:hidden">
-                    {#each availableInputs as input}
+                    {#each availableInputs as input (input.id)}
                         <li>
                             <button
                                 onclick={() => {

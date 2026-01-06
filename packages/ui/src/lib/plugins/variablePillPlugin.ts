@@ -83,7 +83,9 @@ function findVariablesWithDecorations(
 							'badge',
 							'badge-soft',
 							'font-semibold',
-							isCompleted ? 'badge-primary variable-pill-completed pr-4! pl-2! py-1!' : 'px-2! py-1! text-base-content/50',
+							isCompleted
+								? 'badge-primary variable-pill-completed pr-4! pl-2! py-1!'
+								: 'px-2! py-1! text-base-content/50'
 						].join(' '),
 						'data-variable': match[1],
 						'data-start': String(start),
@@ -236,7 +238,7 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 		// Track variables from previous state
 		let previousVariables: VariableMatch[] = [];
 		const completedVariables = new Set<string>(); // "variable:start" keys that already triggered
-		
+
 		// Debounce timers for newly introduced variables that already have separators
 		// This prevents spam when typing a variable in the middle of content
 		const pendingVariableTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -249,7 +251,11 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 					previousVariables = findAllVariables(doc);
 					// Mark any variables that already have separators or are at end of document as completed
 					for (const v of previousVariables) {
-						if (hasSeparatorAt(doc, v.end) || isFollowedByNewBlock(doc, v.end) || isAtEndOfDocument(doc, v.end)) {
+						if (
+							hasSeparatorAt(doc, v.end) ||
+							isFollowedByNewBlock(doc, v.end) ||
+							isAtEndOfDocument(doc, v.end)
+						) {
 							completedVariables.add(`${v.variable}:${v.start}`);
 						}
 					}
@@ -270,7 +276,7 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 						for (const key of remappedCompleted) {
 							completedVariables.add(key);
 						}
-						
+
 						// Also remap pending timer positions
 						const remappedTimers = new Map<string, ReturnType<typeof setTimeout>>();
 						for (const [key, timer] of pendingVariableTimers) {
@@ -283,9 +289,11 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 						for (const [key, timer] of remappedTimers) {
 							pendingVariableTimers.set(key, timer);
 						}
-						
+
 						const newVariables = findAllVariables(tr.doc);
-						const previousKeys = new Set(previousVariables.map((v) => `${v.variable}:${tr.mapping.map(v.start)}`));
+						const previousKeys = new Set(
+							previousVariables.map((v) => `${v.variable}:${tr.mapping.map(v.start)}`)
+						);
 
 						if (options.onVariableAddition) {
 							// For each variable that existed BEFORE this transaction,
@@ -344,7 +352,7 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 								if (pendingVariableTimers.has(key)) {
 									clearTimeout(pendingVariableTimers.get(key));
 								}
-								
+
 								// Set a debounced timer - only trigger if variable persists
 								const timer = setTimeout(() => {
 									pendingVariableTimers.delete(key);
@@ -356,7 +364,7 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 										completedVariables.add(key);
 									}
 								}, DEBOUNCE_MS);
-								
+
 								pendingVariableTimers.set(key, timer);
 							}
 						}
@@ -376,7 +384,7 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 								completedVariables.delete(key);
 							}
 						}
-						
+
 						// Clean up pending timers for variables that no longer exist
 						for (const key of pendingVariableTimers.keys()) {
 							if (!currentKeys.has(key)) {

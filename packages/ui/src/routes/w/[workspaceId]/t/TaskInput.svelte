@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { EllipsisVertical, EyeClosed, HandHelping, Info, ReceiptText, Sparkles } from "@lucide/svelte";
+	import { EllipsisVertical, EyeClosed, HandHelping, ReceiptText, Sparkles } from "@lucide/svelte";
 	import type { Input, Task } from "./types";
 
     interface Props {

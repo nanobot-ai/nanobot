@@ -9,6 +9,8 @@
 	import { goto } from "$app/navigation";
 	import type { Session, WorkspaceFile } from "$lib/types";
 	import ConfirmDelete from "./ConfirmDelete.svelte";
+	import { getNotificationContext } from "$lib/context/notifications.svelte";
+	import { page } from "$app/state";
 
     interface Props {
         inverse?: boolean;
@@ -17,8 +19,8 @@
 
     type WorkspaceManifest = {
         name: string;
-        color: string;
-        order: number;
+        color?: string;
+        order?: number;
     }
 
     type Workspace = {
@@ -29,12 +31,13 @@
     let { inverse, scrollContainerEl }: Props = $props();
 
     let loading = $state(false);
-    let error = $state<string | null>(null);
 
     let loadingWorkspace = new SvelteMap<string, boolean>();
     let workspaceData = new SvelteMap<string, WorkspaceInstance>();
 
     const workspaceService = new WorkspaceService();
+    const notifications = getNotificationContext();
+    
     let newWorkspace = $state<WorkspaceManifest | null>(null);
     let newWorkspaceEl = $state<HTMLInputElement | null>(null);
 
@@ -55,11 +58,11 @@
 
     async function loadWorkspaces() {
         loading = true;
-        error = null;
         try {
             await workspaceService.load();
         } catch (e) {
-            error = e instanceof Error ? e.message : String(e);
+            const error = e instanceof Error ? e.message : String(e);
+            notifications.error('Error loading workspaces', error);
         } finally {
             loading = false;
         }
@@ -79,12 +82,11 @@
 
     async function createWorkspace() {
         if (!newWorkspace?.name.trim()) {
-            error = 'Workspace name is required';
+            notifications.error('Workspace name is required', 'Please enter a name for the workspace before saving.');
             return;
         }
 
         loading = true;
-        error = null;
         try {
             await workspaceService.createWorkspace({
                 name: newWorkspace.name,
@@ -94,7 +96,8 @@
 
             newWorkspace = null;
         } catch (e) {
-            error = e instanceof Error ? e.message : String(e);
+            const error = e instanceof Error ? e.message : String(e);
+            notifications.error('Error creating workspace', error);
         } finally {
             loading = false;
         }
@@ -102,18 +105,17 @@
     
     async function saveEditName() {
         if (!editingWorkspace?.name.trim()) {
-            error = 'Workspace name is required';
+            notifications.error('Workspace name is required', 'Please enter a name for the workspace before saving.');
             return;
         }
 
         const workspace = workspaceService.workspaces.find((w) => w.id === editingWorkspace?.id);
         if (!workspace) {
-            error = 'Workspace not found';
+            notifications.error('Workspace not found', 'The workspace you are trying to edit does not exist.');
             return;
         }
 
         loading = true;
-        error = null;
         try {
             await workspaceService.updateWorkspace({
                 ...workspace,
@@ -123,24 +125,21 @@
             });
             editingWorkspace = null;
         } catch (e) {
-            error = e instanceof Error ? e.message : String(e);
+            const error = e instanceof Error ? e.message : String(e);
+            notifications.error('Error updating workspace', error);
         } finally {
             loading = false;
         }
     }
 
     async function createTask(e: MouseEvent, workspaceId: string) {
-        const url = new URL(window.location.origin + resolve(`/w/${workspaceId}/t`));
-        url.search = '';
+        const url = resolve(`/w/${workspaceId}/t`);
         if (e.metaKey) {
             window.open(url, '_blank');
-        } else {
-            goto(url.pathname, { replaceState: false, invalidateAll: true });
+        } else {    
+            page.url.search = '';
+            goto(url, { replaceState: false, invalidateAll: true });
         }
-    }
-
-    async function createFile(e: MouseEvent, workspaceId: string) {
-        // TODO:
     }
 
     const initialColorOptions = [
@@ -311,7 +310,7 @@
                                             <ChevronRight class="size-3" />
                                         </div>
                                         <ul class="ml-0 menu -translate-y-2 bg-base-100 dark:bg-base-300 rounded-box shadow-md absolute left-full top-0 w-52 invisible opacity-0 group-hover/submenu:visible group-hover/submenu:opacity-100 group-focus-within/submenu:visible group-focus-within/submenu:opacity-100 transition-opacity z-50 before:hidden grid grid-cols-3 gap-0.5">
-                                            {#each initialColorOptions as color}
+                                            {#each initialColorOptions as color (color)}
                                                 <li>
                                                     <button class="text-sm justify-center flex border {color === selectedColor ? 'bg-base-300 border-primary' : 'border-transparent '}" 
                                                         onclick={(_e) => {
@@ -337,14 +336,14 @@
                                                     disabled={!selectedColor}
                                                     onclick={() => {
                                                         loading = true;
-                                                        error = null;
                                                         try {
                                                             workspaceService.updateWorkspace({
                                                                 ...workspace,
                                                                 color: selectedColor,
                                                             });
                                                         } catch (e) {
-                                                            error = e instanceof Error ? e.message : String(e);
+                                                            const error = e instanceof Error ? e.message : String(e);
+                                                            notifications.error('Error updating workspace', error);
                                                         } finally {
                                                             selectedColor = '';
                                                             loading = false;
@@ -359,7 +358,7 @@
                                     <li>
                                         <button 
                                             onmousedown={(e) => e.stopPropagation()} 
-                                            onclick={(e) => {
+                                            onclick={() => {
                                                 confirmDeleteWorkspaceId = workspace.id;
                                                 confirmDeleteWorkspaceModal?.showModal();
                                             }} 
@@ -484,7 +483,7 @@
                             <li>
                                 <button 
                                     onmousedown={(e) => e.stopPropagation()} 
-                                    onclick={(e) => {
+                                    onclick={() => {
                                         // TODO: share
                                     }} 
                                     class="text-sm disabled:opacity-50"
@@ -496,7 +495,7 @@
                             <li>
                                 <button 
                                     onmousedown={(e) => e.stopPropagation()} 
-                                    onclick={(e) => {
+                                    onclick={() => {
                                         confirmDeleteTask = {
                                             taskId: item,
                                             workspaceId,
@@ -517,7 +516,7 @@
 </li>
 {/snippet}
 
-{#snippet conversationsSection(workspaceId: string, conversations: Session[])}
+{#snippet conversationsSection(_workspaceId: string, conversations: Session[])}
 <li class="flex grow">
     <details class="workspace-details w-full">
         {@render sectionTitle('Conversations', MessageSquare, conversations)}
@@ -536,7 +535,7 @@
 </li>
 {/snippet}
 
-{#snippet filesSection(workspaceId: string, files: WorkspaceFile[])}
+{#snippet filesSection(_workspaceId: string, files: WorkspaceFile[])}
 <li class="flex grow">
     <details class="workspace-details w-full">
         {@render sectionTitle('Files', FileText, files)}

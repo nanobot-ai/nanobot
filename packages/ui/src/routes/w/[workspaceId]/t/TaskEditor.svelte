@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '$lib/../app.css';
+    import { resolve } from '$app/paths';
 	import DragDropList from '$lib/components/DragDropList.svelte';
 	import MessageInput from '$lib/components/MessageInput.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
@@ -110,7 +111,7 @@
                 taskId = nameToUse.toLowerCase().replace(/ /g, '_').replace(/[^a-z0-9_]/g, '');
                 if (taskId) {
                     url.searchParams.set('id', taskId);
-                    goto(url.toString(), { replaceState: true, keepFocus: true });
+                    goto(resolve(url.toString() as `/w/${string}/t/`), { replaceState: true, keepFocus: true });
                 } else {
                     console.info('skipping save, initial task name or step name required');
                     return;
@@ -403,21 +404,23 @@ ${JSON.stringify(runFormData)}
             >
                 {#snippet blockHandle({ startDrag, currentItem })}
                     <div class="flex items-center gap-2">
-                        <StepActions 
-                            task={task!} 
-                            item={currentItem} 
-                            availableInputs={hiddenInputs} 
-                            onAddInput={(input) => {
-                                visibleInputs.push(input);
-                            }} 
-                            onOpenSelectTool={() => {
-                                currentAddingToolForStep = currentItem;
-                                registryToolSelector?.showModal();
-                            }}
-                        />
-                        <button class="btn btn-ghost btn-square cursor-grab btn-sm tooltip tooltip-right" onmousedown={startDrag} data-tip="Drag to reorder">
-                            <GripVertical class="text-base-content/50" />
-                        </button>
+                        {#if currentItem}
+                            <StepActions 
+                                task={task!} 
+                                item={currentItem} 
+                                availableInputs={hiddenInputs} 
+                                onAddInput={(input) => {
+                                    visibleInputs.push(input);
+                                }} 
+                                onOpenSelectTool={() => {
+                                    currentAddingToolForStep = currentItem;
+                                    registryToolSelector?.showModal();
+                                }}
+                            />
+                            <button class="btn btn-ghost btn-square cursor-grab btn-sm tooltip tooltip-right" onmousedown={startDrag} data-tip="Drag to reorder">
+                                <GripVertical class="text-base-content/50" />
+                            </button>
+                        {/if}
                     </div>
                 {/snippet}
                 {#snippet children({ item: step })}
