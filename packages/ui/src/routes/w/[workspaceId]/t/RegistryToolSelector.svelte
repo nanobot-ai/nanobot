@@ -65,7 +65,7 @@
                     {@render loadingSkeleton()}
                 {:else if results.length > 0}
                     <ul class="list grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {#each results as server}
+                        {#each results as server (server.name)}
                             <button class="list-row text-left cursor-pointer hover:bg-base-200/50 active:bg-base-200 dark:hover:bg-base-300/50 dark:active:bg-base-300 {selected.has(server.name) ? 'bg-primary/10' : ''}"
                                 onclick={() => {
                                     if (selected.has(server.name)) {

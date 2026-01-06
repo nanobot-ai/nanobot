@@ -1,4 +1,4 @@
-<script lang="ts">
+<script lang="ts" generics="T extends { id: string | number }">
 	import { tick } from 'svelte';
 	import type { Snippet } from 'svelte';
 
@@ -23,7 +23,7 @@
 
 	let {
 		items = $bindable(),
-		getKey = (item: any) => item.id,
+		getKey = (item: T) => item.id,
 		blockHandle,
 		children,
 		onreorder,
@@ -34,7 +34,7 @@
 		as = 'div',
 		childrenAs = 'div',
 		offset = 0,
-	}: Props<any> = $props();
+	}: Props<T> = $props();
 
 	let currentFocusedElement = $state<HTMLElement | null>(null);
 	let currentItem = $state<(typeof items)[number] | null>(null);

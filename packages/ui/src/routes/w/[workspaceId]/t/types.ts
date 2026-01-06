@@ -1,36 +1,36 @@
 export type Input = {
-    name: string;
-    description: string;
-    default?: string;
-    id: string;
-}
+	name: string;
+	description: string;
+	default?: string;
+	id: string;
+};
 
 export type Step = {
-    id: string;
-    name: string;
-    description: string;
-    content: string;
-    tools: string[];
-}
+	id: string;
+	name: string;
+	description: string;
+	content: string;
+	tools: string[];
+};
 
 export type Task = {
-    name: string;
-    description: string;
-    inputs: Input[];
-    steps: Step[];
-}
+	name: string;
+	description: string;
+	inputs: Input[];
+	steps: Step[];
+};
 
 export type ParsedContent = {
-    taskName: string;
-    taskDescription: string;
-    inputs: Input[];
-    next: string;
-    name: string;
-    description: string;
-    content: string;
-    tools: string[];
+	taskName: string;
+	taskDescription: string;
+	inputs: Input[];
+	next: string;
+	name: string;
+	description: string;
+	content: string;
+	tools: string[];
 };
 
 export type ParsedFile = {
-    id: string;
+	id: string;
 } & ParsedContent;

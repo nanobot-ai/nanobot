@@ -155,7 +155,7 @@
                             {/if}
                             {#if tools.length > 0}
                                 <div class="flex flex-wrap gap-2 mt-2 mb-1">
-                                    {#each tools as tool}
+                                    {#each tools as tool (tool.name)}
                                         <div class="badge badge-sm badge-outline badge-primary">
                                             {#if tool.icons?.[0]?.src}
                                                 <img alt={tool.title} src={tool.icons[0].src} class="size-4" />
