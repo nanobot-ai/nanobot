@@ -187,6 +187,12 @@ func toRequest(req *types.CompletionRequest) (Request, error) {
 									bytes, _ := base64.StdEncoding.DecodeString(item.Content.Resource.Blob)
 									text = string(bytes)
 								}
+								// Include file reference so LLM knows the source path
+								if item.Content.Resource.URI != "" {
+									text = fmt.Sprintf("File: %s\n\n%s", item.Content.Resource.URI, text)
+								} else if item.Content.Resource.Name != "" {
+									text = fmt.Sprintf("File: %s\n\n%s", item.Content.Resource.Name, text)
+								}
 								parts = append(parts, ContentPart{
 									Type: "text",
 									Text: text,

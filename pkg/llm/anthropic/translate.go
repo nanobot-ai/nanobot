@@ -176,17 +176,23 @@ func contentToContent(content []mcp.Content) (result []Content) {
 				})
 				continue
 			} else if _, ok := types.TextMimeTypes[item.Resource.MIMEType]; ok {
+				var str string
 				if item.Resource.Blob != "" {
 					text, _ := base64.StdEncoding.DecodeString(item.Resource.Blob)
-					str := string(text)
+					str = string(text)
+				} else if item.Resource.Text != "" {
+					str = item.Resource.Text
+				}
+				// Include file reference so LLM knows the source path
+				if item.Resource.URI != "" {
+					str = fmt.Sprintf("File: %s\n\n%s", item.Resource.URI, str)
+				} else if item.Resource.Name != "" {
+					str = fmt.Sprintf("File: %s\n\n%s", item.Resource.Name, str)
+				}
+				if str != "" {
 					result = append(result, Content{
 						Type: "text",
 						Text: &str,
-					})
-				} else if item.Resource.Text != "" {
-					result = append(result, Content{
-						Type: "text",
-						Text: &item.Resource.Text,
 					})
 				}
 			} else if _, ok := types.PDFMimeTypes[item.Resource.MIMEType]; ok {

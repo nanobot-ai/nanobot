@@ -608,6 +608,8 @@ ${JSON.stringify(runFormData)}
                                 runSession.close();
                                 runSession = undefined;
                             }
+
+                            includeFilesInMessage = [];
                         }}
                     >
                         <X class="size-4" />
