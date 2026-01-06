@@ -12,6 +12,10 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/log"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // RetryableClient wraps an http.Client with automatic retry logic
@@ -128,6 +132,20 @@ func defaultShouldRetry(resp *http.Response, err error) bool {
 // Do executes an HTTP request with automatic retry logic using exponential backoff.
 // The request body is assumed to be idempotent and will be replayed on retries.
 func (c *RetryableClient) Do(req *http.Request) (*http.Response, error) {
+	// Create span for HTTP request
+	tracer := otel.Tracer("llm.httpclient")
+	ctx, span := tracer.Start(req.Context(), "llm.http.request",
+		trace.WithAttributes(
+			attribute.String("http.method", req.Method),
+			attribute.String("http.url", req.URL.String()),
+			attribute.String("http.host", req.URL.Host),
+		),
+	)
+	defer span.End()
+
+	// Replace request context with traced context
+	req = req.WithContext(ctx)
+
 	var resp *http.Response
 	var err error
 	var bodyBytes []byte
@@ -136,9 +154,14 @@ func (c *RetryableClient) Do(req *http.Request) (*http.Response, error) {
 	if req.Body != nil {
 		bodyBytes, err = io.ReadAll(req.Body)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to read request body")
 			return nil, fmt.Errorf("failed to read request body: %w", err)
 		}
 		req.Body.Close()
+
+		// Record request size
+		span.SetAttributes(attribute.Int("http.request.body.size", len(bodyBytes)))
 	}
 
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
@@ -157,14 +180,36 @@ func (c *RetryableClient) Do(req *http.Request) (*http.Response, error) {
 		// Execute the request
 		resp, err = c.client.Do(req)
 
+		// Record status code and response metadata if we got a response
+		if resp != nil {
+			span.SetAttributes(attribute.Int("http.status_code", resp.StatusCode))
+
+			// Record Content-Length if present (may not be set for streaming responses)
+			if contentLength := resp.ContentLength; contentLength > 0 {
+				span.SetAttributes(attribute.Int64("http.response.body.size", contentLength))
+			}
+		}
+
 		// Check if we should retry
 		if !c.shouldRetry(resp, err) {
 			// Success or non-retryable error
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "http request failed")
+			} else {
+				span.SetStatus(codes.Ok, "request completed")
+			}
 			return resp, err
 		}
 
 		// Don't retry if we've exhausted attempts
 		if attempt >= c.maxRetries {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "max retries exceeded")
+			} else {
+				span.SetStatus(codes.Error, fmt.Sprintf("max retries exceeded with status %d", resp.StatusCode))
+			}
 			return resp, err
 		}
 
@@ -181,6 +226,16 @@ func (c *RetryableClient) Do(req *http.Request) (*http.Response, error) {
 		} else if resp != nil {
 			reason = fmt.Sprintf("HTTP %d", resp.StatusCode)
 		}
+
+		// Record retry as span event
+		span.AddEvent("retry",
+			trace.WithAttributes(
+				attribute.Int("retry.attempt", attempt+1),
+				attribute.Int("retry.max_attempts", c.maxRetries),
+				attribute.String("retry.reason", reason),
+				attribute.String("retry.delay", delay.Round(time.Millisecond).String()),
+			),
+		)
 
 		log.Debugf(ctx, "Retrying HTTP request (attempt %d/%d) after %v due to %s: %s %s",
 			attempt+1, c.maxRetries, delay.Round(time.Millisecond), reason, req.Method, req.URL.String())

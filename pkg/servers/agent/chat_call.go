@@ -8,6 +8,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/tools"
 	"github.com/nanobot-ai/nanobot/pkg/types"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const progressSessionKey = "progress"
@@ -142,7 +143,15 @@ func (c chatCall) Invoke(ctx context.Context, msg mcp.Message, payload mcp.CallT
 	if (async == "true" || async == true) && msg.ProgressToken() != nil {
 		nctx := types.NanobotContext(ctx)
 		session := mcp.SessionFromContext(ctx)
-		mcp.SessionFromContext(ctx).Go(types.WithNanobotContext(session.Context(), nctx), func(ctx context.Context) {
+
+		// Preserve the span context from the original context
+		spanCtx := trace.SpanContextFromContext(ctx)
+		newCtx := types.WithNanobotContext(session.Context(), nctx)
+		if spanCtx.IsValid() {
+			newCtx = trace.ContextWithSpanContext(newCtx, spanCtx)
+		}
+
+		mcp.SessionFromContext(ctx).Go(newCtx, func(ctx context.Context) {
 			_, _ = c.chatInvoke(ctx, msg, payload)
 		})
 		return &mcp.CallToolResult{
