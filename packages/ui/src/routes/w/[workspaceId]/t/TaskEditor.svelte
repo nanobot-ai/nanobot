@@ -5,7 +5,7 @@
 	import MessageInput from '$lib/components/MessageInput.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
 	import { createRegistryStore, setRegistryContext } from '$lib/context/registry.svelte';
-	import { EllipsisVertical, GripVertical, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, X } from '@lucide/svelte';
+	import { EllipsisVertical, File, GripVertical, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, X } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
@@ -14,14 +14,14 @@
 	import type { WorkspaceClient, WorkspaceFile } from '$lib/types';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
 	import { type Input, type Task, type Step as StepType } from './types';
-	import { compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
+	import { compileOutputFiles, convertToTask, setupEmptyTask, parseFrontmatterMarkdown } from './utils';
 	import StepActions from './StepActions.svelte';
 	import TaskInputActions from './TaskInputActions.svelte';
     import TaskInput from './TaskInput.svelte';
 	import Step from './Step.svelte';
 	import RegistryToolSelector from './RegistryToolSelector.svelte';
 	import { onMount, tick } from 'svelte';
-	import { ChatService } from '$lib/chat.svelte';
+	import { ChatService, type ToolCallInfo } from '$lib/chat.svelte';
 	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
 
@@ -63,6 +63,8 @@
     let currentAddingToolForStep = $state<StepType | null>(null);
 
     let showMessageInput = $state(false);
+    let includeFileInMessage = $state<{ uri: string, name: string, mimeType: string } | null>(null);
+
     let showAlternateHeader = $state(false);
     let lastSavedTaskJson = '';
     let lastSavedVisibleInputsJson = '';
@@ -80,6 +82,71 @@
     const workspaceService = new WorkspaceService();
     let chat = $state<ChatService>();
     let runSession = $state<ChatService>();
+
+    /** Handle file modifications from chat to update task steps */
+    async function handleFileModified(info: ToolCallInfo) {
+        if (!task || !taskId || !workspace) return;
+        
+        const filePath = info.filePath;
+        const taskPrefix = `.nanobot/tasks/${taskId}/`;
+        const workspacePrefix = `/workspace/${taskPrefix}`;
+        
+        // Check if the modified file belongs to this task
+        let relativePath = '';
+        if (filePath.startsWith(workspacePrefix)) {
+            relativePath = filePath.replace(`/workspace/`, '');
+        } else if (filePath.startsWith(taskPrefix)) {
+            relativePath = filePath;
+        }
+        
+        if (!relativePath || !relativePath.startsWith(taskPrefix)) return;
+        
+        // Extract step identifier (e.g., "TASK.md" or "STEP_1.md")
+        const stepFile = relativePath.replace(taskPrefix, '');
+        console.debug('File modified by chat:', { filePath, stepFile, toolName: info.toolName });
+        
+        try {
+            // Read and parse just the modified file
+            const fileContent = await workspace.readFile(relativePath);
+            const parsed = await parseFrontmatterMarkdown(fileContent);
+            
+            // Find the step with matching id and update it
+            const stepIndex = task.steps.findIndex(s => s.id === stepFile);
+            if (stepIndex !== -1) {
+                // Update the step in place
+                task.steps[stepIndex] = {
+                    ...task.steps[stepIndex],
+                    name: parsed.name,
+                    description: parsed.description,
+                    content: parsed.content,
+                    tools: parsed.tools
+                };
+                
+                // If this is the TASK.md file, also update task-level properties
+                if (stepFile === 'TASK.md') {
+                    task.name = parsed.taskName;
+                    task.description = parsed.taskDescription;
+                    // Update inputs if provided
+                    if (parsed.inputs.length > 0) {
+                        task.inputs = parsed.inputs;
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Failed to update step after file modification:', error);
+        }
+    }
+
+    /** Set up callbacks for a chat service instance */
+    function setupChatCallbacks(chatService: ChatService) {
+        chatService.setCallbacks({
+            onFileModified: handleFileModified,
+            onChatDone: () => {
+                console.debug('Chat done, reloading workspace files');
+                workspace?.load();
+            }
+        });
+    }
 
     onMount(() => {
         workspace = workspaceService.getWorkspace(workspaceId);
@@ -263,6 +330,7 @@
     async function submitRun() {
         // TODO: change below to actually hit the run task endpoint once available
         runSession = await workspace?.newSession();
+        if (runSession) setupChatCallbacks(runSession);
         runSession?.sendMessage(`
 Use the files under the ".nanobot/tasks/${taskId}" directory for context to help you simulate the task run.
 These are the following inputs to simulate the task run with: \n\n
@@ -368,7 +436,6 @@ ${JSON.stringify(runFormData)}
                     {/snippet}
                     {#snippet children({ item: input })}
                         <TaskInput 
-                            {taskId}
                             task={task!} 
                             {input} 
                             {inputDescription}
@@ -382,13 +449,6 @@ ${JSON.stringify(runFormData)}
                             }}
                             onToggleInputDescription={(id, value) => inputDescription.set(id, value)}
                             onToggleInputDefault={(id, value) => inputDefault.set(id, value)}
-                            onSuggestImprovement={async (content) => {
-                                if (!chat) {
-                                    chat = await workspace?.newSession({ editor: true });
-                                }
-                                chat?.sendMessage(content);
-                                showSidebarThread = true;
-                            }}
                         />
                     {/snippet}
                 </DragDropList>
@@ -448,15 +508,16 @@ ${JSON.stringify(runFormData)}
                             };
                             confirmDeleteStepModal?.showModal();
                         }}
-                        onSuggestImprovement={async (content) => {
-                            if (!chat) {
-                                chat = await workspace?.newSession({ editor: true });
-                            }
-                            chat?.sendMessage(content);
-                            showSidebarThread = true;
-                        }}
                         {visibleInputs}
                         onUpdateVisibleInputs={(inputs) => visibleInputs = inputs}
+                        onSuggestImprovement={async (file) => {
+                            if (!chat) {
+                                chat = await workspace?.newSession({ editor: true });
+                                if (chat) setupChatCallbacks(chat);
+                            }
+                            includeFileInMessage = file;
+                            showMessageInput = true;
+                        }}
                     />
                 {/snippet}
             </DragDropList>
@@ -493,10 +554,27 @@ ${JSON.stringify(runFormData)}
 
                                     if (!chat) {
                                         chat = await workspace?.newSession({ editor: true });
+                                        if (chat) setupChatCallbacks(chat);
                                     }
-                                    return chat?.sendMessage(message);
+                                    return chat?.sendMessage(message, includeFileInMessage ? [includeFileInMessage] : undefined);
                                 }} 
-                            />
+                            >
+                                {#snippet customActions()}
+                                    {#if includeFileInMessage}
+                                            <div class="badge badge-sm badge-primary gap-1 group">
+                                                <button class="hidden group-hover:block cursor-pointer text-white/50 hover:text-white transition-colors" 
+                                                    onclick={() => {
+                                                        includeFileInMessage = null;
+                                                    }} 
+                                                >
+                                                    <X class="size-3" />
+                                                </button>
+                                                <File class="size-3 block group-hover:hidden" />
+                                                {includeFileInMessage.name}
+                                            </div>
+                                    {/if}
+                                {/snippet}
+                            </MessageInput>
                         </div>  
                     {/if}
 

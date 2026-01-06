@@ -19,9 +19,9 @@
         onToggleStepDescription: (id: string, value: boolean) => void;
         onToggleStepBlockEditing: (id: string, value: boolean) => void;
         onUpdateStep: (id: string, updates: Partial<Step>) => void;
-        onSuggestImprovement: (content: string) => void;
         visibleInputs: Input[];
         onUpdateVisibleInputs: (inputs: Input[]) => void;
+        onSuggestImprovement: (opts: { uri: string, name: string, mimeType: string }) => void;
     }
 
     let { 
@@ -37,9 +37,9 @@
         onToggleStepDescription, 
         onToggleStepBlockEditing,
         onUpdateStep,
-        onSuggestImprovement,
         visibleInputs,
         onUpdateVisibleInputs,
+        onSuggestImprovement,
     }: Props = $props();
     const notifications = getNotificationContext();
     const registry = getRegistryContext();
@@ -52,6 +52,10 @@
     function handleRemoveTool(toolName: string) {
         step.tools = step.tools.filter((tool) => tool !== toolName);
         onUpdateStep(step.id, { tools: step.tools });
+    }
+
+    function blur() {
+        document.getElementById(`step-${step.id}-action`)?.hidePopover();
     }
 
     const variablePillPlugin = createVariablePillPlugin({
@@ -186,10 +190,14 @@
         </li>
         <li>
             <button class="flex items-center gap-2"
-                onclick={() => onSuggestImprovement(`
-The user is asking for an improvement to the contents of the step file ".nanobot/tasks/${taskId}/${id}"
-Please provide concise improvements to the step.
-`)}
+                onclick={() => {
+                    onSuggestImprovement({
+                        uri: `workspace://.nanobot/tasks/${taskId}/${id}`,
+                        name: step.name,
+                        mimeType: 'application/octet-stream',
+                    });
+                    blur();
+                }}
             >
                 <Sparkles class="size-4" /> Improve with AI
             </button>
@@ -198,6 +206,7 @@ Please provide concise improvements to the step.
             <button class="flex items-center gap-2 disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-default"
                 onclick={() => {
                     // TODO: share step
+                    blur();
                 }}
                 disabled
             >
@@ -209,6 +218,7 @@ Please provide concise improvements to the step.
                 onclick={() => {
                     const filename = `.nanobot/tasks/${taskId}/${id}`;
                     onDeleteStep(id, filename);
+                    blur();
                 }}
             >
                 <Trash2 class="size-4" /> Delete step

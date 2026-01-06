@@ -368,6 +368,7 @@ export interface WorkspaceClient {
 	readonly sessions: Session[];
 	readonly loading: boolean;
 
+	load(): Promise<void>;
 	readFile(path: string): Promise<Blob>;
 	writeFile(path: string, data: Blob | string): Promise<void>;
 	createFile(path: string, data: Blob | string): Promise<void>;

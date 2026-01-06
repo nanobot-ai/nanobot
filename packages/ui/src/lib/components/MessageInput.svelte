@@ -13,6 +13,7 @@
 	import MessageSlashPrompts from '$lib/components/MessageSlashPrompts.svelte';
 	import MessageAttachments from '$lib/components/MessageAttachments.svelte';
 	import MessageResources from '$lib/components/MessageResources.svelte';
+	import type { Snippet } from 'svelte';
 
 	interface Props {
 		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
@@ -27,6 +28,7 @@
 		prompts?: Prompt[];
 		resources?: Resource[];
 		messages?: ChatMessage[];
+		customActions?: Snippet;
 	}
 
 	let {
@@ -47,7 +49,8 @@
 			'application/pdf',
 			'application/json',
 			'text/csv'
-		]
+		],
+		customActions
 	}: Props = $props();
 
 	let message = $state('');
@@ -213,43 +216,50 @@
 				/>
 
 				<!-- Action buttons -->
-				<div class="flex gap-2">
-					<!-- Attach button -->
-					<button
-						type="button"
-						onclick={handleAttach}
-						class="btn h-9 w-9 rounded-full p-0 btn-ghost btn-sm"
-						disabled={disabled || isUploading}
-						aria-label="Attach file"
-					>
-						{#if isUploading}
-							<span class="loading loading-xs loading-spinner"></span>
-						{:else}
-							<Paperclip class="h-4 w-4" />
+				<div class="flex gap-2 justify-between w-full items-end">
+					<div class="flex gap-2 items-center">
+						{#if customActions}
+							{@render customActions()}
 						{/if}
-					</button>
+					</div>
+					<div class="flex gap-2">
+						<!-- Attach button -->
+						<button
+							type="button"
+							onclick={handleAttach}
+							class="btn h-9 w-9 rounded-full p-0 btn-ghost btn-sm"
+							disabled={disabled || isUploading}
+							aria-label="Attach file"
+						>
+							{#if isUploading}
+								<span class="loading loading-xs loading-spinner"></span>
+							{:else}
+								<Paperclip class="h-4 w-4" />
+							{/if}
+						</button>
 
-					<MessageResources
-						{disabled}
-						{resources}
-						{selectedResources}
-						{toggleResource}
-						{messages}
-					/>
+						<MessageResources
+							{disabled}
+							{resources}
+							{selectedResources}
+							{toggleResource}
+							{messages}
+						/>
 
-					<!-- Submit button -->
-					<button
-						type="submit"
-						class="btn h-9 w-9 rounded-full p-0 btn-sm btn-primary"
-						disabled={disabled || isUploading || !message.trim()}
-						aria-label="Send message"
-					>
-						{#if disabled && !isUploading}
-							<span class="loading loading-xs loading-spinner"></span>
-						{:else}
-							<Send class="h-4 w-4" />
-						{/if}
-					</button>
+						<!-- Submit button -->
+						<button
+							type="submit"
+							class="btn h-9 w-9 rounded-full p-0 btn-sm btn-primary"
+							disabled={disabled || isUploading || !message.trim()}
+							aria-label="Send message"
+						>
+							{#if disabled && !isUploading}
+								<span class="loading loading-xs loading-spinner"></span>
+							{:else}
+								<Send class="h-4 w-4" />
+							{/if}
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>

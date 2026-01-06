@@ -1,9 +1,8 @@
 <script lang="ts">
-	import { EllipsisVertical, EyeClosed, HandHelping, ReceiptText, Sparkles } from "@lucide/svelte";
+	import { EllipsisVertical, EyeClosed, HandHelping, ReceiptText } from "@lucide/svelte";
 	import type { Input, Task } from "./types";
 
     interface Props {
-        taskId: string;
         task: Task;
         input: Input;
         inputDescription: Map<string | number, boolean>;
@@ -12,11 +11,9 @@
         onDeleteInput: (id: string) => void;
         onToggleInputDescription: (id: string, value: boolean) => void;
         onToggleInputDefault: (id: string, value: boolean) => void;
-        onSuggestImprovement: (content: string) => void;
     }
 
-    let { 
-        taskId,
+    let {
         task,
         input = $bindable(),
         inputDescription,
@@ -25,7 +22,6 @@
         onDeleteInput,
         onToggleInputDescription,
         onToggleInputDefault,
-        onSuggestImprovement,
     }: Props = $props();
 </script>
 
@@ -92,24 +88,6 @@
                     }}
                 />
             </label>
-        </li>
-        
-        <li>
-            <button class="flex items-center gap-2"
-                onclick={() => onSuggestImprovement(`
-The user is asking for an improvement to the following input:
-Argument name: ${name}
-Argument description: ${input.description}
-Argument default value: ${input.default}
-
-Please provide a concise improvement to the input. If the user has not provided a description, suggest one based on the argument name and default value.
-Do not suggest a default value if the user has not provided one.
-
-Use the files under the ".nanobot/tasks/${taskId}" directory for context to help you improve the input.
-                `)}
-            >
-                <Sparkles class="size-4" /> Improve with AI
-            </button>
         </li>
         {#if name.length > 0 && task!.inputs.some((input) => input.name === name)}
             <li>

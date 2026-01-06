@@ -2,7 +2,7 @@ import type { WorkspaceClient, WorkspaceFile } from '$lib/types';
 import type { Input, ParsedContent, ParsedFile, Step, Task } from './types';
 import YAML from 'yaml';
 
-async function parseFrontmatterMarkdown(fileContent: Blob): Promise<ParsedContent> {
+export async function parseFrontmatterMarkdown(fileContent: Blob): Promise<ParsedContent> {
 	const text = await fileContent.text();
 
 	// Split by frontmatter delimiter (---)
