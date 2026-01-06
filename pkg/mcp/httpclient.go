@@ -29,8 +29,6 @@ const (
 )
 
 // isJWT checks if the given token appears to be a JWT by validating its structure.
-// JWTs have three base64url-encoded parts separated by dots, with the header
-// containing a required "alg" field.
 func isJWT(token string) bool {
 	parser := jwt.NewParser()
 	_, _, err := parser.ParseUnverified(token, jwt.MapClaims{})
