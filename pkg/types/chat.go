@@ -58,6 +58,7 @@ type SampleConfirmRequest struct {
 type Attachment struct {
 	Name     string `json:"name,omitempty"`
 	URL      string `json:"url"`
+	URI      string `json:"uri,omitempty"`
 	MimeType string `json:"mimeType,omitempty"`
 }
 

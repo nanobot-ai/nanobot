@@ -72,12 +72,19 @@ attachmentsLoop:
 			return nil, err
 		}
 
+		// Preserve original name from attachment if provided
+		originalName, _ := data["name"].(string)
+
 		for _, content := range resource.Contents {
 			dataURI := content.ToDataURI()
 			attachmentData := map[string]any{
 				"url": dataURI,
+				"uri": uri, // Original URI for tool calls to reference the correct path
 			}
-			if content.Name != "" {
+			// Use original name if provided, otherwise fall back to content.Name
+			if originalName != "" {
+				attachmentData["name"] = originalName
+			} else if content.Name != "" {
 				attachmentData["name"] = content.Name
 			}
 			newAttachments = append(newAttachments, attachmentData)
