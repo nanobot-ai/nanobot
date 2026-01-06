@@ -149,3 +149,14 @@ body {
 .variable-pill-completed:hover::after {
 	opacity: 1;
 }
+
+.menu-alert {
+	font-size: var(--text-sm);
+    line-height: var(--tw-leading, var(--text-sm--line-height));
+	color: var(--color-error);
+	&:hover {
+        @media (hover: hover) {
+            background-color: color-mix(in oklab, var(--color-error) 5%, transparent);
+        }
+    }
+}

@@ -357,7 +357,7 @@
                                                 confirmDeleteWorkspaceId = workspace.id;
                                                 confirmDeleteWorkspaceModal?.showModal();
                                             }} 
-                                            class="text-sm text-error"
+                                            class="menu-alert"
                                         >
                                             <Trash2 class="size-4" /> Delete
                                         </button>
@@ -457,9 +457,9 @@
                 {@render empty('Tasks', true)}
             {:else}
                 {#each items as item, index (index)}
-                    <li class="flex w-full {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">
-                        <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="flex grow p-2 overflow-hidden rounded-r-none truncate hover:bg-transparent">{item}</a>
-                        <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left" popovertarget="popover-task-actions-{item}" style="anchor-name:--task-actions-anchor-{item}">
+                    <li class="flex flex-row justify-between w-full rounded-l-field p-1 {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">
+                        <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="flex grow overflow-hidden rounded-r-none truncate hover:bg-transparent">{item}</a>
+                        <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left mr-1" popovertarget="popover-task-actions-{item}" style="anchor-name:--task-actions-anchor-{item}">
                             <EllipsisVertical class="size-4 shrink-0" />
                         </button>
                         <ul 
@@ -473,7 +473,7 @@
                                     onclick={(e) => {
                                         // TODO:
                                     }} 
-                                    class="text-sm text-error"
+                                    class="text-sm"
                                 >
                                     <Play class="size-4" /> Run task
                                 </button>
@@ -488,7 +488,7 @@
                                         };
                                         confirmDeleteTaskModal?.showModal();
                                     }} 
-                                    class="text-sm text-error"
+                                    class="menu-alert"
                                 >
                                     <Trash2 class="size-4" /> Delete
                                 </button>
