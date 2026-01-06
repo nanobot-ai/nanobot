@@ -8,13 +8,11 @@ import (
 	"net/http"
 	"os"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
-	"github.com/nanobot-ai/nanobot/pkg/uuid"
 	"gorm.io/gorm"
 )
 
@@ -65,6 +63,7 @@ func (m *Manager) newRecord(id, accountID string) *Session {
 func (m *Manager) loadAttributesFromRecord(stored *Session, session *mcp.ServerSession) {
 	session.GetSession().Set(types.DescriptionSessionKey, stored.Description)
 	session.GetSession().Set(types.AccountIDSessionKey, stored.AccountID)
+	session.GetSession().Set(types.ParentSessionIdKey, stored.ParentSessionID)
 }
 
 func (m *Manager) saveAttributesToRecord(stored *Session, session *mcp.ServerSession) error {
@@ -73,6 +72,7 @@ func (m *Manager) saveAttributesToRecord(stored *Session, session *mcp.ServerSes
 	)
 
 	session.GetSession().Get(types.DescriptionSessionKey, &stored.Description)
+	session.GetSession().Get(types.ParentSessionIdKey, &stored.ParentSessionID)
 	session.GetSession().Get(types.ConfigSessionKey, &config)
 
 	stored.Config = ConfigWrapper(config)
@@ -151,17 +151,7 @@ func (m *Manager) ExtractID(req *http.Request) string {
 	if id != "" {
 		return id
 	}
-	parts := strings.Split(req.URL.Path, "/")
-	for i, part := range parts {
-		if i > 0 && parts[i-1] == "agents" {
-			continue
-		}
-
-		if uuid.ValidUUID(part) {
-			return part
-		}
-	}
-	return ""
+	return req.URL.Query().Get("session")
 }
 
 func checkAccount(ctx context.Context, serverSession *mcp.ServerSession) bool {

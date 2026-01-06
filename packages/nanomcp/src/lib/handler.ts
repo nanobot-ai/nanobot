@@ -198,9 +198,19 @@ export class McpRequestHandler {
 		const workspaceId =
 			req.headers.get("x-nanobot-workspace-id") ||
 			url.searchParams.get("workspace");
+		const accountId =
+			req.headers.get("x-nanobot-account-id") ||
+			url.searchParams.get("account");
+		const nanobotSessionId =
+			req.headers.get("x-nanobot-session-id") ||
+			url.searchParams.get("session");
 		const baseCtx: Context = {
 			sessionId,
 			workspaceId: workspaceId || sessionId,
+			nanobot: {
+				sessionId: nanobotSessionId,
+				accountId: accountId,
+			},
 			signal: req.signal,
 		};
 

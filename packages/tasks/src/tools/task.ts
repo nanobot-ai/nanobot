@@ -1,0 +1,93 @@
+import { Client, createTool, toolResult } from "@nanobot-ai/nanomcp";
+import { ensureConnected } from "@nanobot-ai/workspace-client";
+import * as z from "zod";
+import { getTask, getTasksDescription } from "../lib/task.ts";
+
+const schema = z.object({
+	taskName: z.string().describe("The task name to start"),
+	arguments: z
+		.record(z.string())
+		.optional()
+		.describe("Optional arguments for the task"),
+});
+
+export default createTool({
+	title: "Task",
+	description: async (ctx) => {
+		const client = await ensureConnected(ctx.workspaceId);
+		const tasksDescriptions = await getTasksDescription(client);
+		return `Execute one of the following tasks in the background with the given arguments.
+
+<available_tasks>
+${tasksDescriptions}
+</available_tasks>
+`;
+	},
+	messages: {
+		invoking: "Starting task",
+		invoked: "Task started",
+	},
+	inputSchema: schema,
+	async handler(params, ctx) {
+		const { taskName, arguments: taskArgs } = params;
+		const client = await ensureConnected(ctx.workspaceId);
+		const task = await getTask(client, taskName);
+		if (!task.name) {
+			return toolResult.error(`task not found: ${taskName}`);
+		}
+
+		// collect input
+		const args: Record<string, string> = {};
+		for (const input of task.inputs || []) {
+			const arg = taskArgs?.[input.name];
+			if (arg) {
+				args[input.name] = arg;
+			} else if (input.name in params) {
+				args[input.name] = String(
+					(params as { [input.name]: unknown })[input.name],
+				);
+			} else if (input.default) {
+				args[input.name] = input.default;
+			} else {
+				return toolResult.error(
+					`Missing argument: ${input.name} for task ${taskName}. The argument is described as: ${input.description}`,
+				);
+			}
+		}
+
+		const chatInput = {
+			type: "tool",
+			payload: {
+				name: "BeginTask",
+				arguments: {
+					name: task.name,
+					arguments: args,
+				},
+			},
+		};
+
+		const chatClient = new Client({
+			baseUrl: "http://localhost:5173",
+			path: "/mcp",
+			sessionId: "new",
+			workspaceId: ctx.workspaceId,
+			...(ctx.nanobot?.sessionId && {
+				parentSessionId: ctx.nanobot.sessionId,
+			}),
+		});
+
+		await chatClient.callMCPTool("chat", {
+			payload: JSON.stringify(chatInput),
+			async: true,
+		});
+		const { id } = await chatClient.getSessionDetails();
+
+		return toolResult.structured(
+			`Task ${task.name} started with ${args}. Task ID: ${id}`,
+			{
+				task: chatInput.payload,
+				created_at: new Date().toISOString(),
+			},
+		);
+	},
+});
