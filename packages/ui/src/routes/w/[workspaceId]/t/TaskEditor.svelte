@@ -11,7 +11,7 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { WorkspaceService } from '$lib/workspace.svelte';
-	import type { WorkspaceClient, WorkspaceFile } from '$lib/types';
+	import type { Attachment, WorkspaceClient, WorkspaceFile } from '$lib/types';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
 	import { type Input, type Task, type Step as StepType } from './types';
 	import { compileOutputFiles, convertToTask, setupEmptyTask, parseFrontmatterMarkdown } from './utils';
@@ -63,7 +63,7 @@
     let currentAddingToolForStep = $state<StepType | null>(null);
 
     let showMessageInput = $state(false);
-    let includeFileInMessage = $state<{ uri: string, name: string, mimeType: string } | null>(null);
+    let includeFilesInMessage = $state<Attachment[]>([]);
 
     let showAlternateHeader = $state(false);
     let lastSavedTaskJson = '';
@@ -516,7 +516,9 @@ ${JSON.stringify(runFormData)}
                             if (!chat) {
                                 setupTaskThread();
                             }
-                            includeFileInMessage = file;
+                            if (!includeFilesInMessage.some((f) => f.uri === file.uri)) {
+                                includeFilesInMessage.push(file);
+                            }
                             showMessageInput = true;
                         }}
                     />
@@ -556,22 +558,24 @@ ${JSON.stringify(runFormData)}
                                     if (!chat) {
                                         setupTaskThread();
                                     }
-                                    return chat?.sendMessage(message, includeFileInMessage ? [includeFileInMessage] : undefined);
+                                    return chat?.sendMessage(message, includeFilesInMessage.length > 0 ? includeFilesInMessage : undefined);
                                 }} 
                             >
                                 {#snippet customActions()}
-                                    {#if includeFileInMessage}
+                                    {#if includeFilesInMessage.length > 0}
+                                        {#each includeFilesInMessage as file (file.uri)}
                                             <div class="badge badge-sm badge-primary gap-1 group">
                                                 <button class="hidden group-hover:block cursor-pointer text-white/50 hover:text-white transition-colors" 
                                                     onclick={() => {
-                                                        includeFileInMessage = null;
+                                                        includeFilesInMessage = includeFilesInMessage.filter((f) => f.uri !== file.uri);
                                                     }} 
                                                 >
                                                     <X class="size-3" />
                                                 </button>
                                                 <File class="size-3 block group-hover:hidden" />
-                                                {includeFileInMessage.name}
+                                                {file.name}
                                             </div>
+                                        {/each}
                                     {/if}
                                 {/snippet}
                             </MessageInput>
@@ -616,7 +620,7 @@ ${JSON.stringify(runFormData)}
                         {/key}
                     {:else if chat}
                         {#key chat.chatId}
-                            <ThreadFromChat inline {chat} />
+                            <ThreadFromChat inline {chat} files={includeFilesInMessage} />
                         {/key}
                     {/if}
                 </div>
