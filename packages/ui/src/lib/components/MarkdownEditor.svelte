@@ -1,9 +1,10 @@
 <script lang="ts">
-    import { Crepe } from '@milkdown/crepe';
-    import '@milkdown/crepe/theme/common/style.css';
-    import '@milkdown/crepe/theme/frame.css';
-	import type { MilkdownPlugin } from '@milkdown/kit/ctx';
-    import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
+import { Crepe } from '@milkdown/crepe';
+import '@milkdown/crepe/theme/common/style.css';
+import '@milkdown/crepe/theme/frame.css';
+import type { MilkdownPlugin } from '@milkdown/kit/ctx';
+import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
+import { replaceAll } from '@milkdown/kit/utils';
 	import { untrack } from 'svelte';
 
     interface Props {
@@ -15,6 +16,7 @@
 
     let { value, blockEditEnabled, plugins = [], onChange }: Props = $props();
 
+    let focused = $state(false);
     let prevValue = $state(untrack(() => value));
     let editorNode: HTMLElement | null = null;
     let isCrepeReady = false;
@@ -94,6 +96,22 @@
         };
     });
 
+    $effect(() => {
+        if (value !== prevValue) {
+            if (!focused && crepe && isCrepeReady) {
+                console.log('update', { value, prevValue });
+                setValue(value);
+            }
+            prevValue = value;
+        }
+    });
+
+    function setValue(newValue: string) {
+        if (crepe) {
+            crepe.editor.action(replaceAll(newValue));
+        }
+    }
+
     function editor(node: HTMLElement) {
         editorNode = node;
 
@@ -104,11 +122,23 @@
             }
         }
 
+        function onFocusIn() {
+            focused = true;
+        }
+
+        function onFocusOut() {
+            focused = false;
+        }
+
         node.addEventListener('mouseleave', onMouseLeave);
+        node.addEventListener('focusin', onFocusIn);
+        node.addEventListener('focusout', onFocusOut);
 
         return {
             destroy: () => {
                 node.removeEventListener('mouseleave', onMouseLeave);
+                node.removeEventListener('focusin', onFocusIn);
+                node.removeEventListener('focusout', onFocusOut);
                 editorNode = null;
             }
         };

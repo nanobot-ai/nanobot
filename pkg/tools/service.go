@@ -979,7 +979,7 @@ func (s *Service) convertToSampleRequest(config types.Config, agent string, args
 			mimeType = attachment.MimeType
 		}
 		data := parts[1]
-		if mimeType == "" || strings.HasPrefix(mimeType, "image/") {
+		if strings.HasPrefix(mimeType, "image/") {
 			sampleRequest.Messages = append(sampleRequest.Messages, mcp.SamplingMessage{
 				Role: "user",
 				Content: []mcp.Content{{
@@ -989,6 +989,10 @@ func (s *Service) convertToSampleRequest(config types.Config, agent string, args
 				}},
 			})
 		} else {
+			// Default to text/plain for unknown MIME types
+			if mimeType == "" {
+				mimeType = "text/plain"
+			}
 			sampleRequest.Messages = append(sampleRequest.Messages, mcp.SamplingMessage{
 				Role: "user",
 				Content: []mcp.Content{{

@@ -20,13 +20,28 @@ var (
 		"image/png":  {},
 		"image/jpeg": {},
 		"image/webp": {},
+		"image/gif":  {},
 	}
 	TextMimeTypes = map[string]struct{}{
-		"text/plain":       {},
-		"text/markdown":    {},
-		"text/html":        {},
-		"text/csv":         {},
-		"application/json": {},
+		"text/plain":             {},
+		"text/markdown":          {},
+		"text/html":              {},
+		"text/csv":               {},
+		"text/yaml":              {},
+		"text/css":               {},
+		"text/javascript":        {},
+		"text/typescript":        {},
+		"text/x-python":          {},
+		"text/x-go":              {},
+		"text/x-rust":            {},
+		"text/x-java":            {},
+		"text/x-c":               {},
+		"text/x-c++":             {},
+		"text/x-shellscript":     {},
+		"application/json":       {},
+		"application/xml":        {},
+		"application/javascript": {},
+		"application/octet-stream": {}, // Treat unknown as text to avoid image_url errors
 	}
 	PDFMimeTypes = map[string]struct{}{
 		"application/pdf": {},

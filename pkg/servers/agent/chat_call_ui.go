@@ -55,6 +55,8 @@ attachmentsLoop:
 		clientName := c.s.data.CurrentAgent(ctx)
 		if strings.HasPrefix(uri, "nanobot://") {
 			clientName = "nanobot.resources"
+		} else if strings.HasPrefix(uri, "workspace://") {
+			clientName = "workspaceResources"
 		}
 
 		client, err := c.s.runtime.GetClient(ctx, clientName)

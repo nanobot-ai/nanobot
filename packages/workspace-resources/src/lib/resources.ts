@@ -6,6 +6,47 @@ import type {
 } from "@nanobot-ai/nanomcp";
 import { ensureConnected } from "@nanobot-ai/workspace-client";
 
+// Map file extensions to MIME types for common text/code files
+const extensionToMimeType: Record<string, string> = {
+	".md": "text/markdown",
+	".markdown": "text/markdown",
+	".txt": "text/plain",
+	".json": "application/json",
+	".yaml": "text/yaml",
+	".yml": "text/yaml",
+	".xml": "application/xml",
+	".html": "text/html",
+	".htm": "text/html",
+	".css": "text/css",
+	".js": "text/javascript",
+	".ts": "text/typescript",
+	".jsx": "text/javascript",
+	".tsx": "text/typescript",
+	".py": "text/x-python",
+	".go": "text/x-go",
+	".rs": "text/x-rust",
+	".java": "text/x-java",
+	".c": "text/x-c",
+	".cpp": "text/x-c++",
+	".h": "text/x-c",
+	".hpp": "text/x-c++",
+	".sh": "text/x-shellscript",
+	".bash": "text/x-shellscript",
+	".zsh": "text/x-shellscript",
+	".svg": "image/svg+xml",
+	".png": "image/png",
+	".jpg": "image/jpeg",
+	".jpeg": "image/jpeg",
+	".gif": "image/gif",
+	".webp": "image/webp",
+	".pdf": "application/pdf",
+};
+
+function getMimeTypeFromPath(path: string): string {
+	const ext = path.toLowerCase().match(/\.[^.]+$/)?.[0] || "";
+	return extensionToMimeType[ext] || "application/octet-stream";
+}
+
 export const listResource: ListResources = async (ctx, { cursor }) => {
 	const client = await ensureConnected(ctx.workspaceId);
 	const entries = await client.listDir(".", {
@@ -22,7 +63,7 @@ export const listResource: ListResources = async (ctx, { cursor }) => {
 					({
 						uri: `workspace://${entry.name}`,
 						name: entry.name,
-						mimeType: "application/octet-stream",
+						mimeType: getMimeTypeFromPath(entry.name),
 					}) satisfies Resource,
 			),
 	};
@@ -57,18 +98,23 @@ export const readResource: ReadResource = async (ctx, uri) => {
 		binary: true,
 	});
 
+	// Get MIME type from file extension as fallback
+	const fallbackMimeType = getMimeTypeFromPath(path);
+
 	// Parse the data URI to extract mimeType and base64 content
 	// Format: data:<mimeType>;base64,<content>
-	const dataUriMatch = content.match(/^data:([^;]+);base64,(.+)$/);
+	const dataUriMatch = content.match(/^data:([^;]*);base64,(.+)$/);
 	if (!dataUriMatch) {
 		// Fallback if not a data URI (shouldn't happen with binary: true)
 		return {
 			uri: uri,
+			mimeType: fallbackMimeType,
 			blob: content,
 		};
 	}
 
-	const mimeType = dataUriMatch[1];
+	// Use the data URI mime type if present, otherwise use the fallback
+	const mimeType = dataUriMatch[1] || fallbackMimeType;
 	const base64Content = dataUriMatch[2];
 
 	try {
