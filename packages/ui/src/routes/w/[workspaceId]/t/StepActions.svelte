@@ -20,7 +20,7 @@
     <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-right" data-tip="Add..." popoverTarget={`add-to-step-${item.id}`} style="anchor-name: --add-to-step-${item.id}-anchor;">
         <Plus class="text-base-content/50" />
     </button>
-    <ul class="dropdown menu w-72 rounded-box bg-base-100 dark:bg-base-300 shadow-sm overflow-visible"
+    <ul class="dropdown menu w-80 rounded-box bg-base-100 dark:bg-base-300 shadow-sm overflow-visible"
         popover="auto" id={`add-to-step-${item.id}`} style="position-anchor: --add-to-step-${item.id}-anchor;">
         <li>
             <button class="justify-between"
@@ -42,7 +42,21 @@
                 }}
             >
                 <span>Add new step</span>
-                <span class="text-[11px]">
+                <span class="text-[10px]">
+                    <kbd class="kbd ">⌘</kbd> + click <span class="text-base-content/50">to add above</span>
+                </span>
+            </button>
+        </li>
+        <li>
+            <button class="justify-between disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-default"
+                onclick={(e) => {
+                    // TODO: import step
+                    blur();
+                }}
+                disabled
+            >
+                <span>Import existing step</span>
+                <span class="text-[10px]">
                     <kbd class="kbd ">⌘</kbd> + click <span class="text-base-content/50">to add above</span>
                 </span>
             </button>

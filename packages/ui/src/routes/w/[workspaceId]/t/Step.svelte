@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { EllipsisVertical, ReceiptText, Sparkles, ToolCase, Trash2, Wrench, X } from "@lucide/svelte";
+	import { EllipsisVertical, ReceiptText, Share, Sparkles, ToolCase, Trash2, Wrench, X } from "@lucide/svelte";
 	import type { Input, Step, Task } from "./types";
 	import MarkdownEditor from "$lib/components/MarkdownEditor.svelte";
 	import { createVariablePillPlugin } from "$lib/plugins/variablePillPlugin";
@@ -192,6 +192,16 @@ Please provide concise improvements to the step.
 `)}
             >
                 <Sparkles class="size-4" /> Improve with AI
+            </button>
+        </li>
+        <li>
+            <button class="flex items-center gap-2 disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-default"
+                onclick={() => {
+                    // TODO: share step
+                }}
+                disabled
+            >
+                <Share class="size-4" /> Share step with...
             </button>
         </li>
         <li>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { WorkspaceInstance, WorkspaceService } from "$lib/workspace.svelte";
-	import { ChevronDown, ChevronRight, CircleX, EllipsisVertical, FileText, Folder, FolderOpen, ListTodo, MessageSquare, PaintBucket, PencilLine, Play, Plus, Save, Trash2 } from "@lucide/svelte";
+	import { ChevronDown, ChevronRight, CircleX, EllipsisVertical, FileText, Folder, FolderOpen, ListTodo, MessageSquare, PaintBucket, PencilLine, Play, Plus, Save, Share, Trash2 } from "@lucide/svelte";
 	import { onMount, tick } from "svelte";
 	import type { Component } from "svelte";
 	import DragDropList from "./DragDropList.svelte";
@@ -464,7 +464,7 @@
                         </button>
                         <ul 
                             id="popover-task-actions-{item}"
-                            class="dropdown menu rounded-box bg-base-100 shadow-sm"
+                            class="dropdown menu min-w-36 rounded-box bg-base-100 shadow-sm"
                             popover style="position-anchor:--task-actions-anchor-{item}"
                         >
                             <li>
@@ -474,7 +474,19 @@
                                 >
                                     <Play class="size-4" /> Run
                                 </a>
-                            </li>    
+                            </li> 
+                            <li>
+                                <button 
+                                    onmousedown={(e) => e.stopPropagation()} 
+                                    onclick={(e) => {
+                                        // TODO: share
+                                    }} 
+                                    class="text-sm disabled:opacity-50"
+                                    disabled
+                                >
+                                    <Share class="size-4" /> Share
+                                </button>
+                            </li>
                             <li>
                                 <button 
                                     onmousedown={(e) => e.stopPropagation()} 
