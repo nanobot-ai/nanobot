@@ -46,7 +46,6 @@ import { replaceAll } from '@milkdown/kit/utils';
                     
                     if (markdown === prevMarkdown) return;
                     if (!focused) return;
-                    console.log('markdown updated', markdown);
                     onChange?.(markdown);
                 });
             })
@@ -101,7 +100,6 @@ import { replaceAll } from '@milkdown/kit/utils';
     $effect(() => {
         if (value !== prevValue) {
             if (!focused && crepe && isCrepeReady) {
-                console.log('update', { value, prevValue });
                 setValue(value);
             }
             prevValue = value;
