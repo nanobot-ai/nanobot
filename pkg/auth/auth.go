@@ -27,8 +27,8 @@ type Auth struct {
 	JWKS                 string   `usage:"JWKS public key for JWT tokens"`
 	TrustedAudiences     []string `usage:"Trusted audiences for JWT tokens"`
 	EncryptionKey        string   `usage:"Encryption key for storing sensitive data"`
-	APIKeyAuthWebhookURL string   `usage:"URL for API key authentication webhook" env:"NANOBOT_RUN_API_KEY_AUTH_WEBHOOK_URL"`
-	MCPServerID          string   `usage:"ID of the MCP server to validate API keys for" env:"NANOBOT_RUN_MCP_SERVER_ID"`
+	APIKeyAuthWebhookURL string   `usage:"URL for API key authentication webhook"`
+	MCPServerID          string   `usage:"ID of the MCP server to validate API keys for"`
 }
 
 func Wrap(ctx context.Context, env map[string]string, auth Auth, dsn, healthzPath string, next http.Handler) (http.Handler, error) {

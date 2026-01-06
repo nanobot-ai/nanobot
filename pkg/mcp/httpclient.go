@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 )
@@ -32,26 +32,9 @@ const (
 // JWTs have three base64url-encoded parts separated by dots, with the header
 // containing a required "alg" field.
 func isJWT(token string) bool {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return false
-	}
-	// Try to decode the header (first part)
-	header, err := base64.RawURLEncoding.DecodeString(parts[0])
-	if err != nil {
-		// Try with padding (some JWTs use standard base64url encoding)
-		header, err = base64.URLEncoding.DecodeString(parts[0])
-		if err != nil {
-			return false
-		}
-	}
-	// Check if header is valid JSON with "alg" field (required by JWT spec)
-	var headerMap map[string]any
-	if err := json.Unmarshal(header, &headerMap); err != nil {
-		return false
-	}
-	_, hasAlg := headerMap["alg"]
-	return hasAlg
+	parser := jwt.NewParser()
+	_, _, err := parser.ParseUnverified(token, jwt.MapClaims{})
+	return err == nil
 }
 
 type HTTPClient struct {
