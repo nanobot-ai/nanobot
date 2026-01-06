@@ -195,7 +195,7 @@ Please provide concise improvements to the step.
             </button>
         </li>
         <li>
-            <button class="flex items-center gap-2 text-error hover:bg-error/5"
+            <button class="flex items-center gap-2 menu-alert"
                 onclick={() => {
                     const filename = `.nanobot/tasks/${taskId}/${id}`;
                     onDeleteStep(id, filename);
