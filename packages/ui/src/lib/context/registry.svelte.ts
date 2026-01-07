@@ -7,6 +7,7 @@ const REGISTRY_CONTEXT_KEY = Symbol('registry');
 type RegistryResponse = {
 	metadata: {
 		count: number;
+		nextCursor?: string | null;
 	};
 	servers: {
 		server: Server;
@@ -25,15 +26,17 @@ const CACHE_TTL_MS = 60 * 1000; // 1 minute
 
 export function createRegistryStore(): RegistryStore {
 	let servers = $state<Server[]>([]);
+	let nextCursor = $state<string | null>(null);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let lastFetchTime: number | null = null;
 
-	const serversMap = $derived(servers
-		.reduce<Record<string, Server>>((map, server) => {
+	const serversMap = $derived(
+		servers.reduce<Record<string, Server>>((map, server) => {
 			map[server.name] = server;
 			return map;
-		}, {}));
+		}, {})
+	);
 
 	async function fetch() {
 		if (loading) return;
@@ -49,9 +52,20 @@ export function createRegistryStore(): RegistryStore {
 		}
 
 		try {
-			const response = await globalThis.fetch(env.PUBLIC_REGISTRY_ENDPOINT);
+			const response = await globalThis.fetch(`${env.PUBLIC_REGISTRY_ENDPOINT}?limit=100`);
 			const data: RegistryResponse = await response.json();
+			nextCursor = data.metadata.nextCursor ?? null;
 			servers = data.servers.map((server) => server.server);
+
+			while (nextCursor) {
+				const response = await globalThis.fetch(
+					`${env.PUBLIC_REGISTRY_ENDPOINT}?cursor=${nextCursor}`
+				);
+				const data: RegistryResponse = await response.json();
+				nextCursor = data.metadata.nextCursor ?? null;
+				servers = [...servers, ...data.servers.map((server) => server.server)];
+			}
+
 			lastFetchTime = Date.now();
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
@@ -87,4 +101,3 @@ export function setRegistryContext(store: RegistryStore) {
 export function getRegistryContext(): RegistryStore {
 	return getContext<RegistryStore>(REGISTRY_CONTEXT_KEY);
 }
-
