@@ -529,7 +529,7 @@ ${JSON.stringify(runFormData)}
                 <button class="btn btn-primary btn-square tooltip" data-tip="Add new step"
                     onclick={() => {
                         const newStep = {
-                            id: task!.steps.length.toString(),
+                            id: `STEP_${task!.steps.length}.md`,
                             name: '',
                             description: '',
                             content: '',
@@ -682,6 +682,7 @@ ${JSON.stringify(runFormData)}
         if (!confirmDeleteStep) return;
         task!.steps = task!.steps.filter((s) => s.id !== confirmDeleteStep?.stepId);
         workspace?.deleteFile(confirmDeleteStep?.filename ?? '');
+        confirmDeleteStep = null;
     }}
 />
 
