@@ -47,6 +47,7 @@ import { replaceAll } from '@milkdown/kit/utils';
                     if (markdown === prevMarkdown) return;
                     if (!focused) return;
                     onChange?.(markdown);
+                    prevValue = markdown;
                 });
             })
             .use(listener);
