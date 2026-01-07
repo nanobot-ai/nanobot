@@ -386,7 +386,7 @@ export class ChatService {
 	uploadedFiles: UploadedFile[];
 	uploadingFiles: UploadingFile[];
 
-	private api: ChatAPI;
+	readonly api: ChatAPI;
 	private closer = () => {};
 	private history: ChatMessage[] | undefined;
 	private internalOnChatDone: (() => void)[] = [];

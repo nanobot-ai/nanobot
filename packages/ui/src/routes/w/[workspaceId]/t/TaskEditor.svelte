@@ -24,6 +24,7 @@
 	import { ChatService, type ToolCallInfo } from '$lib/chat.svelte';
 	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
+	import { sharedChat } from '$lib/stores/chat.svelte';
 
     type Props = {
         workspaceId: string;
@@ -80,7 +81,6 @@
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
     const workspaceService = new WorkspaceService();
-    let chat = $state<ChatService>();
     let runSession = $state<ChatService>();
 
     /** Handle file modifications from chat to update task steps */
@@ -136,24 +136,21 @@
         }
     }
 
-    async function setupTaskThread() {
-        chat = await workspace?.newSession({ editor: true });
-        chat?.setCallbacks({
+    onMount(() => {
+        workspace = workspaceService.getWorkspace(workspaceId);
+        registryStore.fetch();
+
+        sharedChat.current?.setCallbacks({
             onFileModified: handleFileModified,
             onChatDone: () => {
                 console.debug('Chat done, reloading workspace files');
                 workspace?.load();
             }
         });
-    }
-
-    onMount(() => {
-        workspace = workspaceService.getWorkspace(workspaceId);
-        registryStore.fetch();
     });
     
     onDestroy(() => {
-        chat?.close();
+        sharedChat.current?.close();
     });
 
     function debouncedSave() {
@@ -513,9 +510,6 @@ ${JSON.stringify(runFormData)}
                         {visibleInputs}
                         onUpdateVisibleInputs={(inputs) => visibleInputs = inputs}
                         onSuggestImprovement={async (file) => {
-                            if (!chat) {
-                                setupTaskThread();
-                            }
                             if (!includeFilesInMessage.some((f) => f.uri === file.uri)) {
                                 includeFilesInMessage.push(file);
                             }
@@ -555,10 +549,7 @@ ${JSON.stringify(runFormData)}
                                     showSidebarThread = true;
                                     showMessageInput = false;
 
-                                    if (!chat) {
-                                        setupTaskThread();
-                                    }
-                                    return chat?.sendMessage(message, includeFilesInMessage.length > 0 ? includeFilesInMessage : undefined);
+                                    return sharedChat.current?.sendMessage(message, includeFilesInMessage.length > 0 ? includeFilesInMessage : undefined);
                                 }} 
                             >
                                 {#snippet customActions()}
@@ -620,9 +611,9 @@ ${JSON.stringify(runFormData)}
                         {#key runSession.chatId}
                             <ThreadFromChat inline chat={runSession} />
                         {/key}
-                    {:else if chat}
-                        {#key chat.chatId}
-                            <ThreadFromChat inline {chat} files={includeFilesInMessage} />
+                    {:else if sharedChat.current}
+                        {#key sharedChat.current.chatId}
+                            <ThreadFromChat inline chat={sharedChat.current} files={includeFilesInMessage} />
                         {/key}
                     {/if}
                 </div>
