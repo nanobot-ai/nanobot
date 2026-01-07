@@ -181,7 +181,7 @@
                 taskId = nameToUse.toLowerCase().replace(/ /g, '_').replace(/[^a-z0-9_]/g, '');
                 if (taskId) {
                     url.searchParams.set('id', taskId);
-                    goto(resolve(url.toString() as `/w/${string}/t/`), { replaceState: true, keepFocus: true });
+                    goto(resolve(url.pathname + url.search as `/w/${string}/t/`), { replaceState: true, keepFocus: true });
                 } else {
                     console.info('skipping save, initial task name or step name required');
                     return;
