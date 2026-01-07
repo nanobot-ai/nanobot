@@ -361,7 +361,7 @@ ${JSON.stringify(runFormData)}
                         {#if showAlternateHeader}
                             <p in:fade class="flex grow text-xl font-semibold">{task.name}</p>
                         {:else if showTaskTitle}
-                            <input name="title" class="input input-ghost input-lg w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Task title" 
+                            <input name="title" class="input input-ghost input-lg w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Workflow title" 
                                 bind:value={task.name}
                             />
                         {:else}
@@ -381,7 +381,7 @@ ${JSON.stringify(runFormData)}
                                     <label for="task-title" class="flex gap-2 justify-between items-center">
                                         <span class="flex items-center gap-2">
                                             <PencilLine class="size-4" />
-                                            Task title
+                                            Workflow title
                                         </span>
                                         <input type="checkbox" class="toggle toggle-sm" id="task-title" 
                                             checked={showTaskTitle}
@@ -393,7 +393,7 @@ ${JSON.stringify(runFormData)}
                                     <label for="task-description" class="flex gap-2 justify-between items-center">
                                         <span class="flex items-center gap-2">
                                             <ReceiptText class="size-4" />
-                                            Task description
+                                            Workflow description
                                         </span>
                                         <input type="checkbox" class="toggle toggle-sm" id="task-description" 
                                             checked={showTaskDescription}
@@ -405,7 +405,7 @@ ${JSON.stringify(runFormData)}
                         </div>
                     </div>
                     {#if !showAlternateHeader && showTaskDescription}
-                        <input out:slide={{ axis: 'y' }} name="description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Task description"
+                        <input out:slide={{ axis: 'y' }} name="description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Workflow description"
                             bind:value={task.description}
                         />
                     {/if}

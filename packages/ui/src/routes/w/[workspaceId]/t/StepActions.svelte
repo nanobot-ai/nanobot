@@ -47,7 +47,7 @@
                 </span>
             </button>
         </li>
-        <li>
+        <!-- <li>
             <button class="justify-between disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-default"
                 onclick={() => {
                     // TODO: import step
@@ -60,7 +60,7 @@
                     <kbd class="kbd ">⌘</kbd> + click <span class="text-base-content/50">to add above</span>
                 </span>
             </button>
-        </li>
+        </li> -->
         <li>
             <button 
                 onclick={() => {
