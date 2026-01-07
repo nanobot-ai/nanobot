@@ -27,7 +27,7 @@
                 onclick={(e) => {
                     const currentIndex = task!.steps.findIndex((step) => step.id === item?.id);
                     const newStep = {
-                        id: task!.steps.length.toString(),
+                        id: `STEP_${task!.steps.length}.md`,
                         name: '',
                         description: '',
                         content: '',
