@@ -61,7 +61,7 @@ func dbWorkspaceToDisplay(workspace *WorkspaceRecord) types.Workspace {
 
 	// Extract attributes JSON
 	if len(workspace.Attributes) > 0 {
-		var attrs map[string]interface{}
+		var attrs map[string]any
 		if err := json.Unmarshal(workspace.Attributes, &attrs); err == nil {
 			display.Attributes = attrs
 		}

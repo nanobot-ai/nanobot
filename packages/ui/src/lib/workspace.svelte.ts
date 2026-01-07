@@ -221,6 +221,21 @@ export class WorkspaceInstance implements WorkspaceClient {
 
 		return chatInstance;
 	}
+
+	async runTask(uri: string, params?: Record<string, string>): Promise<string> {
+		return await this.#client.callMCPTool('chat', {
+			payload: {
+				type: 'tool',
+				payload: {
+					toolName: 'StartTask',
+					params: {
+						taskName: uri,
+						arguments: params ?? {}
+					}
+				}
+			}
+		});
+	}
 }
 
 export class WorkspaceService {

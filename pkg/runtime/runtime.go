@@ -18,6 +18,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/servers/capabilities"
 	"github.com/nanobot-ai/nanobot/pkg/servers/meta"
 	"github.com/nanobot-ai/nanobot/pkg/servers/resources"
+	"github.com/nanobot-ai/nanobot/pkg/servers/tasks"
 	"github.com/nanobot-ai/nanobot/pkg/servers/workspace"
 	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
@@ -142,6 +143,10 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 			return capabilities.NewServer(store, r.Service)
 		})
 	}
+
+	registry.AddServer("nanobot.tasks", func(string) mcp.MessageHandler {
+		return tasks.NewServer(r.Service)
+	})
 
 	return r, nil
 }

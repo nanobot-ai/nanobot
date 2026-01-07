@@ -122,6 +122,15 @@ export interface ChatRequest {
 	attachments?: Attachment[];
 }
 
+export interface ChatToolRequest {
+	id: string;
+	threadId: string;
+	toolName: string;
+	params?: Record<string, unknown>;
+	agent?: string;
+	attachments?: Attachment[];
+}
+
 export interface Attachment {
 	name?: string;
 	uri: string;

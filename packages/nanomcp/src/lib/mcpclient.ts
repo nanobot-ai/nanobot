@@ -1,585 +1,619 @@
 import {
-	type InitializationResult,
-	type ResourceContents,
-	type Resources,
-	UIPath,
+  type InitializationResult,
+  type ResourceContents,
+  type Resources,
+  UIPath,
 } from "./mcpclienttypes.ts";
 
 interface JSONRPCRequest {
-	jsonrpc: "2.0";
-	id: string;
-	method: string;
-	params?: unknown;
+  jsonrpc: "2.0";
+  id: string;
+  method: string;
+  params?: unknown;
 }
 
 interface JSONRPCResponse {
-	jsonrpc: "2.0";
-	id: string;
-	result?: unknown;
-	error?: {
-		code: number;
-		message: string;
-		data?: unknown;
-	};
+  jsonrpc: "2.0";
+  id: string;
+  result?: unknown;
+  error?: {
+    code: number;
+    message: string;
+    data?: unknown;
+  };
 }
 
 interface StoredSession {
-	sessionId: string;
-	initializeResult?: InitializationResult;
+  sessionId: string;
+  initializeResult?: InitializationResult;
 }
 
 // This is a simple MCP client that works for specifically how nanobot will reply. It makes
 // certain assumptions about session support and non-SSE responses to POSTs.
 export class SimpleClient {
-	readonly #url: string;
-	readonly #fetcher: typeof fetch;
-	#sessionId?: string;
-	#initializeResult?: InitializationResult;
-	#initializationPromise?: Promise<void>;
-	readonly #externalSession: boolean;
-	#logger: typeof console.log = console.log;
-	#sseConnection?: EventSource;
-	#sseSubscriptions = new Map<
-		string,
-		Set<(resource: ResourceContents) => void>
-	>();
+  readonly #url: string;
+  readonly #fetcher: typeof fetch;
+  #sessionId?: string;
+  #initializeResult?: InitializationResult;
+  #initializationPromise?: Promise<void>;
+  readonly #externalSession: boolean;
+  #logger: typeof console.log = console.log;
+  #sseConnection?: EventSource;
+  #sseSubscriptions = new Map<
+    string,
+    Set<(resource: ResourceContents) => void>
+  >();
 
-	constructor(opts?: {
-		path?: string;
-		baseUrl?: string;
-		fetcher?: typeof fetch;
-		workspaceId?: string;
-		workspaceShared?: boolean;
-		sessionId?: string;
-		logger?: typeof console.log;
-	}) {
-		const baseUrl = opts?.baseUrl || "";
-		const path = opts?.path || UIPath;
-		this.#url = `${baseUrl}${path}`;
-		this.#fetcher = opts?.fetcher || fetch;
-		this.#logger = opts?.logger || console.log;
-		if (opts?.workspaceId) {
-			this.#url += `${this.#url.includes("?") ? "&" : "?"}workspace=${opts.workspaceId}`;
-			if (opts.workspaceShared) {
-				this.#url += `&shared=true`;
-			}
-		}
+  constructor(opts?: {
+    path?: string;
+    baseUrl?: string;
+    fetcher?: typeof fetch;
+    workspaceId?: string;
+    workspaceShared?: boolean;
+    sessionId?: string;
+    logger?: typeof console.log;
+  }) {
+    const baseUrl = opts?.baseUrl || "";
+    const path = opts?.path || UIPath;
+    this.#url = `${baseUrl}${path}`;
+    this.#fetcher = opts?.fetcher || fetch;
+    this.#logger = opts?.logger || console.log;
+    if (opts?.workspaceId) {
+      this.#url += `${this.#url.includes("?") ? "&" : "?"}workspace=${opts.workspaceId}`;
+      if (opts.workspaceShared) {
+        this.#url += `&shared=true`;
+      }
+    }
 
-		// If sessionId provided in options, use it and mark as external
-		if (opts?.sessionId) {
-			this.#sessionId = opts.sessionId === "new" ? undefined : opts.sessionId;
-			this.#externalSession = true;
-		} else {
-			// Load session data from localStorage
-			const stored = this.#getStoredSession();
-			if (stored) {
-				this.#sessionId = stored.sessionId;
-				this.#initializeResult = stored.initializeResult;
-			}
-			this.#externalSession = false;
-		}
-	}
+    // If sessionId provided in options, use it and mark as external
+    if (opts?.sessionId) {
+      this.#sessionId = opts.sessionId === "new" ? undefined : opts.sessionId;
+      this.#externalSession = true;
+    } else {
+      // Load session data from localStorage
+      const stored = this.#getStoredSession();
+      if (stored) {
+        this.#sessionId = stored.sessionId;
+        this.#initializeResult = stored.initializeResult;
+      }
+      this.#externalSession = false;
+    }
+  }
 
-	async deleteSession(): Promise<void> {
-		try {
-			if (!this.#sessionId) {
-				return;
-			}
-			await this.#fetcher(this.#url, {
-				method: "DELETE",
-				headers: {
-					"Mcp-Session-Id": this.#sessionId,
-				},
-			});
-		} finally {
-			this.#clearSession();
-		}
-	}
+  async deleteSession(): Promise<void> {
+    try {
+      if (!this.#sessionId) {
+        return;
+      }
+      await this.#fetcher(this.#url, {
+        method: "DELETE",
+        headers: {
+          "Mcp-Session-Id": this.#sessionId,
+        },
+      });
+    } finally {
+      this.#clearSession();
+    }
+  }
 
-	#getStoredSession(): StoredSession | undefined {
-		if (typeof window === "undefined" || typeof localStorage === "undefined") {
-			return undefined;
-		}
-		const stored = localStorage.getItem(`mcp-session-${this.#url}`);
-		if (!stored) {
-			return undefined;
-		}
-		try {
-			return JSON.parse(stored) as StoredSession;
-		} catch (e) {
-			console.error("[SimpleClient] Failed to parse stored session:", e);
-			return undefined;
-		}
-	}
+  #getStoredSession(): StoredSession | undefined {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") {
+      return undefined;
+    }
+    const stored = localStorage.getItem(`mcp-session-${this.#url}`);
+    if (!stored) {
+      return undefined;
+    }
+    try {
+      return JSON.parse(stored) as StoredSession;
+    } catch (e) {
+      console.error("[SimpleClient] Failed to parse stored session:", e);
+      return undefined;
+    }
+  }
 
-	#storeSession(sessionId: string, initializeResult?: InitializationResult) {
-		if (typeof window === "undefined" || typeof localStorage === "undefined") {
-			return;
-		}
-		const session: StoredSession = {
-			sessionId,
-			initializeResult,
-		};
-		localStorage.setItem(`mcp-session-${this.#url}`, JSON.stringify(session));
-	}
+  #storeSession(sessionId: string, initializeResult?: InitializationResult) {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") {
+      return;
+    }
+    const session: StoredSession = {
+      sessionId,
+      initializeResult,
+    };
+    localStorage.setItem(`mcp-session-${this.#url}`, JSON.stringify(session));
+  }
 
-	#clearSession() {
-		if (typeof window === "undefined" || typeof localStorage === "undefined") {
-			return;
-		}
-		localStorage.removeItem(`mcp-session-${this.#url}`);
-		this.#sessionId = undefined;
-		this.#initializeResult = undefined;
-		// Close SSE connection if it's open
-		if (this.#sseConnection) {
-			this.#sseConnection.close();
-			this.#sseConnection = undefined;
-		}
-		this.#sseSubscriptions.clear();
-	}
+  #clearSession() {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") {
+      return;
+    }
+    localStorage.removeItem(`mcp-session-${this.#url}`);
+    this.#sessionId = undefined;
+    this.#initializeResult = undefined;
+    // Close SSE connection if it's open
+    if (this.#sseConnection) {
+      this.#sseConnection.close();
+      this.#sseConnection = undefined;
+    }
+    this.#sseSubscriptions.clear();
+  }
 
-	async getSessionDetails(): Promise<{
-		id: string;
-		initializeResult?: InitializationResult;
-	}> {
-		return {
-			id: await this.#ensureSession(),
-			initializeResult: this.#initializeResult,
-		};
-	}
+  async getSessionDetails(): Promise<{
+    id: string;
+    initializeResult?: InitializationResult;
+  }> {
+    return {
+      id: await this.#ensureSession(),
+      initializeResult: this.#initializeResult,
+    };
+  }
 
-	async #initialize(): Promise<void> {
-		// If already initializing, wait for that to complete
-		if (this.#initializationPromise) {
-			return this.#initializationPromise;
-		}
+  async #initialize(): Promise<void> {
+    // If already initializing, wait for that to complete
+    if (this.#initializationPromise) {
+      return this.#initializationPromise;
+    }
 
-		this.#initializationPromise = (async () => {
-			try {
-				// Step 1: Send initialize request
-				const initRequest: JSONRPCRequest = {
-					jsonrpc: "2.0",
-					id: crypto.randomUUID(),
-					method: "initialize",
-					params: {
-						protocolVersion: "2024-11-05",
-						capabilities: {},
-						clientInfo: {
-							name: "nanobot-ui",
-							version: "0.0.1",
-						},
-					},
-				};
+    this.#initializationPromise = (async () => {
+      try {
+        // Step 1: Send initialize request
+        const initRequest: JSONRPCRequest = {
+          jsonrpc: "2.0",
+          id: crypto.randomUUID(),
+          method: "initialize",
+          params: {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            clientInfo: {
+              name: "nanobot-ui",
+              version: "0.0.1",
+            },
+          },
+        };
 
-				const initResp = await this.#fetcher(this.#url, {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify(initRequest),
-				});
+        const initResp = await this.#fetcher(this.#url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify(initRequest),
+        });
 
-				if (!initResp.ok) {
-					throw new Error(
-						`Initialize failed: ${initResp.status} ${initResp.statusText}`,
-					);
-				}
+        if (!initResp.ok) {
+          throw new Error(
+            `Initialize failed: ${initResp.status} ${initResp.statusText} ${await initResp.text()}`,
+          );
+        }
 
-				// Extract session ID from response header
-				const sessionId = initResp.headers.get("Mcp-Session-Id");
-				if (!sessionId) {
-					throw new Error("No Mcp-Session-Id header in initialize response");
-				}
+        // Extract session ID from response header
+        const sessionId = initResp.headers.get("Mcp-Session-Id");
+        if (!sessionId) {
+          throw new Error("No Mcp-Session-Id header in initialize response");
+        }
 
-				// Parse response to check for errors
-				const initData = (await initResp.json()) as JSONRPCResponse;
-				if (initData.error) {
-					throw new Error(`Initialize error: ${initData.error}`);
-				}
+        // Parse response based on content type
+        const initData = await this.#parseResponse(initResp);
+        if (initData.error) {
+          throw new Error(
+            `Initialize error: ${JSON.stringify(initData.error)}`,
+          );
+        }
 
-				// Store session ID and initialize result
-				this.#sessionId = sessionId;
-				this.#initializeResult = initData.result as InitializationResult;
-				if (!this.#externalSession) {
-					this.#storeSession(sessionId, this.#initializeResult);
-				}
+        // Store session ID and initialize result
+        this.#sessionId = sessionId;
+        this.#initializeResult = initData.result as InitializationResult;
+        if (!this.#externalSession) {
+          this.#storeSession(sessionId, this.#initializeResult);
+        }
 
-				// Step 2: Send initialized notification
-				const initializedRequest: JSONRPCRequest = {
-					jsonrpc: "2.0",
-					id: crypto.randomUUID(),
-					method: "notifications/initialized",
-					params: {},
-				};
+        // Step 2: Send initialized notification
+        const initializedRequest: JSONRPCRequest = {
+          jsonrpc: "2.0",
+          id: crypto.randomUUID(),
+          method: "notifications/initialized",
+          params: {},
+        };
 
-				const initializedResp = await this.#fetcher(this.#url, {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						"Mcp-Session-Id": sessionId,
-					},
-					body: JSON.stringify(initializedRequest),
-				});
+        const initializedResp = await this.#fetcher(this.#url, {
+          method: "POST",
+          headers: {
+            Accept: "application/json, text/event-stream",
+            "Content-Type": "application/json",
+            "Mcp-Session-Id": sessionId,
+          },
+          body: JSON.stringify(initializedRequest),
+        });
 
-				if (!initializedResp.ok) {
-					throw new Error(
-						`Initialized notification failed: ${initializedResp.status} ${initializedResp.statusText}`,
-					);
-				}
-			} finally {
-				this.#initializationPromise = undefined;
-			}
-		})();
+        if (!initializedResp.ok) {
+          throw new Error(
+            `Initialized notification failed: ${initializedResp.status} ${initializedResp.statusText}`,
+          );
+        }
+      } finally {
+        this.#initializationPromise = undefined;
+      }
+    })();
 
-		return this.#initializationPromise;
-	}
+    return this.#initializationPromise;
+  }
 
-	async #ensureSession(): Promise<string> {
-		if (!this.#sessionId) {
-			await this.#initialize();
-		}
-		if (!this.#sessionId) {
-			throw new Error("Failed to establish session");
-		}
-		return this.#sessionId;
-	}
+  /**
+   * Parse response based on content type - handles both JSON and SSE formats
+   */
+  async #parseResponse(resp: Response): Promise<JSONRPCResponse> {
+    const contentType = resp.headers.get("Content-Type") || "";
 
-	async reply(id: string | number, result: unknown): Promise<void> {
-		const sessionId = await this.#ensureSession();
+    if (contentType.includes("text/event-stream")) {
+      // Parse SSE response - extract the last JSON message
+      const text = await resp.text();
+      const lines = text.split("\n");
+      let lastData = "";
 
-		const resp = await this.#fetcher(this.#url, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"Mcp-Session-Id": sessionId,
-			},
-			body: JSON.stringify({
-				jsonrpc: "2.0",
-				id,
-				result,
-			}),
-		});
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          lastData = line.slice(6);
+        }
+      }
 
-		// We expect a 204 No Content response or 202
-		if (resp.status === 204 || resp.status === 202) {
-			return;
-		}
+      if (lastData) {
+        return JSON.parse(lastData) as JSONRPCResponse;
+      }
+      throw new Error("No data in SSE response");
+    }
 
-		if (!resp.ok) {
-			const text = await resp.text();
-			this.#logger(`reply: ${resp.status}: ${resp.statusText}: ${text}`);
-			throw new Error(text);
-		}
+    // Default to JSON parsing
+    return (await resp.json()) as JSONRPCResponse;
+  }
 
-		try {
-			// check for a protocol error
-			const data = (await resp.json()) as JSONRPCResponse;
-			if (data.error) {
-				this.#logger(data.error);
-				throw Error(`${data.error.message}: ${JSON.stringify(data.error)}`);
-			}
-		} catch (e) {
-			// If it's already an Error, rethrow it
-			if (e instanceof Error && e.message !== "Unexpected end of JSON input") {
-				throw e;
-			}
-			// Otherwise ignore JSON parse errors
-			console.debug("[SimpleClient] Error parsing JSON in reply:", e);
-		}
-	}
+  async #ensureSession(): Promise<string> {
+    if (!this.#sessionId) {
+      await this.#initialize();
+    }
+    if (!this.#sessionId) {
+      throw new Error("Failed to establish session");
+    }
+    return this.#sessionId;
+  }
 
-	async exchange(
-		method: string,
-		params: unknown,
-		opts?: { abort?: AbortController },
-	): Promise<unknown> {
-		const sessionId = await this.#ensureSession();
+  async reply(id: string | number, result: unknown): Promise<void> {
+    const sessionId = await this.#ensureSession();
 
-		const request: JSONRPCRequest = {
-			jsonrpc: "2.0",
-			id: crypto.randomUUID(),
-			method,
-			params,
-		};
+    const resp = await this.#fetcher(this.#url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Mcp-Session-Id": sessionId,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id,
+        result,
+      }),
+    });
 
-		// Build query string for access logs
-		// Parse the URL to extract existing query params
-		const [basePath, existingQuery] = this.#url.split("?");
-		const queryParams = new URLSearchParams(existingQuery || "");
+    // We expect a 204 No Content response or 202
+    if (resp.status === 204 || resp.status === 202) {
+      return;
+    }
 
-		queryParams.set("method", method);
+    if (!resp.ok) {
+      const text = await resp.text();
+      this.#logger(`reply: ${resp.status}: ${resp.statusText}: ${text}`);
+      throw new Error(text);
+    }
 
-		// If this is a tools/call, add the tool name to the query string
-		if (
-			method === "tools/call" &&
-			params &&
-			typeof params === "object" &&
-			"name" in params
-		) {
-			queryParams.set("toolcallname", String(params.name));
-		}
+    try {
+      // check for a protocol error
+      const data = (await resp.json()) as JSONRPCResponse;
+      if (data.error) {
+        this.#logger(data.error);
+        throw Error(`${data.error.message}: ${JSON.stringify(data.error)}`);
+      }
+    } catch (e) {
+      // If it's already an Error, rethrow it
+      if (e instanceof Error && e.message !== "Unexpected end of JSON input") {
+        throw e;
+      }
+      // Otherwise ignore JSON parse errors
+      console.debug("[SimpleClient] Error parsing JSON in reply:", e);
+    }
+  }
 
-		const url = `${basePath}?${queryParams.toString()}`;
+  async exchange(
+    method: string,
+    params: unknown,
+    opts?: { abort?: AbortController },
+  ): Promise<unknown> {
+    const sessionId = await this.#ensureSession();
 
-		const resp = await this.#fetcher(url, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"Mcp-Session-Id": sessionId,
-			},
-			signal: opts?.abort?.signal,
-			body: JSON.stringify(request),
-		});
+    const request: JSONRPCRequest = {
+      jsonrpc: "2.0",
+      id: crypto.randomUUID(),
+      method,
+      params,
+    };
 
-		// Handle 404 - session expired or invalid
-		if (resp.status === 404) {
-			// If this is an external session, don't try to recreate it
-			if (this.#externalSession) {
-				throw new Error(
-					"Session not found (404). External sessions cannot be recreated.",
-				);
-			}
-			this.#clearSession();
-			// Retry once with new session
-			return this.exchange(method, params, { abort: opts?.abort });
-		}
+    // Build query string for access logs
+    // Parse the URL to extract existing query params
+    const [basePath, existingQuery] = this.#url.split("?");
+    const queryParams = new URLSearchParams(existingQuery || "");
 
-		if (!resp.ok) {
-			const text = await resp.text();
-			this.#logger(`exchange: ${resp.status}: ${resp.statusText}: ${text}`);
-			throw new Error(text);
-		}
+    queryParams.set("method", method);
 
-		const data = (await resp.json()) as JSONRPCResponse;
-		if (data.error) {
-			this.#logger(data.error);
-			throw new Error(`${data.error.message}: ${JSON.stringify(data.error)}`);
-		}
+    // If this is a tools/call, add the tool name to the query string
+    if (
+      method === "tools/call" &&
+      params &&
+      typeof params === "object" &&
+      "name" in params
+    ) {
+      queryParams.set("toolcallname", String(params.name));
+    }
 
-		return data.result;
-	}
+    const url = `${basePath}?${queryParams.toString()}`;
 
-	async callMCPTool<T>(
-		name: string,
-		opts?: {
-			payload?: unknown;
-			progressToken?: string;
-			async?: boolean;
-			abort?: AbortController;
-		},
-	): Promise<T> {
-		const result = await this.exchange(
-			"tools/call",
-			{
-				name: name,
-				arguments: opts?.payload || {},
-				...(opts?.async && {
-					_meta: {
-						"ai.nanobot.async": true,
-						progressToken: opts?.progressToken,
-					},
-				}),
-			},
-			{ abort: opts?.abort },
-		);
+    const resp = await this.#fetcher(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json, text/event-stream",
+        "Content-Type": "application/json",
+        "Mcp-Session-Id": sessionId,
+      },
+      signal: opts?.abort?.signal,
+      body: JSON.stringify(request),
+    });
 
-		// If the result has a structuredResult field, use that, otherwise return the full response
-		if (result && typeof result === "object" && "structuredContent" in result) {
-			return (result as { structuredContent: T }).structuredContent;
-		}
+    // Handle 404 - session expired or invalid
+    if (resp.status === 404) {
+      // If this is an external session, don't try to recreate it
+      if (this.#externalSession) {
+        throw new Error(
+          "Session not found (404). External sessions cannot be recreated.",
+        );
+      }
+      this.#clearSession();
+      // Retry once with new session
+      return this.exchange(method, params, { abort: opts?.abort });
+    }
 
-		return result as T;
-	}
+    if (!resp.ok) {
+      const text = await resp.text();
+      this.#logger(`exchange: ${resp.status}: ${resp.statusText}: ${text}`);
+      throw new Error(text);
+    }
 
-	async listResources<T extends Resources = Resources>(opts?: {
-		prefix?: string | string[];
-		abort?: AbortController;
-	}): Promise<T> {
-		const prefixes = opts?.prefix
-			? Array.isArray(opts.prefix)
-				? opts.prefix
-				: [opts.prefix]
-			: undefined;
+    // Parse response based on content type
+    const data = await this.#parseResponse(resp);
+    if (data.error) {
+      this.#logger(data.error);
+      throw new Error(`${data.error.message}: ${JSON.stringify(data.error)}`);
+    }
 
-		const result = (await this.exchange(
-			"resources/list",
-			{
-				...(prefixes && {
-					_meta: {
-						"ai.nanobot": {
-							prefix: prefixes.length === 1 ? prefixes[0] : prefixes,
-						},
-					},
-				}),
-			},
-			{ abort: opts?.abort },
-		)) as T;
+    return data.result;
+  }
 
-		if (prefixes) {
-			return {
-				...result,
-				resources: result.resources.filter(({ uri }) =>
-					prefixes.some((prefix) => uri.startsWith(prefix)),
-				),
-			};
-		}
+  async callMCPTool<T>(
+    name: string,
+    opts?: {
+      payload?: unknown;
+      progressToken?: string;
+      async?: boolean;
+      abort?: AbortController;
+    },
+  ): Promise<T> {
+    const result = await this.exchange(
+      "tools/call",
+      {
+        name: name,
+        arguments: opts?.payload || {},
+        ...(opts?.async && {
+          _meta: {
+            "ai.nanobot.async": true,
+            progressToken: opts?.progressToken,
+          },
+        }),
+      },
+      { abort: opts?.abort },
+    );
 
-		return result;
-	}
+    // If the result has a structuredResult field, use that, otherwise return the full response
+    if (result && typeof result === "object" && "structuredContent" in result) {
+      return (result as { structuredContent: T }).structuredContent;
+    }
 
-	async readResource(
-		uri: string,
-		opts?: { abort?: AbortController },
-	): Promise<{ contents: ResourceContents[] }> {
-		const result = await this.exchange(
-			"resources/read",
-			{ uri },
-			{ abort: opts?.abort },
-		);
-		return result as { contents: ResourceContents[] };
-	}
+    return result as T;
+  }
 
-	/**
-	 * Ensure SSE connection is established
-	 */
-	async #ensureSSEConnection(): Promise<void> {
-		if (
-			this.#sseConnection &&
-			this.#sseConnection.readyState !== EventSource.CLOSED
-		) {
-			return;
-		}
+  async listResources<T extends Resources = Resources>(opts?: {
+    prefix?: string | string[];
+    abort?: AbortController;
+  }): Promise<T> {
+    const prefixes = opts?.prefix
+      ? Array.isArray(opts.prefix)
+        ? opts.prefix
+        : [opts.prefix]
+      : undefined;
 
-		// Ensure we have a session before connecting
-		await this.#ensureSession();
+    const result = (await this.exchange(
+      "resources/list",
+      {
+        ...(prefixes && {
+          _meta: {
+            "ai.nanobot": {
+              prefix: prefixes.length === 1 ? prefixes[0] : prefixes,
+            },
+          },
+        }),
+      },
+      { abort: opts?.abort },
+    )) as T;
 
-		// Build SSE URL
-		const [basePath, existingQuery] = this.#url.split("?");
-		const queryParams = new URLSearchParams(existingQuery || "");
-		queryParams.set("stream", "true");
-		const sseUrl = `${basePath}?${queryParams.toString()}`;
+    if (prefixes) {
+      return {
+        ...result,
+        resources: result.resources.filter(({ uri }) =>
+          prefixes.some((prefix) => uri.startsWith(prefix)),
+        ),
+      };
+    }
 
-		// Create EventSource connection
-		this.#sseConnection = new EventSource(sseUrl);
+    return result;
+  }
 
-		// Handle incoming messages
-		this.#sseConnection.onmessage = (event) => {
-			try {
-				const message = JSON.parse(event.data) as JSONRPCResponse & {
-					method?: string;
-					params?: { uri?: string };
-				};
+  async readResource(
+    uri: string,
+    opts?: { abort?: AbortController },
+  ): Promise<{ contents: ResourceContents[] }> {
+    const result = await this.exchange(
+      "resources/read",
+      { uri },
+      { abort: opts?.abort },
+    );
+    return result as { contents: ResourceContents[] };
+  }
 
-				// Check if this is a resource update notification
-				if (
-					message.method === "notifications/resources/updated" &&
-					message.params?.uri
-				) {
-					const uri = message.params.uri;
+  /**
+   * Ensure SSE connection is established
+   */
+  async #ensureSSEConnection(): Promise<void> {
+    if (
+      this.#sseConnection &&
+      this.#sseConnection.readyState !== EventSource.CLOSED
+    ) {
+      return;
+    }
 
-					// Find all subscriptions that match this URI prefix
-					for (const [prefix, callbacks] of this.#sseSubscriptions.entries()) {
-						if (uri.startsWith(prefix)) {
-							// Fetch the updated resource details
-							this.#fetchResourceDetails(uri).then((resource) => {
-								if (resource) {
-									callbacks.forEach((callback) => {
-										callback(resource);
-									});
-								}
-							});
-						}
-					}
-				}
-			} catch (e) {
-				console.error("[SimpleClient] Failed to parse SSE message:", e);
-			}
-		};
+    // Ensure we have a session before connecting
+    await this.#ensureSession();
 
-		this.#sseConnection.onerror = (error) => {
-			console.error("[SimpleClient] SSE connection error:", error);
-			// Connection will automatically try to reconnect
-		};
+    // Build SSE URL
+    const [basePath, existingQuery] = this.#url.split("?");
+    const queryParams = new URLSearchParams(existingQuery || "");
+    queryParams.set("stream", "true");
+    const sseUrl = `${basePath}?${queryParams.toString()}`;
 
-		this.#sseConnection.onopen = () => {
-			this.#logger("[SimpleClient] SSE connection established");
-		};
-	}
+    // Create EventSource connection
+    this.#sseConnection = new EventSource(sseUrl);
 
-	/**
-	 * Fetch resource details for a given URI
-	 */
-	async #fetchResourceDetails(uri: string): Promise<ResourceContents | null> {
-		try {
-			// Use resources/read to get the resource details
-			const result = await this.readResource(uri);
-			if (result.contents?.length) {
-				return result.contents[0] as ResourceContents;
-			}
-		} catch (e) {
-			this.#logger(
-				`[SimpleClient] Failed to fetch resource ${uri}: ${e instanceof Error ? e.message : String(e)}`,
-			);
-		}
-		return null;
-	}
+    // Handle incoming messages
+    this.#sseConnection.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data) as JSONRPCResponse & {
+          method?: string;
+          params?: { uri?: string };
+        };
 
-	/**
-	 * Watch for resource changes with a given prefix.
-	 * Returns a cleanup function to stop watching.
-	 *
-	 * @param prefix - URI prefix to watch (e.g., 'workspace://')
-	 * @param callback - Called when a resource changes with the updated resource
-	 * @returns Cleanup function to stop watching
-	 */
-	watchResource(
-		prefix: string,
-		callback: (resource: ResourceContents) => void,
-	): () => void {
-		// Add callback to subscriptions
-		if (!this.#sseSubscriptions.has(prefix)) {
-			this.#sseSubscriptions.set(prefix, new Set());
-		}
-		this.#sseSubscriptions.get(prefix)?.add(callback);
+        // Check if this is a resource update notification
+        if (
+          message.method === "notifications/resources/updated" &&
+          message.params?.uri
+        ) {
+          const uri = message.params.uri;
 
-		// Ensure SSE connection is established
-		this.#ensureSSEConnection().then(async () => {
-			// Subscribe to resource changes for this prefix
-			try {
-				await this.exchange("resources/subscribe", { uri: prefix });
-				this.#logger(
-					`[SimpleClient] Subscribed to resources with prefix: ${prefix}`,
-				);
-			} catch (e) {
-				console.error(`[SimpleClient] Failed to subscribe to ${prefix}:`, e);
-			}
-		});
+          // Find all subscriptions that match this URI prefix
+          for (const [prefix, callbacks] of this.#sseSubscriptions.entries()) {
+            if (uri.startsWith(prefix)) {
+              // Fetch the updated resource details
+              this.#fetchResourceDetails(uri).then((resource) => {
+                if (resource) {
+                  callbacks.forEach((callback) => {
+                    callback(resource);
+                  });
+                }
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[SimpleClient] Failed to parse SSE message:", e);
+      }
+    };
 
-		// Return cleanup function
-		return () => {
-			const callbacks = this.#sseSubscriptions.get(prefix);
-			if (callbacks) {
-				callbacks.delete(callback);
-				if (callbacks.size === 0) {
-					this.#sseSubscriptions.delete(prefix);
-					// Optionally unsubscribe from server
-					this.exchange("resources/unsubscribe", { uri: prefix }).catch((e) => {
-						console.error(
-							`[SimpleClient] Failed to unsubscribe from ${prefix}:`,
-							e,
-						);
-					});
-				}
-			}
-			this.#logger(
-				`[SimpleClient] Stopped watching resources with prefix: ${prefix}`,
-			);
+    this.#sseConnection.onerror = (error) => {
+      console.error("[SimpleClient] SSE connection error:", error);
+      // Connection will automatically try to reconnect
+    };
 
-			// Close SSE connection if no more subscriptions
-			if (this.#sseSubscriptions.size === 0 && this.#sseConnection) {
-				this.#sseConnection.close();
-				this.#sseConnection = undefined;
-			}
-		};
-	}
+    this.#sseConnection.onopen = () => {
+      this.#logger("[SimpleClient] SSE connection established");
+    };
+  }
+
+  /**
+   * Fetch resource details for a given URI
+   */
+  async #fetchResourceDetails(uri: string): Promise<ResourceContents | null> {
+    try {
+      // Use resources/read to get the resource details
+      const result = await this.readResource(uri);
+      if (result.contents?.length) {
+        return result.contents[0] as ResourceContents;
+      }
+    } catch (e) {
+      this.#logger(
+        `[SimpleClient] Failed to fetch resource ${uri}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+    return null;
+  }
+
+  /**
+   * Watch for resource changes with a given prefix.
+   * Returns a cleanup function to stop watching.
+   *
+   * @param prefix - URI prefix to watch (e.g., 'workspace://')
+   * @param callback - Called when a resource changes with the updated resource
+   * @returns Cleanup function to stop watching
+   */
+  watchResource(
+    prefix: string,
+    callback: (resource: ResourceContents) => void,
+  ): () => void {
+    // Add callback to subscriptions
+    if (!this.#sseSubscriptions.has(prefix)) {
+      this.#sseSubscriptions.set(prefix, new Set());
+    }
+    this.#sseSubscriptions.get(prefix)?.add(callback);
+
+    // Ensure SSE connection is established
+    this.#ensureSSEConnection().then(async () => {
+      // Subscribe to resource changes for this prefix
+      try {
+        await this.exchange("resources/subscribe", { uri: prefix });
+        this.#logger(
+          `[SimpleClient] Subscribed to resources with prefix: ${prefix}`,
+        );
+      } catch (e) {
+        console.error(`[SimpleClient] Failed to subscribe to ${prefix}:`, e);
+      }
+    });
+
+    // Return cleanup function
+    return () => {
+      const callbacks = this.#sseSubscriptions.get(prefix);
+      if (callbacks) {
+        callbacks.delete(callback);
+        if (callbacks.size === 0) {
+          this.#sseSubscriptions.delete(prefix);
+          // Optionally unsubscribe from server
+          this.exchange("resources/unsubscribe", { uri: prefix }).catch((e) => {
+            console.error(
+              `[SimpleClient] Failed to unsubscribe from ${prefix}:`,
+              e,
+            );
+          });
+        }
+      }
+      this.#logger(
+        `[SimpleClient] Stopped watching resources with prefix: ${prefix}`,
+      );
+
+      // Close SSE connection if no more subscriptions
+      if (this.#sseSubscriptions.size === 0 && this.#sseConnection) {
+        this.#sseConnection.close();
+        this.#sseConnection = undefined;
+      }
+    };
+  }
 }

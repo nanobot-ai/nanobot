@@ -16,7 +16,8 @@ import {
 	type UploadedFile,
 	type UploadingFile,
 	type Resource,
-	type Resources
+	type Resources,
+	type ChatToolRequest
 } from './types';
 import { getNotificationContext } from './context/notifications.svelte';
 import { SimpleClient } from './mcpclient';
@@ -215,6 +216,37 @@ export class ChatAPI {
 				};
 			}
 		});
+	}
+
+	async sendChatToolCall(request: ChatToolRequest): Promise<ChatResult> {
+		await this.callMCPTool<CallToolResult>('chat', {
+			payload: {
+				type: 'tool',
+				payload: {
+					toolName: request.toolName,
+					params: request.params
+				}
+			},
+			sessionId: request.threadId,
+			progressToken: request.id,
+			async: true
+		});
+		const message: ChatMessage = {
+			id: request.id,
+			role: 'assistant',
+			created: now(),
+			items: [
+				{
+					id: request.id + '_0',
+					type: 'tool',
+					name: request.toolName,
+					arguments: JSON.stringify(request.params)
+				}
+			]
+		};
+		return {
+			message
+		};
 	}
 
 	async sendMessage(request: ChatRequest): Promise<ChatResult> {
@@ -611,6 +643,57 @@ export class ChatService {
 				threadId: this.chatId,
 				message: message,
 				attachments: [...this.uploadedFiles, ...(attachments || [])]
+			});
+			this.uploadedFiles = [];
+
+			this.messages = appendMessage(this.messages, response.message);
+			return new Promise<ChatResult | void>((resolve) => {
+				this.internalOnChatDone.push(() => {
+					this.isLoading = false;
+					const i = this.messages.findIndex((m) => m.id === response.message.id);
+					if (i !== -1 && i <= this.messages.length) {
+						resolve({
+							message: this.messages[i + 1]
+						});
+					} else {
+						resolve();
+					}
+				});
+			});
+		} catch (error) {
+			this.isLoading = false;
+			this.messages = appendMessage(this.messages, {
+				id: crypto.randomUUID(),
+				role: 'assistant',
+				created: now(),
+				items: [
+					{
+						id: crypto.randomUUID(),
+						type: 'text',
+						text: `Sorry, I couldn't send your message. Please try again. Error: ${error}`
+					}
+				]
+			});
+		}
+	};
+
+	sendToolCall = async (toolName: string, params?: Record<string, unknown>) => {
+		if (!toolName.trim() || this.isLoading) return;
+
+		console.log('loading');
+
+		this.isLoading = true;
+
+		if (!this.chatId) {
+			await this.newChat();
+		}
+
+		try {
+			const response = await this.api.sendChatToolCall({
+				id: crypto.randomUUID(),
+				threadId: this.chatId,
+				toolName,
+				params
 			});
 			this.uploadedFiles = [];
 
