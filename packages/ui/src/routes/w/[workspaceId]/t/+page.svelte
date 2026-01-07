@@ -10,7 +10,7 @@
 </script>
 
 <svelte:head>
-    <title>Nanobot | Tasks</title>
+    <title>Nanobot | Workflows</title>
 </svelte:head>
 
 {#if runOnly}

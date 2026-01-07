@@ -189,21 +189,21 @@
 			<!-- Threads and Workspaces list -->
 			<div class="overflow-y-auto h-[calc(100%-3.5rem)] {!isSidebarCollapsed ? 'min-w-80' : ''}" bind:this={scrollContainer}>
 				<div class="flex flex-col">
-					<!-- Threads section (takes up ~40% of available space) -->
-					<div class='shrink-0'>
-						<Threads
-							{threads}
-							onRename={handleRenameThread}
-							onDelete={handleDeleteThread}
-							{isLoading}
-							onThreadClick={closeMobileSidebar}
-							{inverse}
-						/>
-					</div>
-
 					{#if showWorkspaces}
 						<div class="shrink-0">
 							<Workspaces scrollContainerEl={scrollContainer} {inverse} />
+						</div>
+					{:else}
+						<!-- Threads section (takes up ~40% of available space) -->
+						<div class='shrink-0'>
+							<Threads
+								{threads}
+								onRename={handleRenameThread}
+								onDelete={handleDeleteThread}
+								{isLoading}
+								onThreadClick={closeMobileSidebar}
+								{inverse}
+							/>
 						</div>
 					{/if}
 
