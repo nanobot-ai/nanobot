@@ -13,12 +13,13 @@
 	import type { Chat } from '$lib/types';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { sharedChat } from '$lib/stores/chat.svelte';
 	import Workspaces from '$lib/components/Workspaces.svelte';
 
 	let { children } = $props();
 
 	let inverse = $derived(page.data.inverse ?? false);
-	let showWorkspaces = $derived(page.data.showWorkspaces ?? false);
+	let showWorkspaces = $state(false);
 
 	let threads = $state<Chat[]>([]);
 	let isLoading = $state(true);
@@ -78,6 +79,19 @@
 				const logoUrlAttribute = getComputedStyle(document.documentElement).getPropertyValue('--logo-url');
 				currentLogoUrl = logoUrlAttribute || '/assets/nanobot.svg';
 			});
+		}
+	})
+
+	$effect(() => {
+		const chat = sharedChat.current;
+		if (chat?.api) {
+			chat.api.capabilities().then((caps) => {
+				showWorkspaces = caps?.workspace?.supported === true;
+			}).catch(() => {
+				showWorkspaces = false;
+			});
+		} else {
+			showWorkspaces = false;
 		}
 	})
 

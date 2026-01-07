@@ -3,17 +3,19 @@
 	import { ChatService } from '$lib/chat.svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
+	import { setSharedChat } from '$lib/stores/chat.svelte';
 	import ThreadFromChat from "$lib/components/ThreadFromChat.svelte";
 
 	const chat = new ChatService();
 	let doClose = true;
 
+	// Share the chat instance immediately so layout can access it
+	setSharedChat(chat);
+
 	$effect(() => {
 		if (chat.chatId) {
 			doClose = false;
-			page.data.chat = chat;
 			goto(resolve(`/c/${chat.chatId}`));
 		}
 	});

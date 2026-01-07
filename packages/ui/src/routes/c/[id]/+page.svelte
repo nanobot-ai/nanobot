@@ -1,16 +1,22 @@
 <script lang="ts">
 	import '$lib/../app.css';
 	import { page } from '$app/state';
-	import Thread from '$lib/components/Thread.svelte';
 	import { ChatService } from '$lib/chat.svelte';
 	import { onDestroy } from 'svelte';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
+	import { sharedChat, setSharedChat, clearSharedChat } from '$lib/stores/chat.svelte';
 	import Workspace from '$lib/components/Workspace.svelte';
 	import ThreadFromChat from "$lib/components/ThreadFromChat.svelte";
 
-	// The existing chat might have been set by / so don't recreate it because that will
-	// loose the event stream.
-	const chat = page.data.chat || new ChatService();
+	// Reuse shared chat if available (e.g., from / page), otherwise create new
+	const chat = sharedChat.current && sharedChat.current.chatId === page.params.id ? sharedChat.current : new ChatService();
+	
+	// Ensure the chat is always shared (for direct navigation to /c/[id])
+	if (!chat.chatId) {
+		console.log('new chat');
+		setSharedChat(chat);
+	}
+	
 	const notification = getNotificationContext();
 
 	$effect(() => {
@@ -22,6 +28,7 @@
 	});
 
 	onDestroy(() => {
+		clearSharedChat();
 		chat.close();
 	});
 </script>
