@@ -582,11 +582,11 @@ ${JSON.stringify(runFormData)}
                         </div>  
                     {/if}
 
-                    <button class="float-right btn btn-lg btn-circle btn-primary self-end" onclick={async () => {
+                    <button class="float-right btn btn-lg btn-circle btn-primary self-end tooltip tooltip-left" onclick={async () => {
                         showMessageInput = !showMessageInput;
                         await tick();
                         toggleableMessageInput?.focus();
-                    }}>
+                    }} data-tip={showMessageInput ? 'Hide chat' : 'Show chat'}>
                         <MessageCircleMore class="size-6" />
                     </button>
                 </div>

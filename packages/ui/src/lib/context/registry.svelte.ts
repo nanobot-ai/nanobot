@@ -57,6 +57,7 @@ export function createRegistryStore(): RegistryStore {
 			nextCursor = data.metadata.nextCursor ?? null;
 			servers = data.servers.map((server) => server.server);
 
+			// to fetch all but TODO: change to pagination
 			while (nextCursor) {
 				const response = await globalThis.fetch(
 					`${env.PUBLIC_REGISTRY_ENDPOINT}?cursor=${nextCursor}`
