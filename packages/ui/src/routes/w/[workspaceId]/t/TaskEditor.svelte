@@ -24,7 +24,7 @@
 	import { ChatService, type ToolCallInfo } from '$lib/chat.svelte';
 	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
-	import { sharedChat } from '$lib/stores/chat.svelte';
+	import { setSharedChat, sharedChat } from '$lib/stores/chat.svelte';
 
     type Props = {
         workspaceId: string;
@@ -139,19 +139,31 @@
     onMount(() => {
         workspace = workspaceService.getWorkspace(workspaceId);
         registryStore.fetch();
-
-        sharedChat.current?.setCallbacks({
-            onFileModified: handleFileModified,
-            onChatDone: () => {
-                console.debug('Chat done, reloading workspace files');
-                workspace?.load();
-            }
-        });
     });
     
     onDestroy(() => {
         sharedChat.current?.close();
     });
+
+    $effect(() => {
+        if (workspace && !sharedChat.current) {
+            initChat();
+        }
+    })
+
+    async function initChat() {
+        const chat = await workspace?.newSession({ editor: true });
+        if (chat) {
+            chat.setCallbacks({
+                onFileModified: handleFileModified,
+                onChatDone: () => {
+                    console.debug('Chat done, reloading workspace files');
+                    workspace?.load();
+                }
+            });
+            setSharedChat(chat);
+        }
+    }
 
     function debouncedSave() {
         if (saveTimeout) {

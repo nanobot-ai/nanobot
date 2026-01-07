@@ -13,7 +13,6 @@
 	
 	// Ensure the chat is always shared (for direct navigation to /c/[id])
 	if (!chat.chatId) {
-		console.log('new chat');
 		setSharedChat(chat);
 	}
 	

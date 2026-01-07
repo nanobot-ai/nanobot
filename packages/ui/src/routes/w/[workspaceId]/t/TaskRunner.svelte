@@ -7,8 +7,8 @@
 	import type { Input, Task } from "./types";
 	import { fade, fly, slide } from "svelte/transition";
 	import { LoaderCircle, Play, Square, Wrench } from "@lucide/svelte";
-	import { ChatService } from "$lib/chat.svelte";
 	import Messages from "$lib/components/Messages.svelte";
+	import { setSharedChat, sharedChat } from "$lib/stores/chat.svelte";
 
     type Props = {
         workspaceId: string;
@@ -21,7 +21,6 @@
     const registry = getRegistryContext();
 
     const workspaceService = new WorkspaceService();
-    const chat = new ChatService();
     
     let workspace = $state<WorkspaceClient | null>(null);
     let task = $state<Task | null>(null);
@@ -52,9 +51,22 @@
             registryStore.fetch();
         }
     });
+
+    async function initChat() {
+        const chat = await workspace?.newSession({ editor: true });
+        if (chat) {
+            setSharedChat(chat);
+        }
+    }
+
+    $effect(() => {
+        if (workspace && !sharedChat.current) {
+            initChat();
+        }
+    })
     
     onDestroy(() => {
-        chat.close();
+        sharedChat.current?.close();
     });
 
     async function compileTask(id: string, files: WorkspaceFile[]) {
@@ -93,7 +105,7 @@
     });
 
     $effect(() => {
-        if (!chat.isLoading && loading) {
+        if (!sharedChat.current?.isLoading && loading) {
             untrack(() => loading = false);
             completed = true;
         }
@@ -103,12 +115,12 @@
         if (disabled) return;
         if (loading) {
             canceling = true;
-            chat.close();
+            sharedChat.current?.close();
             return;
         }
         
         // TODO: change below to hit running task with arguments once available
-        chat.sendMessage('Write a very long story about the history of the universe. It should be a 1 minute read at least.');
+        sharedChat.current?.sendMessage('Write a very long story about the history of the universe. It should be a 1 minute read at least.');
         setTimeout(() => {
             loading = true
         }, 300);
@@ -207,7 +219,7 @@
         {#if loading && !canceling}
             <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-48 overflow-hidden flex flex-col justify-end md:w-2xl w-full" id="thread-process">
                 <div class="absolute inset-x-0 top-0 h-16 bg-linear-to-b from-base-200 dark:from-base-100 to-transparent z-10 pointer-events-none"></div>
-                <Messages messages={chat.messages} onSend={chat.sendMessage} isLoading={chat.isLoading} agent={chat.agent} />
+                <Messages messages={sharedChat.current?.messages ?? []} onSend={sharedChat.current?.sendMessage} isLoading={sharedChat.current?.isLoading ?? false} agent={sharedChat.current?.agent ?? undefined} />
             </div>
         {/if}
     {:else}
