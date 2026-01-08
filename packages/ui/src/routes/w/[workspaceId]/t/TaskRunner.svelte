@@ -6,7 +6,7 @@
 	import { convertToTask } from "./utils";
 	import type { Input, Task } from "./types";
 	import { fade, fly, slide } from "svelte/transition";
-	import { Circle, CircleCheck, LoaderCircle, Play, Square, Wrench } from "@lucide/svelte";
+	import { Circle, CircleCheck, ListTodo, LoaderCircle, Play, Square, Wrench } from "@lucide/svelte";
 	import { setSharedChat, sharedChat } from "$lib/stores/chat.svelte";
 	import { SvelteMap } from "svelte/reactivity";
 	
@@ -180,10 +180,15 @@
             {#if loading}
                 <div class="md:w-4xl p-4 w-full flex flex-col justify-center items-center z-20">
                     <div class="hero w-full bg-base-100 dark:bg-base-200 rounded-box shadow-xs dark:border-base-300 border-transparent border">
-                        <div class="hero-content w-full grow flex-col md:flex-row gap-4">
-                            <div class="px-4">
-                                <h4 class="text-2xl font-semibold">{task.name}</h4>
-                                <p class="font-light text-sm text-base-content/50">Your task is currently running. Please wait a moment...</p>
+                        <div class="hero-content w-full grow flex-col md:flex-row">
+                            <div class="px-4 flex items-center gap-2">
+                                <div class="rounded-full bg-primary/10 p-2 border-primary border-2 animate-pulse w-fit">
+                                    <ListTodo class="size-8 text-primary" />
+                                </div>
+                                <div class="w-xs">
+                                    <h4 class="mt-2 text-2xl font-semibold">{task.name}</h4>
+                                    <p class="font-light text-sm text-base-content/50">Your task is currently running. Please wait a moment...</p>
+                                </div>
                             </div>
                             <ul in:fade class="timeline timeline-vertical timeline-compact mt-4 grow">
                                 {#each task.steps as step, index (step.id)}
