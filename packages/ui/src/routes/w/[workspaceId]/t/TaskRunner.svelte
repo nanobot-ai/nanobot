@@ -190,7 +190,7 @@
                                     <p class="font-light text-sm text-base-content/50">Your task is currently running. Please wait a moment...</p>
                                 </div>
                             </div>
-                            <ul in:fade class="timeline timeline-vertical timeline-compact mt-4 grow">
+                            <ul in:fade class="timeline timeline-vertical timeline-compact grow">
                                 {#each task.steps as step, index (step.id)}
                                     <li>
                                         {#if index > 0}
