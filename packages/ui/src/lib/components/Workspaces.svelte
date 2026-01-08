@@ -202,8 +202,8 @@
             <ChevronDown class="size-4 chevron-open" />
         </button>
         {#if editingWorkspace?.id !== workspace.id}
-            <Folder class="size-4 shrink-0 folder-closed" style="color: {workspace.color};" />
-            <FolderOpen class="size-4 shrink-0 folder-open" style="color: {workspace.color};" />
+            <Folder class="size-4 shrink-0 folder-closed" style="color: {workspace.color || '#000'}; fill: color-mix(in oklab, {workspace.color || '#000'} 50%, var(--color-base-100))" />
+            <FolderOpen class="size-4 shrink-0 folder-open" style="color: {workspace.color || '#000'}; fill: color-mix(in oklab, {workspace.color || '#000'} 50%, var(--color-base-100))" />
         {/if}
         {#if editingWorkspace && editingWorkspace?.id === workspace.id}
             <input
