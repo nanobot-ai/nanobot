@@ -11,6 +11,7 @@
 	import ConfirmDelete from "./ConfirmDelete.svelte";
 	import { getNotificationContext } from "$lib/context/notifications.svelte";
 	import { page } from "$app/state";
+    import * as mocks from '$lib/mocks';
 
     interface Props {
         inverse?: boolean;
@@ -55,13 +56,9 @@
     let selectedColor = $state<string>('');
     let summaryPointerDownTime = 0;
 
-    const mockedSharedWorkspaces = $state<Workspace[]>([{
-        id: 'shared',
-        created: new Date().toISOString(),
-        name: 'Onboarding Shared Example',
-        color: '#3b82f6',
-        order: 0,
-    }]);
+    let workspaces = $derived([...workspaceService.workspaces, mocks.workspace]);
+    let sharedWorkspaces = $state<Workspace[]>(mocks.sharedWorkspaces);
+    let workspacePermissions = $state(mocks.workspacePermissions);
 
     onMount(() => {
         loadWorkspaces();
@@ -120,7 +117,7 @@
             return;
         }
 
-        const workspace = workspaceService.workspaces.find((w) => w.id === editingWorkspace?.id);
+        const workspace = workspaces.find((w) => w.id === editingWorkspace?.id);
         if (!workspace) {
             notifications.error('Workspace not found', 'The workspace you are trying to edit does not exist.');
             return;
@@ -161,16 +158,21 @@
         if (details) details.open = !details.open;
         if (details && details.open) {
             loadingWorkspace.set(workspaceId, true);
-            workspaceData.set(workspaceId, workspaceService.getWorkspace(workspaceId) as WorkspaceInstance);
-            try {
-                await workspaceData.get(workspaceId)?.load();
-            } catch (err) {
-                console.error(err);
-                // TODO: handle error, temp disabled cause of mock shared workspaces
-                // const error = e instanceof Error ? e.message : JSON.stringify(e);
-                // notifications.error('Error loading workspace', error);
-            } finally {
+            if (workspaceId.startsWith('mock-')) {
+                workspaceData.set(workspaceId, mocks.workspaceInstance);
                 loadingWorkspace.set(workspaceId, false);
+            } else {
+                workspaceData.set(workspaceId, workspaceService.getWorkspace(workspaceId) as WorkspaceInstance);
+                try {
+                    await workspaceData.get(workspaceId)?.load();
+                } catch (err) {
+                    console.error(err);
+                    // TODO: handle error, temp disabled cause of mock shared workspaces
+                    // const error = e instanceof Error ? e.message : JSON.stringify(e);
+                    // notifications.error('Error loading workspace', error);
+                } finally {
+                    loadingWorkspace.set(workspaceId, false);
+                }
             }
         }
     }
@@ -190,7 +192,7 @@
 
 <div class="flex flex-col">
     {@render myWorkspaces()}
-    {@render sharedWorkspaces()}
+    {@render sharedWorkspacesContent()}
 </div>
 
 {#snippet workspaceTitle(workspace: Workspace)}
@@ -238,7 +240,7 @@
         </button>
     </div>
 
-    {#if loading && workspaceService.workspaces.length === 0}
+    {#if loading && workspaces.length === 0}
         <div class="flex justify-center items-center p-12">
             <span class="loading loading-spinner loading-sm"></span>
         </div>
@@ -276,7 +278,7 @@
                 </div>
             </div>
         {/if}
-        <DragDropList bind:items={workspaceService.workspaces} {scrollContainerEl}
+        <DragDropList bind:items={workspaces} {scrollContainerEl}
             class="menu menu-sm w-full p-0"
             classes={{
                 dropIndicator: 'mx-2 my-0.5 h-0.5',
@@ -440,20 +442,20 @@
                             {/if}
                         </div>
                     </summary>
-                    {@render workspaceContent(workspace)}
+                    {@render workspaceContent(workspace, ['read', 'write', 'execute'])}
                 </details>
             {/snippet}
         </DragDropList>
     {/if}
 {/snippet}
 
-{#snippet sharedWorkspaces()}
+{#snippet sharedWorkspacesContent()}
     <div class="flex p-2 items-center justify-between mt-2">
         <h2 class="font-semibold text-base-content/60">Shared With Me</h2>
     </div>
 
     <ul class="menu menu-sm w-full p-0">
-        {#each mockedSharedWorkspaces as workspace (workspace.id)}
+        {#each sharedWorkspaces as workspace (workspace.id)}
         <li class="group">
             <details class="workspace-details flex flex-col w-full overflow-visible">
                 <summary class="flex px-2 items-center justify-between rounded-none list-none [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}"
@@ -481,20 +483,20 @@
                                     class="text-sm"
                                 >
                                     <Copy class="size-4" />
-                                    Clone workspace
+                                    Make a copy
                                 </button>
                             </li>
                         </ul>
                     </div>
                 </summary>
-                {@render workspaceContent(workspace, true)}
+                {@render workspaceContent(workspace, workspacePermissions[workspace.id] ?? [])}
             </details>
         </li>
         {/each}
     </ul>
 {/snippet}
 
-{#snippet workspaceContent(workspace: Workspace, shared?: boolean)}
+{#snippet workspaceContent(workspace: Workspace, permissions: string[])}
 <div onmousedown={(e) => e.stopPropagation()} role="presentation">
     {#if loadingWorkspace.get(workspace.id)}
         <div class="flex flex-col gap-1 w-full p-2 pl-8">
@@ -514,9 +516,9 @@
         {@const files = (workspaceInstance?.files ?? []).filter((f: { name: string }) => !f.name.startsWith('.nanobot/tasks/'))}
         <!-- {@const conversations = workspaceInstance?.sessions ?? []} -->
         <ul>
-            {@render tasksSection(workspace.id, tasks, shared)}
+            {@render tasksSection(workspace.id, tasks, permissions)}
             <!-- {@render conversationsSection(workspace.id, conversations)} -->
-            {@render filesSection(workspace.id, files, shared)}
+            {@render filesSection(workspace.id, files, permissions)}
         </ul>
     {/if}
 </div>
@@ -558,15 +560,15 @@
     </summary>
 {/snippet}
 
-{#snippet tasksSection(workspaceId: string, tasks: Record<string, boolean>, shared?: boolean)}
+{#snippet tasksSection(workspaceId: string, tasks: Record<string, boolean>, permissions: string[])}
 {@const items = Object.keys(tasks)}
 {@const title =  'Workflows'}
 <li class="flex grow">
     <details class="workspace-details w-full">
-        {@render sectionTitle(title, ListTodo, items, shared ? undefined : (e) => createTask(e, workspaceId), 'Create new workflow')}
+        {@render sectionTitle(title, ListTodo, items, permissions.includes('write') ? (e) => createTask(e, workspaceId) :undefined, 'Create new workflow')}
         <ul>
             {#if items.length === 0}
-                {@render empty(title, true)}
+                {@render empty(title, permissions.includes('write'))}
             {:else}
                 {#each items as item, index (index)}
                     <li class="flex flex-row justify-between w-full rounded-l-field p-1 {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">
@@ -632,10 +634,10 @@
 </li>
 {/snippet} -->
 
-{#snippet filesSection(_workspaceId: string, files: WorkspaceFile[], shared?: boolean)}
+{#snippet filesSection(_workspaceId: string, files: WorkspaceFile[], permissions: string[])}
 <li class="flex grow">
     <details class="workspace-details w-full">
-        {@render sectionTitle('Files', FileText, files, shared ? undefined : undefined, 'Create new file')}
+        {@render sectionTitle('Files', FileText, files, permissions.includes('write') ? undefined : undefined, 'Create new file')}
         <ul>
             {#if files.length === 0}
                 {@render empty('Files')}

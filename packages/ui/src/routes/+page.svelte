@@ -9,38 +9,17 @@
 	import { WorkspaceService } from '$lib/workspace.svelte';
 	import { ChevronRight, Eye, File, Folder, ListTodo, Plus } from '@lucide/svelte';
 	import { formatTimeAgo } from '$lib/utils/time';
-
+	import * as mocks from '$lib/mocks';
+	
 	const chat = new ChatService();
 	let doClose = true;
 	let workspaceEnabled = $derived(chat.workspaceEnabled);
 	const workspaceService = new WorkspaceService();
-	const mockSharedWorkspaces = $state<{ id: string, name: string, color: string, created: string }[]>([
-		{ id: '1', name: 'Jolly Roger', color: '#000', created: '2026-01-07' },
-		{ id: '2', name: 'Matcha Latte', color: '#2ddcec', created: '2026-01-06' },
-		{ id: '3', name: 'Pumpkin Spice', color: '#fdcc11', created: '2026-01-06' },
-	]);
-	const mockTasks = $state<{ id: string, name: string, created: string, workspace: string }[]>([
-		{ id: '1', name: 'Onboarding Workflow', created: '2026-01-02', workspace: 'Adorable Akita' },
-		{ id: '2', name: 'Customer Support', created: '2026-01-01', workspace: 'Adorable Akita' },
-		{ id: '3', name: 'Marketing Campaign', created: '2026-01-01', workspace: 'Caramel Cookie' },
-	]);
-	const mockFiles = $state<{ id: string, name: string, created: string, workspace: string }[]>([
-		{ id: '1', name: 'Example.pdf', created: '2026-01-03', workspace: 'Adorable Akita' },
-		{ id: '2', name: 'Example.docx', created: '2026-01-02', workspace: 'Caramel Cookie' },
-		{ id: '3', name: 'Example.xlsx', created: '2026-01-01', workspace: 'Adorable Akita' },
-	]);
-	const mockTaskRuns = $state<{ id: string, created: string, task: string, averageCompletionTime: string, user: string, workspace: string, tokensUsed: number; }[]>([
-		{ id: '1', created: '2026-01-03 10:00:00', task: 'Onboarding Workflow', averageCompletionTime: '10m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 7000 },
-		{ id: '2', created: '2026-01-02 10:00:00', task: 'Customer Support', averageCompletionTime: '10.1m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 8500 },
-		{ id: '3', created: '2026-01-02 10:00:00', task: 'Marketing Campaign', averageCompletionTime: '10m', user: 'Jane Doe', workspace: 'Caramel Cookie', tokensUsed: 8000 },
-		{ id: '4', created: '2026-01-01 10:00:00', task: 'Product Launch', averageCompletionTime: '11m', user: 'Jane Doe', workspace: 'Caramel Cookie', tokensUsed: 9000 },
-		{ id: '5', created: '2026-01-01 10:00:00', task: 'Sales Pipeline', averageCompletionTime: '10m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 10000 },
-		{ id: '6', created: '2026-01-01 10:00:00', task: 'Customer Support', averageCompletionTime: '6.5m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 11500 },
-		{ id: '7', created: '2026-01-01 10:00:00', task: 'Marketing Campaign', averageCompletionTime: '10m', user: 'Jane Doe', workspace: 'Caramel Cookie', tokensUsed: 12000 },
-		{ id: '8', created: '2026-01-01 10:00:00', task: 'Product Launch', averageCompletionTime: '10m', user: 'Jane Doe', workspace: 'Caramel Cookie', tokensUsed: 13000 },
-		{ id: '9', created: '2026-01-01 10:00:00', task: 'Sales Pipeline', averageCompletionTime: '10m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 14000 },
-		{ id: '10', created: '2026-01-01 10:00:00', task: 'Customer Support', averageCompletionTime: '10m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 15500 },
-	]);
+	
+	let tasks = $state(mocks.tasks);
+	let files = $state(mocks.files);
+	let taskRuns = $state(mocks.taskRuns);
+	let sharedWorkspaces = $state(mocks.sharedWorkspaces);
 
 	// Share the chat instance immediately so layout can access it
 	setSharedChat(chat);
@@ -140,7 +119,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each mockTaskRuns as taskRun (taskRun.id)}
+								{#each taskRuns as taskRun (taskRun.id)}
 									<tr>
 										<td>{taskRun.task}</td>
 										<td>{formatTimeAgo(taskRun.created).relativeTime}</td>
@@ -160,8 +139,8 @@
 					<div class="card-body">
 						<h3 class="card-title justify-between">
 							Workspaces
-							<button class="btn btn-square btn-ghost btn-sm tooltip" data-tip="Create new workspace">
-								<Plus class="size-4" />
+							<button class="btn btn-square btn-ghost btn-xs tooltip" data-tip="Create new workspace">
+								<Plus />
 							</button>
 						</h3>
 						<ul class="list bg-base-100 rounded-box">
@@ -183,7 +162,7 @@
 
 						<ul class="list bg-base-100 rounded-box">
 							<li class="pb-2 text-xs opacity-60 tracking-wide">Most recently shared workspaces</li>
-							{#each mockSharedWorkspaces as workspace (workspace.id)}
+							{#each sharedWorkspaces as workspace (workspace.id)}
 								<li class="list-row">
 									<div>
 										<Folder class="size-6" style="color: {workspace.color || '#000'}; fill: color-mix(in oklab, {workspace.color || '#000'} 50%, var(--color-base-100))" />
@@ -202,10 +181,10 @@
 
 				<div class="card h-fit bg-base-100 dark:bg-base-200">
 					<div class="card-body">
-						<h3 class="card-title">Tasks</h3>
+						<h3 class="card-title">Workflows</h3>
 						<ul class="list bg-base-100 rounded-box">
-							<li class="pb-2 text-xs opacity-60 tracking-wide">Most recently created tasks</li>
-							{#each mockTasks as task (task.id)}
+							<li class="pb-2 text-xs opacity-60 tracking-wide">Most recently created workflows</li>
+							{#each tasks as task (task.id)}
 								<button class="list-row hover:bg-base-200 text-left cursor-pointer transition-colors duration-250">
 									<div class="self-center">
 										<ListTodo class="size-6" />
@@ -231,7 +210,7 @@
 						<h3 class="card-title">Files</h3>
 						<ul class="list bg-base-100 rounded-box">
 							<li class="pb-2 text-xs opacity-60 tracking-wide">Most recently uploaded files</li>
-							{#each mockFiles as file (file.id)}
+							{#each files as file (file.id)}
 								<button class="list-row hover:bg-base-200 text-left cursor-pointer transition-colors duration-250">
 									<div class="self-center">
 										<File class="size-6" />

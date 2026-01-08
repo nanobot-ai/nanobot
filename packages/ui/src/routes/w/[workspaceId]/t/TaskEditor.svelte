@@ -25,6 +25,7 @@
 	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
 	import { setSharedChat, sharedChat } from '$lib/stores/chat.svelte';
+    import * as mocks from '$lib/mocks';
 
     type Props = {
         workspaceId: string;
@@ -137,7 +138,8 @@
     }
 
     onMount(() => {
-        workspace = workspaceService.getWorkspace(workspaceId);
+        const isMock = mocks.workspaceIds.includes(workspaceId);
+        workspace = isMock ? mocks.workspaceInstance : workspaceService.getWorkspace(workspaceId);
         registryStore.fetch();
     });
     
@@ -152,15 +154,17 @@
     })
 
     async function initChat() {
-        const chat = await workspace?.newSession({ editor: true });
+        const isMock = mocks.workspaceIds.includes(workspaceId);
+        const chat = isMock ? new ChatService() : await workspace?.newSession({ editor: true });
         if (chat) {
-            chat.setCallbacks({
-                onFileModified: handleFileModified,
-                onChatDone: () => {
-                    console.debug('Chat done, reloading workspace files');
-                    workspace?.load();
-                }
-            });
+            if (!isMock) {
+                chat.setCallbacks({
+                    onFileModified: handleFileModified,
+                    onChatDone: () => {
+                        workspace?.load();
+                    }
+                });
+            }
             setSharedChat(chat);
         }
     }
@@ -251,7 +255,12 @@
         initialLoadComplete = false;
         task = null;
 
-        task = await convertToTask(workspace, files, idToUse);
+        console.log('idToUse', idToUse, mocks.taskIds);
+        if (mocks.taskIds.includes(idToUse)) {
+            task = mocks.taskData[idToUse];
+        } else {
+            task = await convertToTask(workspace, files, idToUse);
+        }
         taskId = idToUse;
 
         stepDescription.clear();
@@ -289,7 +298,7 @@
     $effect(() => {
         const files = workspace?.files ?? [];
         
-        if (urlTaskId && workspace && workspace.id === workspaceId && urlTaskId !== taskId && files.length > 0) {
+        if (urlTaskId && workspace && urlTaskId !== taskId && files.length > 0) {
             compileTask(urlTaskId, files);
         }
     });
