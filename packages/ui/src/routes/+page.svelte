@@ -15,9 +15,9 @@
 	let workspaceEnabled = $derived(chat.workspaceEnabled);
 	const workspaceService = new WorkspaceService();
 	const mockSharedWorkspaces = $state<{ id: string, name: string, color: string, created: string }[]>([
-		{ id: '1', name: 'Jolly Roger', color: '#000', created: '2026-01-01' },
-		{ id: '2', name: 'Matcha Latte', color: '#2ddcec', created: '2026-01-02' },
-		{ id: '3', name: 'Pumpkin Spice', color: '#fdcc11', created: '2026-01-03' },
+		{ id: '1', name: 'Jolly Roger', color: '#000', created: '2026-01-07' },
+		{ id: '2', name: 'Matcha Latte', color: '#2ddcec', created: '2026-01-06' },
+		{ id: '3', name: 'Pumpkin Spice', color: '#fdcc11', created: '2026-01-06' },
 	]);
 	const mockTasks = $state<{ id: string, name: string, created: string, workspace: string }[]>([
 		{ id: '1', name: 'Onboarding Workflow', created: '2026-01-02', workspace: 'Adorable Akita' },
