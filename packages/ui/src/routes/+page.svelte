@@ -71,14 +71,6 @@
 	});
 </script>
 
-<svelte:head>
-	{#if chat.agent?.name}
-		<title>{chat.agent.name}</title>
-	{:else}
-		<title>Nanobot</title>
-	{/if}
-</svelte:head>
-
 {#if workspaceEnabled}
 <div class="h-dvh w-full overflow-y-auto">
 	<div class="w-6xl mx-auto py-8 flex flex-col gap-4">
@@ -263,3 +255,14 @@
 {:else}
 	<ThreadFromChat {chat} />
 {/if}
+
+
+<svelte:head>
+	{#if workspaceEnabled}
+		<title>Nanobot | Dashboard</title>
+	{:else if chat.agent?.name}
+		<title>{chat.agent.name}</title>
+	{:else}
+		<title>Nanobot</title>
+	{/if}
+</svelte:head>
