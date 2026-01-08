@@ -23,9 +23,11 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
+	"github.com/nanobot-ai/nanobot/pkg/middleware"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
 	"github.com/nanobot-ai/nanobot/pkg/server"
 	"github.com/nanobot-ai/nanobot/pkg/session"
+	"github.com/nanobot-ai/nanobot/pkg/telemetry"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 	"github.com/spf13/cobra"
@@ -61,6 +63,9 @@ type Nanobot struct {
 	MaxConcurrency          int               `usage:"The maximum number of concurrent tasks in a parallel loop" default:"10" hidden:"true"`
 	Chdir                   string            `usage:"Change directory to this path before running the nanobot" default:"." short:"C"`
 	State                   string            `usage:"Path to the state file" default:"./nanobot.db"`
+	OtelEndpoint            string            `usage:"OpenTelemetry OTLP endpoint (e.g., localhost:4318 for HTTP, localhost:4317 for gRPC)" env:"OTEL_EXPORTER_OTLP_ENDPOINT" name:"otel-endpoint"`
+	OtelServiceName         string            `usage:"OpenTelemetry service name" default:"nanobot" env:"OTEL_SERVICE_NAME" name:"otel-service-name"`
+	OtelProtocol            string            `usage:"OpenTelemetry protocol (http, grpc, http/protobuf)" default:"http" env:"OTEL_EXPORTER_OTLP_PROTOCOL" name:"otel-protocol"`
 
 	env map[string]string
 }
@@ -245,6 +250,20 @@ type mcpOpts struct {
 }
 
 func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, auditLogCollector *auditlogs.Collector, opts mcpOpts) error {
+	// Initialize OpenTelemetry tracing if endpoint is configured
+	tracerProvider, err := telemetry.InitTracer(ctx, n.OtelServiceName, n.OtelEndpoint, n.OtelProtocol)
+	if err != nil {
+		return fmt.Errorf("failed to initialize tracer: %w", err)
+	}
+	if tracerProvider != nil {
+		defer func() {
+			if err := tracerProvider.ShutdownWithTimeout(5 * time.Second); err != nil {
+				log.Errorf(ctx, "Failed to shutdown tracer: %v", err)
+			}
+		}()
+		log.Infof(ctx, "OpenTelemetry tracing enabled, exporting to %s via %s", n.OtelEndpoint, n.OtelProtocol)
+	}
+
 	env, err := n.loadEnv()
 	if err != nil {
 		return fmt.Errorf("failed to load environment: %w", err)
@@ -314,9 +333,12 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 		return fmt.Errorf("failed to setup auth: %w", err)
 	}
 
+	// Wrap with tracing middleware (applied before CORS)
+	tracedHandler := middleware.TracingMiddleware(handler, tracerProvider)
+
 	s := &http.Server{
 		Addr:    address,
-		Handler: api.Cors(handler),
+		Handler: api.Cors(tracedHandler),
 	}
 
 	context.AfterFunc(ctx, func() {

@@ -92,9 +92,10 @@ type Message struct {
 }
 
 type CompletionItem struct {
-	ID             string          `json:"id,omitempty"`
+	ID string `json:"id,omitempty"`
+	// Partial indicates that the content may not be complete and later content may be appended
+	// If false the content is complete and further content
 	Partial        bool            `json:"partial,omitempty"`
-	HasMore        bool            `json:"hasMore,omitempty"`
 	Content        *mcp.Content    `json:"content,omitempty"`
 	ToolCall       *ToolCall       `json:"toolCall,omitempty"`
 	ToolCallResult *ToolCallResult `json:"toolCallResult,omitempty"`
@@ -110,12 +111,6 @@ func (c *CompletionItem) UnmarshalJSON(data []byte) error {
 	c.ID = ""
 	if id, ok := raw["id"]; ok {
 		if err := json.Unmarshal(id, &c.ID); err != nil {
-			return err
-		}
-	}
-
-	if hasMore, ok := raw["hasMore"]; ok {
-		if err := json.Unmarshal(hasMore, &c.HasMore); err != nil {
 			return err
 		}
 	}
@@ -153,6 +148,12 @@ func (c *CompletionItem) UnmarshalJSON(data []byte) error {
 			if err := json.Unmarshal(data, c.ToolCall); err != nil {
 				return err
 			}
+		} else if _, ok := raw["arguments"]; ok {
+			// Handle partial tool call with only arguments
+			c.ToolCall = &ToolCall{}
+			if err := json.Unmarshal(data, c.ToolCall); err != nil {
+				return err
+			}
 		}
 		if _, ok := raw["output"]; ok {
 			c.ToolCallResult = &ToolCallResult{}
@@ -166,6 +167,167 @@ func (c *CompletionItem) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+// AppendProgress appends Messages to the InternalMessages field matching the Message IDs and Item IDs, appending
+// content as necessary. The Agent and Model fields are also updated if the progress has non-zero values.
+// This function does not modify the input resp; it returns a new CompletionResponse with updated data.
+func AppendProgress(resp CompletionResponse, progress CompletionProgress) CompletionResponse {
+	// Create a new response to avoid modifying the input
+	result := CompletionResponse{
+		Output:        resp.Output,
+		Agent:         resp.Agent,
+		Model:         resp.Model,
+		HasMore:       resp.HasMore,
+		Error:         resp.Error,
+		ProgressToken: resp.ProgressToken,
+	}
+
+	// Update Agent and Model if progress has non-zero values
+	if progress.Agent != "" {
+		result.Agent = progress.Agent
+	}
+	if progress.Model != "" {
+		result.Model = progress.Model
+	}
+
+	// Copy the internal messages slice to avoid modifying the original
+	result.InternalMessages = make([]Message, len(resp.InternalMessages))
+	copy(result.InternalMessages, resp.InternalMessages)
+
+	// If no message ID in progress, return the copy
+	if progress.MessageID == "" {
+		return result
+	}
+
+	// Find or create the message with the matching ID
+	messageIdx := -1
+	for i, msg := range result.InternalMessages {
+		if msg.ID == progress.MessageID {
+			messageIdx = i
+			break
+		}
+	}
+
+	// If message not found, create a new one
+	if messageIdx == -1 {
+		now := time.Now()
+		role := progress.Role
+		if role == "" {
+			role = "assistant"
+		}
+		newMsg := Message{
+			ID:      progress.MessageID,
+			Created: &now,
+			Role:    role,
+			Items:   []CompletionItem{progress.Item},
+		}
+		result.InternalMessages = append(result.InternalMessages, newMsg)
+		return result
+	}
+
+	// Message exists, copy it to avoid modifying the original
+	msg := result.InternalMessages[messageIdx]
+
+	// Update role if provided in progress
+	if progress.Role != "" {
+		msg.Role = progress.Role
+	}
+
+	// Copy items slice to avoid modifying the original
+	msg.Items = make([]CompletionItem, len(msg.Items))
+	copy(msg.Items, result.InternalMessages[messageIdx].Items)
+
+	// If the item has an ID, try to find and merge it
+	if progress.Item.ID != "" {
+		for i, item := range msg.Items {
+			if item.ID == progress.Item.ID {
+				// Found matching item, merge content
+				msg.Items[i] = mergeCompletionItems(item, progress.Item)
+				result.InternalMessages[messageIdx] = msg
+				return result
+			}
+		}
+	}
+
+	// Item not found or no ID, append as new item
+	msg.Items = append(msg.Items, progress.Item)
+	result.InternalMessages[messageIdx] = msg
+	return result
+}
+
+// mergeCompletionItems merges two completion items, appending content when both items are partial.
+// This function creates copies to avoid side effects on the input objects.
+func mergeCompletionItems(existing, new CompletionItem) CompletionItem {
+	// If the new item is not partial, it replaces the existing one
+	if !new.Partial {
+		return new
+	}
+
+	// Create a copy to avoid modifying the existing item
+	result := CompletionItem{
+		ID:      existing.ID,
+		Partial: new.Partial,
+	}
+
+	// Merge based on content type
+	switch {
+	case new.Content != nil:
+		result.Content = mergeContent(existing.Content, new.Content)
+		return result
+	case new.ToolCall != nil:
+		result.ToolCall = mergeToolCall(existing.ToolCall, new.ToolCall)
+		return result
+	case new.Reasoning != nil:
+		result.Reasoning = mergeReasoning(existing.Reasoning, new.Reasoning)
+		return result
+	case new.ToolCallResult != nil:
+		result.ToolCallResult = new.ToolCallResult
+		return result
+	}
+
+	// Default: if new has no content fields, keep existing unchanged
+	return existing
+}
+
+// mergeContent merges text content, or returns new content if types differ or existing is nil
+func mergeContent(existing, new *mcp.Content) *mcp.Content {
+	if existing != nil && existing.Type == "text" && new.Type == "text" {
+		return &mcp.Content{
+			Type: "text",
+			Text: existing.Text + new.Text,
+		}
+	}
+	return new
+}
+
+// mergeToolCall merges tool call arguments and updates fields, or returns new if existing is nil
+func mergeToolCall(existing, new *ToolCall) *ToolCall {
+	if existing == nil {
+		return new
+	}
+
+	merged := existing.Clone()
+	merged.Arguments += new.Arguments
+	if new.Name != "" {
+		merged.Name = new.Name
+	}
+	if new.CallID != "" {
+		merged.CallID = new.CallID
+	}
+	return merged
+}
+
+// mergeReasoning merges reasoning content and summaries, or returns new if existing is nil
+func mergeReasoning(existing, new *Reasoning) *Reasoning {
+	if existing == nil {
+		return new
+	}
+
+	merged := existing.Clone()
+	merged.EncryptedContent += new.EncryptedContent
+	merged.Summary = append(merged.Summary, new.Summary...)
+	return merged
 }
 
 func (c CompletionItem) MarshalJSON() ([]byte, error) {
@@ -183,7 +345,6 @@ func (c CompletionItem) MarshalJSON() ([]byte, error) {
 
 		header, err := json.Marshal(map[string]any{
 			"id":      c.ID,
-			"hasMore": c.HasMore,
 			"partial": c.Partial,
 		})
 
@@ -212,7 +373,6 @@ func (c CompletionItem) MarshalJSON() ([]byte, error) {
 		}
 		return json.Marshal(struct {
 			ID      string     `json:"id,omitempty"`
-			HasMore bool       `json:"hasMore,omitempty"`
 			Partial bool       `json:"partial,omitempty"`
 			Type    string     `json:"type,omitempty"`
 			Output  CallResult `json:"output,omitzero"`
@@ -220,7 +380,6 @@ func (c CompletionItem) MarshalJSON() ([]byte, error) {
 		}{
 			ID:       c.ID,
 			Type:     "tool",
-			HasMore:  c.HasMore,
 			Partial:  c.Partial,
 			ToolCall: tc,
 			Output:   output,
@@ -229,13 +388,11 @@ func (c CompletionItem) MarshalJSON() ([]byte, error) {
 		return json.Marshal(struct {
 			ID      string `json:"id,omitempty"`
 			Type    string `json:"type,omitempty"`
-			HasMore bool   `json:"hasMore,omitempty"`
 			Partial bool   `json:"partial,omitempty"`
 			*Reasoning
 		}{
 			ID:        c.ID,
 			Type:      "reasoning",
-			HasMore:   c.HasMore,
 			Partial:   c.Partial,
 			Reasoning: c.Reasoning,
 		})
@@ -247,6 +404,17 @@ func (c CompletionItem) MarshalJSON() ([]byte, error) {
 type Reasoning struct {
 	EncryptedContent string        `json:"encryptedContent,omitempty"`
 	Summary          []SummaryText `json:"summary,omitempty"`
+}
+
+func (r *Reasoning) Clone() *Reasoning {
+	if r == nil {
+		return nil
+	}
+	clone := &Reasoning{
+		EncryptedContent: r.EncryptedContent,
+		Summary:          append([]SummaryText(nil), r.Summary...),
+	}
+	return clone
 }
 
 type SummaryText struct {
@@ -279,11 +447,20 @@ type ToolCallResult struct {
 }
 
 type ToolCall struct {
-	Arguments  string `json:"arguments,omitempty"`
-	CallID     string `json:"callID,omitempty"`
-	Name       string `json:"name,omitempty"`
-	Target     string `json:"target,omitempty"`
-	TargetType string `json:"targetType,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
+	CallID    string `json:"callID,omitempty"`
+	Name      string `json:"name,omitempty"`
+}
+
+func (t *ToolCall) Clone() *ToolCall {
+	if t == nil {
+		return nil
+	}
+	return &ToolCall{
+		Arguments: t.Arguments,
+		CallID:    t.CallID,
+		Name:      t.Name,
+	}
 }
 
 type CallResult struct {

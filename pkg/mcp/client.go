@@ -13,6 +13,10 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/envvar"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/version"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Client struct {
@@ -404,7 +408,33 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 	return c, nil
 }
 
+// startSpan creates a new span for client operations and returns a context, span, and cleanup function
+func (c *Client) startSpan(ctx context.Context, operation string, attrs ...attribute.KeyValue) (context.Context, trace.Span, func(error, string, string)) {
+	tracer := otel.Tracer("mcp.client")
+	ctx, span := tracer.Start(ctx, "mcp.client."+operation,
+		trace.WithAttributes(attrs...),
+	)
+
+	endSpan := func(err error, successMsg, errorMsg string) {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, errorMsg)
+		} else {
+			span.SetStatus(codes.Ok, successMsg)
+		}
+		span.End()
+	}
+
+	return ctx, span, endSpan
+}
+
 func (c *Client) Initialize(ctx context.Context, param InitializeRequest) (result InitializeResult, err error) {
+	ctx, _, endSpan := c.startSpan(ctx, "initialize",
+		attribute.String("mcp.protocol_version", param.ProtocolVersion),
+		attribute.String("mcp.client_name", param.ClientInfo.Name),
+	)
+	defer func() { endSpan(err, "initialized", "initialization failed") }()
+
 	err = c.Session.Exchange(ctx, "initialize", param, &result)
 	if err == nil {
 		err = c.Session.Send(ctx, Message{
@@ -414,76 +444,118 @@ func (c *Client) Initialize(ctx context.Context, param InitializeRequest) (resul
 	return
 }
 
-func (c *Client) ReadResource(ctx context.Context, uri string) (*ReadResourceResult, error) {
-	var result ReadResourceResult
-	err := c.Session.Exchange(ctx, "resources/read", ReadResourceRequest{
+func (c *Client) ReadResource(ctx context.Context, uri string) (result *ReadResourceResult, err error) {
+	ctx, _, endSpan := c.startSpan(ctx, "read_resource",
+		attribute.String("mcp.resource.uri", uri),
+	)
+	defer func() { endSpan(err, "resource read", "read resource failed") }()
+
+	result = &ReadResourceResult{}
+	err = c.Session.Exchange(ctx, "resources/read", ReadResourceRequest{
 		URI: uri,
-	}, &result)
-	return &result, err
+	}, result)
+	return
 }
 
-func (c *Client) ListResourceTemplates(ctx context.Context) (*ListResourceTemplatesResult, error) {
-	var result ListResourceTemplatesResult
+func (c *Client) ListResourceTemplates(ctx context.Context) (result *ListResourceTemplatesResult, err error) {
+	ctx, span, endSpan := c.startSpan(ctx, "list_resource_templates")
+	defer func() { endSpan(err, "resource templates listed", "list resource templates failed") }()
+
+	result = &ListResourceTemplatesResult{}
 	if c.Session.InitializeResult.Capabilities.Resources == nil {
-		return &result, nil
+		return result, nil
 	}
-	err := c.Session.Exchange(ctx, "resources/templates/list", struct{}{}, &result)
-	return &result, err
+	err = c.Session.Exchange(ctx, "resources/templates/list", struct{}{}, result)
+	if err == nil {
+		span.SetAttributes(attribute.Int("mcp.resource_templates.count", len(result.ResourceTemplates)))
+	}
+	return
 }
 
-func (c *Client) ListResources(ctx context.Context) (*ListResourcesResult, error) {
-	var result ListResourcesResult
+func (c *Client) ListResources(ctx context.Context) (result *ListResourcesResult, err error) {
+	ctx, span, endSpan := c.startSpan(ctx, "list_resources")
+	defer func() { endSpan(err, "resources listed", "list resources failed") }()
+
+	result = &ListResourcesResult{}
 	if c.Session.InitializeResult.Capabilities.Resources == nil {
-		return &result, nil
+		return result, nil
 	}
-	err := c.Session.Exchange(ctx, "resources/list", struct{}{}, &result)
-	return &result, err
+	err = c.Session.Exchange(ctx, "resources/list", struct{}{}, result)
+	if err == nil {
+		span.SetAttributes(attribute.Int("mcp.resources.count", len(result.Resources)))
+	}
+	return
 }
 
-func (c *Client) SubscribeResource(ctx context.Context, uri string) (*SubscribeResult, error) {
-	var result SubscribeResult
-	err := c.Session.Exchange(ctx, "resources/subscribe", SubscribeRequest{
-		URI: uri,
-	}, &result)
-	return &result, err
+func (c *Client) SubscribeResource(ctx context.Context, uri string) (result *SubscribeResult, err error) {
+	ctx, _, endSpan := c.startSpan(ctx, "subscribe_resource",
+		attribute.String("mcp.resource.uri", uri),
+	)
+	defer func() { endSpan(err, "resource subscribed", "subscribe resource failed") }()
+
+	result = &SubscribeResult{}
+	err = c.Session.Exchange(ctx, "resources/subscribe", SubscribeRequest{URI: uri}, result)
+	return
 }
 
-func (c *Client) UnsubscribeResource(ctx context.Context, uri string) (*UnsubscribeResult, error) {
-	var result UnsubscribeResult
-	err := c.Session.Exchange(ctx, "resources/unsubscribe", UnsubscribeRequest{
-		URI: uri,
-	}, &result)
-	return &result, err
+func (c *Client) UnsubscribeResource(ctx context.Context, uri string) (result *UnsubscribeResult, err error) {
+	ctx, _, endSpan := c.startSpan(ctx, "unsubscribe_resource",
+		attribute.String("mcp.resource.uri", uri),
+	)
+	defer func() { endSpan(err, "resource unsubscribed", "unsubscribe resource failed") }()
+
+	result = &UnsubscribeResult{}
+	err = c.Session.Exchange(ctx, "resources/unsubscribe", UnsubscribeRequest{URI: uri}, result)
+	return
 }
 
-func (c *Client) ListPrompts(ctx context.Context) (*ListPromptsResult, error) {
-	var prompts ListPromptsResult
+func (c *Client) ListPrompts(ctx context.Context) (result *ListPromptsResult, err error) {
+	ctx, span, endSpan := c.startSpan(ctx, "list_prompts")
+	defer func() { endSpan(err, "prompts listed", "list prompts failed") }()
+
+	result = &ListPromptsResult{}
 	if c.Session.InitializeResult.Capabilities.Prompts == nil {
-		return &prompts, nil
+		return result, nil
 	}
-	err := c.Session.Exchange(ctx, "prompts/list", struct{}{}, &prompts)
-	return &prompts, err
+	err = c.Session.Exchange(ctx, "prompts/list", struct{}{}, result)
+	if err == nil {
+		span.SetAttributes(attribute.Int("mcp.prompts.count", len(result.Prompts)))
+	}
+	return
 }
 
-func (c *Client) GetPrompt(ctx context.Context, name string, args map[string]string) (*GetPromptResult, error) {
-	var result GetPromptResult
-	err := c.Session.Exchange(ctx, "prompts/get", GetPromptRequest{
+func (c *Client) GetPrompt(ctx context.Context, name string, args map[string]string) (result *GetPromptResult, err error) {
+	ctx, span, endSpan := c.startSpan(ctx, "get_prompt",
+		attribute.String("mcp.prompt.name", name),
+		attribute.Int("mcp.prompt.args_count", len(args)),
+	)
+	defer func() { endSpan(err, "prompt retrieved", "get prompt failed") }()
+
+	result = &GetPromptResult{}
+	err = c.Session.Exchange(ctx, "prompts/get", GetPromptRequest{
 		Name:      name,
 		Arguments: args,
-	}, &result)
-	return &result, err
+	}, result)
+	if err == nil {
+		span.SetAttributes(attribute.Int("mcp.prompt.messages_count", len(result.Messages)))
+	}
+	return
 }
 
-func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
+func (c *Client) ListTools(ctx context.Context) (result *ListToolsResult, err error) {
+	ctx, span, endSpan := c.startSpan(ctx, "list_tools")
+	defer func() { endSpan(err, "tools listed", "list tools failed") }()
+
+	result = &ListToolsResult{}
 	if c.Session.InitializeResult.Capabilities.Tools == nil {
-		return &ListToolsResult{}, nil
+		return result, nil
 	}
 
-	var tools ListToolsResult
-	err := c.Session.Exchange(ctx, "tools/list", struct{}{}, &tools)
+	err = c.Session.Exchange(ctx, "tools/list", struct{}{}, result)
 	if err == nil && len(c.toolOverrides) > 0 {
-		filtered := tools.Tools[:0] // reuse the backing array
-		for _, tool := range tools.Tools {
+		originalCount := len(result.Tools)
+		filtered := result.Tools[:0] // reuse the backing array
+		for _, tool := range result.Tools {
 			override, ok := c.toolOverrides[tool.Name]
 			if !ok {
 				// If there are tool overrides, but this tool is not there, then skip it.
@@ -498,16 +570,26 @@ func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 
 			filtered = append(filtered, tool)
 		}
-		tools.Tools = filtered
+		result.Tools = filtered
+		span.SetAttributes(
+			attribute.Int("mcp.tools.original_count", originalCount),
+			attribute.Int("mcp.tools.filtered_count", len(filtered)),
+		)
 	}
 
-	return &tools, err
+	if err == nil {
+		span.SetAttributes(attribute.Int("mcp.tools.count", len(result.Tools)))
+	}
+	return
 }
 
-func (c *Client) Ping(ctx context.Context) (*PingResult, error) {
-	var result PingResult
-	err := c.Session.Exchange(ctx, "ping", struct{}{}, &result)
-	return &result, err
+func (c *Client) Ping(ctx context.Context) (result *PingResult, err error) {
+	ctx, _, endSpan := c.startSpan(ctx, "ping")
+	defer func() { endSpan(err, "ping successful", "ping failed") }()
+
+	result = &PingResult{}
+	err = c.Session.Exchange(ctx, "ping", struct{}{}, result)
+	return
 }
 
 type CallOption struct {
@@ -522,12 +604,29 @@ func (c CallOption) Merge(other CallOption) (result CallOption) {
 }
 
 func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOption) (result *CallToolResult, err error) {
+	ctx, span, endSpan := c.startSpan(ctx, "call_tool",
+		attribute.String("mcp.tool.name", tool),
+	)
+	defer func() {
+		if err != nil {
+			endSpan(err, "", "tool call failed")
+		} else {
+			span.SetAttributes(attribute.Bool("mcp.tool.is_error", result.IsError))
+			if result.IsError {
+				endSpan(nil, "", "tool returned error")
+			} else {
+				endSpan(nil, "tool call succeeded", "")
+			}
+		}
+	}()
+
 	opt := complete.Complete(opts...)
 	result = new(CallToolResult)
 
 	for name, o := range c.toolOverrides {
 		if o.Name != "" && tool == o.Name {
 			tool = name
+			span.SetAttributes(attribute.String("mcp.tool.original_name", name))
 			break
 		}
 	}
@@ -547,13 +646,20 @@ func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOp
 	return
 }
 
-func (c *Client) SetLogLevel(ctx context.Context, level string) error {
+func (c *Client) SetLogLevel(ctx context.Context, level string) (err error) {
+	ctx, _, endSpan := c.startSpan(ctx, "set_log_level",
+		attribute.String("mcp.log_level", level),
+	)
+	defer func() { endSpan(err, "log level set", "set log level failed") }()
+
 	if c.Session.InitializeResult.Capabilities.Logging == nil {
 		// Logging is not supported, don't error.
 		return nil
 	}
 
-	return c.Session.Exchange(ctx, "logging/setLevel", SetLogLevelRequest{
+	err = c.Session.Exchange(ctx, "logging/setLevel", SetLogLevelRequest{
 		Level: level,
 	}, &SetLogLevelResult{})
+
+	return
 }

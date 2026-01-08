@@ -186,6 +186,87 @@ Go tests follow standard Go conventions:
 
 ## Common Patterns
 
+### Options Pattern with pkg/complete
+
+When creating functions or types that accept configuration options, use the `pkg/complete` pattern for consistency across the codebase. This pattern is used throughout Nanobot (e.g., `pkg/mcp`, `pkg/tools`, `pkg/llm/httpclient`).
+
+**Pattern Structure:**
+
+1. **Define an Options struct** with pointer fields for all optional parameters:
+   ```go
+   type Options struct {
+       MaxRetries  *int
+       Timeout     *time.Duration
+       CustomValue *string
+   }
+   ```
+
+2. **Implement Merge method** to combine options (later options override earlier ones):
+   ```go
+   func (o Options) Merge(other Options) (result Options) {
+       result.MaxRetries = complete.Last(o.MaxRetries, other.MaxRetries)
+       result.Timeout = complete.Last(o.Timeout, other.Timeout)
+       result.CustomValue = complete.Last(o.CustomValue, other.CustomValue)
+       return
+   }
+   ```
+
+3. **Implement Complete method** to set defaults:
+   ```go
+   func (o Options) Complete() Options {
+       if o.MaxRetries == nil {
+           o.MaxRetries = ptr(3)
+       }
+       if o.Timeout == nil {
+           o.Timeout = ptr(30 * time.Second)
+       }
+       return o
+   }
+   ```
+
+4. **Create With* helper functions** that return Options structs:
+   ```go
+   func WithMaxRetries(max int) Options {
+       return Options{MaxRetries: ptr(max)}
+   }
+
+   func WithTimeout(timeout time.Duration) Options {
+       return Options{Timeout: ptr(timeout)}
+   }
+   ```
+
+5. **Use in function signatures** with variadic Options:
+   ```go
+   func NewClient(cfg Config, opts ...Options) *Client {
+       opt := complete.Complete(opts...)
+       return &Client{
+           maxRetries: *opt.MaxRetries,
+           timeout:    *opt.Timeout,
+       }
+   }
+   ```
+
+**Usage Examples:**
+
+```go
+// Using With* helpers
+client := NewClient(cfg, WithMaxRetries(5), WithTimeout(60*time.Second))
+
+// Using Options struct directly
+client := NewClient(cfg, Options{MaxRetries: ptr(5)})
+
+// Merging multiple option sources
+client := NewClient(cfg, defaultOpts, userOpts, WithMaxRetries(5))
+```
+
+**Why This Pattern:**
+
+- Consistent with `pkg/complete` utilities used throughout the codebase
+- Supports option merging and composition
+- Clear defaults via Complete method
+- Type-safe and discoverable via With* helpers
+- Avoids nil pointer issues by using Complete to set defaults
+
 ### Adding a New Agent Hook
 
 1. Define TypeScript types in `hooks.ts` (root level)

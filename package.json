@@ -23,7 +23,7 @@
 		"typescript": "^5.9.3"
 	},
 	"dependencies": {
-		"@modelcontextprotocol/sdk": "~1.24.0",
+		"@modelcontextprotocol/sdk": "~1.25.1",
 		"zod": "^3"
 	}
 }

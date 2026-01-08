@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
+	"github.com/nanobot-ai/nanobot/pkg/llm/httpclient"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -20,6 +21,7 @@ import (
 
 type Client struct {
 	Config
+	httpClient *httpclient.RetryableClient
 }
 
 type Config struct {
@@ -46,7 +48,8 @@ func NewClient(cfg Config) *Client {
 	}
 
 	return &Client{
-		Config: cfg,
+		Config:     cfg,
+		httpClient: httpclient.New(http.DefaultClient),
 	}
 }
 
@@ -83,7 +86,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 		httpReq.Header.Set(key, value)
 	}
 
-	httpResp, err := http.DefaultClient.Do(httpReq)
+	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, err
 	}
@@ -151,9 +154,6 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 				continue
 			}
 
-			// Determine if this is the final chunk for this choice
-			isFinished := choice.FinishReason != nil
-
 			// Handle role
 			if delta.Role != "" && resp.Choices[choice.Index].Message != nil {
 				resp.Choices[choice.Index].Message.Role = delta.Role
@@ -173,7 +173,6 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 					Item: types.CompletionItem{
 						ID:      fmt.Sprintf("%s-%d", resp.ID, choice.Index),
 						Partial: true,
-						HasMore: !isFinished,
 						Content: &mcp.Content{
 							Type: "text",
 							Text: *delta.Content,
@@ -196,7 +195,6 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 					Item: types.CompletionItem{
 						ID:      fmt.Sprintf("%s-reasoning-%d", resp.ID, choice.Index),
 						Partial: true,
-						HasMore: !isFinished,
 						Reasoning: &types.Reasoning{
 							Summary: []types.SummaryText{
 								{
@@ -236,7 +234,6 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 						Item: types.CompletionItem{
 							ID:      fmt.Sprintf("%s-t-%d", resp.ID, index),
 							Partial: true,
-							HasMore: !isFinished,
 							ToolCall: &types.ToolCall{
 								CallID:    toolCalls[index].ID,
 								Name:      toolCalls[index].Function.Name,

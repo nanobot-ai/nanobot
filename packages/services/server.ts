@@ -1,6 +1,7 @@
 import AgentConfig from "@nanobot-ai/agentconfig";
 import Coder from "@nanobot-ai/coder";
 import { mergeConfig, Server } from "@nanobot-ai/nanomcp";
+import Skills from "@nanobot-ai/skills";
 import Tasks from "@nanobot-ai/tasks";
 import WorkspaceMcp from "@nanobot-ai/workspace-mcp";
 import WorkspaceResources from "@nanobot-ai/workspace-resources";
@@ -13,6 +14,7 @@ const server = new Server(
 	mergeConfig(AgentConfig.config, WorkspaceMcp.config),
 );
 
+server.router.map("/mcp/skills", Skills.mcp.handler);
 server.router.map("/mcp/tasks", Tasks.mcp.handler);
 server.router.map("/mcp/coder", Coder.mcp.handler);
 server.router.map("/mcp/workspace-resources", WorkspaceResources.mcp.handler);

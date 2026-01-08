@@ -40,8 +40,9 @@ export default createTool({
 			// Get workspace client
 			const client = await ensureConnected(ctx.workspaceId);
 
-			// Write the todo list to ${AGENT_HOME}/.todo.json
-			const todoFilePath = ".nanobot/status/todo.json";
+			// Write the todo list to .nanobot/status/${sessionId}/todo.json
+			const sessionId = ctx.sessionId || "default";
+			const todoFilePath = `.nanobot/status/${sessionId}/todo.json`;
 			const todoContent = JSON.stringify(todos, null, 2);
 			await client.writeTextFile(todoFilePath, todoContent);
 

@@ -3,7 +3,6 @@ import {
 	ensureConnected,
 	type WorkspaceClient,
 } from "@nanobot-ai/workspace-client";
-import { parse as jsoncParse } from "jsonc-parser";
 
 async function addInstructions(client: WorkspaceClient, agent: hooks.Agent) {
 	const instructions = await client.readTextFile(".nanobot/agent.md", {
@@ -29,17 +28,23 @@ async function addMcpServers(
 		return;
 	}
 
+	const parsedRaw = JSON.parse(mcpJson);
+
 	const parsed = hooks.AgentConfigHookSchema.safeParse({
-		mcpServers: jsoncParse(mcpJson).mcpServers,
+		agent: {},
+		mcpServers: parsedRaw?.mcpServers,
 	});
 	if (parsed.success) {
-		config.mcpServers = parsed.data.mcpServers;
+		config.mcpServers = {
+			...config.mcpServers,
+			...parsed.data.mcpServers,
+		};
+		config.agent.mcpServers = [
+			...(config.agent.mcpServers || []),
+			...Object.keys(parsed.data?.mcpServers || {}),
+		];
 	} else {
 		console.error(`Failed to parse MCP servers: ${parsed.error.message}`);
-	}
-
-	if (config.agent && !config.agent.resources) {
-		config.agent.resources = [];
 	}
 }
 
@@ -69,27 +74,33 @@ export async function amendConfig(
 		await amendAgent(client, config.agent);
 	}
 
-	await addMcpServers(client, config);
+	const headers = {
+		"X-Nanobot-Workspace-Id": workspaceId,
+		...(config.sessionId && {
+			"X-Nanobot-Session-Id": config.sessionId,
+		}),
+		...(config.accountId && {
+			"X-Nanobot-Account-Id": config.accountId,
+		}),
+	};
 
 	config.mcpServers = {
 		...(config.mcpServers || {}),
 		task: {
 			url: "http://localhost:5173/mcp/tasks",
-			headers: {
-				"X-Nanobot-Workspace-Id": workspaceId,
-			},
+			headers,
+		},
+		skills: {
+			url: "http://localhost:5173/mcp/skills",
+			headers,
 		},
 		coder: {
 			url: "http://localhost:5173/mcp/coder",
-			headers: {
-				"X-Nanobot-Workspace-Id": workspaceId,
-			},
+			headers,
 		},
 		workspaceResources: {
 			url: "http://localhost:5173/mcp/workspace-resources",
-			headers: {
-				"X-Nanobot-Workspace-Id": workspaceId,
-			},
+			headers,
 		},
 	};
 
@@ -102,8 +113,11 @@ export async function amendConfig(
 			...(config.agent.mcpServers ?? []),
 			"task",
 			"coder",
+			"skills",
 		];
 	}
+
+	await addMcpServers(client, config);
 
 	return config;
 }

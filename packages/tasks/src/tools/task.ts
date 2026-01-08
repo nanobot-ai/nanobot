@@ -12,7 +12,7 @@ const schema = z.object({
 });
 
 export default createTool({
-	title: "Start Task",
+	title: "Task",
 	description: async (ctx) => {
 		const client = await ensureConnected(ctx.workspaceId);
 		const tasksDescriptions = await getTasksDescription(client);
@@ -24,11 +24,12 @@ ${tasksDescriptions}
 `;
 	},
 	messages: {
-		invoking: "Dispatching task",
-		invoked: "Task dispatched",
+		invoking: "Starting task",
+		invoked: "Task started",
 	},
 	inputSchema: schema,
-	async handler({ taskName, arguments: taskArgs }, ctx) {
+	async handler(params, ctx) {
+		const { taskName, arguments: taskArgs } = params;
 		const client = await ensureConnected(ctx.workspaceId);
 		const task = await getTask(client, taskName);
 		if (!task.name) {
@@ -41,6 +42,10 @@ ${tasksDescriptions}
 			const arg = taskArgs?.[input.name];
 			if (arg) {
 				args[input.name] = arg;
+			} else if (input.name in params) {
+				args[input.name] = String(
+					(params as { [input.name]: unknown })[input.name],
+				);
 			} else if (input.default) {
 				args[input.name] = input.default;
 			} else {
@@ -53,8 +58,11 @@ ${tasksDescriptions}
 		const chatInput = {
 			type: "tool",
 			payload: {
-				name: task.name,
-				arguments: args,
+				name: "BeginTask",
+				arguments: {
+					name: task.name,
+					arguments: args,
+				},
 			},
 		};
 
@@ -63,6 +71,9 @@ ${tasksDescriptions}
 			path: "/mcp",
 			sessionId: "new",
 			workspaceId: ctx.workspaceId,
+			...(ctx.nanobot?.sessionId && {
+				parentSessionId: ctx.nanobot.sessionId,
+			}),
 		});
 
 		await chatClient.callMCPTool("chat", {
@@ -72,13 +83,9 @@ ${tasksDescriptions}
 		const { id } = await chatClient.getSessionDetails();
 
 		return toolResult.structured(
-			`Task ${task.name} dispatched with ${args}. Task ID: ${id}`,
+			`Task ${task.name} started with ${args}. Task ID: ${id}`,
 			{
-				task: {
-					name: task.name,
-					arguments: args,
-				},
-				id,
+				task: chatInput.payload,
 				created_at: new Date().toISOString(),
 			},
 		);

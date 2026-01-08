@@ -47,7 +47,6 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 				if event.Item.Type == "function_call" {
 					progress.Item = types.CompletionItem{
 						Partial: true,
-						HasMore: true,
 						ID:      event.Item.ID,
 						ToolCall: &types.ToolCall{
 							CallID: event.Item.CallID,
@@ -57,7 +56,6 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 				} else if event.Item.Type == "message" {
 					progress.Item = types.CompletionItem{
 						Partial: true,
-						HasMore: true,
 						ID:      event.Item.ID,
 						Content: &mcp.Content{
 							Type: "text",

@@ -34,7 +34,6 @@
 		"@remix-run/headers": "^0.18.0",
 		"@remix-run/logger-middleware": "^0.1.0",
 		"@remix-run/node-fetch-server": "^0.12.0",
-		"commander": "^14.0.2",
-		"fetch-to-node": "^2.1.0"
+		"commander": "^14.0.2"
 	}
 }

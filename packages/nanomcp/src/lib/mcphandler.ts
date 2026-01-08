@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
 	type Implementation,
 	isInitializeRequest,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { RequestHandler } from "@remix-run/fetch-router";
-import { toFetchResponse, toReqRes } from "fetch-to-node";
 
 export function createMcpHandler(
 	serverInfo: { name: string; version: string },
@@ -23,7 +22,10 @@ type SetupServer = (opts: {
 }) => void | Promise<void>;
 
 class McpHandler {
-	readonly #transports: Record<string, StreamableHTTPServerTransport> = {};
+	readonly #transports: Record<
+		string,
+		WebStandardStreamableHTTPServerTransport
+	> = {};
 	readonly #setupServer: SetupServer;
 	readonly #serverInfo: Implementation;
 
@@ -46,33 +48,17 @@ class McpHandler {
 		return new Response("Method not allowed", { status: 405 });
 	};
 
-	private newTransport = async (request: Request, sessionId?: string) => {
-		let transport: StreamableHTTPServerTransport;
-		if (sessionId) {
-			transport = new StreamableHTTPServerTransport({
-				sessionIdGenerator: undefined,
-			});
-			transport.sessionId = sessionId;
-			this.#transports[sessionId] = transport;
-			transport.onclose = () => {
-				if (transport.sessionId) {
-					delete this.#transports[transport.sessionId];
-				}
-			};
-		} else {
-			transport = new StreamableHTTPServerTransport({
-				sessionIdGenerator: () => randomUUID(),
-				onsessioninitialized: (sessionId) => {
-					this.#transports[sessionId] = transport;
-				},
-			});
-		}
-
-		transport.onclose = () => {
-			if (transport.sessionId) {
-				delete this.#transports[transport.sessionId];
-			}
-		};
+	private newTransport = async (request: Request) => {
+		const sessionId = randomUUID();
+		const transport = new WebStandardStreamableHTTPServerTransport({
+			sessionIdGenerator: () => sessionId,
+			onsessioninitialized: (sessionId) => {
+				this.#transports[sessionId] = transport;
+			},
+			onsessionclosed: (closedSessionId) => {
+				delete this.#transports[closedSessionId];
+			},
+		});
 
 		const mcpServer = new McpServer(this.#serverInfo);
 		await this.#setupServer({
@@ -87,17 +73,33 @@ class McpHandler {
 	private post = async (request: Request) => {
 		const sessionId = request.headers.get("mcp-session-id") || undefined;
 
-		let transport: StreamableHTTPServerTransport;
+		let transport: WebStandardStreamableHTTPServerTransport;
 		let parsedBody: unknown;
-		const { req, res } = toReqRes(request);
-		// read the full body into memory from the req (In
 
-		if (sessionId && this.#transports[sessionId]) {
+		if (sessionId) {
+			// Session ID provided - must exist in memory
 			transport = this.#transports[sessionId];
+			if (!transport) {
+				console.error("[MCP] POST: Session not found:", sessionId);
+				return Response.json(
+					{
+						jsonrpc: "2.0",
+						error: {
+							code: -32000,
+							message: "Session not found",
+						},
+						id: null,
+					},
+					{
+						status: 404,
+					},
+				);
+			}
 		} else {
+			// No session ID - must be an initialize request
 			parsedBody = await request.json();
-			if (isInitializeRequest(parsedBody) || validUUID(sessionId)) {
-				transport = await this.newTransport(request, sessionId);
+			if (isInitializeRequest(parsedBody)) {
+				transport = await this.newTransport(request);
 			} else {
 				return Response.json(
 					{
@@ -109,14 +111,14 @@ class McpHandler {
 						id: null,
 					},
 					{
-						status: 404,
+						status: 400,
 					},
 				);
 			}
 		}
 
-		await transport.handleRequest(req, res, parsedBody);
-		return await toFetchResponse(res);
+		const response = await transport.handleRequest(request, { parsedBody });
+		return response;
 	};
 
 	private getOrDelete = async (request: Request) => {
@@ -129,15 +131,6 @@ class McpHandler {
 				{ status: 404 },
 			);
 		}
-		const { req, res } = toReqRes(request);
-		await transport.handleRequest(req, res);
-		return await toFetchResponse(res);
+		return await transport.handleRequest(request);
 	};
-}
-
-function validUUID(id?: string): boolean {
-	if (!id) return false;
-	return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-		id,
-	);
 }

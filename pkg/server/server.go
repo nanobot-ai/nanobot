@@ -357,6 +357,32 @@ func (s *Server) runInitHook(ctx context.Context) (types.SessionInitHook, error)
 	return sessionInit, nil
 }
 
+func (s *Server) setParentSessionId(ctx context.Context, payload mcp.InitializeRequest) error {
+	meta, _ := payload.Meta[types.MetaNanobot].(map[string]any)
+	parentSessionId, _ := meta[types.ParentSessionIdKey].(string)
+	if parentSessionId == "" {
+		return nil
+	}
+
+	_, accountId := types.GetSessionAndAccountID(ctx)
+	parentSession, ok, err := s.manager.Acquire(ctx, nil, parentSessionId)
+	if err != nil {
+		return fmt.Errorf("failed to acquire parent session: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("parent session %s not found", parentSessionId)
+	}
+
+	var parentAccountId string
+	parentSession.GetSession().Get(types.ParentSessionIdKey, &parentAccountId)
+	if parentAccountId != accountId {
+		return fmt.Errorf("parent session %s does not belong to account %s", parentSessionId, accountId)
+	}
+
+	mcp.SessionFromContext(ctx).Set(types.ParentSessionIdKey, parentSessionId)
+	return nil
+}
+
 func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload mcp.InitializeRequest) error {
 	sessionInit, err := s.runInitHook(ctx)
 	if err != nil {
@@ -367,6 +393,10 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 	c := types.ConfigFromContext(ctx)
 
 	if err := reconcileEnv(session, c); err != nil {
+		return err
+	}
+
+	if err := s.setParentSessionId(ctx, payload); err != nil {
 		return err
 	}
 

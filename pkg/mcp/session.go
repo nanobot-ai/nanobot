@@ -12,6 +12,10 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var ErrNoResult = errors.New("no result in response")
@@ -396,8 +400,23 @@ func (s *Session) SendPayload(ctx context.Context, method string, payload any) e
 }
 
 func (s *Session) Send(ctx context.Context, req Message) error {
+	tracer := otel.Tracer("mcp.session")
+	ctx, span := tracer.Start(ctx, "mcp.session.send",
+		trace.WithAttributes(
+			attribute.String("mcp.method", req.Method),
+		),
+	)
+	defer span.End()
+
+	if req.ID != nil {
+		span.SetAttributes(attribute.String("mcp.message_id", fmt.Sprintf("%v", req.ID)))
+	}
+
 	if s.wire == nil {
-		return fmt.Errorf("empty session: wire is not initialized")
+		err := fmt.Errorf("empty session: wire is not initialized")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "no wire connection")
+		return err
 	}
 
 	s.lock.Lock()
@@ -407,6 +426,10 @@ func (s *Session) Send(ctx context.Context, req Message) error {
 	for _, filter := range f {
 		newReq, err := filter.filter(ctx, &req)
 		if err != nil || newReq == nil {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "filter failed")
+			}
 			return err
 		}
 		req = *newReq
@@ -414,14 +437,20 @@ func (s *Session) Send(ctx context.Context, req Message) error {
 
 	newReq, err := s.callAllHooks(ctx, &req, "request")
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "request hooks failed")
 		return fmt.Errorf("failed to call \"request\" hooks: %w", err)
 	}
 
 	req = *newReq
 	req.JSONRPC = "2.0"
 	if err := s.wire.Send(ctx, req); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "wire send failed")
 		return err
 	}
+
+	span.SetStatus(codes.Ok, "message sent")
 	return nil
 }
 
@@ -522,6 +551,19 @@ func getMessageName(req *Message) string {
 }
 
 func (s *Session) callAllHooks(ctx context.Context, req *Message, direction string) (*Message, error) {
+	tracer := otel.Tracer("mcp.session")
+	ctx, span := tracer.Start(ctx, "mcp.session.hooks",
+		trace.WithAttributes(
+			attribute.String("mcp.hook.direction", direction),
+			attribute.String("mcp.method", req.Method),
+		),
+	)
+	defer span.End()
+
+	if req.ID != nil {
+		span.SetAttributes(attribute.String("mcp.message_id", fmt.Sprintf("%v", req.ID)))
+	}
+
 	var (
 		hooks    = s.hooks
 		name     = getMessageName(req)
@@ -535,6 +577,8 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 			ctx = WithMCPServerConfig(ctx, Server{})
 		}
 	}
+
+	span.SetAttributes(attribute.Int("mcp.hook.count", len(hooks)))
 
 	params := map[string]string{
 		"name":        name,
@@ -580,10 +624,34 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 		return hookResponse
 	})
 
+	if len(errs) > 0 {
+		span.RecordError(errors.Join(errs...))
+		span.SetStatus(codes.Error, fmt.Sprintf("%d hook(s) failed", len(errs)))
+	} else {
+		span.SetStatus(codes.Ok, fmt.Sprintf("executed %d hook(s)", len(hooks)))
+	}
+
 	return hookResponse.Message, errors.Join(errs...)
 }
 
 func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts ...ExchangeOption) (err error) {
+	// Create span for the full request/response exchange
+	tracer := otel.Tracer("mcp.session")
+	ctx, span := tracer.Start(ctx, "mcp.session.exchange",
+		trace.WithAttributes(
+			attribute.String("mcp.method", method),
+		),
+	)
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "exchange failed")
+		} else {
+			span.SetStatus(codes.Ok, "exchange completed")
+		}
+		span.End()
+	}()
+
 	opt := complete.Complete(opts...)
 	var (
 		req        *Message
@@ -593,6 +661,16 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 	req, err = s.toRequest(method, in, opt)
 	if err != nil {
 		return err
+	}
+
+	// Add message ID and session ID to span
+	if req.ID != nil {
+		span.SetAttributes(attribute.String("mcp.message_id", fmt.Sprintf("%v", req.ID)))
+	}
+	if s.wire != nil {
+		if sessionID := s.wire.SessionID(); sessionID != "" {
+			span.SetAttributes(attribute.String("mcp.session_id", sessionID))
+		}
 	}
 
 	defer func() {
@@ -617,6 +695,9 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 
 	errChan := make(chan error, 1)
 
+	// Record send event
+	span.AddEvent("sending_request")
+
 	go func() {
 		defer close(errChan)
 
@@ -637,6 +718,9 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 			// Set the error channel to nil so that this case always blocks.
 			errChan = nil
 		case m := <-ch:
+			// Record receive event
+			span.AddEvent("received_response")
+
 			if isInit {
 				if err := s.postInit(&m); err != nil {
 					return fmt.Errorf("failed to post init: %w", err)
@@ -644,6 +728,15 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 			}
 			respResult = m.Result
 			respError = m.Error
+
+			// Record response status
+			if respError != nil {
+				span.SetAttributes(
+					attribute.Int("mcp.response.error_code", respError.Code),
+					attribute.String("mcp.response.error_message", respError.Message),
+				)
+			}
+
 			return s.marshalResponse(m, out)
 		}
 	}

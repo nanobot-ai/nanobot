@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
+	"github.com/nanobot-ai/nanobot/pkg/llm/httpclient"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -20,6 +21,7 @@ import (
 
 type Client struct {
 	Config
+	httpClient *httpclient.RetryableClient
 }
 
 type Config struct {
@@ -47,7 +49,8 @@ func NewClient(cfg Config) *Client {
 	}
 
 	return &Client{
-		Config: cfg,
+		Config:     cfg,
+		httpClient: httpclient.New(http.DefaultClient),
 	}
 }
 
@@ -84,7 +87,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 		httpReq.Header.Set(key, value)
 	}
 
-	httpResp, err := http.DefaultClient.Do(httpReq)
+	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +136,6 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 						Item: types.CompletionItem{
 							ID:      fmt.Sprintf("%s-%d", resp.ID, contentIndex),
 							Partial: true,
-							HasMore: true,
 							Content: &mcp.Content{
 								Type: "text",
 								Text: delta.Delta.Text,
@@ -151,7 +153,6 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 						Item: types.CompletionItem{
 							ID:      fmt.Sprintf("%s-%d", resp.ID, contentIndex),
 							Partial: true,
-							HasMore: true,
 							ToolCall: &types.ToolCall{
 								CallID:    resp.Content[contentIndex].ID,
 								Name:      resp.Content[contentIndex].Name,

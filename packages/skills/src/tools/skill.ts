@@ -39,7 +39,6 @@ How to use skills:
 Important:
 - Only use skills listed in <available_skills> below
 - Do not invoke a skill that is already running
-- Do not use this tool for built-in CLI commands (like /help, /clear, etc.)
 </skills_instructions>
 
 <available_skills>

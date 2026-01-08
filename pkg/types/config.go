@@ -19,6 +19,7 @@ const (
 	SessionInitSessionKey           = "sessionInit"
 	DefaultAgentSessionKey          = "defaultAgent"
 	AccountIDSessionKey             = "accountID"
+	ParentSessionIdKey              = "parentSessionId"
 	DescriptionSessionKey           = "description"
 	ResourceSubscriptionsSessionKey = "resourceSubscriptions"
 	PublicURLSessionKey             = "publicURL"

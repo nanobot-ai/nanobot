@@ -11,6 +11,32 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
+// createErrorToolOutput creates a ToolOutput with error content for a failed tool call
+func createErrorToolOutput(callID, errorMessage string) types.ToolOutput {
+	return types.ToolOutput{
+		Output: types.Message{
+			Role: "user",
+			Items: []types.CompletionItem{
+				{
+					ToolCallResult: &types.ToolCallResult{
+						CallID: callID,
+						Output: types.CallResult{
+							Content: []mcp.Content{
+								{
+									Type: "text",
+									Text: errorMessage,
+								},
+							},
+							IsError: true,
+						},
+					},
+				},
+			},
+		},
+		Done: true,
+	}
+}
+
 func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.Execution, opts []types.CompletionOptions) error {
 	for _, output := range run.Response.Output.Items {
 		functionCall := output.ToolCall
@@ -25,7 +51,15 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 
 		targetServer, ok := run.ToolToMCPServer[functionCall.Name]
 		if !ok {
-			return fmt.Errorf("can not map tool %s to a MCP server", functionCall.Name)
+			// Store error as tool output instead of returning
+			if run.ToolOutputs == nil {
+				run.ToolOutputs = make(map[string]types.ToolOutput)
+			}
+			run.ToolOutputs[functionCall.CallID] = createErrorToolOutput(
+				functionCall.CallID,
+				fmt.Sprintf("Error: tool %s not found", functionCall.Name),
+			)
+			continue
 		}
 
 		if targetServer.Target.External {
@@ -34,13 +68,21 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 			continue
 		}
 
-		callOutput, err := a.invoke(ctx, config, targetServer, tools.ToolCallInvocation{
+		callOutput, err := a.invoke(ctx, targetServer, tools.ToolCallInvocation{
 			MessageID: run.Response.Output.ID,
 			ItemID:    output.ID,
 			ToolCall:  *functionCall,
 		}, opts)
 		if err != nil {
-			return fmt.Errorf("failed to invoke tool %s on MCP server %s: %w", functionCall.Name, targetServer.MCPServer, err)
+			// Store error as tool output instead of returning
+			if run.ToolOutputs == nil {
+				run.ToolOutputs = make(map[string]types.ToolOutput)
+			}
+			run.ToolOutputs[functionCall.CallID] = createErrorToolOutput(
+				functionCall.CallID,
+				fmt.Sprintf("Error calling %s: %v", functionCall.Name, err),
+			)
+			continue
 		}
 
 		if run.ToolOutputs == nil {
@@ -60,15 +102,36 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 	return nil
 }
 
-func (a *Agents) invoke(ctx context.Context, config types.Config, target types.TargetMapping[types.TargetTool], funcCall tools.ToolCallInvocation, opts []types.CompletionOptions) (*types.Message, error) {
+func (a *Agents) invoke(ctx context.Context, target types.TargetMapping[types.TargetTool], funcCall tools.ToolCallInvocation, opts []types.CompletionOptions) (*types.Message, error) {
 	var (
-		data map[string]any
+		data     map[string]any
+		response *types.CallResult
 	)
 
 	if funcCall.ToolCall.Arguments != "" {
 		data = make(map[string]any)
 		if err := json.Unmarshal([]byte(funcCall.ToolCall.Arguments), &data); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal function call arguments: %w", err)
+			// Return error as content instead of returning an error
+			response = &types.CallResult{
+				Content: []mcp.Content{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("Error unmarshalling arguments for %s: %v", target.TargetName, err),
+					},
+				},
+				IsError: true,
+			}
+			return &types.Message{
+				Role: "user",
+				Items: []types.CompletionItem{
+					{
+						ToolCallResult: &types.ToolCallResult{
+							CallID: funcCall.ToolCall.CallID,
+							Output: *response,
+						},
+					},
+				},
+			}, nil
 		}
 	}
 

@@ -7,9 +7,11 @@
 bin/*
 nanobot
 releases/*
-examples/customer/tools/travel2.sqlite
 *.db
 /workspace
+/workspace-mcp
+/test.yaml
+/todo
 
 .svelte-kit/
 node_modules/

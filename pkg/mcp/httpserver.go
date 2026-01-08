@@ -17,6 +17,10 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 	"github.com/tidwall/gjson"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // responseRecorder is an http.ResponseWriter that captures the response for audit logging
@@ -269,17 +273,35 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	req = req.WithContext(withRequest(req))
+
+	// Create span for MCP server request handling
+	tracer := otel.Tracer("mcp.server")
+	ctx, span := tracer.Start(req.Context(), "mcp.server.request",
+		trace.WithAttributes(
+			attribute.String("http.method", req.Method),
+		),
+	)
+	defer span.End()
+
 	// Determine audit log method and session ID based on HTTP method
 	sessionID := h.sessions.ExtractID(req)
+	if sessionID != "" {
+		span.SetAttributes(attribute.String("mcp.session_id", sessionID))
+	}
+
 	var auditMethod string
 	switch req.Method {
 	case http.MethodGet:
 		auditMethod = "sse/stream"
+		span.SetAttributes(attribute.String("mcp.operation", "sse_stream"))
 	case http.MethodDelete:
 		auditMethod = "session/delete"
+		span.SetAttributes(attribute.String("mcp.operation", "session_delete"))
 	case http.MethodPost:
 		// Will be set to msg.Method after decoding the message
+		span.SetAttributes(attribute.String("mcp.operation", "message"))
 	default:
+		span.SetStatus(codes.Error, "unsupported HTTP method")
 		http.Error(rw, `{"http_error": "Unsupported HTTP method"}`, http.StatusMethodNotAllowed)
 		return
 	}
@@ -304,9 +326,9 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		}()
 	}
 
-	ctx := req.Context()
 	auditLog.Subject = UserFromContext(ctx).Sub
 	if req.Method == http.MethodGet {
+		span.SetStatus(codes.Ok, "streaming events")
 		h.streamEvents(rw, req, auditLog)
 		return
 	}
@@ -314,10 +336,13 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	if sessionID != "" && req.Method == http.MethodDelete {
 		sseSession, ok, err := h.sessions.LoadAndDelete(ctx, h.MessageHandler, sessionID)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to delete session")
 			http.Error(rw, `{"http_error": "Failed to delete session"}`, http.StatusInternalServerError)
 			return
 		}
 		if !ok {
+			span.SetStatus(codes.Error, "session not found")
 			http.Error(rw, `{"http_error": "Session not found"}`, http.StatusNotFound)
 			return
 		}
@@ -326,6 +351,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		auditLog.ClientVersion = sseSession.session.InitializeRequest.ClientInfo.Version
 
 		sseSession.Close(true)
+		span.SetStatus(codes.Ok, "session deleted")
 		rw.WriteHeader(http.StatusOK)
 		return
 	}
@@ -346,21 +372,27 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	var msg Message
 	if err := json.Unmarshal(auditLog.RequestBody, &msg); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to decode message")
 		http.Error(rw, `{"http_error": "Failed to decode message"}`, http.StatusBadRequest)
 		return
 	}
 
 	auditLog.CallType = msg.Method
+	span.SetAttributes(attribute.String("mcp.method", msg.Method))
 	if msg.ID != nil {
 		auditLog.RequestID = fmt.Sprintf("%v", msg.ID)
+		span.SetAttributes(attribute.String("mcp.message_id", fmt.Sprintf("%v", msg.ID)))
 	}
 
 	// Gather method-specific information
 	switch msg.Method {
 	case "resources/read":
 		auditLog.CallIdentifier = gjson.GetBytes(msg.Params, "uri").String()
+		span.SetAttributes(attribute.String("mcp.resource.uri", auditLog.CallIdentifier))
 	case "tools/call", "prompts/get":
 		auditLog.CallIdentifier = gjson.GetBytes(msg.Params, "name").String()
+		span.SetAttributes(attribute.String("mcp.call.name", auditLog.CallIdentifier))
 	default:
 	}
 
@@ -378,10 +410,13 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	if sessionID != "" {
 		streamingSession, ok, err := h.sessions.Acquire(ctx, h.MessageHandler, sessionID)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to load session")
 			http.Error(rw, `{"http_error": "Failed to load session"}`, http.StatusInternalServerError)
 			return
 		}
 		if !ok {
+			span.SetStatus(codes.Error, "session not found")
 			http.Error(rw, `{"http_error": "Session not found"}`, http.StatusNotFound)
 			return
 		}
@@ -400,12 +435,15 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 
 		response, err := streamingSession.Exchange(ctx, msg)
 		if errors.Is(err, ErrNoResponse) {
+			span.SetStatus(codes.Ok, "no response expected")
 			rw.WriteHeader(http.StatusAccepted)
 			return
 		} else if errors.As(err, &AuthRequiredErr{}) {
+			span.SetStatus(codes.Error, "authentication required")
 			respondWithUnauthorized(rw, req)
 			return
 		} else if err != nil {
+			span.RecordError(err)
 			response = Message{
 				JSONRPC: msg.JSONRPC,
 				ID:      msg.ID,
@@ -421,7 +459,13 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		}
 
 		if err := json.NewEncoder(rw).Encode(response); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to encode response")
 			http.Error(rw, `{"http_error": "Failed to encode response"}`, http.StatusInternalServerError)
+		} else if response.Error != nil {
+			span.SetStatus(codes.Error, fmt.Sprintf("RPC error: %s", response.Error.Message))
+		} else {
+			span.SetStatus(codes.Ok, "message handled")
 		}
 
 		_ = h.sessions.Store(ctx, streamingSession.ID(), streamingSession)
@@ -429,12 +473,15 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	if msg.Method != "initialize" {
+		span.SetStatus(codes.Error, fmt.Sprintf("method %q not allowed without session", msg.Method))
 		http.Error(rw, fmt.Sprintf(`{"http_error": "Method not %q allowed"}`, msg.Method), http.StatusMethodNotAllowed)
 		return
 	}
 
 	session, err := NewServerSession(h.ctx, h.MessageHandler)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create session")
 		http.Error(rw, fmt.Sprintf(`{"http_error": "Failed to create session: %v"}`, err), http.StatusInternalServerError)
 		return
 	}
@@ -447,13 +494,17 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	resp, err := session.Exchange(ctx, msg)
 	if err != nil {
 		if errors.As(err, &AuthRequiredErr{}) {
+			span.SetStatus(codes.Error, "authentication required")
 			respondWithUnauthorized(rw, req)
 			return
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to initialize session")
 		session.Close(true)
 		http.Error(rw, fmt.Sprintf(`{"http_error": "Failed to handle message: %v"}`, err), http.StatusInternalServerError)
 		return
 	} else if resp.Error != nil && errors.As(resp.Error, &AuthRequiredErr{}) {
+		span.SetStatus(codes.Error, "authentication required")
 		respondWithUnauthorized(rw, req)
 		return
 	}
@@ -461,8 +512,11 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	auditLog.ClientName = session.session.InitializeRequest.ClientInfo.Name
 	auditLog.ClientVersion = session.session.InitializeRequest.ClientInfo.Version
 	auditLog.SessionID = session.ID()
+	span.SetAttributes(attribute.String("mcp.session_id", session.ID()))
 
 	if err := h.sessions.Store(ctx, session.ID(), session); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to store session")
 		session.Close(true)
 		http.Error(rw, fmt.Sprintf(`{"http_error": "Failed to store session: %v"}`, err), http.StatusInternalServerError)
 		return
@@ -471,9 +525,13 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Mcp-Session-Id", session.ID())
 	rw.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(rw).Encode(resp); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to encode response")
 		http.Error(rw, fmt.Sprintf(`{"http_error": "Failed to encode response: %v"}`, err), http.StatusInternalServerError)
 		return
 	}
+
+	span.SetStatus(codes.Ok, "session initialized")
 }
 
 func respondWithUnauthorized(rw http.ResponseWriter, req *http.Request) {
