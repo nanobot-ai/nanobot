@@ -7,7 +7,7 @@
 	import { setSharedChat } from '$lib/stores/chat.svelte';
 	import ThreadFromChat from "$lib/components/ThreadFromChat.svelte";
 	import { WorkspaceService } from '$lib/workspace.svelte';
-	import { ChevronRight, Eye, File, Folder, ListTodo } from '@lucide/svelte';
+	import { ChevronRight, Eye, File, Folder, ListTodo, Plus } from '@lucide/svelte';
 	import { formatTimeAgo } from '$lib/utils/time';
 
 	const chat = new ChatService();
@@ -158,7 +158,12 @@
 			<div class="flex flex-col col-span-4 gap-4">
 				<div class="card h-fit bg-base-100 dark:bg-base-200">
 					<div class="card-body">
-						<h3 class="card-title">Workspaces</h3>
+						<h3 class="card-title justify-between">
+							Workspaces
+							<button class="btn btn-square btn-ghost btn-sm tooltip" data-tip="Create new workspace">
+								<Plus class="size-4" />
+							</button>
+						</h3>
 						<ul class="list bg-base-100 rounded-box">
 							<li class="pb-2 text-xs opacity-60 tracking-wide">Most recently created workspaces</li>
 							{#each workspaceService.workspaces as workspace (workspace.id)}

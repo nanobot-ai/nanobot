@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { WorkspaceInstance, WorkspaceService } from "$lib/workspace.svelte";
-	import { ChevronDown, ChevronRight, CircleX, Copy, EllipsisVertical, FileText, Folder, FolderOpen, ListTodo, PaintBucket, PencilLine, Play, Plus, Save, Share, Trash2 } from "@lucide/svelte";
+	import { ChevronDown, ChevronRight, CircleX, Copy, EllipsisVertical, FileText, Folder, FolderOpen, ListTodo, PaintBucket, PencilLine, Play, Plus, Save, Search, Share, Trash2, X } from "@lucide/svelte";
 	import { onMount, tick } from "svelte";
 	import type { Component } from "svelte";
 	import DragDropList from "./DragDropList.svelte";
@@ -45,6 +45,9 @@
     let confirmDeleteWorkspaceModal = $state<ReturnType<typeof ConfirmDelete> | null>(null);
     let confirmDeleteTask = $state<{ taskId: string, workspaceId: string } | null>(null);
     let confirmDeleteTaskModal = $state<ReturnType<typeof ConfirmDelete> | null>(null);
+
+    let shareWorkspaceModal = $state<HTMLDialogElement | null>(null);
+    let sharingWorkspace = $state<Workspace | null>(null);
 
     let editingWorkspace = $state<Workspace | null>(null);
     let editingWorkspaceEl = $state<HTMLInputElement | null>(null);
@@ -396,10 +399,10 @@
                                         <button 
                                             onmousedown={(e) => e.stopPropagation()} 
                                             onclick={() => {
-                                                // TODO: share
+                                                sharingWorkspace = workspace;
+                                                shareWorkspaceModal?.showModal();
                                             }} 
-                                            class="text-sm disabled:opacity-50"
-                                            disabled
+                                            class="text-sm"
                                         >
                                             <Share class="size-4" /> Share
                                         </button>
@@ -673,6 +676,78 @@
         confirmDeleteTaskModal?.close();
     }}
 />
+
+<dialog bind:this={shareWorkspaceModal} class="modal">
+    <div class="modal-box">
+        <h3 class="text-xl font-bold">Share {sharingWorkspace?.name}</h3>
+
+        <div class="flex flex-col gap-2 mt-4 w-full">
+            <label class="input w-full">
+                <Search class="size-4" />
+                <input type="search" class="grow" placeholder="Add by email..." />
+            </label>
+
+            <h4 class="text-base font-semibold mt-4">People with access</h4>
+            <ul class="list">
+                <li class="flex w-full">
+                    <div class="grow"></div>
+                    <div class="w-64 flex">
+                        <div class="flex flex-1 text-xs font-semibold justify-center">Read</div>
+                        <div class="flex flex-1 text-xs font-semibold justify-center">Write</div>
+                        <div class="flex flex-1 text-xs font-semibold justify-center">Execute Only</div>
+                    </div>
+                    <div class="w-8"></div>
+                </li>
+                <li class="list-row flex w-full gap-0 px-0">
+                    <div class="grow flex items-center gap-2">
+                        <div class="avatar avatar-placeholder">
+                            <div class="bg-neutral text-neutral-content w-8 rounded-full">
+                                <span class="text-xs">J</span>
+                            </div>
+                        </div>
+                        <div class="font-medium">John Doe</div>
+                    </div>
+                    <div class="w-64 flex items-center">
+                        <div class="flex flex-1 justify-center">
+                            <input type="radio" name="radio-4" class="radio radio-primary radio-sm" checked={true} />
+                        </div>
+                        <div class="flex flex-1 justify-center">
+                            <input type="radio" name="radio-4" class="radio radio-primary radio-sm" />
+                        </div>
+                        <div class="flex flex-1 justify-center">
+                            <input type="radio" name="radio-4" class="radio radio-primary radio-sm" />
+                        </div>
+                    </div>
+                    <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left" data-tip="Remove"
+                        onclick={() => {
+                            // TODO:
+                        }}
+                    >
+                        <X class="size-4" />
+                    </button>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="modal-action">
+            <button class="btn btn-ghost" onclick={() => {
+                sharingWorkspace = null;
+                shareWorkspaceModal?.close();
+            }}>
+                Cancel
+            </button>
+            <button class="btn btn-primary" onclick={() => {
+                sharingWorkspace = null;
+                shareWorkspaceModal?.close();
+            }}>
+                Share
+            </button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
 
 <style>
     /* Hide daisyUI's default menu marker */
