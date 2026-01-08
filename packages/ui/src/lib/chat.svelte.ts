@@ -385,6 +385,7 @@ export class ChatService {
 	chatId: string;
 	uploadedFiles: UploadedFile[];
 	uploadingFiles: UploadingFile[];
+	workspaceEnabled: boolean;
 
 	readonly api: ChatAPI;
 	private closer = () => {};
@@ -404,9 +405,19 @@ export class ChatService {
 		this.agent = $state<Agent>({});
 		this.uploadedFiles = $state([]);
 		this.uploadingFiles = $state([]);
+		this.workspaceEnabled = $state(false);
+
 		if (opts?.callbacks) {
 			this.callbacks = opts.callbacks;
 		}
+		this.api
+			.capabilities()
+			.then((caps) => {
+				this.workspaceEnabled = caps?.workspace?.supported === true;
+			})
+			.catch(() => {
+				this.workspaceEnabled = false;
+			});
 		this.setChatId(opts?.chatId);
 	}
 
