@@ -5,7 +5,7 @@
 	import MessageInput from '$lib/components/MessageInput.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
 	import { createRegistryStore, setRegistryContext } from '$lib/context/registry.svelte';
-	import { EllipsisVertical, File, GripVertical, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, X } from '@lucide/svelte';
+	import { Circle, CircleCheck, EllipsisVertical, File, GripVertical, LoaderCircle, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, X } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
@@ -26,6 +26,7 @@
 	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
 	import { setSharedChat, sharedChat } from '$lib/stores/chat.svelte';
     import * as mocks from '$lib/mocks';
+	import Messages from '$lib/components/Messages.svelte';
 
     type Props = {
         workspaceId: string;
@@ -82,7 +83,9 @@
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
     const workspaceService = new WorkspaceService();
-    let runSession = $state<ChatService>();
+
+    let runSession = $state<{ thread: ChatService, stepName: string, pending: boolean }[]>([]);
+    let runHandlers = $state<ReturnType<typeof setTimeout>[]>([]);
 
     /** Handle file modifications from chat to update task steps */
     async function handleFileModified(info: ToolCallInfo) {
@@ -348,16 +351,54 @@
     }
 
     async function submitRun() {
+        if (!task) return;
         // TODO: change below to actually hit the run task endpoint once available
-        runSession = await workspace?.newSession();
-        runSession?.sendMessage(`
-Use the files under the ".nanobot/tasks/${taskId}" directory for context to help you simulate the task run.
-These are the following inputs to simulate the task run with: \n\n
-${JSON.stringify(runFormData)}
+        runSession = [];
+        let priorSteps = '';
+        let priorResponse = '';
 
-\n\n Do not indicate that you are simulating; act as if you are actually running the task.
-`)
+        for (const step of task.steps) {
+            const thread = workspace?.newSession ? await workspace?.newSession() : new ChatService();
+            runSession.push({ thread: thread!, stepName: step.name, pending: true });
+        }
+
         showSidebarThread = true;
+        for (const [stepIndex, step] of task.steps.entries()) {
+            runSession[stepIndex].pending = false;
+
+            const message = `
+You are a task runner. You are given a task and a list of steps to run. You are to run the task step by step. \n\n
+
+You have the following arguments:
+${JSON.stringify(runFormData)} \n\n
+
+${priorSteps.length > 0 ? `
+You have already run the following steps:
+${priorSteps}
+` : ''} \n\n
+
+${priorResponse.length > 0 ? `
+You have given the following response to the previous step(s):
+${priorResponse}
+` : ''} \n\n
+
+You are currently running the following step: \n
+Step name: ${step.name} \n
+Step description: ${step.description} \n
+Step content: ${step.content} \n\n
+\n\n You have the following tools available to you:
+${step.tools.join(', ')}
+\n\n Do not indicate that you are simulating or mocking any data; act as if you are actually running the task.
+            `;
+            
+            // Wait for this thread to complete before starting the next one
+            const response = await runSession[stepIndex].thread?.sendMessage(message);
+            if (response) {
+                priorResponse += `Step ${stepIndex} response: ${response.message}\n\n`;
+            }
+            
+            priorSteps += `Step ${stepIndex + 1}: ${step.name} \n\n`;
+        }
     }
 </script>
 
@@ -616,8 +657,10 @@ ${JSON.stringify(runFormData)}
                         onclick={() => {
                             showSidebarThread = false;
                             if (runSession) {
-                                runSession.close();
-                                runSession = undefined;
+                                runHandlers.forEach((handler) => clearTimeout(handler));
+                                runSession.forEach((session) => session.thread.close());
+                                runHandlers = [];
+                                runSession = [];
                             }
 
                             includeFilesInMessage = [];
@@ -628,9 +671,36 @@ ${JSON.stringify(runFormData)}
                 </div>
                 <div class="w-full flex-1 min-h-0 flex flex-col">
                     {#if runSession}
-                        {#key runSession.chatId}
-                            <ThreadFromChat inline chat={runSession} />
-                        {/key}
+                        <div class="h-full overflow-y-auto px-4">
+                            {#each runSession as session (session.stepName)}
+                            <details open class="collapse {session.thread.isLoading || session.pending ? '' : 'collapse-arrow'}">
+                                <summary class="collapse-title font-semibold flex items-center gap-2 {session.thread.isLoading || session.pending ? 'text-base-content/35' : ''} "
+                                    onmousedown={(e) => { 
+                                        if (session.thread.isLoading) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }
+                                    }}
+                                >
+                                    {session.stepName}
+                                    {#if session.pending}
+                                        <Circle class="size-4" />
+                                    {:else if session.thread.isLoading}
+                                        <LoaderCircle class="size-4 animate-spin" />
+                                    {:else}
+                                        <CircleCheck class="size-4 text-primary" />
+                                    {/if}
+                                </summary>
+                                <div class="collapse-content task-run-sidebar-content">
+                                    {#if !session.pending}
+                                        <div in:fade>
+                                            <Messages inline messages={session.thread.messages.slice(1)} />
+                                        </div>
+                                    {/if}
+                                </div>
+                            </details>
+                            {/each}
+                        </div>
                     {:else if sharedChat.current}
                         {#key sharedChat.current.chatId}
                             <ThreadFromChat inline chat={sharedChat.current} files={includeFilesInMessage} />
@@ -706,3 +776,9 @@ ${JSON.stringify(runFormData)}
         task!.steps[stepIndex].tools.push(...names);
     }} 
 />
+
+<style lang="postcss">
+    :global(.task-run-sidebar-content .prose) {
+        font-size: var(--text-sm);
+    }
+</style>

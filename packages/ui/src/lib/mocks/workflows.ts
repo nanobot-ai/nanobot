@@ -121,7 +121,6 @@ export const taskData: Record<string, Task> = {
 			{
 				name: 'ProductName',
 				description: 'The name of the product',
-				default: 'Obot',
 				id: 'eb3573cd-c6fb-4dda-beda-a92623e90fb4'
 			}
 		],
@@ -143,7 +142,6 @@ export const taskData: Record<string, Task> = {
 			{
 				name: 'CompanyName',
 				description: 'The name of the company you want to add member to',
-				default: 'Obot',
 				id: 'eb3573cd-c6fb-4dda-beda-a92623e90fb4'
 			},
 			{
