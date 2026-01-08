@@ -193,6 +193,51 @@ export const taskData: Record<string, Task> = {
 	}
 };
 
+export const summaryResults: Record<string, { step: string; summary: string }[]> = {
+	[taskIds[0]]: [
+		{
+			step: 'Add Member To Google Sheets',
+			summary:
+				'John Doe, Jane Doe, Mark Smith, Emily Johnson, David Lee were added to the google sheet.'
+		},
+		{
+			step: 'Add New Member Contacts to Google Groups',
+			summary:
+				'John Doe, Jane Doe, Mark Smith, Emily Johnson, David Lee were added to the Marketing & Business Proposals groups.'
+		},
+		{
+			step: 'Add Member Contacts To Slack',
+			summary:
+				'John Doe, Jane Doe, Mark Smith, Emily Johnson, David Lee were added to the private marketing channel, business-owners channel, and technical-leads channel.'
+		},
+		{ step: 'Add Logo to Site', summary: 'A PR was created to add the logo to the site.' },
+		{
+			step: 'Send Welcome Email',
+			summary: 'Welcome email sent to John Doe, Jane Doe, Mark Smith, Emily Johnson, David Lee.'
+		}
+	],
+	[taskIds[1]]: [
+		{
+			step: 'Search popular sites for the product',
+			summary:
+				'Product found on Amazon for $100.00, Walmart for $101.00, Best Buy for $102.00, Target for $103.00, and eBay for $104.00. The most affordable product is Amazon for $100.00; an email was sent to the user with the product details.'
+		}
+	],
+	[taskIds[2]]: [
+		{ step: 'Add Member To Google Sheets', summary: 'John Doe was added to Google Sheets' },
+		{
+			step: 'Add Member Contact Information to Google Groups',
+			summary: 'John Doe was added to the Marketing & Business Proposals groups'
+		},
+		{
+			step: 'Add Member To Slack',
+			summary:
+				'John Doe was added to the private marketing channel, business-owners channel, and technical-leads channel'
+		},
+		{ step: 'Send Welcome Email', summary: 'The welcome email was sent to John Doe.' }
+	]
+};
+
 export const workspaceInstances: Record<string, WorkspaceInstance> = {
 	[workspace.id]: {
 		files: workspaceFiles,
