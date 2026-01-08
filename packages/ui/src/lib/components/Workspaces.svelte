@@ -436,41 +436,47 @@
             {:else}
                 {#each items as item, index (index)}
                     <li class="flex flex-row justify-between w-full rounded-l-field p-1 {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">
-                        <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="flex grow overflow-hidden rounded-r-none truncate hover:bg-transparent">{item}</a>
-                        <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left mr-1" popovertarget="popover-task-actions-{item}" style="anchor-name:--task-actions-anchor-{item}"
-                            data-tip="Edit workflow"
-                        >
-                            <EllipsisVertical class="size-4 shrink-0" />
-                        </button>
-                        <ul 
-                            id="popover-task-actions-{item}"
-                            class="dropdown menu min-w-36 rounded-box bg-base-100 shadow-sm"
-                            popover style="position-anchor:--task-actions-anchor-{item}"
-                        >
-                            <li>
-                                <a 
-                                    href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)}
-                                    class="text-sm {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}"
-                                >
-                                    <Play class="size-4" /> Run
-                                </a>
-                            </li> 
-                            <li>
-                                <button 
-                                    onmousedown={(e) => e.stopPropagation()} 
-                                    onclick={() => {
-                                        confirmDeleteTask = {
-                                            taskId: item,
-                                            workspaceId,
-                                        };
-                                        confirmDeleteTaskModal?.showModal();
-                                    }} 
-                                    class="menu-alert"
-                                >
-                                    <Trash2 class="size-4" /> Delete
-                                </button>
-                            </li>
-                        </ul>
+                        {#if permissions.includes('write') || permissions.includes('read')}
+                            <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="flex grow overflow-hidden rounded-r-none truncate hover:bg-transparent">{item}</a>
+                            <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left mr-1" popovertarget="popover-task-actions-{item}" style="anchor-name:--task-actions-anchor-{item}"
+                                data-tip="Edit workflow"
+                            >
+                                <EllipsisVertical class="size-4 shrink-0" />
+                            </button>
+                            <ul 
+                                id="popover-task-actions-{item}"
+                                class="dropdown menu min-w-36 rounded-box bg-base-100 shadow-sm"
+                                popover style="position-anchor:--task-actions-anchor-{item}"
+                            >
+                                <li>
+                                    <a 
+                                        href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)}
+                                        class="text-sm {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}"
+                                    >
+                                        <Play class="size-4" /> Run
+                                    </a>
+                                </li> 
+                                {#if permissions.includes('write')}
+                                    <li>
+                                        <button 
+                                            onmousedown={(e) => e.stopPropagation()} 
+                                            onclick={() => {
+                                                confirmDeleteTask = {
+                                                    taskId: item,
+                                                    workspaceId,
+                                                };
+                                                confirmDeleteTaskModal?.showModal();
+                                            }} 
+                                            class="menu-alert"
+                                        >
+                                            <Trash2 class="size-4" /> Delete
+                                        </button>
+                                    </li>
+                                {/if}
+                            </ul>
+                        {:else}
+                            <a href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)} class="flex grow overflow-hidden rounded-r-none truncate hover:bg-transparent">{item}</a>
+                        {/if}
                     </li>
                 {/each}
             {/if}

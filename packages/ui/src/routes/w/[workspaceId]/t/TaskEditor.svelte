@@ -255,7 +255,6 @@
         initialLoadComplete = false;
         task = null;
 
-        console.log('idToUse', idToUse, mocks.taskIds);
         if (mocks.taskIds.includes(idToUse)) {
             task = mocks.taskData[idToUse];
         } else {

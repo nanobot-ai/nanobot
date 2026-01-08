@@ -2,13 +2,15 @@
 	import { createRegistryStore, getRegistryContext, setRegistryContext } from "$lib/context/registry.svelte";
 	import type { WorkspaceClient, WorkspaceFile } from "$lib/types";
 	import { WorkspaceService } from "$lib/workspace.svelte";
-	import { onDestroy, onMount } from "svelte";
+	import { onDestroy, onMount, untrack } from "svelte";
 	import { convertToTask } from "./utils";
 	import type { Input, Task } from "./types";
 	import { fade, fly, slide } from "svelte/transition";
 	import { Circle, CircleCheck, ListTodo, LoaderCircle, Play, Square, Wrench } from "@lucide/svelte";
 	import { setSharedChat, sharedChat } from "$lib/stores/chat.svelte";
 	import { SvelteMap } from "svelte/reactivity";
+    import * as mocks from '$lib/mocks';
+	import { ChatService } from "$lib/chat.svelte";
 	
     type Props = {
         workspaceId: string;
@@ -25,6 +27,7 @@
     let workspace = $state<WorkspaceClient | null>(null);
     let task = $state<Task | null>(null);
     let initialLoadComplete = $state(false);
+    let compiling = $state(false);
 
     let runFormData = $state<(Input & { value: string })[]>([]);
     let loading = $state(false);
@@ -50,14 +53,16 @@
     const ongoingSteps = new SvelteMap<string, { loading: boolean, completed: boolean, oauth: string, totalTime?: number, tokens?: number }>();
 
     onMount(() => {
+        const isMock = mocks.workspaceIds.includes(workspaceId);
         if (urlTaskId && workspaceId) {
-            workspace = workspaceService.getWorkspace(workspaceId);
+            workspace = isMock ? mocks.workspaceInstances[workspaceId] : workspaceService.getWorkspace(workspaceId);
             registryStore.fetch();
         }
     });
 
     async function initChat() {
-        const chat = await workspace?.newSession({ editor: true });
+        const isMock = mocks.workspaceIds.includes(workspaceId);
+        const chat = isMock ? new ChatService() : await workspace?.newSession({ editor: true });
         if (chat) {
             setSharedChat(chat);
         }
@@ -74,7 +79,9 @@
     });
 
     async function compileTask(id: string, files: WorkspaceFile[]) {
-        if (!workspace || !id) return;
+        if (!workspace || !id || compiling) return;
+        
+        compiling = true;
         if (progressTimeout) {
             clearTimeout(progressTimeout);
         }
@@ -89,7 +96,11 @@
             }, 3000);
         }, 1000);
 
-        task = await convertToTask(workspace, files, id);
+        if (mocks.taskIds.includes(id)) {
+            task = mocks.taskData[id];
+        } else {
+            task = await convertToTask(workspace, files, id);
+        }
         runFormData = task.inputs.map((input) => ({
             ...input,
             value: input.default || '',
@@ -99,12 +110,15 @@
 
         await new Promise((resolve) => setTimeout(resolve, 1000));
         initialLoadComplete = true;
+        compiling = false;
     }
 
     $effect(() => {
         const files = workspace?.files ?? [];
         if (urlTaskId && files.length > 0) {
-            compileTask(urlTaskId, files);
+             if (untrack(() => !compiling)) {
+                compileTask(urlTaskId, files);
+            }
         }
     });
     
