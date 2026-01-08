@@ -687,18 +687,17 @@
                 <input type="search" class="grow" placeholder="Add by email..." />
             </label>
 
-            <h4 class="text-base font-semibold mt-4">People with access</h4>
+            <div class="flex w-full">
+                <h4 class="text-base font-semibold mt-4 flex grow">People with access</h4>
+                <div class="w-60 flex pb-0.5">
+                    <div class="flex flex-1 text-xs font-semibold justify-center self-end">Read</div>
+                    <div class="flex flex-1 text-xs font-semibold justify-center self-end">Write</div>
+                    <div class="flex flex-1 text-xs font-semibold justify-center self-end">Execute Only</div>
+                </div>
+                <div class="w-8"></div>
+            </div>
             <ul class="list">
-                <li class="flex w-full">
-                    <div class="grow"></div>
-                    <div class="w-60 flex">
-                        <div class="flex flex-1 text-xs font-semibold justify-center">Read</div>
-                        <div class="flex flex-1 text-xs font-semibold justify-center">Write</div>
-                        <div class="flex flex-1 text-xs font-semibold justify-center">Execute Only</div>
-                    </div>
-                    <div class="w-8"></div>
-                </li>
-                <li class="list-row flex w-full gap-0 px-0">
+                <li class="list-row flex w-full gap-0 px-0 items-center">
                     <div class="grow flex items-center gap-2">
                         <div class="avatar avatar-placeholder">
                             <div class="bg-neutral text-neutral-content w-8 rounded-full">
@@ -706,6 +705,34 @@
                             </div>
                         </div>
                         <div class="font-medium">John Doe</div>
+                    </div>
+                    <div class="w-60 flex items-center">
+                        <div class="flex flex-1 justify-center">
+                            <input type="radio" name="radio-4" class="radio radio-primary radio-sm" checked={true} />
+                        </div>
+                        <div class="flex flex-1 justify-center">
+                            <input type="radio" name="radio-4" class="radio radio-primary radio-sm" />
+                        </div>
+                        <div class="flex flex-1 justify-center">
+                            <input type="radio" name="radio-4" class="radio radio-primary radio-sm" />
+                        </div>
+                    </div>
+                    <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left" data-tip="Remove"
+                        onclick={() => {
+                            // TODO:
+                        }}
+                    >
+                        <X class="size-4" />
+                    </button>
+                </li>
+                <li class="list-row flex w-full gap-0 px-0 items-center">
+                    <div class="grow flex items-center gap-2">
+                        <div class="avatar avatar-placeholder">
+                            <div class="bg-neutral text-neutral-content w-8 rounded-full">
+                                <span class="text-xs">J</span>
+                            </div>
+                        </div>
+                        <div class="font-medium">Jane Smith</div>
                     </div>
                     <div class="w-60 flex items-center">
                         <div class="flex flex-1 justify-center">
