@@ -139,36 +139,41 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 		return nil, fmt.Errorf("failed to marshal client metadata: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, authorizationServerMetadata.RegistrationEndpoint, bytes.NewReader(b))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create registration request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	// Before trying to register a client, check if there is a static client configuration.
+	var (
+		clientInfo clientRegistrationResponse
+		lookupErr  error
+	)
+	clientInfo.ClientID, clientInfo.ClientSecret, lookupErr = o.clientLookup.Lookup(ctx, protectedResourceMetadata.AuthorizationServers[0])
 
-	resp, err := o.metadataClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to register client: %w", err)
-	}
-	defer resp.Body.Close()
+	// If we didn't get a result from the lookup, register a client dynamically.
+	if lookupErr != nil || clientInfo.ClientID == "" || clientInfo.ClientSecret == "" {
+		req, err := http.NewRequest(http.MethodPost, authorizationServerMetadata.RegistrationEndpoint, bytes.NewReader(b))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create registration request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
 
-	var clientInfo clientRegistrationResponse
-	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden {
-		// If the registration endpoint produces a not found, then look for static client credentials.
-		clientInfo.ClientID, clientInfo.ClientSecret, err = o.clientLookup.Lookup(ctx, protectedResourceMetadata.AuthorizationServers[0])
+		resp, err := o.metadataClient.Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("failed to lookup client credentials: %w", err)
+			return nil, fmt.Errorf("failed to register client: %w", err)
 		}
-		if clientInfo.ClientID == "" {
-			return nil, fmt.Errorf("client registration failed with status %s and no client credentials were found", resp.Status)
-		}
-	} else if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("unexpeted status registering client (%d): %s", resp.StatusCode, string(body))
-	} else {
-		clientInfo, err = parseClientRegistrationResponse(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse client registration response: %w", err)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+			body, _ := io.ReadAll(resp.Body)
+			if lookupErr != nil {
+				err = fmt.Errorf("unexpected status registering client (%d): %s - static OAuth client lookup also failed: %v", resp.StatusCode, string(body), lookupErr)
+			} else {
+				err = fmt.Errorf("unexpected status registering client (%d): %s", resp.StatusCode, string(body))
+			}
+			return nil, err
+		} else {
+			clientInfo, err = parseClientRegistrationResponse(resp.Body)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse client registration response: %w", err)
+			}
 		}
 	}
 
