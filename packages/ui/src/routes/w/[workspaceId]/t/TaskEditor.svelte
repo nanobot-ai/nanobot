@@ -87,6 +87,41 @@
     let runSession = $state<{ thread: ChatService, stepName: string, pending: boolean }[]>([]);
     let runHandlers = $state<ReturnType<typeof setTimeout>[]>([]);
 
+    // Stick-to-bottom scroll tracking for run session
+    let runSessionScrollContainer = $state<HTMLElement | null>(null);
+    let isStickToBottom = $state(true);
+    const SCROLL_THRESHOLD = 50; // pixels from bottom to consider "at bottom"
+
+    function checkIfAtBottom(el: HTMLElement): boolean {
+        return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_THRESHOLD;
+    }
+
+    function handleRunSessionScroll() {
+        if (!runSessionScrollContainer) return;
+        isStickToBottom = checkIfAtBottom(runSessionScrollContainer);
+    }
+
+    function scrollToBottom() {
+        if (runSessionScrollContainer && isStickToBottom) {
+            runSessionScrollContainer.scrollTop = runSessionScrollContainer.scrollHeight;
+        }
+    }
+
+    // Auto-scroll when session content changes
+    $effect(() => {
+        if (!runSession.length) return;
+        // Track loading states and message counts to detect content changes
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const _ = runSession.map(s => ({
+            loading: s.thread.isLoading,
+            messageCount: s.thread.messages.length,
+            pending: s.pending
+        }));
+        
+        // Schedule scroll after DOM update
+        tick().then(scrollToBottom);
+    });
+
     /** Handle file modifications from chat to update task steps */
     async function handleFileModified(info: ToolCallInfo) {
         if (!task || !taskId || !workspace) return;
@@ -346,6 +381,7 @@
             inputsModal?.showModal();
         } else {
             // no inputs provided, just run task
+            isStickToBottom = true; // Reset stick-to-bottom when showing sidebar
             showSidebarThread = true;
         }
     }
@@ -354,6 +390,7 @@
         if (!task) return;
         // TODO: change below to actually hit the run task endpoint once available
         runSession = [];
+        isStickToBottom = true; // Reset stick-to-bottom when starting a new run
         let priorSteps = '';
         let priorResponse = '';
 
@@ -607,6 +644,7 @@ ${step.tools.join(', ')}
                         >
                             <MessageInput bind:this={toggleableMessageInput} 
                                 onSend={async (message) => {
+                                    isStickToBottom = true; // Reset stick-to-bottom when showing sidebar
                                     showSidebarThread = true;
                                     showMessageInput = false;
 
@@ -671,7 +709,10 @@ ${step.tools.join(', ')}
                 </div>
                 <div class="w-full flex-1 min-h-0 flex flex-col">
                     {#if runSession}
-                        <div class="h-full overflow-y-auto px-4">
+                        <div class="h-full overflow-y-auto px-4" 
+                            bind:this={runSessionScrollContainer}
+                            onscroll={handleRunSessionScroll}
+                        >
                             {#each runSession as session (session.stepName)}
                             <details open class="collapse {session.thread.isLoading || session.pending ? '' : 'collapse-arrow'}">
                                 <summary class="collapse-title font-semibold flex items-center gap-2 {session.thread.isLoading || session.pending ? 'text-base-content/35' : ''} "
