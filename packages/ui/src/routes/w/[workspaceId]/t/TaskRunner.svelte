@@ -164,12 +164,12 @@
     {#if initialLoadComplete && task}
         {#if completed}
             <div in:fade class="w-md flex flex-col justify-center items-center">
-                <h4 class="text-xl font-semibold">{canceling ? 'Task Run Cancelled' : 'Task Run Completed'}</h4>
+                <h4 class="text-xl font-semibold">{canceling ? 'Workflow Cancelled' : 'Workflow Completed'}</h4>
                 <p class="text-sm text-base-content/50 text-center mt-1">
                     {#if canceling}
-                        The task run has been cancelled. Would you like to run it again?
+                        The workflow has been cancelled. Would you like to run it again?
                     {:else}
-                        The task has been completed successfully. 
+                        The workflow has been completed successfully. 
                         Would you like to see specific details of the run or run it again?
                     {/if}
                 </p>

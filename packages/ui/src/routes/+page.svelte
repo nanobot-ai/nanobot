@@ -81,13 +81,13 @@
 					<div class="card-body">
 						<h2 class="card-title">Overview</h2>
 						<div class="text-sm text-base-content/70">
-							Welcome to your dashboard. This is a summary of your activity.
+							This is a summary of the most recent activity across your workspaces.
 						</div>
 
 						<div class="grid grid-cols-2 gap-3 bg-base-200 dark:bg-base-100 p-2 rounded-box">
 							<div class="stats shadow bg-base-100 dark:bg-base-200">
 								<div class="stat">
-									<div class="stat-title">Total Task Runs</div>
+									<div class="stat-title">Total Workflow Runs</div>
 									<div class="stat-value">121</div>
 									<div class="stat-desc">10% more than last month</div>
 								</div>
@@ -126,12 +126,12 @@
 
 				<div class="card h-fit bg-base-100 dark:bg-base-200">
 					<div class="card-body">
-						<h2 class="card-title text-base">Recent Task Run Activity</h2>
+						<h2 class="card-title text-base">Recent Workflow Activity</h2>
 
 						<table class="table">
 							<thead>
 								<tr>
-									<th>Task</th>
+									<th>Workflow</th>
 									<th>Created</th>
 									<th>Time to Complete</th>
 									<th>Tokens Used</th>
