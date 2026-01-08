@@ -193,11 +193,23 @@ export const taskData: Record<string, Task> = {
 	}
 };
 
-export const workspaceInstance = {
-	files: workspaceFiles,
-	sessions: [],
-	loading: false
-} as unknown as WorkspaceInstance;
+export const workspaceInstances: Record<string, WorkspaceInstance> = {
+	[workspace.id]: {
+		files: workspaceFiles,
+		sessions: [],
+		loading: false
+	} as unknown as WorkspaceInstance,
+	[sharedWorkspaces[0].id]: {
+		files: sharedWorkspaceFiles[sharedWorkspaces[0].id],
+		sessions: [],
+		loading: false
+	} as unknown as WorkspaceInstance,
+	[sharedWorkspaces[1].id]: {
+		files: sharedWorkspaceFiles[sharedWorkspaces[1].id],
+		sessions: [],
+		loading: false
+	} as unknown as WorkspaceInstance
+};
 
 export const workspacePermissions: Record<string, string[]> = {
 	'mock-matcha-latte': ['read', 'write', 'execute'],
@@ -306,5 +318,33 @@ export const taskRuns = [
 		user: 'John Doe',
 		workspace: 'Adorable Akita',
 		tokensUsed: 15500
+	}
+];
+
+export const users = [
+	{
+		id: '1',
+		name: 'John Doe',
+		email: 'john.doe@example.com'
+	},
+	{
+		id: '2',
+		name: 'Jane Doe',
+		email: 'jane.doe@example.com'
+	},
+	{
+		id: '3',
+		name: 'Mark Smith',
+		email: 'mark.smith@example.com'
+	},
+	{
+		id: '4',
+		name: 'Emily Johnson',
+		email: 'emily.johnson@example.com'
+	},
+	{
+		id: '5',
+		name: 'David Lee',
+		email: 'david.lee@example.com'
 	}
 ];
