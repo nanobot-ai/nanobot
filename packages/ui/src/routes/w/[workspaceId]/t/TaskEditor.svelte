@@ -139,7 +139,7 @@
 
     onMount(() => {
         const isMock = mocks.workspaceIds.includes(workspaceId);
-        workspace = isMock ? mocks.workspaceInstance : workspaceService.getWorkspace(workspaceId);
+        workspace = isMock ? mocks.workspaceInstances[workspaceId] : workspaceService.getWorkspace(workspaceId);
         registryStore.fetch();
     });
     

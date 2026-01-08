@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { WorkspaceInstance, WorkspaceService } from "$lib/workspace.svelte";
-	import { ChevronDown, ChevronRight, CircleX, Copy, EllipsisVertical, FileText, Folder, FolderOpen, ListTodo, PaintBucket, PencilLine, Play, Plus, Save, Search, Share, Trash2, X } from "@lucide/svelte";
+	import { ChevronDown, ChevronRight, CircleX, Copy, EllipsisVertical, FileText, Folder, FolderOpen, ListTodo, PaintBucket, PencilLine, Play, Plus, Save, Share, Trash2 } from "@lucide/svelte";
 	import { onMount, tick } from "svelte";
 	import type { Component } from "svelte";
 	import DragDropList from "./DragDropList.svelte";
@@ -12,6 +12,7 @@
 	import { getNotificationContext } from "$lib/context/notifications.svelte";
 	import { page } from "$app/state";
     import * as mocks from '$lib/mocks';
+	import WorkspaceShare from "./WorkspaceShare.svelte";
 
     interface Props {
         inverse?: boolean;
@@ -47,8 +48,8 @@
     let confirmDeleteTask = $state<{ taskId: string, workspaceId: string } | null>(null);
     let confirmDeleteTaskModal = $state<ReturnType<typeof ConfirmDelete> | null>(null);
 
-    let shareWorkspaceModal = $state<HTMLDialogElement | null>(null);
     let sharingWorkspace = $state<Workspace | null>(null);
+    let shareWorkspaceModal = $state<ReturnType<typeof WorkspaceShare> | null>(null);
 
     let editingWorkspace = $state<Workspace | null>(null);
     let editingWorkspaceEl = $state<HTMLInputElement | null>(null);
@@ -159,7 +160,7 @@
         if (details && details.open) {
             loadingWorkspace.set(workspaceId, true);
             if (workspaceId.startsWith('mock-')) {
-                workspaceData.set(workspaceId, mocks.workspaceInstance);
+                workspaceData.set(workspaceId, mocks.workspaceInstances[workspaceId]);
                 loadingWorkspace.set(workspaceId, false);
             } else {
                 workspaceData.set(workspaceId, workspaceService.getWorkspace(workspaceId) as WorkspaceInstance);
@@ -477,8 +478,15 @@
                             <li>
                                 <button 
                                     onmousedown={(e) => e.stopPropagation()} 
-                                    onclick={async (_e) => {
-                                        // TODO:
+                                    onclick={async (e) => {
+                                        e.stopPropagation();
+                                        workspaces = [...workspaces, {
+                                            ...workspace,
+                                            id: `copy-${workspace.id}`,
+                                            name: `Copy of ${workspace.name}`,
+                                            created: new Date().toISOString(),
+                                        }];
+                                        document.getElementById(`workspace-actions-${workspace.id}`)?.hidePopover();
                                     }} 
                                     class="text-sm"
                                 >
@@ -679,104 +687,16 @@
     }}
 />
 
-<dialog bind:this={shareWorkspaceModal} class="modal">
-    <div class="modal-box">
-        <h3 class="text-xl font-bold">Share {sharingWorkspace?.name}</h3>
-
-        <div class="flex flex-col gap-2 mt-4 w-full">
-            <label class="input w-full">
-                <Search class="size-4" />
-                <input type="search" class="grow" placeholder="Add by email..." />
-            </label>
-
-            <div class="flex w-full">
-                <h4 class="text-base font-semibold mt-4 flex grow">People with access</h4>
-                <div class="w-60 flex pb-0.5">
-                    <div class="flex flex-1 text-xs font-semibold justify-center self-end">Read</div>
-                    <div class="flex flex-1 text-xs font-semibold justify-center self-end">Write</div>
-                    <div class="flex flex-1 text-xs font-semibold justify-center self-end">Execute Only</div>
-                </div>
-                <div class="w-8"></div>
-            </div>
-            <ul class="list">
-                <li class="list-row flex w-full gap-0 px-0 items-center">
-                    <div class="grow flex items-center gap-2">
-                        <div class="avatar avatar-placeholder">
-                            <div class="bg-neutral text-neutral-content w-8 rounded-full">
-                                <span class="text-xs">J</span>
-                            </div>
-                        </div>
-                        <div class="font-medium">John Doe</div>
-                    </div>
-                    <div class="w-60 flex items-center">
-                        <div class="flex flex-1 justify-center">
-                            <input type="radio" name="radio-4" class="radio radio-primary radio-sm" checked={true} />
-                        </div>
-                        <div class="flex flex-1 justify-center">
-                            <input type="radio" name="radio-4" class="radio radio-primary radio-sm" />
-                        </div>
-                        <div class="flex flex-1 justify-center">
-                            <input type="radio" name="radio-4" class="radio radio-primary radio-sm" />
-                        </div>
-                    </div>
-                    <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left" data-tip="Remove"
-                        onclick={() => {
-                            // TODO:
-                        }}
-                    >
-                        <X class="size-4" />
-                    </button>
-                </li>
-                <li class="list-row flex w-full gap-0 px-0 items-center">
-                    <div class="grow flex items-center gap-2">
-                        <div class="avatar avatar-placeholder">
-                            <div class="bg-neutral text-neutral-content w-8 rounded-full">
-                                <span class="text-xs">J</span>
-                            </div>
-                        </div>
-                        <div class="font-medium">Jane Smith</div>
-                    </div>
-                    <div class="w-60 flex items-center">
-                        <div class="flex flex-1 justify-center">
-                            <input type="radio" name="radio-4" class="radio radio-primary radio-sm" checked={true} />
-                        </div>
-                        <div class="flex flex-1 justify-center">
-                            <input type="radio" name="radio-4" class="radio radio-primary radio-sm" />
-                        </div>
-                        <div class="flex flex-1 justify-center">
-                            <input type="radio" name="radio-4" class="radio radio-primary radio-sm" />
-                        </div>
-                    </div>
-                    <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left" data-tip="Remove"
-                        onclick={() => {
-                            // TODO:
-                        }}
-                    >
-                        <X class="size-4" />
-                    </button>
-                </li>
-            </ul>
-        </div>
-        
-        <div class="modal-action">
-            <button class="btn btn-ghost" onclick={() => {
-                sharingWorkspace = null;
-                shareWorkspaceModal?.close();
-            }}>
-                Cancel
-            </button>
-            <button class="btn btn-primary" onclick={() => {
-                sharingWorkspace = null;
-                shareWorkspaceModal?.close();
-            }}>
-                Share
-            </button>
-        </div>
-    </div>
-    <form method="dialog" class="modal-backdrop">
-        <button>close</button>
-    </form>
-</dialog>
+<WorkspaceShare
+    bind:this={shareWorkspaceModal}
+    sharingWorkspace={sharingWorkspace}
+    onCancel={() => {
+        sharingWorkspace = null;
+    }}
+    onShare={() => {
+        sharingWorkspace = null;
+    }}
+/>
 
 <style>
     /* Hide daisyUI's default menu marker */
