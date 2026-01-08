@@ -14,6 +14,11 @@
 	let doClose = true;
 	let workspaceEnabled = $derived(chat.workspaceEnabled);
 	const workspaceService = new WorkspaceService();
+	const mockSharedWorkspaces = $state<{ id: string, name: string, color: string, created: string }[]>([
+		{ id: '1', name: 'Jolly Roger', color: '#000', created: '2026-01-01' },
+		{ id: '2', name: 'Matcha Latte', color: '#2ddcec', created: '2026-01-02' },
+		{ id: '3', name: 'Pumpkin Spice', color: '#fdcc11', created: '2026-01-03' },
+	]);
 	const mockTasks = $state<{ id: string, name: string, created: string, workspace: string }[]>([
 		{ id: '1', name: 'Onboarding Workflow', created: '2026-01-01', workspace: 'Adorable Akita' },
 		{ id: '2', name: 'Customer Support', created: '2026-01-02', workspace: 'Adorable Akita' },
@@ -129,7 +134,7 @@
 
 				<div class="card h-fit bg-base-100 dark:bg-base-200">
 					<div class="card-body">
-						<h2 class="card-title">Task Run Activity</h2>
+						<h2 class="card-title text-base">Recent Task Run Activity</h2>
 
 						<table class="table">
 							<thead>
@@ -163,10 +168,27 @@
 			<div class="flex flex-col col-span-4 gap-4">
 				<div class="card h-fit bg-base-100 dark:bg-base-200">
 					<div class="card-body">
-						<h3 class="card-title">Recent Workspaces</h3>
+						<h3 class="card-title">Workspaces</h3>
 						<ul class="list bg-base-100 rounded-box">
 							<li class="pb-2 text-xs opacity-60 tracking-wide">Most recently created workspaces</li>
 							{#each workspaceService.workspaces as workspace (workspace.id)}
+								<li class="list-row">
+									<div>
+										<Folder class="size-6" style="color: {workspace.color || '#000'}; fill: color-mix(in oklab, {workspace.color || '#000'} 50%, var(--color-base-100))" />
+									</div>
+									<div>
+									<div>{workspace.name}</div>
+									<div class="text-xs uppercase font-semibold opacity-60">
+										{formatTimeAgo(workspace.created).relativeTime}
+									</div>
+									</div>
+								</li>
+							{/each}
+						</ul>
+
+						<ul class="list bg-base-100 rounded-box">
+							<li class="pb-2 text-xs opacity-60 tracking-wide">Most recently shared workspaces</li>
+							{#each mockSharedWorkspaces as workspace (workspace.id)}
 								<li class="list-row">
 									<div>
 										<Folder class="size-6" style="color: {workspace.color || '#000'}; fill: color-mix(in oklab, {workspace.color || '#000'} 50%, var(--color-base-100))" />
@@ -185,7 +207,7 @@
 
 				<div class="card h-fit bg-base-100 dark:bg-base-200">
 					<div class="card-body">
-						<h3 class="card-title">Recent Tasks</h3>
+						<h3 class="card-title">Tasks</h3>
 						<ul class="list bg-base-100 rounded-box">
 							<li class="pb-2 text-xs opacity-60 tracking-wide">Most recently created tasks</li>
 							{#each mockTasks as task (task.id)}
@@ -211,7 +233,7 @@
 
 				<div class="card h-fit bg-base-100 dark:bg-base-200">
 					<div class="card-body">
-						<h3 class="card-title">Recent Files</h3>
+						<h3 class="card-title">Files</h3>
 						<ul class="list bg-base-100 rounded-box">
 							<li class="pb-2 text-xs opacity-60 tracking-wide">Most recently uploaded files</li>
 							{#each mockFiles as file (file.id)}
