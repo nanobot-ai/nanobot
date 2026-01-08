@@ -306,123 +306,7 @@
                         {@render workspaceTitle(workspace)}
                         <div class="shrink-0 flex items-center opacity-0 transition-opacity group-hover:opacity-100 relative z-30">
                             {#if editingWorkspace?.id !== workspace.id}
-                                <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" popoverTarget="workspace-actions-{workspace.id}" style="anchor-name: --workspace-actions-anchor-{workspace.id};"
-                                    onmousedown={(e) => e.stopPropagation()}
-                                    onclick={(e) => e.stopPropagation()}
-                                    data-tip="Edit workspace"
-                                >
-                                    <EllipsisVertical class="size-4" />
-                                </button>
-                                <ul class="dropdown menu w-48 rounded-box bg-base-100 dark:bg-base-300 shadow-sm overflow-visible"
-                                    popover="auto" id="workspace-actions-{workspace.id}" style="position-anchor: --workspace-actions-anchor-{workspace.id};">
-                                    <li>
-                                        <button 
-                                            onmousedown={(e) => e.stopPropagation()} 
-                                            onclick={async (e) => {
-                                                editingWorkspace = workspace;
-                                                e.currentTarget.blur();
-
-                                                await tick();
-                                                editingWorkspaceEl?.focus();
-                                            }} 
-                                            class="text-sm"
-                                        >
-                                            <PencilLine class="size-4" />
-                                            Rename
-                                        </button>
-                                    </li>
-                                    <li class="group/submenu relative" 
-                                        role="presentation"
-                                        onmousedown={(e) => e.stopPropagation()}
-                                        onmouseleave={(e) => {
-                                            if (!e.currentTarget.contains(document.activeElement)) {
-                                                selectedColor = '';
-                                            }
-                                        }}
-                                        onfocusout={(e) => {
-                                            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                                                selectedColor = '';
-                                            }
-                                        }}
-                                    >
-                                        <div class="flex justify-between items-center">
-                                            <div class="flex items-center gap-2 text-sm">
-                                                <PaintBucket class="size-4" />
-                                                Change color
-                                            </div>
-                                            <ChevronRight class="size-3" />
-                                        </div>
-                                        <ul class="ml-0 menu -translate-y-2 bg-base-100 dark:bg-base-300 rounded-box shadow-md absolute left-full top-0 w-52 invisible opacity-0 group-hover/submenu:visible group-hover/submenu:opacity-100 group-focus-within/submenu:visible group-focus-within/submenu:opacity-100 transition-opacity z-50 before:hidden grid grid-cols-3 gap-0.5">
-                                            {#each initialColorOptions as color (color)}
-                                                <li>
-                                                    <button class="text-sm justify-center flex border {color === selectedColor ? 'bg-base-300 border-primary' : 'border-transparent '}" 
-                                                        onclick={(_e) => {
-                                                            selectedColor = color;
-                                                        }} aria-label="Change color to {color}"
-                                                    >
-                                                        <div class="w-8 h-4 rounded-input" style="background-color: {color};"></div>
-                                                    </button>
-                                                </li>
-                                            {/each}
-                                            <li class="col-span-3 relative">
-                                                <button class="btn btn-sm btn-ghost z-10 pointer-events-none border {selectedColor && !initialColorOptions.includes(selectedColor) ? 'bg-base-300 border-primary' : 'border-transparent'}">
-                                                    {#if selectedColor === '' || initialColorOptions.includes(selectedColor)}
-                                                        Custom color
-                                                    {:else}
-                                                        <div class="w-full h-4 rounded-input" style="background-color: {selectedColor};"></div>
-                                                    {/if}
-                                                </button>
-                                                <input type="color" class="w-full absolute top-0 left-0 h-full" onmousedown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()} bind:value={selectedColor} />
-                                            </li>
-                                            <li class="col-span-3 mt-2">
-                                                <button class="btn button-soft btn-sm"
-                                                    disabled={!selectedColor}
-                                                    onclick={() => {
-                                                        loading = true;
-                                                        try {
-                                                            workspaceService.updateWorkspace({
-                                                                ...workspace,
-                                                                color: selectedColor,
-                                                            });
-                                                        } catch (e) {
-                                                            const error = e instanceof Error ? e.message : String(e);
-                                                            notifications.error('Error updating workspace', error);
-                                                        } finally {
-                                                            selectedColor = '';
-                                                            loading = false;
-                                                        }
-                                                    }}
-                                                >
-                                                    Apply
-                                                </button>
-                                            </li>
-                                        </ul>
-                                    </li>
-                                    <li>
-                                        <button 
-                                            onmousedown={(e) => e.stopPropagation()} 
-                                            onclick={() => {
-                                                sharingWorkspace = workspace;
-                                                shareWorkspaceModal?.showModal();
-                                            }} 
-                                            class="text-sm"
-                                        >
-                                            <Share class="size-4" /> Share
-                                        </button>
-                                    </li>
-                                    <li>
-                                        <button 
-                                            onmousedown={(e) => e.stopPropagation()} 
-                                            onclick={() => {
-                                                confirmDeleteWorkspaceId = workspace.id;
-                                                confirmDeleteWorkspaceModal?.showModal();
-                                            }} 
-                                            class="menu-alert"
-                                        >
-                                            <Trash2 class="size-4" /> Delete
-                                        </button>
-                                    </li>
-                                </ul>
+                                {@render workspaceMenuActions(workspace, ['read', 'write', 'execute'])}
                             {:else}
                                 <div class="flex items-center">
                                     <button class="btn btn-square btn-ghost btn-sm" 
@@ -466,35 +350,7 @@
                 >
                     {@render workspaceTitle(workspace)}
                     <div class="shrink-0 flex items-center opacity-0 transition-opacity group-hover:opacity-100 relative z-30">
-                        <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" popoverTarget="workspace-actions-{workspace.id}" style="anchor-name: --workspace-actions-anchor-{workspace.id};"
-                            onmousedown={(e) => e.stopPropagation()}
-                            onclick={(e) => e.stopPropagation()}
-                            data-tip="Edit workspace"
-                        >
-                            <EllipsisVertical class="size-4" />
-                        </button>
-                        <ul class="dropdown menu w-48 rounded-box bg-base-100 dark:bg-base-300 shadow-sm overflow-visible"
-                            popover="auto" id="workspace-actions-{workspace.id}" style="position-anchor: --workspace-actions-anchor-{workspace.id};">
-                            <li>
-                                <button 
-                                    onmousedown={(e) => e.stopPropagation()} 
-                                    onclick={async (e) => {
-                                        e.stopPropagation();
-                                        workspaces = [...workspaces, {
-                                            ...workspace,
-                                            id: `copy-${workspace.id}`,
-                                            name: `Copy of ${workspace.name}`,
-                                            created: new Date().toISOString(),
-                                        }];
-                                        document.getElementById(`workspace-actions-${workspace.id}`)?.hidePopover();
-                                    }} 
-                                    class="text-sm"
-                                >
-                                    <Copy class="size-4" />
-                                    Make a copy
-                                </button>
-                            </li>
-                        </ul>
+                        {@render workspaceMenuActions(workspace, workspacePermissions[workspace.id] ?? [], true)}
                     </div>
                 </summary>
                 {@render workspaceContent(workspace, workspacePermissions[workspace.id] ?? [])}
@@ -621,6 +477,153 @@
         </ul>
     </details>
 </li>
+{/snippet}
+
+{#snippet workspaceMenuActions(workspace: Workspace, permissions: string[], isShared?: boolean)}
+{@const canWrite = permissions.includes('write')}
+<button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" popoverTarget="workspace-actions-{workspace.id}" style="anchor-name: --workspace-actions-anchor-{workspace.id};"
+    onmousedown={(e) => e.stopPropagation()}
+    onclick={(e) => e.stopPropagation()}
+    data-tip="Edit workspace"
+>
+    <EllipsisVertical class="size-4" />
+</button>
+<ul class="dropdown menu w-48 rounded-box bg-base-100 dark:bg-base-300 shadow-sm overflow-visible"
+    popover="auto" id="workspace-actions-{workspace.id}" style="position-anchor: --workspace-actions-anchor-{workspace.id};">
+    {#if canWrite}
+        <li>
+            <button 
+                onmousedown={(e) => e.stopPropagation()} 
+                onclick={async (e) => {
+                    editingWorkspace = workspace;
+                    e.currentTarget.blur();
+
+                    await tick();
+                    editingWorkspaceEl?.focus();
+                }} 
+                class="text-sm"
+            >
+                <PencilLine class="size-4" />
+                Rename
+            </button>
+        </li>
+        <li class="group/submenu relative" 
+            role="presentation"
+            onmousedown={(e) => e.stopPropagation()}
+            onmouseleave={(e) => {
+                if (!e.currentTarget.contains(document.activeElement)) {
+                    selectedColor = '';
+                }
+            }}
+            onfocusout={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    selectedColor = '';
+                }
+            }}
+        >
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-2 text-sm">
+                    <PaintBucket class="size-4" />
+                    Change color
+                </div>
+                <ChevronRight class="size-3" />
+            </div>
+            <ul class="ml-0 menu -translate-y-2 bg-base-100 dark:bg-base-300 rounded-box shadow-md absolute left-full top-0 w-52 invisible opacity-0 group-hover/submenu:visible group-hover/submenu:opacity-100 group-focus-within/submenu:visible group-focus-within/submenu:opacity-100 transition-opacity z-50 before:hidden grid grid-cols-3 gap-0.5">
+                {#each initialColorOptions as color (color)}
+                    <li>
+                        <button class="text-sm justify-center flex border {color === selectedColor ? 'bg-base-300 border-primary' : 'border-transparent '}" 
+                            onclick={(_e) => {
+                                selectedColor = color;
+                            }} aria-label="Change color to {color}"
+                        >
+                            <div class="w-8 h-4 rounded-input" style="background-color: {color};"></div>
+                        </button>
+                    </li>
+                {/each}
+                <li class="col-span-3 relative">
+                    <button class="btn btn-sm btn-ghost z-10 pointer-events-none border {selectedColor && !initialColorOptions.includes(selectedColor) ? 'bg-base-300 border-primary' : 'border-transparent'}">
+                        {#if selectedColor === '' || initialColorOptions.includes(selectedColor)}
+                            Custom color
+                        {:else}
+                            <div class="w-full h-4 rounded-input" style="background-color: {selectedColor};"></div>
+                        {/if}
+                    </button>
+                    <input type="color" class="w-full absolute top-0 left-0 h-full" onmousedown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()} bind:value={selectedColor} />
+                </li>
+                <li class="col-span-3 mt-2">
+                    <button class="btn button-soft btn-sm"
+                        disabled={!selectedColor}
+                        onclick={() => {
+                            loading = true;
+                            try {
+                                workspaceService.updateWorkspace({
+                                    ...workspace,
+                                    color: selectedColor,
+                                });
+                            } catch (e) {
+                                const error = e instanceof Error ? e.message : String(e);
+                                notifications.error('Error updating workspace', error);
+                            } finally {
+                                selectedColor = '';
+                                loading = false;
+                            }
+                        }}
+                    >
+                        Apply
+                    </button>
+                </li>
+            </ul>
+        </li>
+    {/if}
+    {#if isShared}
+        <li>
+            <button 
+                onmousedown={(e) => e.stopPropagation()} 
+                onclick={() => {
+                    sharingWorkspace = workspace;
+                    shareWorkspaceModal?.showModal();
+                }} 
+                class="text-sm"
+            >
+                <Share class="size-4" /> Share
+            </button>
+        </li>
+    {:else}
+        <li>
+            <button 
+                onmousedown={(e) => e.stopPropagation()} 
+                onclick={async (e) => {
+                    e.stopPropagation();
+                    workspaces = [...workspaces, {
+                        ...workspace,
+                        id: `copy-${workspace.id}`,
+                        name: `Copy of ${workspace.name}`,
+                        created: new Date().toISOString(),
+                    }];
+                    document.getElementById(`workspace-actions-${workspace.id}`)?.hidePopover();
+                }} 
+                class="text-sm"
+            >
+                <Copy class="size-4" />
+                Make a copy
+            </button>
+        </li>
+    {/if}
+    {#if canWrite && !isShared}
+        <li>
+            <button 
+                onmousedown={(e) => e.stopPropagation()} 
+                onclick={() => {
+                    confirmDeleteWorkspaceId = workspace.id;
+                    confirmDeleteWorkspaceModal?.showModal();
+                }} 
+                class="menu-alert"
+            >
+                <Trash2 class="size-4" /> Delete
+            </button>
+        </li>
+    {/if}
+</ul>
 {/snippet}
 
 <!-- {#snippet conversationsSection(_workspaceId: string, conversations: Session[])}
