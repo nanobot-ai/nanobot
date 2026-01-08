@@ -188,12 +188,12 @@
             <div class="md:w-4xl px-4 w-full flex flex-col justify-center items-center z-20">
                 <div class="hero w-full bg-base-100 dark:bg-base-200 rounded-box shadow-xs dark:border-base-300 border-transparent border">
                     <div class="hero-content w-full grow flex-col md:flex-row">
-                        <div class="pl-4 flex items-center gap-2">
+                        <div class="pl-4 flex items-center gap-3">
                             <div class="rounded-full p-2 border-2 border-primary bg-primary/10 {loading ? 'animate-pulse' : ''} w-fit">
                                 <ListTodo class="size-8 text-primary" />
                             </div>
                             <div class="w-xs">
-                                <h4 class="mt-2 text-2xl font-semibold">{name}</h4>
+                                <h3 class="mt-2 text-2xl font-semibold">{name}</h3>
                                 {#if loading}
                                     <p in:fade class="font-light text-sm text-base-content/50">Your task is currently running. Please wait a moment...</p>
                                 {:else}
