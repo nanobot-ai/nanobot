@@ -145,10 +145,18 @@
         }, timeout + 1000);
         timeoutHandlers.push(finalHandler);
     }
+
+    function reset() {
+        loading = false;
+        completed = false;
+        canceling = false;
+        timeoutHandlers = [];
+        ongoingSteps.clear();
+    }
 </script>
 
 <div class="flex w-full h-dvh justify-center items-center flex-col relative">
-    <div class="h-16 w-full flex p-4 items-center absolute top-0 left-0">
+    <div class="h-16 w-full flex px-4 items-center absolute top-0 left-0">
         {#if loading}
         <h2 in:fade class="text-xl font-semibold flex items-center gap-2">{name} <LoaderCircle class="size-4 animate-spin shrink-0" /></h2>
         {/if}
@@ -171,83 +179,85 @@
                             View Details
                         </button>
                     {/if}
-                    <button class="btn btn-primary flex-1" onclick={handleRun}>
+                    <button class="btn btn-primary flex-1" onclick={reset}>
                         Run Again
                     </button>
                 </div>
             </div>
         {:else}
-            {#if loading}
-                <div class="md:w-4xl p-4 w-full flex flex-col justify-center items-center z-20">
-                    <div class="hero w-full bg-base-100 dark:bg-base-200 rounded-box shadow-xs dark:border-base-300 border-transparent border">
-                        <div class="hero-content w-full grow flex-col md:flex-row">
-                            <div class="px-4 flex items-center gap-2">
-                                <div class="rounded-full bg-primary/10 p-2 border-primary border-2 animate-pulse w-fit">
-                                    <ListTodo class="size-8 text-primary" />
-                                </div>
-                                <div class="w-xs">
-                                    <h4 class="mt-2 text-2xl font-semibold">{task.name}</h4>
-                                    <p class="font-light text-sm text-base-content/50">Your task is currently running. Please wait a moment...</p>
-                                </div>
+            <div class="md:w-4xl px-4 w-full flex flex-col justify-center items-center z-20">
+                <div class="hero w-full bg-base-100 dark:bg-base-200 rounded-box shadow-xs dark:border-base-300 border-transparent border">
+                    <div class="hero-content w-full grow flex-col md:flex-row">
+                        <div class="pl-4 flex items-center gap-2">
+                            <div class="rounded-full p-2 border-2 border-primary bg-primary/10 {loading ? 'animate-pulse' : ''} w-fit">
+                                <ListTodo class="size-8 text-primary" />
                             </div>
-                            <ul in:fade class="timeline timeline-vertical timeline-compact grow">
-                                {#each task.steps as step, index (step.id)}
-                                    <li>
-                                        {#if index > 0}
-                                            <hr class="timeline-connector w-0.5 {ongoingSteps.get(task.steps[index - 1].id)?.completed ? 'completed' : ''}" />
+                            <div class="w-xs">
+                                <h4 class="mt-2 text-2xl font-semibold">{task.name}</h4>
+                                {#if loading}
+                                    <p in:fade class="font-light text-sm text-base-content/50">Your task is currently running. Please wait a moment...</p>
+                                {:else}
+                                    <div in:fade>
+                                        {#if description.length > 0}
+                                            <p class="text-xs text-base-content/50 mt-1">{description}</p>
                                         {/if}
-                                        <div class="timeline-middle">
-                                            {#if ongoingSteps.get(step.id)?.completed}
-                                                <CircleCheck class="size-5 text-primary" />
-                                            {:else if ongoingSteps.get(step.id)?.loading}
-                                                <LoaderCircle class="size-5 animate-spin shrink-0 text-base-content/50" />
-                                            {:else}
-                                                <Circle class="size-5 text-base-content/50" />
-                                            {/if}
-                                        </div>
-                                        <div class="timeline-end timeline-box border-0 shadow-none pl-1 py-2">
-                                            {step.name} 
-                                            {#if ongoingSteps.get(step.id)?.completed}
-                                                <span in:fade class="text-xs text-base-content/35">({ongoingSteps.get(step.id)?.totalTime ? `${(ongoingSteps.get(step.id)!.totalTime! / 1000).toFixed(1)}s` : ''})</span>
-                                            {/if}
-                                            {#if ongoingSteps.get(step.id)?.tokens}
-                                                <span in:fade class="text-xs italic text-base-content/35">{ongoingSteps.get(step.id)?.tokens ? `${ongoingSteps.get(step.id)!.tokens!} tokens` : ''}</span>
-                                            {/if}
-                                        </div>
-                                        {#if index < task.steps.length - 1}
-                                            <hr class="timeline-connector w-0.5 {ongoingSteps.get(step.id)?.completed ? 'completed' : ''}" />
+                                        {#if tools.length > 0}
+                                            <div class="flex flex-wrap gap-2 mt-2 mb-1">
+                                                {#each tools as tool (tool.name)}
+                                                    <div class="badge badge-sm badge-soft gap-1">
+                                                        {#if tool.icons?.[0]?.src}
+                                                            <img alt={tool.title} src={tool.icons[0].src} class="size-4" />
+                                                        {:else}
+                                                            <Wrench class="size-4" />
+                                                        {/if}
+                                                        {tool.title}
+                                                    </div>
+                                                {/each}
+                                            </div>
                                         {/if}
-                                    </li>
-                                {/each}
-                            </ul>
+                                    </div>
+                                {/if}
+                            </div>
                         </div>
+                        <ul in:fade class="timeline timeline-vertical timeline-compact grow">
+                            {#each task.steps as step, index (step.id)}
+                                <li>
+                                    {#if index > 0}
+                                        <hr class="timeline-connector w-0.5 {ongoingSteps.get(task.steps[index - 1].id)?.completed ? 'completed' : ''}" />
+                                    {/if}
+                                    <div class="timeline-middle">
+                                        {#if ongoingSteps.get(step.id)?.completed}
+                                            <CircleCheck class="size-5 text-primary" />
+                                        {:else if ongoingSteps.get(step.id)?.loading}
+                                            <LoaderCircle class="size-5 animate-spin shrink-0 text-base-content/50" />
+                                        {:else}
+                                            <Circle class="size-5 text-base-content/50" />
+                                        {/if}
+                                    </div>
+                                    <div class="timeline-end timeline-box border-0 shadow-none pl-1 py-2">
+                                        {step.name} 
+                                        {#if ongoingSteps.get(step.id)?.completed}
+                                            <span in:fade class="text-xs text-base-content/35">({ongoingSteps.get(step.id)?.totalTime ? `${(ongoingSteps.get(step.id)!.totalTime! / 1000).toFixed(1)}s` : ''})</span>
+                                        {/if}
+                                        {#if ongoingSteps.get(step.id)?.tokens}
+                                            <span in:fade class="text-xs italic text-base-content/35">{ongoingSteps.get(step.id)?.tokens ? `${ongoingSteps.get(step.id)!.tokens!} tokens` : ''}</span>
+                                        {/if}
+                                    </div>
+                                    {#if index < task.steps.length - 1}
+                                        <hr class="timeline-connector w-0.5 {ongoingSteps.get(step.id)?.completed ? 'completed' : ''}" />
+                                    {/if}
+                                </li>
+                            {/each}
+                        </ul>
                     </div>
                 </div>
-            {/if}
-            <div class="md:w-xl w-full flex flex-col justify-center items-center z-20">
+            </div>
+            <div class="md:w-4xl p-4 w-full flex flex-col justify-center items-center z-20">
                 {#if !loading}
                     <div class="w-full" out:slide={{ duration: 300 }}>
                         <div class="w-full flex flex-col justify-center items-center" out:fly={{ y: -100, duration: 200 }} >
-                            <h2 class="text-xl font-semibold">{name}</h2>
-                            {#if description.length > 0}
-                                <p class="text-xs text-base-content/50 mt-1">{description}</p>
-                            {/if}
-                            {#if tools.length > 0}
-                                <div class="flex flex-wrap gap-2 mt-2 mb-1">
-                                    {#each tools as tool (tool.name)}
-                                        <div class="badge badge-sm badge-outline badge-primary">
-                                            {#if tool.icons?.[0]?.src}
-                                                <img alt={tool.title} src={tool.icons[0].src} class="size-4" />
-                                            {:else}
-                                                <Wrench class="size-4" />
-                                            {/if}
-                                            {tool.title}
-                                        </div>
-                                    {/each}
-                                </div>
-                            {/if}
                             {#if runFormData.length > 0}
-                                <div class="mt-4 p-4 flex flex-col gap-2 w-full border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
+                                <div class="p-4 flex flex-col gap-2 w-full border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
                                     <p class="text-xs text-primary">To get started, please fill out the following information:</p>
                                     <div class="flex flex-col gap-2">
                                         {#each runFormData as input (input.id)}
@@ -267,7 +277,7 @@
                         <LoaderCircle class="size-4 animate-spin shrink-0" />
                     </button>
                 {:else}
-                    <button class="btn btn-primary transition-all {loading ? 'w-10 tooltip' : 'mt-4 w-48'}"  onclick={handleRun} {disabled} data-tip={loading ? 'Cancel run' : undefined}>
+                    <button class="btn btn-primary transition-all mt-4 {loading ? 'w-10 tooltip' : 'w-48'}"  onclick={handleRun} {disabled} data-tip={loading ? 'Cancel run' : undefined}>
                         {#if loading}
                             <Square class="size-4 shrink-0" />
                         {:else}
