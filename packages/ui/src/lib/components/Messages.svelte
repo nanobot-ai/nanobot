@@ -8,9 +8,10 @@
 		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
 		isLoading?: boolean;
 		agent?: Agent;
+		inline?: boolean;
 	}
 
-	let { messages, onSend, isLoading = false, agent }: Props = $props();
+	let { messages, onSend, isLoading = false, agent, inline }: Props = $props();
 	let messageGroups = $derived.by(() => {
 		return messages.reduce((acc, message) => {
 			if (message.role === 'user' || acc.length === 0) {
@@ -40,7 +41,7 @@
 	let showLoadingIndicator = $derived(isLoading && !hasMessageContent);
 </script>
 
-<div id="message-groups" class="w-full flex flex-col space-y-4 pt-4">
+<div id="message-groups" class="w-full flex flex-col {inline ? '' : 'space-y-4 pt-4'}">
 	{#if messages.length === 0}
 		<AgentHeader {agent} {onSend} />
 	{:else}
@@ -52,7 +53,7 @@
 			<div
 				id={`group-${messageGroup[0]?.id}`}
 				class={{
-					'min-h-[calc(100vh-2rem)]': isLast,
+					'min-h-[calc(100vh-2rem)]': isLast && !inline,
 					contents: !isLast
 				}}
 				data-message-id={messageGroup[0]?.id}
@@ -70,7 +71,9 @@
 							</div>
 						</div>
 					{/if}
-					<div class="h-59"></div>
+					{#if !inline}
+						<div class="h-59"></div>
+					{/if}
 				{/if}
 			</div>
 		{/each}
