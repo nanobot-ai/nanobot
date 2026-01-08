@@ -2,14 +2,14 @@
 	import { createRegistryStore, getRegistryContext, setRegistryContext } from "$lib/context/registry.svelte";
 	import type { WorkspaceClient, WorkspaceFile } from "$lib/types";
 	import { WorkspaceService } from "$lib/workspace.svelte";
-	import { onDestroy, onMount, untrack } from "svelte";
+	import { onDestroy, onMount } from "svelte";
 	import { convertToTask } from "./utils";
 	import type { Input, Task } from "./types";
 	import { fade, fly, slide } from "svelte/transition";
-	import { LoaderCircle, Play, Square, Wrench } from "@lucide/svelte";
-	import Messages from "$lib/components/Messages.svelte";
+	import { Circle, CircleCheck, LoaderCircle, Play, Square, Wrench } from "@lucide/svelte";
 	import { setSharedChat, sharedChat } from "$lib/stores/chat.svelte";
-
+	import { SvelteMap } from "svelte/reactivity";
+	
     type Props = {
         workspaceId: string;
         urlTaskId: string;
@@ -44,6 +44,10 @@
         const tools = task?.steps.flatMap((step) => step.tools.map((toolName) => registry.getServerByName(toolName)).filter((tool) => tool !== undefined)) ?? [];
         return tools.filter((tool, index, self) => self.findIndex((t) => t.name === tool.name) === index);
     })
+
+    let timeoutHandlers = $state<ReturnType<typeof setTimeout>[]>([]);
+
+    const ongoingSteps = new SvelteMap<string, { loading: boolean, completed: boolean, oauth: string, totalTime?: number, tokens?: number }>();
 
     onMount(() => {
         if (urlTaskId && workspaceId) {
@@ -103,27 +107,43 @@
             compileTask(urlTaskId, files);
         }
     });
-
-    $effect(() => {
-        if (!sharedChat.current?.isLoading && loading) {
-            untrack(() => loading = false);
-            completed = true;
-        }
-    });
     
     async function handleRun() {
-        if (disabled) return;
+        if (disabled || !task) return;
         if (loading) {
             canceling = true;
-            sharedChat.current?.close();
+            timeoutHandlers.forEach((handler) => clearTimeout(handler));
+            completed = true;
+            loading = false;
             return;
         }
         
-        // TODO: change below to hit running task with arguments once available
-        sharedChat.current?.sendMessage('Write a very long story about the history of the universe. It should be a 1 minute read at least.');
-        setTimeout(() => {
-            loading = true
-        }, 300);
+        canceling = false;
+        loading = true;
+        completed = false;
+        timeoutHandlers = [];
+        ongoingSteps.clear();
+
+        let timeout = 0;
+        for (const step of task.steps) {
+            timeout += 1000;
+            const handlerA = setTimeout(() => {
+                ongoingSteps.set(step.id, { loading: true, completed: false, oauth: '' });
+            }, timeout);
+            
+            const completeTime = Math.floor(Math.random() * 4000) + 1000;
+            const tokens = Math.floor(Math.random() * 9000) + 1000;
+            timeout += completeTime; // 1-5 seconds
+            const handlerB = setTimeout(() => {
+                ongoingSteps.set(step.id, { loading: false, completed: true, totalTime: completeTime, tokens, oauth: '' });
+            }, timeout);
+            timeoutHandlers.push(handlerA, handlerB);
+        }
+        const finalHandler = setTimeout(() => {
+            loading = false;
+            completed = true;
+        }, timeout + 1000);
+        timeoutHandlers.push(finalHandler);
     }
 </script>
 
@@ -151,13 +171,55 @@
                             View Details
                         </button>
                     {/if}
-                    <button class="btn btn-primary flex-1">
+                    <button class="btn btn-primary flex-1" onclick={handleRun}>
                         Run Again
                     </button>
                 </div>
             </div>
         {:else}
-            <div class="md:w-xl w-full flex flex-col grow justify-center items-center z-20">
+            {#if loading}
+                <div class="md:w-4xl p-4 w-full flex flex-col justify-center items-center z-20">
+                    <div class="hero w-full bg-base-100 dark:bg-base-200 rounded-box shadow-xs dark:border-base-300 border-transparent border">
+                        <div class="hero-content w-full grow flex-col md:flex-row gap-4">
+                            <div class="px-4">
+                                <h4 class="text-2xl font-semibold">{task.name}</h4>
+                                <p class="font-light text-sm text-base-content/50">Your task is currently running. Please wait a moment...</p>
+                            </div>
+                            <ul in:fade class="timeline timeline-vertical timeline-compact mt-4 grow">
+                                {#each task.steps as step, index (step.id)}
+                                    <li>
+                                        {#if index > 0}
+                                            <hr class="timeline-connector w-0.5 {ongoingSteps.get(task.steps[index - 1].id)?.completed ? 'completed' : ''}" />
+                                        {/if}
+                                        <div class="timeline-middle">
+                                            {#if ongoingSteps.get(step.id)?.completed}
+                                                <CircleCheck class="size-5 text-primary" />
+                                            {:else if ongoingSteps.get(step.id)?.loading}
+                                                <LoaderCircle class="size-5 animate-spin shrink-0 text-base-content/50" />
+                                            {:else}
+                                                <Circle class="size-5 text-base-content/50" />
+                                            {/if}
+                                        </div>
+                                        <div class="timeline-end timeline-box border-0 shadow-none pl-1 py-2">
+                                            {step.name} 
+                                            {#if ongoingSteps.get(step.id)?.completed}
+                                                <span in:fade class="text-xs text-base-content/35">({ongoingSteps.get(step.id)?.totalTime ? `${(ongoingSteps.get(step.id)!.totalTime! / 1000).toFixed(1)}s` : ''})</span>
+                                            {/if}
+                                            {#if ongoingSteps.get(step.id)?.tokens}
+                                                <span in:fade class="text-xs italic text-base-content/35">{ongoingSteps.get(step.id)?.tokens ? `${ongoingSteps.get(step.id)!.tokens!} tokens` : ''}</span>
+                                            {/if}
+                                        </div>
+                                        {#if index < task.steps.length - 1}
+                                            <hr class="timeline-connector w-0.5 {ongoingSteps.get(step.id)?.completed ? 'completed' : ''}" />
+                                        {/if}
+                                    </li>
+                                {/each}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            {/if}
+            <div class="md:w-xl w-full flex flex-col justify-center items-center z-20">
                 {#if !loading}
                     <div class="w-full" out:slide={{ duration: 300 }}>
                         <div class="w-full flex flex-col justify-center items-center" out:fly={{ y: -100, duration: 200 }} >
@@ -200,7 +262,7 @@
                         <LoaderCircle class="size-4 animate-spin shrink-0" />
                     </button>
                 {:else}
-                    <button class="btn btn-primary transition-all mt-4 {loading ? 'w-10' : 'w-48'}"  onclick={handleRun} {disabled}>
+                    <button class="btn btn-primary transition-all {loading ? 'w-10 tooltip' : 'mt-4 w-48'}"  onclick={handleRun} {disabled} data-tip={loading ? 'Cancel run' : undefined}>
                         {#if loading}
                             <Square class="size-4 shrink-0" />
                         {:else}
@@ -213,13 +275,6 @@
                 {#if canceling}
                     <p class="text-sm text-base-content/25 mt-1">Cancelling current run...</p>
                 {/if}
-            </div>
-        {/if}
-
-        {#if loading && !canceling}
-            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-48 overflow-hidden flex flex-col justify-end md:w-2xl w-full" id="thread-process">
-                <div class="absolute inset-x-0 top-0 h-16 bg-linear-to-b from-base-200 dark:from-base-100 to-transparent z-10 pointer-events-none"></div>
-                <Messages messages={sharedChat.current?.messages ?? []} onSend={sharedChat.current?.sendMessage} isLoading={sharedChat.current?.isLoading ?? false} agent={sharedChat.current?.agent ?? undefined} />
             </div>
         {/if}
     {:else}
@@ -240,5 +295,27 @@
     }
     :global(#thread-process #message-groups .h-59) {
         display: none;
+    }
+
+    /* Timeline connector fill animation */
+    :global(.timeline-connector) {
+        position: relative !important;
+        background-color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
+        overflow: hidden !important;
+    }
+
+    :global(.timeline-connector::after) {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 0%;
+        background-color: var(--color-primary);
+        transition: height 0.4s ease-out;
+    }
+
+    :global(.timeline-connector.completed::after) {
+        height: 100%;
     }
 </style>

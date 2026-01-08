@@ -691,7 +691,7 @@
             <ul class="list">
                 <li class="flex w-full">
                     <div class="grow"></div>
-                    <div class="w-64 flex">
+                    <div class="w-60 flex">
                         <div class="flex flex-1 text-xs font-semibold justify-center">Read</div>
                         <div class="flex flex-1 text-xs font-semibold justify-center">Write</div>
                         <div class="flex flex-1 text-xs font-semibold justify-center">Execute Only</div>
@@ -707,7 +707,7 @@
                         </div>
                         <div class="font-medium">John Doe</div>
                     </div>
-                    <div class="w-64 flex items-center">
+                    <div class="w-60 flex items-center">
                         <div class="flex flex-1 justify-center">
                             <input type="radio" name="radio-4" class="radio radio-primary radio-sm" checked={true} />
                         </div>
