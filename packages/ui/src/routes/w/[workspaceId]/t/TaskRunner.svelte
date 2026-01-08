@@ -193,7 +193,7 @@
                                 <ListTodo class="size-8 text-primary" />
                             </div>
                             <div class="w-xs">
-                                <h4 class="mt-2 text-2xl font-semibold">{task.name}</h4>
+                                <h4 class="mt-2 text-2xl font-semibold">{name}</h4>
                                 {#if loading}
                                     <p in:fade class="font-light text-sm text-base-content/50">Your task is currently running. Please wait a moment...</p>
                                 {:else}
