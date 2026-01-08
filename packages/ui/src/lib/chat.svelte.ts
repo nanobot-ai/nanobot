@@ -503,7 +503,7 @@ export class ChatService {
 	};
 
 	private reloadAgent = async () => {
-		const agents = await this.api.listAgents({ sessionId: this.chatId });
+		const agents = await this.api.listAgents();
 		if (agents.agents?.length > 0) {
 			this.agent = agents.agents[0];
 		}

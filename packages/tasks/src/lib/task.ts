@@ -103,7 +103,6 @@ export async function getTasksDescription(client: WorkspaceClient) {
 }
 
 export async function getTasks(client: WorkspaceClient) {
-  console.log("getTasks", client.getSessionId());
   const dirEntries = await client.listDir(tasksRoot, {
     ignoreNotFound: true,
   });
@@ -117,8 +116,6 @@ export async function getTasks(client: WorkspaceClient) {
       return getTaskByDirectoryName(client, entry.name);
     }),
   );
-
-  console.log("getTasks RECEIVED TASKS", tasks, client.getSessionId());
 
   return tasks.filter((x) => x.name);
 }

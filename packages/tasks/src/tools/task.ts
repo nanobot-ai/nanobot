@@ -5,7 +5,6 @@ import { getTask } from "../lib/task.ts";
 
 const schema = z.object({
   taskName: z.string().describe("The task name to start"),
-  sessionId: z.string().optional().describe("The session ID"),
   arguments: z
     .record(z.string())
     .optional()
@@ -22,11 +21,8 @@ export default createTool({
     invoked: "Task dispatched",
   },
   inputSchema: schema,
-  async handler({ taskName, sessionId, arguments: taskArgs }, ctx) {
-    if (!sessionId) {
-      sessionId = ctx.workspaceId;
-    }
-    const client = await ensureConnected(sessionId);
+  async handler({ taskName, arguments: taskArgs }, ctx) {
+    const client = await ensureConnected(ctx.workspaceId);
     const task = await getTask(
       client,
       taskName.replace(/^workspace:\/\/+/, ""),

@@ -1,7 +1,6 @@
 publish:
   mcpServers:
     - nanobot.workspace
-    - nanobot.tasks
   entrypoint: main
 
 agents:
@@ -11,8 +10,5 @@ agents:
 
 mcpServers:
   nanobot.workspace: {} # Internal
-  nanobot.tasks: {} # Internal
   nanobot.workspace.provider:
     url: http://localhost:5173/mcp
-  nanobot.tasks.runner:
-    url: http://localhost:5173/mcp/tasks
