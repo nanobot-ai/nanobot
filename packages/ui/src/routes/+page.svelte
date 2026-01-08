@@ -20,26 +20,26 @@
 		{ id: '3', name: 'Pumpkin Spice', color: '#fdcc11', created: '2026-01-03' },
 	]);
 	const mockTasks = $state<{ id: string, name: string, created: string, workspace: string }[]>([
-		{ id: '1', name: 'Onboarding Workflow', created: '2026-01-01', workspace: 'Adorable Akita' },
-		{ id: '2', name: 'Customer Support', created: '2026-01-02', workspace: 'Adorable Akita' },
-		{ id: '3', name: 'Marketing Campaign', created: '2026-01-03', workspace: 'Caramel Cookie' },
+		{ id: '1', name: 'Onboarding Workflow', created: '2026-01-02', workspace: 'Adorable Akita' },
+		{ id: '2', name: 'Customer Support', created: '2026-01-01', workspace: 'Adorable Akita' },
+		{ id: '3', name: 'Marketing Campaign', created: '2026-01-01', workspace: 'Caramel Cookie' },
 	]);
 	const mockFiles = $state<{ id: string, name: string, created: string, workspace: string }[]>([
-		{ id: '1', name: 'Example.pdf', created: '2026-01-01', workspace: 'Adorable Akita' },
+		{ id: '1', name: 'Example.pdf', created: '2026-01-03', workspace: 'Adorable Akita' },
 		{ id: '2', name: 'Example.docx', created: '2026-01-02', workspace: 'Caramel Cookie' },
-		{ id: '3', name: 'Example.xlsx', created: '2026-01-03', workspace: 'Adorable Akita' },
+		{ id: '3', name: 'Example.xlsx', created: '2026-01-01', workspace: 'Adorable Akita' },
 	]);
-	const mockTaskRuns = $state<{ id: string, task: string, averageCompletionTime: string, user: string, workspace: string, tokensUsed: number; }[]>([
-		{ id: '1', task: 'Onboarding Workflow', averageCompletionTime: '10m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 7000 },
-		{ id: '2', task: 'Customer Support', averageCompletionTime: '10.1m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 8500 },
-		{ id: '3', task: 'Marketing Campaign', averageCompletionTime: '10m', user: 'Jane Doe', workspace: 'Caramel Cookie', tokensUsed: 8000 },
-		{ id: '4', task: 'Product Launch', averageCompletionTime: '11m', user: 'Jane Doe', workspace: 'Caramel Cookie', tokensUsed: 9000 },
-		{ id: '5', task: 'Sales Pipeline', averageCompletionTime: '10m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 10000 },
-		{ id: '6', task: 'Customer Support', averageCompletionTime: '6.5m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 11500 },
-		{ id: '7', task: 'Marketing Campaign', averageCompletionTime: '10m', user: 'Jane Doe', workspace: 'Caramel Cookie', tokensUsed: 12000 },
-		{ id: '8', task: 'Product Launch', averageCompletionTime: '10m', user: 'Jane Doe', workspace: 'Caramel Cookie', tokensUsed: 13000 },
-		{ id: '9', task: 'Sales Pipeline', averageCompletionTime: '10m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 14000 },
-		{ id: '10', task: 'Customer Support', averageCompletionTime: '10m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 15500 },
+	const mockTaskRuns = $state<{ id: string, created: string, task: string, averageCompletionTime: string, user: string, workspace: string, tokensUsed: number; }[]>([
+		{ id: '1', created: '2026-01-03 10:00:00', task: 'Onboarding Workflow', averageCompletionTime: '10m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 7000 },
+		{ id: '2', created: '2026-01-02 10:00:00', task: 'Customer Support', averageCompletionTime: '10.1m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 8500 },
+		{ id: '3', created: '2026-01-02 10:00:00', task: 'Marketing Campaign', averageCompletionTime: '10m', user: 'Jane Doe', workspace: 'Caramel Cookie', tokensUsed: 8000 },
+		{ id: '4', created: '2026-01-01 10:00:00', task: 'Product Launch', averageCompletionTime: '11m', user: 'Jane Doe', workspace: 'Caramel Cookie', tokensUsed: 9000 },
+		{ id: '5', created: '2026-01-01 10:00:00', task: 'Sales Pipeline', averageCompletionTime: '10m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 10000 },
+		{ id: '6', created: '2026-01-01 10:00:00', task: 'Customer Support', averageCompletionTime: '6.5m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 11500 },
+		{ id: '7', created: '2026-01-01 10:00:00', task: 'Marketing Campaign', averageCompletionTime: '10m', user: 'Jane Doe', workspace: 'Caramel Cookie', tokensUsed: 12000 },
+		{ id: '8', created: '2026-01-01 10:00:00', task: 'Product Launch', averageCompletionTime: '10m', user: 'Jane Doe', workspace: 'Caramel Cookie', tokensUsed: 13000 },
+		{ id: '9', created: '2026-01-01 10:00:00', task: 'Sales Pipeline', averageCompletionTime: '10m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 14000 },
+		{ id: '10', created: '2026-01-01 10:00:00', task: 'Customer Support', averageCompletionTime: '10m', user: 'John Doe', workspace: 'Adorable Akita', tokensUsed: 15500 },
 	]);
 
 	// Share the chat instance immediately so layout can access it
@@ -73,7 +73,7 @@
 
 {#if workspaceEnabled}
 <div class="h-dvh w-full overflow-y-auto">
-	<div class="w-6xl mx-auto py-8 flex flex-col gap-4">
+	<div class="px-8 mx-auto py-8 flex flex-col gap-4 max-w-7xl w-full">
 		<h1 class="text-3xl font-semibold">Dashboard</h1>
 		<div class="grid grid-cols-12 gap-4">
 			<div class="flex flex-col col-span-8 gap-4">
@@ -132,24 +132,22 @@
 							<thead>
 								<tr>
 									<th>Task</th>
-									<th>Time To Complete</th>
+									<th>Created</th>
+									<th>Time to Complete</th>
 									<th>Tokens Used</th>
 									<th>User</th>
 									<th>Workspace</th>
-									<th></th>
 								</tr>
 							</thead>
 							<tbody>
 								{#each mockTaskRuns as taskRun (taskRun.id)}
 									<tr>
 										<td>{taskRun.task}</td>
+										<td>{formatTimeAgo(taskRun.created).relativeTime}</td>
 										<td>{taskRun.averageCompletionTime}</td>
 										<td>{taskRun.tokensUsed}</td>
 										<td>{taskRun.user}</td>
 										<td>{taskRun.workspace}</td>
-										<td>
-											<button class="btn btn-ghost btn-xs">details</button>
-										</td>
 									</tr>
 								{/each}
 							</tbody>
