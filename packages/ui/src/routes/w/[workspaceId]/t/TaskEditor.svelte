@@ -4,25 +4,28 @@
 	import DragDropList from '$lib/components/DragDropList.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
 	import { createRegistryStore, setRegistryContext } from '$lib/context/registry.svelte';
-	import { EllipsisVertical, GripVertical, PencilLine, Play, Plus, ReceiptText, X } from '@lucide/svelte';
+	import { ChevronDown, File, EllipsisVertical, GripVertical, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, X } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { fade, slide } from 'svelte/transition';
+	import { fade, fly, slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { WorkspaceService } from '$lib/workspace.svelte';
-	import type { WorkspaceClient, WorkspaceFile } from '$lib/types';
+	import type { Attachment, WorkspaceClient, WorkspaceFile } from '$lib/types';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
 	import { type Input, type Task, type Step as StepType } from './types';
-	import { compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
+	import { compileOutputFiles, convertToTask, parseFrontmatterMarkdown, setupEmptyTask } from './utils';
 	import StepActions from './StepActions.svelte';
 	import TaskInputActions from './TaskInputActions.svelte';
     import TaskInput from './TaskInput.svelte';
 	import Step from './Step.svelte';
 	import RegistryToolSelector from './RegistryToolSelector.svelte';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
     import * as mocks from '$lib/mocks';
 	import { mockTasks } from '$lib/mocks/stores/tasks.svelte';
+	import { setSharedChat, sharedChat } from '$lib/stores/chat.svelte';
+	import MessageInput from '$lib/components/MessageInput.svelte';
+	import type { ToolCallInfo } from '$lib/chat.svelte';
 	
     type Props = {
         workspaceId: string;
@@ -43,6 +46,7 @@
 
     let inputsModal = $state<HTMLDialogElement | null>(null);
     let runFormData = $state<(Input & { value: string })[]>([]);
+    let runMode = $state<'normal' | 'debug'>('normal');
 
     let confirmDeleteStep = $state<{ stepId: string, filename: string } | null>(null);
     let confirmDeleteStepModal = $state<ReturnType<typeof ConfirmDelete> | null>(null);
@@ -55,13 +59,13 @@
     let stepDescription = new SvelteMap<number | string, boolean>();
 
     let showSidebarThread = $state(false);
-    // let toggleableMessageInput = $state<ReturnType<typeof MessageInput> | null>(null);
+    let toggleableMessageInput = $state<ReturnType<typeof MessageInput> | null>(null);
 
     let registryToolSelector = $state<ReturnType<typeof RegistryToolSelector> | null>(null);
     let currentAddingToolForStep = $state<StepType | null>(null);
 
-    // let showMessageInput = $state(false);
-    // let includeFilesInMessage = $state<Attachment[]>([]);
+    let showMessageInput = $state(false);
+    let includeFilesInMessage = $state<Attachment[]>([]);
 
     let showAlternateHeader = $state(false);
     let lastSavedTaskJson = '';
@@ -114,58 +118,58 @@
     //     tick().then(scrollToBottom);
     // });
 
-    // /** Handle file modifications from chat to update task steps */
-    // async function handleFileModified(info: ToolCallInfo) {
-    //     if (!task || !taskId || !workspace) return;
+    /** Handle file modifications from chat to update task steps */
+    async function handleFileModified(info: ToolCallInfo) {
+        if (!task || !taskId || !workspace) return;
         
-    //     const filePath = info.filePath;
-    //     const taskPrefix = `.nanobot/tasks/${taskId}/`;
-    //     const workspacePrefix = `/workspace/${taskPrefix}`;
+        const filePath = info.filePath;
+        const taskPrefix = `.nanobot/tasks/${taskId}/`;
+        const workspacePrefix = `/workspace/${taskPrefix}`;
         
-    //     // Check if the modified file belongs to this task
-    //     let relativePath = '';
-    //     if (filePath.startsWith(workspacePrefix)) {
-    //         relativePath = filePath.replace(`/workspace/`, '');
-    //     } else if (filePath.startsWith(taskPrefix)) {
-    //         relativePath = filePath;
-    //     }
+        // Check if the modified file belongs to this task
+        let relativePath = '';
+        if (filePath.startsWith(workspacePrefix)) {
+            relativePath = filePath.replace(`/workspace/`, '');
+        } else if (filePath.startsWith(taskPrefix)) {
+            relativePath = filePath;
+        }
         
-    //     if (!relativePath || !relativePath.startsWith(taskPrefix)) return;
+        if (!relativePath || !relativePath.startsWith(taskPrefix)) return;
         
-    //     // Extract step identifier (e.g., "TASK.md" or "STEP_1.md")
-    //     const stepFile = relativePath.replace(taskPrefix, '');
+        // Extract step identifier (e.g., "TASK.md" or "STEP_1.md")
+        const stepFile = relativePath.replace(taskPrefix, '');
         
-    //     try {
-    //         // Read and parse just the modified file
-    //         const fileContent = await workspace.readFile(relativePath);
-    //         const parsed = await parseFrontmatterMarkdown(fileContent);
+        try {
+            // Read and parse just the modified file
+            const fileContent = await workspace.readFile(relativePath);
+            const parsed = await parseFrontmatterMarkdown(fileContent);
             
-    //         // Find the step with matching id and update it
-    //         const stepIndex = task.steps.findIndex(s => s.id === stepFile);
-    //         if (stepIndex !== -1) {
-    //             // Update the step in place
-    //             task.steps[stepIndex] = {
-    //                 ...task.steps[stepIndex],
-    //                 name: parsed.name,
-    //                 description: parsed.description,
-    //                 content: parsed.content,
-    //                 tools: parsed.tools
-    //             };
+            // Find the step with matching id and update it
+            const stepIndex = task.steps.findIndex(s => s.id === stepFile);
+            if (stepIndex !== -1) {
+                // Update the step in place
+                task.steps[stepIndex] = {
+                    ...task.steps[stepIndex],
+                    name: parsed.name,
+                    description: parsed.description,
+                    content: parsed.content,
+                    tools: parsed.tools
+                };
                 
-    //             // If this is the TASK.md file, also update task-level properties
-    //             if (stepFile === 'TASK.md') {
-    //                 task.name = parsed.taskName;
-    //                 task.description = parsed.taskDescription;
-    //                 // Update inputs if provided
-    //                 if (parsed.inputs.length > 0) {
-    //                     task.inputs = parsed.inputs;
-    //                 }
-    //             }
-    //         }
-    //     } catch (error) {
-    //         console.error('Failed to update step after file modification:', error);
-    //     }
-    // }
+                // If this is the TASK.md file, also update task-level properties
+                if (stepFile === 'TASK.md') {
+                    task.name = parsed.taskName;
+                    task.description = parsed.taskDescription;
+                    // Update inputs if provided
+                    if (parsed.inputs.length > 0) {
+                        task.inputs = parsed.inputs;
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Failed to update step after file modification:', error);
+        }
+    }
 
     onMount(() => {
         const isMock = mocks.workspaceIds.includes(workspaceId);
@@ -173,32 +177,31 @@
         registryStore.fetch();
     });
     
-    // onDestroy(() => {
-    //     sharedChat.current?.close();
-    // });
+    onDestroy(() => {
+        sharedChat.current?.close();
+    });
 
-    // TODO: whether or not to add this back in
-    // $effect(() => {
-    //     if (workspace && !sharedChat.current) {
-    //         initChat();
-    //     }
-    // })
+    $effect(() => {
+        if (workspace && !sharedChat.current) {
+            initChat();
+        }
+    })
 
-    // async function initChat() {
-    //     const isMock = mocks.workspaceIds.includes(workspaceId);
-    //     const chat = isMock ? new ChatService() : await workspace?.newSession({ editor: true });
-    //     if (chat) {
-    //         if (!isMock) {
-    //             chat.setCallbacks({
-    //                 onFileModified: handleFileModified,
-    //                 onChatDone: () => {
-    //                     workspace?.load();
-    //                 }
-    //             });
-    //         }
-    //         setSharedChat(chat);
-    //     }
-    // }
+    async function initChat() {
+        const isMock = mocks.workspaceIds.includes(workspaceId);
+        const chat = isMock ? sharedChat.current : await workspace?.newSession({ editor: true });
+        if (chat) {
+            if (!isMock) {
+                chat.setCallbacks({
+                    onFileModified: handleFileModified,
+                    onChatDone: () => {
+                        workspace?.load();
+                    }
+                });
+            }
+            setSharedChat(chat);
+        }
+    }
 
     function debouncedSave() {
         if (saveTimeout) {
@@ -420,9 +423,40 @@
                             <div class="w-full"></div>
                         {/if}
                         <div class="flex shrink-0 items-center gap-2">
-                            <button class="btn btn-primary w-48" onclick={handleRun}>
-                                Run <Play class="size-4" /> 
-                            </button>
+                            <div class="flex">
+                                <button class="btn btn-primary rounded-r-none w-48" onclick={handleRun}>
+                                    {runMode === 'normal' ? 'Run' : 'Debug Mode'} <Play class="size-4" /> 
+                                </button>
+                                <div class="dropdown dropdown-end">
+                                    <div tabindex="0" role="button" class="btn rounded-l-none btn-primary btn-square border-l-white">
+                                        <ChevronDown class="size-4" />
+                                    </div>
+                                    <ul tabindex="-1" class="menu dropdown-content bg-base-100 rounded-box z-1 w-64 p-2 shadow-sm">
+                                        <li>
+                                            <button class="flex flex-col gap-0 items-start"
+                                                onclick={() => {
+                                                    runMode = 'normal';
+                                                    (document.activeElement as HTMLElement)?.blur();
+                                                }}
+                                            >
+                                                <span class="flex items-center gap-1 font-medium">Run</span>
+                                                <span class="text-xs text-base-content/50">Perform a standard workflow run, runs all steps at once and outputs a summarized result.</span>
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button class="flex flex-col gap-0 items-start"
+                                                onclick={() => {
+                                                    runMode = 'debug';
+                                                    (document.activeElement as HTMLElement)?.blur();
+                                                }}
+                                            >
+                                                <span class="flex items-center gap-1 font-medium">Debug Mode</span>
+                                                <span class="text-xs text-base-content/50">Run the workflow in debug mode, runs step by step and outputs any errors that occur.</span>
+                                            </button>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
                             <button class="btn btn-ghost btn-square" popoverTarget="task-actions" style="anchor-name: --task-actions-anchor;">
                                 <EllipsisVertical class="text-base-content/50" />
                             </button>
@@ -564,11 +598,11 @@
                         }}
                         {visibleInputs}
                         onUpdateVisibleInputs={(inputs) => visibleInputs = inputs}
-                        onSuggestImprovement={async (_file) => {
-                            // if (!includeFilesInMessage.some((f) => f.uri === file.uri)) {
-                            //     includeFilesInMessage.push(file);
-                            // }
-                            // showMessageInput = true;
+                        onSuggestImprovement={async (file) => {
+                            if (!includeFilesInMessage.some((f) => f.uri === file.uri)) {
+                                includeFilesInMessage.push(file);
+                            }
+                            showMessageInput = true;
                         }}
                     />
                 {/snippet}
@@ -593,8 +627,7 @@
 
             <div class="flex grow"></div>
 
-            <!-- TODO: whether or not to add this back in -->
-            <!-- {#if !showSidebarThread}
+            {#if !showSidebarThread}
                 <div in:fade={{ duration: 200 }} class="sticky bottom-0 right-0 self-end flex flex-col gap-4 z-10">
                     {#if showMessageInput}
                         <div class="bg-base-100 dark:bg-base-200 border border-base-300 rounded-selector w-sm md:w-2xl"
@@ -602,7 +635,7 @@
                         >
                             <MessageInput bind:this={toggleableMessageInput} 
                                 onSend={async (message) => {
-                                    isStickToBottom = true; // Reset stick-to-bottom when showing sidebar
+                                    // isStickToBottom = true; // Reset stick-to-bottom when showing sidebar
                                     showSidebarThread = true;
                                     showMessageInput = false;
 
@@ -638,7 +671,7 @@
                         <MessageCircleMore class="size-6" />
                     </button>
                 </div>
-            {/if} -->
+            {/if}
         </div>
 
         <!-- TODO: whether or not to add this back in -->

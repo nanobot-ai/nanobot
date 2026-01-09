@@ -38,7 +38,6 @@
     let name = $derived(task?.name || task?.steps[0].name || '');
 
     async function compileTask(idToUse: string, files: WorkspaceFile[]){
-        console.log('compileTask', idToUse);
         if (!workspace) return;
         initialLoadComplete = false;
         task = null;
@@ -104,8 +103,7 @@
     // TODO: change below to actually hit the run task endpoint once available
     async function runTask() {
         if (!task) return;
-        console.log('runTask');
-
+        
         let stepSessions = [];
         runSession.forEach((session) => session.thread.close());
         runSession.clear();
@@ -185,19 +183,12 @@ ${step.tools.join(', ')}
                 <div class="px-22 mb-6 flex flex-col gap-4">
                     <div class="w-full h-2"></div>
                     {#each runArguments as input (input.name)}
-                        <div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 pb-8 task-step relative">
-                            <div class="flex flex-col gap-2 pr-12">
+                        <div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 task-step relative">
+                            <div class="flex flex-col gap-2">
                                 <label class="input w-full">
-                                    <span class="label h-full font-semibold text-primary bg-primary/15 mr-0">$</span>
-                                    <input type="text" class="font-semibold placeholder:font-normal" disabled value={input.name} />
+                                    <span class="label h-full font-semibold text-primary bg-primary/15 mr-0">${input.name}</span>
+                                    <input type="text" class="font-semibold placeholder:font-normal" disabled value={input.value} />
                                 </label>
-                        
-                                {#if input.description.length > 0}
-                                    <input name="input-description" disabled class="input w-full placeholder:text-base-content/30" type="text" value={input.description} />
-                                {/if}
-                                {#if input.value.length > 0}
-                                    <input name="input-value" disabled  class="input w-full placeholder:text-base-content/30" type="text" value={input.value} />
-                                {/if}
                             </div>
                         </div>
                     {/each}

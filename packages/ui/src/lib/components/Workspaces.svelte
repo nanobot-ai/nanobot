@@ -515,7 +515,7 @@
                                     {/each}
                                 {:else}
                                     <li>
-                                        <p class="p-2 text-base-content/30 text-xs">No runs available.</p>
+                                        <p class="p-2 italic text-base-content/30 text-xs">No runs.</p>
                                     </li>
                                 {/if}
                             </ul>
