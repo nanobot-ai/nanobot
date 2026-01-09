@@ -24,7 +24,15 @@ type TaskState = {
 	current: {
 		tasks: Task[];
 	};
-	addRun: (taskId: string, run: { id: string; created: string; arguments: TaskArgument[] }) => void;
+	addRun: (
+		taskId: string,
+		run: {
+			id: string;
+			created: string;
+			arguments: TaskArgument[];
+			stepSessions: { stepId: string; threadId: string }[];
+		}
+	) => void;
 	updateRun: (
 		taskId: string,
 		runId: string,

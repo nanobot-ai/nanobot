@@ -503,10 +503,11 @@
                             </summary>
                             <ul>
                                 {#if taskRuns[item]?.runs?.length > 0}
+                                    {@const runOnly = !permissions.includes('write') && !permissions.includes('read') && permissions.includes('execute')}
                                     {#each (taskRuns[item]?.runs ?? []) as run (run.id)}
                                         <li>
                                             <a
-                                                href={resolve(`/w/${workspaceId}/t?id=${item}&runId=${run.id}`)}
+                                                href={resolve(`/w/${workspaceId}/t?id=${item}&runId=${run.id}${runOnly ? '&run=true' : ''}`)}
                                                 class="block h-full p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}"
                                             >
                                                 {new Date(run.created).toLocaleString().replace(',', '')}
