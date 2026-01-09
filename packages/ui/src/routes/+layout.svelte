@@ -273,7 +273,7 @@
 					class="btn p-1 btn-ghost btn-sm"
 					aria-label="Open sidebar"
 				>
-					<SidebarOpen class="h-4 w-4" />
+					<SidebarOpen class="size-5" />
 				</button>
 			</div>
 		</div>
