@@ -14,6 +14,7 @@
 	import { resolve } from '$app/paths';
 	import { sharedChat } from '$lib/stores/chat.svelte';
 	import Workspaces from '$lib/components/Workspaces.svelte';
+	import { page } from '$app/state';
 
 	let { children } = $props();
 
@@ -44,6 +45,10 @@
 			return isMobileSidebarOpen;
 		}
 	});
+
+	// starts with w/
+	const selectedTaskId = $derived(page.url.pathname.startsWith('/w/') ? page.url.searchParams.get('id') : null);
+	const selectedRunId = $derived(page.url.pathname.startsWith('/w/') ? page.url.searchParams.get('runId') : null);
 
 	onMount(async () => {
 		// Load sidebar state from localStorage (desktop only)
@@ -191,7 +196,12 @@
 				<div class="flex flex-col">
 					{#if showWorkspaces}
 						<div class="shrink-0">
-							<Workspaces scrollContainerEl={scrollContainer} {inverse} />
+							<Workspaces 
+								scrollContainerEl={scrollContainer} 
+								{inverse} 
+								{selectedTaskId}
+								{selectedRunId}
+							/>
 						</div>
 					{:else}
 						<!-- Threads section (takes up ~40% of available space) -->

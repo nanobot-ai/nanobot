@@ -4,7 +4,7 @@
 	import { onMount, tick } from "svelte";
 	import type { Component } from "svelte";
 	import DragDropList from "./DragDropList.svelte";
-	import { SvelteMap } from "svelte/reactivity";
+	import { SvelteMap, SvelteSet } from "svelte/reactivity";
 	import { resolve } from '$app/paths';
 	import { goto } from "$app/navigation";
 	import type { WorkspaceFile } from "$lib/types";
@@ -14,10 +14,13 @@
     import * as mocks from '$lib/mocks';
 	import WorkspaceShare from "./WorkspaceShare.svelte";
 	import { mockTasks } from "$lib/mocks/stores/tasks.svelte";
+	import { browser } from '$app/environment';
 
     interface Props {
         inverse?: boolean;
         scrollContainerEl?: HTMLElement | null;
+        selectedTaskId?: string | null;
+        selectedRunId?: string | null;
     }
 
     type WorkspaceManifest = {
@@ -31,7 +34,7 @@
         created: string;
     } & WorkspaceManifest;
 
-    let { inverse, scrollContainerEl }: Props = $props();
+    let { inverse, scrollContainerEl, selectedTaskId, selectedRunId }: Props = $props();
 
     let loading = $state(false);
 
@@ -40,6 +43,53 @@
 
     const workspaceService = new WorkspaceService();
     const notifications = getNotificationContext();
+
+    // Persist expanded state across route changes
+    const EXPANDED_STATE_KEY = 'workspaces-expanded-state';
+    let expandedSections = new SvelteSet<string>();
+
+    function loadExpandedState() {
+        if (!browser) return;
+        try {
+            const saved = localStorage.getItem(EXPANDED_STATE_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved) as string[];
+                expandedSections.clear();
+                parsed.forEach(key => expandedSections.add(key));
+            }
+        } catch {
+            // Ignore parse errors
+        }
+    }
+
+    function saveExpandedState() {
+        if (!browser) return;
+        try {
+            localStorage.setItem(EXPANDED_STATE_KEY, JSON.stringify([...expandedSections]));
+        } catch {
+            // Ignore storage errors
+        }
+    }
+
+    function isExpanded(key: string): boolean {
+        return expandedSections.has(key);
+    }
+
+    function toggleExpanded(key: string, open: boolean) {
+        if (open) {
+            expandedSections.add(key);
+        } else {
+            expandedSections.delete(key);
+        }
+        saveExpandedState();
+    }
+    
+    function handleToggle(key: string) {
+        return (e: Event) => {
+            const details = e.currentTarget as HTMLDetailsElement;
+            toggleExpanded(key, details.open);
+        };
+    }
     
     let newWorkspace = $state<WorkspaceManifest | null>(null);
     let newWorkspaceEl = $state<HTMLInputElement | null>(null);
@@ -72,8 +122,36 @@
     }, {}))
 
     onMount(() => {
+        loadExpandedState();
         loadWorkspaces();
+        // Restore data for expanded workspaces
+        restoreExpandedWorkspaces();
     });
+    
+    async function restoreExpandedWorkspaces() {
+        // Load data for any workspaces that were previously expanded
+        for (const key of expandedSections) {
+            if (key.startsWith('workspace:') && key.split(':').length === 2) {
+                const workspaceId = key.split(':')[1];
+                if (!workspaceData.has(workspaceId)) {
+                    loadingWorkspace.set(workspaceId, true);
+                    if (mocks.workspaceIds.includes(workspaceId)) {
+                        workspaceData.set(workspaceId, mocks.workspaceInstances[workspaceId]);
+                        loadingWorkspace.set(workspaceId, false);
+                    } else {
+                        workspaceData.set(workspaceId, workspaceService.getWorkspace(workspaceId) as WorkspaceInstance);
+                        try {
+                            await workspaceData.get(workspaceId)?.load();
+                        } catch (err) {
+                            console.error(err);
+                        } finally {
+                            loadingWorkspace.set(workspaceId, false);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     async function loadWorkspaces() {
         loading = true;
@@ -165,9 +243,11 @@
         e.preventDefault();
         e.stopPropagation();
 
-        const details = e.currentTarget.closest('details');
-        if (details) details.open = !details.open;
-        if (details && details.open) {
+        const key = `workspace:${workspaceId}`;
+        const willOpen = !isExpanded(key);
+        toggleExpanded(key, willOpen);
+        
+        if (willOpen) {
             loadingWorkspace.set(workspaceId, true);
             if (mocks.workspaceIds.includes(workspaceId)) {
                 workspaceData.set(workspaceId, mocks.workspaceInstances[workspaceId]);
@@ -301,7 +381,7 @@
             useLongPress
         >
             {#snippet children({ item: workspace })}
-                <details class="workspace-details flex flex-col w-full overflow-visible">
+                <details class="workspace-details flex flex-col w-full overflow-visible" open={isExpanded(`workspace:${workspace.id}`)}>
                     <summary 
                         class="flex px-2 items-center justify-between rounded-none list-none [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}" 
                         onpointerdown={() => { summaryPointerDownTime = Date.now(); }}
@@ -352,7 +432,7 @@
     <ul class="menu menu-sm w-full p-0">
         {#each sharedWorkspaces as workspace (workspace.id)}
         <li class="group">
-            <details class="workspace-details flex flex-col w-full overflow-visible">
+            <details class="workspace-details flex flex-col w-full overflow-visible" open={isExpanded(`workspace:${workspace.id}`)}>
                 <summary class="flex px-2 items-center justify-between rounded-none list-none [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}"
                     onclick={(e) => {
                         handleLoadWorkspace(e, workspace.id);
@@ -438,16 +518,23 @@
 {@const items = Object.keys(tasks)}
 {@const title =  'Workflows'}
 <li class="flex grow">
-    <details class="workspace-details w-full">
+    <details class="workspace-details w-full" open={isExpanded(`workspace:${workspaceId}:tasks`)}
+        ontoggle={handleToggle(`workspace:${workspaceId}:tasks`)}>
         {@render sectionTitle(title, ListTodo, items, permissions.includes('write') ? (e) => createTask(e, workspaceId) :undefined, 'Create new workflow')}
         <ul>
             {#if items.length === 0}
                 {@render empty(title, permissions.includes('write'))}
             {:else}
                 {#each items as item, index (index)}
+                {@const name = mocks.taskData[item]?.name ?? item}
+                                                        
                     <li class="flex grow">
-                        <details class="workspace-details w-full">
-                            <summary class="flex rounded-r-none px-2 items-center justify-between gap-2 [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">
+                        <details class="workspace-details w-full" open={isExpanded(`workspace:${workspaceId}:task:${item}`)}
+                            ontoggle={handleToggle(`workspace:${workspaceId}:task:${item}`)}>
+                            <summary class="flex rounded-r-none px-2 items-center justify-between gap-2 [&::-webkit-details-marker]:hidden overflow-visible 
+                                {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'} 
+                                {selectedTaskId && !selectedRunId  && selectedTaskId === item ? 'bg-base-200 dark:bg-base-100' : ''}
+                            ">
                                 <div class="flex items-center gap-2">
                                     <span class="chevron-icon shrink-0">
                                         <ChevronRight class="size-4 chevron-closed" />
@@ -455,7 +542,7 @@
                                     </span>
 
                                     {#if permissions.includes('write') || permissions.includes('read')}
-                                        <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="flex min-h-8 grow overflow-hidden rounded-r-none truncate hover:bg-transparent items-center">{item}</a>
+                                        <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="flex min-h-8 grow overflow-hidden rounded-r-none truncate hover:bg-transparent items-center">{name}</a>
                                     {:else}
                                         <a href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)} class="flex min-h-8 grow overflow-hidden rounded-r-none truncate hover:bg-transparent items-center">{item}</a>
                                     {/if}
@@ -508,7 +595,10 @@
                                         <li>
                                             <a
                                                 href={resolve(`/w/${workspaceId}/t?id=${item}&runId=${run.id}${runOnly ? '&run=true' : ''}`)}
-                                                class="block h-full p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}"
+                                                class="block h-full p-2 w-full overflow-hidden rounded-r-none truncate 
+                                                    {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}
+                                                    {selectedRunId && selectedRunId === run.id ? 'bg-base-200 dark:bg-base-100' : ''}
+                                                "
                                             >
                                                 {new Date(run.created).toLocaleString().replace(',', '')}
                                             </a>
@@ -697,7 +787,8 @@
 
 {#snippet filesSection(_workspaceId: string, files: WorkspaceFile[], permissions: string[])}
 <li class="flex grow">
-    <details class="workspace-details w-full">
+    <details class="workspace-details w-full" open={isExpanded(`workspace:${_workspaceId}:files`)}
+        ontoggle={handleToggle(`workspace:${_workspaceId}:files`)}>
         {@render sectionTitle('Files', FileText, files, permissions.includes('write') ? undefined : undefined, 'Create new file')}
         <ul>
             {#if files.length === 0}
