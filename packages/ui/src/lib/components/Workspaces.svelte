@@ -14,7 +14,6 @@
     import * as mocks from '$lib/mocks';
 	import WorkspaceShare from "./WorkspaceShare.svelte";
 	import { mockTasks } from "$lib/mocks/stores/tasks.svelte";
-	import { formatTimeAgo } from "$lib/utils/time";
 
     interface Props {
         inverse?: boolean;
@@ -456,9 +455,9 @@
                                     </span>
 
                                     {#if permissions.includes('write') || permissions.includes('read')}
-                                        <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="flex grow overflow-hidden rounded-r-none truncate hover:bg-transparent">{item}</a>
+                                        <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="flex min-h-8 grow overflow-hidden rounded-r-none truncate hover:bg-transparent items-center">{item}</a>
                                     {:else}
-                                        <a href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)} class="flex grow overflow-hidden rounded-r-none truncate hover:bg-transparent">{item}</a>
+                                        <a href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)} class="flex min-h-8 grow overflow-hidden rounded-r-none truncate hover:bg-transparent items-center">{item}</a>
                                     {/if}
                                 </div>
                                 <div class="flex items-center gap-2">
@@ -503,16 +502,22 @@
                                 </div>
                             </summary>
                             <ul>
-                                {#each (taskRuns[item]?.runs ?? []) as run (run.id)}
+                                {#if taskRuns[item]?.runs?.length > 0}
+                                    {#each (taskRuns[item]?.runs ?? []) as run (run.id)}
+                                        <li>
+                                            <a
+                                                href={resolve(`/w/${workspaceId}/t?id=${item}&runId=${run.id}`)}
+                                                class="block h-full p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}"
+                                            >
+                                                {new Date(run.created).toLocaleString().replace(',', '')}
+                                            </a>
+                                        </li>
+                                    {/each}
+                                {:else}
                                     <li>
-                                        <a
-                                            href={resolve(`/w/${workspaceId}/t?id=${item}&runId=${run.id}`)}
-                                            class="block p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}"
-                                        >
-                                            {formatTimeAgo(run.created).relativeTime}
-                                        </a>
+                                        <p class="p-2 text-base-content/30 text-xs">No runs available.</p>
                                     </li>
-                                {/each}
+                                {/if}
                             </ul>
                         </details>
                     </li>

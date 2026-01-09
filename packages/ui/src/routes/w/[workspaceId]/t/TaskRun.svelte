@@ -8,7 +8,7 @@
 	import Step from "./Step.svelte";
 	import { SvelteMap } from "svelte/reactivity";
 	import { WorkspaceService } from "$lib/workspace.svelte";
-	import { onMount } from "svelte";
+	import { onDestroy, onMount, untrack } from "svelte";
 	import { mockTasks } from "$lib/mocks/stores/tasks.svelte";
 	import StepRun from "../StepRun.svelte";
 
@@ -27,6 +27,8 @@
     let workspace = $state<WorkspaceClient | null>(null);
     let task = $state<Task | null>(null);
     let initialLoadComplete = $state(false);
+    let prevRunId = $state('');
+    let prevTaskId = $state('');
 
     let scrollContainer = $state<HTMLElement | null>(null);
 
@@ -36,6 +38,7 @@
     let name = $derived(task?.name || task?.steps[0].name || '');
 
     async function compileTask(idToUse: string, files: WorkspaceFile[]){
+        console.log('compileTask', idToUse);
         if (!workspace) return;
         initialLoadComplete = false;
         task = null;
@@ -45,6 +48,7 @@
         } else {
             task = await convertToTask(workspace, files, idToUse);
         }
+        prevTaskId = idToUse;
         
         initialLoadComplete = true;
         handleRun();
@@ -56,10 +60,21 @@
         registryStore.fetch();
     });
 
+    onDestroy(() => {
+        runSession.forEach((session) => session.thread.close());
+        runSession.clear();
+    });
+
     $effect(() => {
         const files = workspace?.files ?? [];
         
-        if (urlTaskId && workspace && urlTaskId && files.length > 0 && !initialLoadComplete) {
+        if (initialLoadComplete && (prevRunId !== runId || prevTaskId !== urlTaskId)) {
+            if (prevRunId !== runId) {
+                handleRun();
+            } else {
+                compileTask(urlTaskId, files);
+            }
+        } else if (urlTaskId && workspace && urlTaskId && files.length > 0 && !initialLoadComplete) {
             compileTask(urlTaskId, files);
         }
     });
@@ -83,12 +98,16 @@
         } else {
             // TODO: actual impl
         }
+        untrack(() => prevRunId = runId);
     }
 
     // TODO: change below to actually hit the run task endpoint once available
     async function runTask() {
         if (!task) return;
+        console.log('runTask');
+
         let stepSessions = [];
+        runSession.forEach((session) => session.thread.close());
         runSession.clear();
         // isStickToBottom = true; // Reset stick-to-bottom when starting a new run
         let priorSteps = '';
@@ -163,8 +182,8 @@ ${step.tools.join(', ')}
                 </div>
             </div>
             <div>
-                <div class="px-22 mb-4 flex flex-col gap-4">
-                    <div class="w-full h-4"></div>
+                <div class="px-22 mb-6 flex flex-col gap-4">
+                    <div class="w-full h-2"></div>
                     {#each runArguments as input (input.name)}
                         <div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 pb-8 task-step relative">
                             <div class="flex flex-col gap-2 pr-12">
@@ -184,7 +203,7 @@ ${step.tools.join(', ')}
                     {/each}
                 </div>
             </div>
-            <div class="md:pr-22 flex flex-col gap-4">
+            <div class="md:pr-22 flex flex-col gap-6">
                 {#each task.steps as step (step.id)}
                     <div class="pl-22">
                         <Step 
