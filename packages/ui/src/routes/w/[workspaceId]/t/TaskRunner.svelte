@@ -11,12 +11,14 @@
 	import { SvelteMap } from "svelte/reactivity";
     import * as mocks from '$lib/mocks';
 	import { ChatService } from "$lib/chat.svelte";
+	import { mockTasks } from "$lib/mocks/stores/tasks.svelte";
 	
     type Props = {
         workspaceId: string;
         urlTaskId: string;
+        runId?: string;
     }
-    let { workspaceId, urlTaskId }: Props = $props();
+    let { workspaceId, urlTaskId, runId }: Props = $props();
     
     const registryStore = createRegistryStore();
 	setRegistryContext(registryStore);
@@ -34,6 +36,8 @@
     let disabled = $derived(runFormData.some((input) => input.value.trim().length === 0));
     let canceling =  $state(false);
     let completed = $state(false); // TODO: completed data to display?
+
+    let runArguments = $state<(Omit<Input, 'id'> & { value: string })[]>([]);
 
     let progressTimeout: ReturnType<typeof setTimeout> | null = null;
     let progress = $state(0);
@@ -74,6 +78,17 @@
     $effect(() => {
         if (workspace && !sharedChat.current) {
             initChat();
+        }
+    })
+
+    $effect(() => {
+        if (runId) {
+            completed = true;
+            summaryResults = mocks.summaryResults[urlTaskId];
+            runArguments = mockTasks.current.tasks.find((task) => task.id === urlTaskId)?.runs.find((run) => run.id === runId)?.arguments ?? [];
+        } else {
+            completed = false;
+            summaryResults = [];
         }
     })
     
@@ -144,6 +159,15 @@
         ongoingSteps.clear();
         totalTime = 0;
         totalTokens = 0;
+
+        if (mocks.taskIds.includes(urlTaskId)) {
+            mockTasks.addRun(urlTaskId, {
+                id: crypto.randomUUID(),
+                created: new Date().toISOString(),
+                arguments: runFormData,
+                stepSessions: [],
+            });
+        }
 
         let timeout = 0;
         let tokenCount = 0;
@@ -243,7 +267,7 @@
                                     <hr class="timeline-connector w-0.5 {ongoingSteps.get(task.steps[index - 1].id)?.completed ? 'completed' : ''}" />
                                 {/if}
                                 <div class="timeline-middle">
-                                    {#if ongoingSteps.get(step.id)?.completed}
+                                    {#if ongoingSteps.get(step.id)?.completed || completed}
                                         <CircleCheck class="size-5 text-primary" />
                                     {:else if ongoingSteps.get(step.id)?.loading}
                                         <LoaderCircle class="size-5 animate-spin shrink-0 text-base-content/50" />
@@ -290,9 +314,27 @@
                 </div>
             {/if}
 
+            {#if completed && runId && runArguments.length > 0}
+                <div class="w-full">
+                    <div class="w-full flex flex-col justify-center items-center">
+                        <div class="p-4 flex flex-col gap-2 w-full border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
+                            <p class="text-xs text-primary">The following information was used to run the workflow:</p>
+                            <div class="flex flex-col gap-2">
+                                {#each runArguments as input (input.name)}
+                                    <label class="input w-full">
+                                        <span class="label h-full font-semibold text-primary bg-primary/15">{input.name}</span>
+                                        <input disabled type="text" bind:value={input.value} />
+                                    </label>
+                                {/each}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {/if}
+
             {#if completed}
-                <div in:fade out:slide={{ axis: 'y', duration: 150 }} class="md:w-4xl w-full flex flex-col justify-center items-center py-4">
-                    <div class="w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
+                <div in:fade out:slide={{ axis: 'y', duration: 150 }} class="w-full flex flex-col justify-center items-center py-4">
+                    <div class="w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field p-6">
                         <h4 class="text-xl font-semibold">{canceling ? 'Workflow Cancelled' : 'Workflow Completed'}</h4>
                         <p class="text-sm text-base-content/50 text-center mt-1">
                             {#if canceling}
@@ -322,7 +364,7 @@
                 <button class="btn w-10 mt-4" disabled>
                     <LoaderCircle class="size-4 animate-spin shrink-0" />
                 </button>
-            {:else}
+            {:else if !runId}
                 <button class="btn btn-primary transition-all mt-4 {loading ? 'w-10 tooltip' : 'w-48'}"  onclick={() => {
                     if (completed) {
                         reset();
@@ -333,7 +375,7 @@
                     {#if loading}
                         <Square class="size-4 shrink-0" />
                     {:else}
-                        {completed ? 'Run Again' : 'Run'} 
+                        Run 
                         <Play class="size-4 shrink-0" />
                     {/if}
                 </button>
