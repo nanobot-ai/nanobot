@@ -26,6 +26,7 @@
 	import { setSharedChat, sharedChat } from '$lib/stores/chat.svelte';
 	import MessageInput from '$lib/components/MessageInput.svelte';
 	import type { ToolCallInfo } from '$lib/chat.svelte';
+	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 	
     type Props = {
         workspaceId: string;
@@ -58,7 +59,9 @@
     let stepBlockEditing = new SvelteMap<number | string, boolean>();
     let stepDescription = new SvelteMap<number | string, boolean>();
 
-    let showSidebarThread = $state(false);
+    let showSidebarThread = $state(true);
+    let sidebarWidth = $state(520);
+    let isResizing = $state(false);
     let toggleableMessageInput = $state<ReturnType<typeof MessageInput> | null>(null);
 
     let registryToolSelector = $state<ReturnType<typeof RegistryToolSelector> | null>(null);
@@ -82,41 +85,6 @@
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
     const workspaceService = new WorkspaceService();
-
-    // TODO: whether or not to add this back in -- right sidebar for run / agent chat input on bottom right
-    // // Stick-to-bottom scroll tracking for run session
-    // let runSessionScrollContainer = $state<HTMLElement | null>(null);
-    // let isStickToBottom = $state(true);
-    // const SCROLL_THRESHOLD = 50; // pixels from bottom to consider "at bottom"
-
-    // function checkIfAtBottom(el: HTMLElement): boolean {
-    //     return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_THRESHOLD;
-    // }
-
-    // function handleRunSessionScroll() {
-    //     if (!runSessionScrollContainer) return;
-    //     isStickToBottom = checkIfAtBottom(runSessionScrollContainer);
-    // }
-
-    // function scrollToBottom() {
-    //     if (runSessionScrollContainer && isStickToBottom) {
-    //         runSessionScrollContainer.scrollTop = runSessionScrollContainer.scrollHeight;
-    //     }
-    // }
-
-    // $effect(() => {
-    //     if (!runSession.length) return;
-    //     // Track loading states and message counts to detect content changes
-    //     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    //     const _ = runSession.map(s => ({
-    //         loading: s.thread.isLoading,
-    //         messageCount: s.thread.messages.length,
-    //         pending: s.pending
-    //     }));
-        
-    //     // Schedule scroll after DOM update
-    //     tick().then(scrollToBottom);
-    // });
 
     /** Handle file modifications from chat to update task steps */
     async function handleFileModified(info: ToolCallInfo) {
@@ -376,11 +344,30 @@
             }));
             inputsModal?.showModal();
         } else {
-            // TODO: whether or not to add this back in
-            // isStickToBottom = true; // Reset stick-to-bottom when showing sidebar
-            // showSidebarThread = true;
             submitRun();
         }
+    }
+
+    function startResize(e: MouseEvent) {
+        e.preventDefault();
+        isResizing = true;
+        const startX = e.clientX;
+        const startWidth = sidebarWidth;
+        
+        function onMouseMove(e: MouseEvent) {
+            // Sidebar is on the left side, so dragging right increases width
+            const delta = e.clientX - startX;
+            sidebarWidth = Math.max(400, Math.min(startWidth + delta, window.innerWidth - 800));
+        }
+        
+        function onMouseUp() {
+            isResizing = false;
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        }
+        
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
     }
 
     // TODO: change below to actually hit the run task endpoint once available
@@ -400,10 +387,45 @@
 </script>
 
 {#if initialLoadComplete && task}
-    <div class="flex w-full h-dvh">
+    <div class="flex w-full h-dvh {isResizing ? 'cursor-col-resize' : ''}">
+        {#if showSidebarThread}
+            <!-- Sidebar Thread -->
+            <div 
+                transition:fly={{ x: -100, duration: 200 }} 
+                class="border-l border-l-base-300 bg-base-100 h-dvh flex flex-col shrink-0 {isResizing ? 'select-none' : ''}"
+                style="width: {sidebarWidth}px; min-width: 400px;"
+            >
+                <div class="w-full flex justify-between items-center p-4 bg-base-100 shrink-0">
+                    <div class="w-full"></div>
+                    <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-right" data-tip="Close" 
+                        onclick={() => {
+                            showSidebarThread = false;
+                            includeFilesInMessage = [];
+                        }}
+                    >
+                        <X class="size-4" />
+                    </button>
+                </div>
+                <div class="w-full flex-1 min-h-0 flex flex-col">
+                    {#if sharedChat.current}
+                        {#key sharedChat.current.chatId}
+                            <ThreadFromChat inline chat={sharedChat.current} files={includeFilesInMessage} />
+                        {/key}
+                    {/if}
+                </div>
+            </div>
+            <!-- Resize Handle -->
+            <button 
+                type="button"
+                class="w-1 bg-base-300 hover:bg-primary/50 cursor-col-resize transition-all duration-150 shrink-0 active:bg-primary border-none p-0"
+                aria-label="Resize sidebar"
+                onmousedown={startResize}
+            ></button>
+        {/if}
         <div class="
             flex flex-col grow p-4 pt-0 overflow-y-auto max-h-dvh transition-all duration-200 ease-in-out 
             {layout.isSidebarCollapsed ? 'mt-10' : ''}
+            {isResizing ? 'select-none' : ''}
         " 
             bind:this={scrollContainer}
             onscroll={() => {
@@ -673,75 +695,6 @@
                 </div>
             {/if}
         </div>
-
-        <!-- TODO: whether or not to add this back in -->
-        <!-- {#if showSidebarThread}
-            <div transition:fly={{ x: 100, duration: 200 }} class="md:min-w-[520px] bg-base-100 h-dvh flex flex-col">
-                <div class="w-full flex justify-between items-center p-4 bg-base-100 shrink-0">
-                    {#if currentRun}
-                        <h4 class="text-lg font-semibold border-l-4 border-primary">{task.name} | Run {'{id}'}</h4>
-                    {:else}
-                        <div class="w-full"></div>
-                    {/if}
-                    <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" data-tip="Close" 
-                        onclick={() => {
-                            showSidebarThread = false;
-                            if (runSession) {
-                                runHandlers.forEach((handler) => clearTimeout(handler));
-                                runSession.forEach((session) => session.thread.close());
-                                runHandlers = [];
-                                runSession = [];
-                            }
-
-                            includeFilesInMessage = [];
-                        }}
-                    >
-                        <X class="size-4" />
-                    </button>
-                </div>
-                <div class="w-full flex-1 min-h-0 flex flex-col">
-                    {#if runSession}
-                        <div class="h-full overflow-y-auto px-4" 
-                            bind:this={runSessionScrollContainer}
-                            onscroll={handleRunSessionScroll}
-                        >
-                            {#each runSession as session (session.stepName)}
-                            <details open class="collapse {session.thread.isLoading || session.pending ? '' : 'collapse-arrow'}">
-                                <summary class="collapse-title font-semibold flex items-center gap-2 {session.thread.isLoading || session.pending ? 'text-base-content/35' : ''} "
-                                    onmousedown={(e) => { 
-                                        if (session.thread.isLoading) {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                        }
-                                    }}
-                                >
-                                    {session.stepName}
-                                    {#if session.pending}
-                                        <Circle class="size-4" />
-                                    {:else if session.thread.isLoading}
-                                        <LoaderCircle class="size-4 animate-spin" />
-                                    {:else}
-                                        <CircleCheck class="size-4 text-primary" />
-                                    {/if}
-                                </summary>
-                                <div class="collapse-content task-run-sidebar-content">
-                                    {#if !session.pending}
-                                        <div in:fade>
-                                            <Messages inline messages={session.thread.messages.slice(1)} />
-                                        </div>
-                                    {/if}
-                                </div>
-                            </details>
-                            {/each}
-                        </div>
-                    {:else if sharedChat.current}
-                        {#key sharedChat.current.chatId}
-                            <ThreadFromChat inline chat={sharedChat.current} files={includeFilesInMessage} />
-                        {/key}
-                    {/if}
-                </div>
-            </div>
-        {/if} -->
     </div>
 {:else}
     <div class="w-full flex flex-col gap-8">
