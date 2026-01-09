@@ -11,6 +11,7 @@
 	import { onDestroy, onMount, untrack } from "svelte";
 	import { mockTasks } from "$lib/mocks/stores/tasks.svelte";
 	import StepRun from "../StepRun.svelte";
+	import { fade } from "svelte/transition";
 
     type Props = {
         workspaceId: string;
@@ -36,6 +37,10 @@
     let runArguments = $state<(Omit<Input, 'id'> & { value: string })[]>([]);
 
     let name = $derived(task?.name || task?.steps[0].name || '');
+
+    let summaryResults = $state<{ step: string, summary: string }[]>([]);
+    let timeoutHandlers = $state<ReturnType<typeof setTimeout>[]>([]);
+    let totalTime = $state(0);
 
     async function compileTask(idToUse: string, files: WorkspaceFile[]){
         if (!workspace) return;
@@ -90,6 +95,9 @@
                         thread.setChatId(stepSession.threadId);
                         runSession.set(stepSession.stepId, { thread, stepId: stepSession.stepId, pending: false });
                     }
+
+                    totalTime = Math.random() * 10000 + 1000;
+                    summaryResults = [...mocks.summaryResults[urlTaskId]];
                 } else {
                     runTask();
                 }
@@ -104,6 +112,7 @@
     async function runTask() {
         if (!task) return;
         
+        const startTime = Date.now();
         let stepSessions = [];
         runSession.forEach((session) => session.thread.close());
         runSession.clear();
@@ -158,6 +167,19 @@ ${step.tools.join(', ')}
             priorSteps += `Step ${step.id}: ${step.name} \n\n`;
         }
 
+        totalTime = Date.now() - startTime;
+        const finalHandler = setTimeout(() => {
+            let summaryTimer = 0;
+            for (const summaryResult of mocks.summaryResults[urlTaskId]) {
+                const handler = setTimeout(() => {
+                    summaryResults.push(summaryResult);
+                }, summaryTimer);
+                summaryTimer += 1000;
+                timeoutHandlers.push(handler);
+            }
+        }, 1000);
+        timeoutHandlers.push(finalHandler);
+
         mockTasks.updateRun(urlTaskId, runId, stepSessions); 
     }
 </script>
@@ -210,125 +232,33 @@ ${step.tools.join(', ')}
                     </div>
                 {/each}
             </div>
+            
+            {#if summaryResults.length > 0}
+                <div class="md:px-22">
+                    <div class="mt-6 p-6 w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
+                        <h4 class="text-xl font-semibold">Workflow Completed</h4>
+                        <p class="text-sm text-base-content/50 text-center mt-1">
+                            The workflow has completed successfully. Here are your summarized results:
+                        </p>
 
-            <div class="flex grow"></div>
+                        <p class="text-sm text-base-content/50 text-center mt-1">Total time: {(totalTime / 1000).toFixed(1)}s, Total tokens: {(Math.floor(Math.random() * 10000) + 1000)}</p>
 
-            <!-- TODO: whether or not to add this back in -->
-            <!-- {#if !showSidebarThread}
-                <div in:fade={{ duration: 200 }} class="sticky bottom-0 right-0 self-end flex flex-col gap-4 z-10">
-                    {#if showMessageInput}
-                        <div class="bg-base-100 dark:bg-base-200 border border-base-300 rounded-selector w-sm md:w-2xl"
-                            transition:fly={{ x: 100, duration: 200 }}
-                        >
-                            <MessageInput bind:this={toggleableMessageInput} 
-                                onSend={async (message) => {
-                                    isStickToBottom = true; // Reset stick-to-bottom when showing sidebar
-                                    showSidebarThread = true;
-                                    showMessageInput = false;
-
-                                    return sharedChat.current?.sendMessage(message, includeFilesInMessage.length > 0 ? includeFilesInMessage : undefined);
-                                }} 
-                            >
-                                {#snippet customActions()}
-                                    {#if includeFilesInMessage.length > 0}
-                                        {#each includeFilesInMessage as file (file.uri)}
-                                            <div class="badge badge-sm badge-primary gap-1 group">
-                                                <button class="hidden group-hover:block cursor-pointer text-white/50 hover:text-white transition-colors" 
-                                                    onclick={() => {
-                                                        includeFilesInMessage = includeFilesInMessage.filter((f) => f.uri !== file.uri);
-                                                    }} 
-                                                >
-                                                    <X class="size-3" />
-                                                </button>
-                                                <File class="size-3 block group-hover:hidden" />
-                                                {file.name}
-                                            </div>
-                                        {/each}
-                                    {/if}
-                                {/snippet}
-                            </MessageInput>
-                        </div>  
-                    {/if}
-
-                    <button class="float-right btn btn-lg btn-circle btn-primary self-end tooltip tooltip-left" onclick={async () => {
-                        showMessageInput = !showMessageInput;
-                        await tick();
-                        toggleableMessageInput?.focus();
-                    }} data-tip={showMessageInput ? 'Hide chat' : 'Show chat'}>
-                        <MessageCircleMore class="size-6" />
-                    </button>
-                </div>
-            {/if} -->
-        </div>
-
-        <!-- TODO: whether or not to add this back in -->
-        <!-- {#if showSidebarThread}
-            <div transition:fly={{ x: 100, duration: 200 }} class="md:min-w-[520px] bg-base-100 h-dvh flex flex-col">
-                <div class="w-full flex justify-between items-center p-4 bg-base-100 shrink-0">
-                    {#if currentRun}
-                        <h4 class="text-lg font-semibold border-l-4 border-primary">{task.name} | Run {'{id}'}</h4>
-                    {:else}
-                        <div class="w-full"></div>
-                    {/if}
-                    <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" data-tip="Close" 
-                        onclick={() => {
-                            showSidebarThread = false;
-                            if (runSession) {
-                                runHandlers.forEach((handler) => clearTimeout(handler));
-                                runSession.forEach((session) => session.thread.close());
-                                runHandlers = [];
-                                runSession = [];
-                            }
-
-                            includeFilesInMessage = [];
-                        }}
-                    >
-                        <X class="size-4" />
-                    </button>
-                </div>
-                <div class="w-full flex-1 min-h-0 flex flex-col">
-                    {#if runSession}
-                        <div class="h-full overflow-y-auto px-4" 
-                            bind:this={runSessionScrollContainer}
-                            onscroll={handleRunSessionScroll}
-                        >
-                            {#each runSession as session (session.stepName)}
-                            <details open class="collapse {session.thread.isLoading || session.pending ? '' : 'collapse-arrow'}">
-                                <summary class="collapse-title font-semibold flex items-center gap-2 {session.thread.isLoading || session.pending ? 'text-base-content/35' : ''} "
-                                    onmousedown={(e) => { 
-                                        if (session.thread.isLoading) {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                        }
-                                    }}
-                                >
-                                    {session.stepName}
-                                    {#if session.pending}
-                                        <Circle class="size-4" />
-                                    {:else if session.thread.isLoading}
-                                        <LoaderCircle class="size-4 animate-spin" />
-                                    {:else}
-                                        <CircleCheck class="size-4 text-primary" />
-                                    {/if}
-                                </summary>
-                                <div class="collapse-content task-run-sidebar-content">
-                                    {#if !session.pending}
-                                        <div in:fade>
-                                            <Messages inline messages={session.thread.messages.slice(1)} />
-                                        </div>
-                                    {/if}
+                        <div class="w-xl flex flex-col gap-4 mt-6">
+                            {#each summaryResults as result (result.step)}
+                                <div in:fade class="flex flex-col">
+                                    <h4 class="font-semibold">{result.step}</h4>
+                                    <p class="text-sm text-base-content/50">
+                                        {result.summary}
+                                    </p>
                                 </div>
-                            </details>
                             {/each}
                         </div>
-                    {:else if sharedChat.current}
-                        {#key sharedChat.current.chatId}
-                            <ThreadFromChat inline chat={sharedChat.current} files={includeFilesInMessage} />
-                        {/key}
-                    {/if}
+                    </div>
                 </div>
-            </div>
-        {/if} -->
+            {/if}
+
+            <div class="flex grow"></div>
+        </div>
     </div>
 {:else}
     <div class="w-full flex flex-col gap-8">

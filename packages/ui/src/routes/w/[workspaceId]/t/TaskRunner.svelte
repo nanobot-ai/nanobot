@@ -292,26 +292,28 @@
 
             {#if completed}
                 <div in:fade out:slide={{ axis: 'y', duration: 150 }} class="md:w-4xl w-full flex flex-col justify-center items-center py-4">
-                    <h4 class="text-xl font-semibold">{canceling ? 'Workflow Cancelled' : 'Workflow Completed'}</h4>
-                    <p class="text-sm text-base-content/50 text-center mt-1">
-                        {#if canceling}
-                            The workflow has been cancelled. Would you like to run it again?
-                        {:else}
-                            The workflow has completed successfully. Here are your summarized results:
-                        {/if}
-                    </p>
+                    <div class="w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
+                        <h4 class="text-xl font-semibold">{canceling ? 'Workflow Cancelled' : 'Workflow Completed'}</h4>
+                        <p class="text-sm text-base-content/50 text-center mt-1">
+                            {#if canceling}
+                                The workflow has been cancelled. Would you like to run it again?
+                            {:else}
+                                The workflow has completed successfully. Here are your summarized results:
+                            {/if}
+                        </p>
 
-                    <p class="text-sm text-base-content/50 text-center mt-1">Total time: {(totalTime / 1000).toFixed(1)}s, Total tokens: {totalTokens}</p>
+                        <p class="text-sm text-base-content/50 text-center mt-1">Total time: {(totalTime / 1000).toFixed(1)}s, Total tokens: {totalTokens}</p>
 
-                    <div class="w-xl flex flex-col gap-4 mt-6">
-                        {#each summaryResults as result (result.step)}
-                            <div in:fade class="flex flex-col">
-                                <h4 class="font-semibold">{result.step}</h4>
-                                <p class="text-sm text-base-content/50">
-                                    {result.summary}
-                                </p>
-                            </div>
-                        {/each}
+                        <div class="w-xl flex flex-col gap-4 mt-6">
+                            {#each summaryResults as result (result.step)}
+                                <div in:fade class="flex flex-col">
+                                    <h4 class="font-semibold">{result.step}</h4>
+                                    <p class="text-sm text-base-content/50">
+                                        {result.summary}
+                                    </p>
+                                </div>
+                            {/each}
+                        </div>
                     </div>
                 </div>
             {/if}

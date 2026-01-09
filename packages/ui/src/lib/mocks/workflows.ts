@@ -317,22 +317,16 @@ export const tasks = [
 
 export const files = [
 	{
-		id: 'cncf_onboarding.md',
-		name: 'cncf_onboarding.md',
+		id: 'cncf_onboarding.xlsx',
+		name: 'Users to Onboard.xlsx',
 		created: '2026-01-03',
 		workspace: 'CNCF Onboarding'
 	},
 	{
-		id: 'pytorch_onboarding.md',
-		name: 'pytorch_onboarding.md',
+		id: 'pytorch_onboarding.doc',
+		name: 'Onboarding Process.doc ',
 		created: '2026-01-02',
 		workspace: 'PyTorch Onboarding'
-	},
-	{
-		id: 'aaif_onboarding.md',
-		name: 'aaif_onboarding.md',
-		created: '2026-01-01',
-		workspace: 'AAIF Onboarding'
 	}
 ];
 
@@ -340,91 +334,91 @@ export const taskRuns = [
 	{
 		id: '1',
 		created: '2026-01-03 10:00:00',
-		task: 'Onboarding Workflow',
+		task: 'CNCF Onboarding',
 		averageCompletionTime: '10m',
 		user: 'John Doe',
-		workspace: 'Adorable Akita',
+		workspace: 'CNCF Onboarding',
 		tokensUsed: 7000
 	},
 	{
 		id: '2',
 		created: '2026-01-02 10:00:00',
-		task: 'Customer Support',
+		task: 'PyTorch Onboarding',
 		averageCompletionTime: '10.1m',
 		user: 'John Doe',
-		workspace: 'Adorable Akita',
+		workspace: 'PyTorch Onboarding',
 		tokensUsed: 8500
 	},
 	{
 		id: '3',
 		created: '2026-01-02 10:00:00',
-		task: 'Marketing Campaign',
+		task: 'AAIF Onboarding',
 		averageCompletionTime: '10m',
 		user: 'Jane Doe',
-		workspace: 'Caramel Cookie',
+		workspace: 'AAIF Onboarding',
 		tokensUsed: 8000
 	},
 	{
 		id: '4',
 		created: '2026-01-01 10:00:00',
-		task: 'Product Launch',
+		task: 'CNCF Onboarding',
 		averageCompletionTime: '11m',
 		user: 'Jane Doe',
-		workspace: 'Caramel Cookie',
+		workspace: 'CNCF Onboarding',
 		tokensUsed: 9000
 	},
 	{
 		id: '5',
 		created: '2026-01-01 10:00:00',
-		task: 'Sales Pipeline',
+		task: 'CNCF Onboarding',
 		averageCompletionTime: '10m',
 		user: 'John Doe',
-		workspace: 'Adorable Akita',
+		workspace: 'CNCF Onboarding',
 		tokensUsed: 10000
 	},
 	{
 		id: '6',
 		created: '2026-01-01 10:00:00',
-		task: 'Customer Support',
+		task: 'PyTorch Onboarding',
 		averageCompletionTime: '6.5m',
 		user: 'John Doe',
-		workspace: 'Adorable Akita',
+		workspace: 'PyTorch Onboarding',
 		tokensUsed: 11500
 	},
 	{
 		id: '7',
 		created: '2026-01-01 10:00:00',
-		task: 'Marketing Campaign',
+		task: 'CNCF Onboarding',
 		averageCompletionTime: '10m',
 		user: 'Jane Doe',
-		workspace: 'Caramel Cookie',
+		workspace: 'CNCF Onboarding',
 		tokensUsed: 12000
 	},
 	{
 		id: '8',
 		created: '2026-01-01 10:00:00',
-		task: 'Product Launch',
+		task: 'CNCF Onboarding',
 		averageCompletionTime: '10m',
 		user: 'Jane Doe',
-		workspace: 'Caramel Cookie',
+		workspace: 'CNCF Onboarding',
 		tokensUsed: 13000
 	},
 	{
 		id: '9',
 		created: '2026-01-01 10:00:00',
-		task: 'Sales Pipeline',
+		task: 'CNCF Onboarding',
 		averageCompletionTime: '10m',
 		user: 'John Doe',
-		workspace: 'Adorable Akita',
+		workspace: 'CNCF Onboarding',
 		tokensUsed: 14000
 	},
 	{
 		id: '10',
 		created: '2026-01-01 10:00:00',
-		task: 'Customer Support',
+		task: 'PyTorch Onboarding',
 		averageCompletionTime: '10m',
 		user: 'John Doe',
-		workspace: 'Adorable Akita',
+		workspace: 'PyTorch Onboarding',
 		tokensUsed: 15500
 	}
 ];
