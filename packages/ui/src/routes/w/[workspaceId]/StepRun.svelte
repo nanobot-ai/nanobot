@@ -34,19 +34,22 @@
     });
 </script>
 
-<div
-    bind:this={container}
-    onscroll={handleScroll}
-    class="mt-4 w-full step-agent max-h-52 shadow-inner overflow-y-auto bg-base-200 dark:bg-base-100 rounded-field p-4"
->
-    {#if pending}
-        <span class="skeleton skeleton-text w-full h-4 text-sm">
-            Waiting for prior step to complete...
-        </span>
-    {:else if chatLoading && messages.length === 0}
-        <span class="skeleton skeleton-text w-full h-4 text-sm">
-            The step is processing...
-        </span>
-    {/if}
-    <Messages inline messages={messages} />
+<div class="flex flex-col gap-0">
+    <p class="text-sm font-semibold py-2">Output:</p>
+    <div
+        bind:this={container}
+        onscroll={handleScroll}
+        class="w-full step-agent max-h-52 shadow-inner overflow-y-auto bg-base-200 dark:bg-base-100 rounded-field p-4"
+    >
+        {#if pending}
+            <span class="skeleton skeleton-text w-full h-4 text-sm">
+                Waiting for prior step to complete...
+            </span>
+        {:else if chatLoading && messages.length === 0}
+            <span class="skeleton skeleton-text w-full h-4 text-sm">
+                The step is processing...
+            </span>
+        {/if}
+        <Messages inline messages={messages} />
+    </div>
 </div>

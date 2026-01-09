@@ -4,7 +4,7 @@
 	import DragDropList from '$lib/components/DragDropList.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
 	import { createRegistryStore, setRegistryContext } from '$lib/context/registry.svelte';
-	import { ChevronDown, File, EllipsisVertical, GripVertical, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, X } from '@lucide/svelte';
+	import { ChevronDown, File, EllipsisVertical, GripVertical, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, X, Bug } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
@@ -425,7 +425,7 @@
                         <div class="flex shrink-0 items-center gap-2">
                             <div class="flex">
                                 <button class="btn btn-primary rounded-r-none w-48" onclick={handleRun}>
-                                    {runMode === 'normal' ? 'Run' : 'Debug Mode'} <Play class="size-4" /> 
+                                    {runMode === 'normal' ? 'Run' : 'Debug'} <Play class="size-4" /> 
                                 </button>
                                 <div class="dropdown dropdown-end">
                                     <div tabindex="0" role="button" class="btn rounded-l-none btn-primary btn-square border-l-white">
@@ -439,7 +439,7 @@
                                                     (document.activeElement as HTMLElement)?.blur();
                                                 }}
                                             >
-                                                <span class="flex items-center gap-1 font-medium">Run</span>
+                                                <span class="flex items-center gap-2 font-medium"><Play class="size-3" /> Run</span>
                                                 <span class="text-xs text-base-content/50">Perform a standard workflow run, runs all steps at once and outputs a summarized result.</span>
                                             </button>
                                         </li>
@@ -450,7 +450,7 @@
                                                     (document.activeElement as HTMLElement)?.blur();
                                                 }}
                                             >
-                                                <span class="flex items-center gap-1 font-medium">Debug Mode</span>
+                                                <span class="flex items-center gap-2 font-medium"><Bug class="size-3" /> Debug</span>
                                                 <span class="text-xs text-base-content/50">Run the workflow in debug mode, runs step by step and outputs any errors that occur.</span>
                                             </button>
                                         </li>

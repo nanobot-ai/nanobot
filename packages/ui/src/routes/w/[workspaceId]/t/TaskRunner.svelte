@@ -334,7 +334,7 @@
 
             {#if completed}
                 <div in:fade out:slide={{ axis: 'y', duration: 150 }} class="w-full flex flex-col justify-center items-center py-4">
-                    <div class="w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field p-6">
+                    <div class="w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field p-6 pb-12">
                         <h4 class="text-xl font-semibold">{canceling ? 'Workflow Cancelled' : 'Workflow Completed'}</h4>
                         <p class="text-sm text-base-content/50 text-center mt-1">
                             {#if canceling}
