@@ -23,7 +23,7 @@
 
 	let threads = $state<Chat[]>([]);
 	let isLoading = $state(true);
-	let isSidebarCollapsed = $state(page.url.pathname.startsWith('/w/'));
+	let isSidebarCollapsed = $state(false);
 	let isMobileSidebarOpen = $state(false);
 	let currentTheme = $state('nanobotlight');
 	let currentLogoUrl = $state('/assets/nanobot.svg');
@@ -36,13 +36,16 @@
 	// Set notification context for global access
 	setNotificationContext(notifications);
 
-	// Set layout context for children to access sidebar state
+	// Set layout context for children to access and modify sidebar state
 	setLayoutContext({
 		get isSidebarCollapsed() {
 			return isSidebarCollapsed;
 		},
 		get isMobileSidebarOpen() {
 			return isMobileSidebarOpen;
+		},
+		setIsSidebarCollapsed(collapsed: boolean) {
+			isSidebarCollapsed = collapsed;
 		}
 	});
 

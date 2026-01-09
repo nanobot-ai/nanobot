@@ -5,6 +5,7 @@ const LAYOUT_CONTEXT_KEY = Symbol('layout');
 export interface LayoutContext {
 	isSidebarCollapsed: boolean;
 	isMobileSidebarOpen: boolean;
+	setIsSidebarCollapsed: (collapsed: boolean) => void;
 }
 
 export function setLayoutContext(context: LayoutContext) {
