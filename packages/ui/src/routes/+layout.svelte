@@ -23,7 +23,7 @@
 
 	let threads = $state<Chat[]>([]);
 	let isLoading = $state(true);
-	let isSidebarCollapsed = $state(false);
+	let isSidebarCollapsed = $state(page.url.pathname.startsWith('/w/'));
 	let isMobileSidebarOpen = $state(false);
 	let currentTheme = $state('nanobotlight');
 	let currentLogoUrl = $state('/assets/nanobot.svg');
@@ -161,9 +161,11 @@
 					<img src={currentLogoUrl} alt="Nanobot" class="h-12" />
 				</a>
 				<div class="flex items-center gap-1">
-					<a href={newThread} class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
-						<SquarePen class="h-5 w-5" />
-					</a>
+					{#if !showWorkspaces}
+						<a href={newThread} class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
+							<SquarePen class="size-5" />
+						</a>
+					{/if}
 					<button
 						onclick={() => {
 							if (window.innerWidth >= 1024) {
@@ -258,9 +260,11 @@
 				<a href={root} class="flex items-center gap-2 text-xl font-bold hover:opacity-80">
 					<img src={currentLogoUrl} alt="Nanobot" class="h-12" />
 				</a>
-				<a href={newThread} class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
-					<SquarePen class="h-4 w-4" />
-				</a>
+				{#if !showWorkspaces}
+					<a href={newThread} class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
+						<SquarePen class="h-4 w-4" />
+					</a>
+				{/if}
 				<button
 					onclick={toggleDesktopSidebar}
 					class="btn p-1 btn-ghost btn-sm"
@@ -275,13 +279,15 @@
 	<!-- Mobile menu button -->
 	{#if !isMobileSidebarOpen}
 		<div class="absolute top-4 left-4 z-50 flex gap-2 lg:hidden">
-			<a
-				href={newThread}
-				class="btn border border-base-300 bg-base-100/80 btn-ghost backdrop-blur-sm btn-sm"
-				aria-label="New thread"
-			>
-				<SquarePen class="h-5 w-5" />
-			</a>
+			{#if !showWorkspaces}
+				<a
+					href={newThread}
+					class="btn border border-base-300 bg-base-100/80 btn-ghost backdrop-blur-sm btn-sm"
+					aria-label="New thread"
+				>
+					<SquarePen class="h-5 w-5" />
+				</a>
+			{/if}
 			<button
 				onclick={toggleMobileSidebar}
 				class="btn border border-base-300 bg-base-100/80 btn-ghost backdrop-blur-sm btn-sm"

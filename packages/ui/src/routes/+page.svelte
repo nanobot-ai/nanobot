@@ -10,6 +10,7 @@
 	import { ChevronRight, Eye, File, Folder, ListTodo, Plus } from '@lucide/svelte';
 	import { formatTimeAgo } from '$lib/utils/time';
 	import * as mocks from '$lib/mocks';
+	import { getLayoutContext } from '$lib/context/layout.svelte';
 	
 	const chat = new ChatService();
 	let doClose = true;
@@ -48,11 +49,13 @@
 			chat.close();
 		}
 	});
+
+	const layout = getLayoutContext();
 </script>
 
 {#if workspaceEnabled}
 <div class="h-dvh w-full overflow-y-auto">
-	<div class="px-8 mx-auto py-8 flex flex-col gap-4 max-w-7xl w-full">
+	<div class="{layout.isSidebarCollapsed ? 'pt-18' : ''} mx-auto pt-6 p-8 flex flex-col gap-4 max-w-7xl w-full">
 		<h1 class="text-3xl font-semibold">Dashboard</h1>
 		<div class="grid grid-cols-12 gap-4">
 			<div class="flex flex-col col-span-8 gap-4">
