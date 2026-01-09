@@ -2,32 +2,28 @@
 	import '$lib/../app.css';
     import { resolve } from '$app/paths';
 	import DragDropList from '$lib/components/DragDropList.svelte';
-	import MessageInput from '$lib/components/MessageInput.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
 	import { createRegistryStore, setRegistryContext } from '$lib/context/registry.svelte';
-	import { Circle, CircleCheck, EllipsisVertical, File, GripVertical, LoaderCircle, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, X } from '@lucide/svelte';
+	import { EllipsisVertical, GripVertical, PencilLine, Play, Plus, ReceiptText, X } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { fade, fly, slide } from 'svelte/transition';
+	import { fade, slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { WorkspaceService } from '$lib/workspace.svelte';
-	import type { Attachment, WorkspaceClient, WorkspaceFile } from '$lib/types';
+	import type { WorkspaceClient, WorkspaceFile } from '$lib/types';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
 	import { type Input, type Task, type Step as StepType } from './types';
-	import { compileOutputFiles, convertToTask, setupEmptyTask, parseFrontmatterMarkdown } from './utils';
+	import { compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
 	import StepActions from './StepActions.svelte';
 	import TaskInputActions from './TaskInputActions.svelte';
     import TaskInput from './TaskInput.svelte';
 	import Step from './Step.svelte';
 	import RegistryToolSelector from './RegistryToolSelector.svelte';
-	import { onDestroy, onMount, tick } from 'svelte';
-	import { ChatService, type ToolCallInfo } from '$lib/chat.svelte';
-	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
+	import { onMount } from 'svelte';
 	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
-	import { setSharedChat, sharedChat } from '$lib/stores/chat.svelte';
     import * as mocks from '$lib/mocks';
-	import Messages from '$lib/components/Messages.svelte';
-
+	import { mockTasks } from '$lib/mocks/stores/tasks.svelte';
+	
     type Props = {
         workspaceId: string;
         urlTaskId?: string;
@@ -58,15 +54,14 @@
     let stepBlockEditing = new SvelteMap<number | string, boolean>();
     let stepDescription = new SvelteMap<number | string, boolean>();
 
-    let currentRun = $state<unknown | null>(null);
     let showSidebarThread = $state(false);
-    let toggleableMessageInput = $state<ReturnType<typeof MessageInput> | null>(null);
+    // let toggleableMessageInput = $state<ReturnType<typeof MessageInput> | null>(null);
 
     let registryToolSelector = $state<ReturnType<typeof RegistryToolSelector> | null>(null);
     let currentAddingToolForStep = $state<StepType | null>(null);
 
-    let showMessageInput = $state(false);
-    let includeFilesInMessage = $state<Attachment[]>([]);
+    // let showMessageInput = $state(false);
+    // let includeFilesInMessage = $state<Attachment[]>([]);
 
     let showAlternateHeader = $state(false);
     let lastSavedTaskJson = '';
@@ -84,96 +79,93 @@
     const layout = getLayoutContext();
     const workspaceService = new WorkspaceService();
 
-    let runSession = $state<{ thread: ChatService, stepName: string, pending: boolean }[]>([]);
-    let runHandlers = $state<ReturnType<typeof setTimeout>[]>([]);
+    // TODO: whether or not to add this back in -- right sidebar for run / agent chat input on bottom right
+    // // Stick-to-bottom scroll tracking for run session
+    // let runSessionScrollContainer = $state<HTMLElement | null>(null);
+    // let isStickToBottom = $state(true);
+    // const SCROLL_THRESHOLD = 50; // pixels from bottom to consider "at bottom"
 
-    // Stick-to-bottom scroll tracking for run session
-    let runSessionScrollContainer = $state<HTMLElement | null>(null);
-    let isStickToBottom = $state(true);
-    const SCROLL_THRESHOLD = 50; // pixels from bottom to consider "at bottom"
+    // function checkIfAtBottom(el: HTMLElement): boolean {
+    //     return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_THRESHOLD;
+    // }
 
-    function checkIfAtBottom(el: HTMLElement): boolean {
-        return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_THRESHOLD;
-    }
+    // function handleRunSessionScroll() {
+    //     if (!runSessionScrollContainer) return;
+    //     isStickToBottom = checkIfAtBottom(runSessionScrollContainer);
+    // }
 
-    function handleRunSessionScroll() {
-        if (!runSessionScrollContainer) return;
-        isStickToBottom = checkIfAtBottom(runSessionScrollContainer);
-    }
+    // function scrollToBottom() {
+    //     if (runSessionScrollContainer && isStickToBottom) {
+    //         runSessionScrollContainer.scrollTop = runSessionScrollContainer.scrollHeight;
+    //     }
+    // }
 
-    function scrollToBottom() {
-        if (runSessionScrollContainer && isStickToBottom) {
-            runSessionScrollContainer.scrollTop = runSessionScrollContainer.scrollHeight;
-        }
-    }
+    // $effect(() => {
+    //     if (!runSession.length) return;
+    //     // Track loading states and message counts to detect content changes
+    //     // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    //     const _ = runSession.map(s => ({
+    //         loading: s.thread.isLoading,
+    //         messageCount: s.thread.messages.length,
+    //         pending: s.pending
+    //     }));
+        
+    //     // Schedule scroll after DOM update
+    //     tick().then(scrollToBottom);
+    // });
 
-    // Auto-scroll when session content changes
-    $effect(() => {
-        if (!runSession.length) return;
-        // Track loading states and message counts to detect content changes
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const _ = runSession.map(s => ({
-            loading: s.thread.isLoading,
-            messageCount: s.thread.messages.length,
-            pending: s.pending
-        }));
+    // /** Handle file modifications from chat to update task steps */
+    // async function handleFileModified(info: ToolCallInfo) {
+    //     if (!task || !taskId || !workspace) return;
         
-        // Schedule scroll after DOM update
-        tick().then(scrollToBottom);
-    });
-
-    /** Handle file modifications from chat to update task steps */
-    async function handleFileModified(info: ToolCallInfo) {
-        if (!task || !taskId || !workspace) return;
+    //     const filePath = info.filePath;
+    //     const taskPrefix = `.nanobot/tasks/${taskId}/`;
+    //     const workspacePrefix = `/workspace/${taskPrefix}`;
         
-        const filePath = info.filePath;
-        const taskPrefix = `.nanobot/tasks/${taskId}/`;
-        const workspacePrefix = `/workspace/${taskPrefix}`;
+    //     // Check if the modified file belongs to this task
+    //     let relativePath = '';
+    //     if (filePath.startsWith(workspacePrefix)) {
+    //         relativePath = filePath.replace(`/workspace/`, '');
+    //     } else if (filePath.startsWith(taskPrefix)) {
+    //         relativePath = filePath;
+    //     }
         
-        // Check if the modified file belongs to this task
-        let relativePath = '';
-        if (filePath.startsWith(workspacePrefix)) {
-            relativePath = filePath.replace(`/workspace/`, '');
-        } else if (filePath.startsWith(taskPrefix)) {
-            relativePath = filePath;
-        }
+    //     if (!relativePath || !relativePath.startsWith(taskPrefix)) return;
         
-        if (!relativePath || !relativePath.startsWith(taskPrefix)) return;
+    //     // Extract step identifier (e.g., "TASK.md" or "STEP_1.md")
+    //     const stepFile = relativePath.replace(taskPrefix, '');
         
-        // Extract step identifier (e.g., "TASK.md" or "STEP_1.md")
-        const stepFile = relativePath.replace(taskPrefix, '');
-        
-        try {
-            // Read and parse just the modified file
-            const fileContent = await workspace.readFile(relativePath);
-            const parsed = await parseFrontmatterMarkdown(fileContent);
+    //     try {
+    //         // Read and parse just the modified file
+    //         const fileContent = await workspace.readFile(relativePath);
+    //         const parsed = await parseFrontmatterMarkdown(fileContent);
             
-            // Find the step with matching id and update it
-            const stepIndex = task.steps.findIndex(s => s.id === stepFile);
-            if (stepIndex !== -1) {
-                // Update the step in place
-                task.steps[stepIndex] = {
-                    ...task.steps[stepIndex],
-                    name: parsed.name,
-                    description: parsed.description,
-                    content: parsed.content,
-                    tools: parsed.tools
-                };
+    //         // Find the step with matching id and update it
+    //         const stepIndex = task.steps.findIndex(s => s.id === stepFile);
+    //         if (stepIndex !== -1) {
+    //             // Update the step in place
+    //             task.steps[stepIndex] = {
+    //                 ...task.steps[stepIndex],
+    //                 name: parsed.name,
+    //                 description: parsed.description,
+    //                 content: parsed.content,
+    //                 tools: parsed.tools
+    //             };
                 
-                // If this is the TASK.md file, also update task-level properties
-                if (stepFile === 'TASK.md') {
-                    task.name = parsed.taskName;
-                    task.description = parsed.taskDescription;
-                    // Update inputs if provided
-                    if (parsed.inputs.length > 0) {
-                        task.inputs = parsed.inputs;
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('Failed to update step after file modification:', error);
-        }
-    }
+    //             // If this is the TASK.md file, also update task-level properties
+    //             if (stepFile === 'TASK.md') {
+    //                 task.name = parsed.taskName;
+    //                 task.description = parsed.taskDescription;
+    //                 // Update inputs if provided
+    //                 if (parsed.inputs.length > 0) {
+    //                     task.inputs = parsed.inputs;
+    //                 }
+    //             }
+    //         }
+    //     } catch (error) {
+    //         console.error('Failed to update step after file modification:', error);
+    //     }
+    // }
 
     onMount(() => {
         const isMock = mocks.workspaceIds.includes(workspaceId);
@@ -181,31 +173,32 @@
         registryStore.fetch();
     });
     
-    onDestroy(() => {
-        sharedChat.current?.close();
-    });
+    // onDestroy(() => {
+    //     sharedChat.current?.close();
+    // });
 
-    $effect(() => {
-        if (workspace && !sharedChat.current) {
-            initChat();
-        }
-    })
+    // TODO: whether or not to add this back in
+    // $effect(() => {
+    //     if (workspace && !sharedChat.current) {
+    //         initChat();
+    //     }
+    // })
 
-    async function initChat() {
-        const isMock = mocks.workspaceIds.includes(workspaceId);
-        const chat = isMock ? new ChatService() : await workspace?.newSession({ editor: true });
-        if (chat) {
-            if (!isMock) {
-                chat.setCallbacks({
-                    onFileModified: handleFileModified,
-                    onChatDone: () => {
-                        workspace?.load();
-                    }
-                });
-            }
-            setSharedChat(chat);
-        }
-    }
+    // async function initChat() {
+    //     const isMock = mocks.workspaceIds.includes(workspaceId);
+    //     const chat = isMock ? new ChatService() : await workspace?.newSession({ editor: true });
+    //     if (chat) {
+    //         if (!isMock) {
+    //             chat.setCallbacks({
+    //                 onFileModified: handleFileModified,
+    //                 onChatDone: () => {
+    //                     workspace?.load();
+    //                 }
+    //             });
+    //         }
+    //         setSharedChat(chat);
+    //     }
+    // }
 
     function debouncedSave() {
         if (saveTimeout) {
@@ -380,61 +373,25 @@
             }));
             inputsModal?.showModal();
         } else {
-            // no inputs provided, just run task
-            isStickToBottom = true; // Reset stick-to-bottom when showing sidebar
-            showSidebarThread = true;
+            // TODO: whether or not to add this back in
+            // isStickToBottom = true; // Reset stick-to-bottom when showing sidebar
+            // showSidebarThread = true;
+            submitRun();
         }
     }
 
+    // TODO: change below to actually hit the run task endpoint once available
     async function submitRun() {
-        if (!task) return;
-        // TODO: change below to actually hit the run task endpoint once available
-        runSession = [];
-        isStickToBottom = true; // Reset stick-to-bottom when starting a new run
-        let priorSteps = '';
-        let priorResponse = '';
+        // navigate to run page
+        const created = new Date().toISOString();
+        const runId = crypto.randomUUID();
 
-        for (const step of task.steps) {
-            const thread = workspace?.newSession ? await workspace?.newSession() : new ChatService();
-            runSession.push({ thread: thread!, stepName: step.name, pending: true });
-        }
-
-        showSidebarThread = true;
-        for (const [stepIndex, step] of task.steps.entries()) {
-            runSession[stepIndex].pending = false;
-
-            const message = `
-You are a task runner. You are given a task and a list of steps to run. You are to run the task step by step. \n\n
-
-You have the following arguments:
-${JSON.stringify(runFormData)} \n\n
-
-${priorSteps.length > 0 ? `
-You have already run the following steps:
-${priorSteps}
-` : ''} \n\n
-
-${priorResponse.length > 0 ? `
-You have given the following response to the previous step(s):
-${priorResponse}
-` : ''} \n\n
-
-You are currently running the following step: \n
-Step name: ${step.name} \n
-Step description: ${step.description} \n
-Step content: ${step.content} \n\n
-\n\n You have the following tools available to you:
-${step.tools.join(', ')}
-\n\n Do not indicate that you are simulating or mocking any data; act as if you are actually running the task.
-            `;
-            
-            // Wait for this thread to complete before starting the next one
-            const response = await runSession[stepIndex].thread?.sendMessage(message);
-            if (response) {
-                priorResponse += `Step ${stepIndex} response: ${response.message}\n\n`;
-            }
-            
-            priorSteps += `Step ${stepIndex + 1}: ${step.name} \n\n`;
+        if (mocks.taskIds.includes(taskId)) {
+            const content = { id: runId, created, arguments: runFormData };
+            mockTasks.addRun(taskId, content);
+            goto(resolve(`/w/${workspaceId}/t?id=${taskId}&runId=${runId}`), { keepFocus: true });
+        } else {
+            // TODO: actual impl
         }
     }
 </script>
@@ -585,8 +542,8 @@ ${step.tools.join(', ')}
                         taskId={taskId}
                         task={task!}
                         {step}
-                        {stepDescription}
-                        {stepBlockEditing}
+                        showDescription={stepDescription.get(step.id) ?? false}
+                        showBlockEditing={stepBlockEditing.get(step.id) ?? false}
                         onToggleStepDescription={(id, value) => stepDescription.set(id, value)}
                         onToggleStepBlockEditing={(id, value) => stepBlockEditing.set(id, value)}
                         onUpdateStep={(id, updates) => {
@@ -607,11 +564,11 @@ ${step.tools.join(', ')}
                         }}
                         {visibleInputs}
                         onUpdateVisibleInputs={(inputs) => visibleInputs = inputs}
-                        onSuggestImprovement={async (file) => {
-                            if (!includeFilesInMessage.some((f) => f.uri === file.uri)) {
-                                includeFilesInMessage.push(file);
-                            }
-                            showMessageInput = true;
+                        onSuggestImprovement={async (_file) => {
+                            // if (!includeFilesInMessage.some((f) => f.uri === file.uri)) {
+                            //     includeFilesInMessage.push(file);
+                            // }
+                            // showMessageInput = true;
                         }}
                     />
                 {/snippet}
@@ -636,7 +593,8 @@ ${step.tools.join(', ')}
 
             <div class="flex grow"></div>
 
-            {#if !showSidebarThread}
+            <!-- TODO: whether or not to add this back in -->
+            <!-- {#if !showSidebarThread}
                 <div in:fade={{ duration: 200 }} class="sticky bottom-0 right-0 self-end flex flex-col gap-4 z-10">
                     {#if showMessageInput}
                         <div class="bg-base-100 dark:bg-base-200 border border-base-300 rounded-selector w-sm md:w-2xl"
@@ -680,10 +638,11 @@ ${step.tools.join(', ')}
                         <MessageCircleMore class="size-6" />
                     </button>
                 </div>
-            {/if}
+            {/if} -->
         </div>
 
-        {#if showSidebarThread}
+        <!-- TODO: whether or not to add this back in -->
+        <!-- {#if showSidebarThread}
             <div transition:fly={{ x: 100, duration: 200 }} class="md:min-w-[520px] bg-base-100 h-dvh flex flex-col">
                 <div class="w-full flex justify-between items-center p-4 bg-base-100 shrink-0">
                     {#if currentRun}
@@ -749,7 +708,7 @@ ${step.tools.join(', ')}
                     {/if}
                 </div>
             </div>
-        {/if}
+        {/if} -->
     </div>
 {:else}
     <div class="w-full flex flex-col gap-8">
