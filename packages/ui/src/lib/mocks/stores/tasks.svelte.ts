@@ -12,7 +12,7 @@ type Task = {
 	runs: {
 		id: string;
 		created: string;
-		arguments: TaskArgument[];
+		arguments?: TaskArgument[];
 		stepSessions?: {
 			stepId: string;
 			threadId: string;
@@ -68,7 +68,8 @@ function addRun(
 	run: {
 		id: string;
 		created: string;
-		arguments: TaskArgument[];
+		arguments?: TaskArgument[];
+		stepSessions?: { stepId: string; threadId: string }[];
 	}
 ): void {
 	if (!browser) return;
