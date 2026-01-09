@@ -29,8 +29,8 @@ type TaskState = {
 		run: {
 			id: string;
 			created: string;
-			arguments: TaskArgument[];
-			stepSessions: { stepId: string; threadId: string }[];
+			arguments?: TaskArgument[];
+			stepSessions?: { stepId: string; threadId: string }[];
 		}
 	) => void;
 	updateRun: (
