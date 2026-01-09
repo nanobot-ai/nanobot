@@ -84,9 +84,9 @@
 								<div class="stat">
 									<div class="stat-title">Most Used Task</div>
 									<div class="stat-value text-lg truncate self-end">
-										Onboarding Workflow
+										CNCF Onboarding
 									</div>
-									<div class="stat-desc self-end">Adorable Akita</div>
+									<div class="stat-desc self-end">CNCF Onboarding</div>
 								</div>
 							</div>
 
@@ -94,7 +94,7 @@
 								<div class="stat">
 									<div class="stat-title">Most Expensive Task</div>
 									<div class="stat-value text-lg truncate self-end">
-										Onboarding Workflow
+										CNCF Onboarding
 									</div>
 									<div class="stat-desc">8,500 average tokens used per run</div>
 								</div>
@@ -145,7 +145,8 @@
 						</h3>
 						<ul class="list bg-base-100 rounded-box">
 							<li class="pb-2 text-xs opacity-60 tracking-wide">Most recently created workspaces</li>
-							{#each workspaceService.workspaces as workspace (workspace.id)}
+
+							{#each [...workspaceService.workspaces, mocks.workspace] as workspace (workspace.id)}
 								<li class="list-row">
 									<div>
 										<Folder class="size-6" style="color: {workspace.color || '#000'}; fill: color-mix(in oklab, {workspace.color || '#000'} 50%, var(--color-base-100))" />
