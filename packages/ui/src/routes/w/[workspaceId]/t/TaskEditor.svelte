@@ -4,7 +4,7 @@
 	import DragDropList from '$lib/components/DragDropList.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
 	import { createRegistryStore, setRegistryContext } from '$lib/context/registry.svelte';
-	import { ChevronDown, File, EllipsisVertical, GripVertical, MessageCircleMore, PencilLine, Play, Plus, ReceiptText, X, Bug } from '@lucide/svelte';
+	import { ChevronDown, EllipsisVertical, GripVertical, PencilLine, Play, Plus, ReceiptText, X, Bug, MessageCircleMore } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
@@ -19,12 +19,11 @@
     import TaskInput from './TaskInput.svelte';
 	import Step from './Step.svelte';
 	import RegistryToolSelector from './RegistryToolSelector.svelte';
-	import { onDestroy, onMount, tick } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
     import * as mocks from '$lib/mocks';
 	import { mockTasks } from '$lib/mocks/stores/tasks.svelte';
 	import { setSharedChat, sharedChat } from '$lib/stores/chat.svelte';
-	import MessageInput from '$lib/components/MessageInput.svelte';
 	import type { ToolCallInfo } from '$lib/chat.svelte';
 	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 	
@@ -62,12 +61,10 @@
     let showSidebarThread = $state(true);
     let sidebarWidth = $state(520);
     let isResizing = $state(false);
-    let toggleableMessageInput = $state<ReturnType<typeof MessageInput> | null>(null);
-
+    
     let registryToolSelector = $state<ReturnType<typeof RegistryToolSelector> | null>(null);
     let currentAddingToolForStep = $state<StepType | null>(null);
 
-    let showMessageInput = $state(false);
     let includeFilesInMessage = $state<Attachment[]>([]);
 
     let showAlternateHeader = $state(false);
@@ -425,8 +422,7 @@
             ></button>
         {/if}
         <div class="
-            flex flex-col grow p-4 pt-0 overflow-y-auto max-h-dvh transition-all duration-200 ease-in-out 
-            {layout.isSidebarCollapsed && !showSidebarThread ? 'mt-13' : ''}
+            flex flex-col grow p-4 pt-0 overflow-y-auto max-h-dvh transition-all duration-150 
             {isResizing ? 'select-none' : ''}
         " 
             bind:this={scrollContainer}
@@ -436,7 +432,7 @@
         >
             <div class="sticky top-0 left-0 w-full bg-base-200 dark:bg-base-100 z-10 py-4">
                 <div in:fade class="flex flex-col grow">
-                    <div class="flex w-full items-center gap-4">
+                    <div class="flex w-full items-center gap-4 {layout.isSidebarCollapsed && !showSidebarThread ? 'pl-68' : ''}">
                         {#if showAlternateHeader}
                             <p in:fade class="flex grow text-xl font-semibold">{task.name}</p>
                         {:else if showTaskTitle}
@@ -511,6 +507,20 @@
                                         />
                                     </label>
                                 </li>
+                                {#if !showSidebarThread}
+                                    <li>
+                                        <button 
+                                            class="flex items-center gap-2"
+                                            onclick={() => {
+                                                showSidebarThread = true;
+                                                includeFilesInMessage = [];
+                                                document.getElementById('task-actions')?.hidePopover();
+                                            }}
+                                        >
+                                            <MessageCircleMore class="size-4" /> Show chat
+                                        </button>
+                                    </li>
+                                {/if}
                             </ul>
                         </div>
                     </div>
@@ -626,7 +636,7 @@
                             if (!includeFilesInMessage.some((f) => f.uri === file.uri)) {
                                 includeFilesInMessage.push(file);
                             }
-                            showMessageInput = true;
+                            //TODO:
                         }}
                     />
                 {/snippet}
@@ -650,52 +660,6 @@
             </div>
 
             <div class="flex grow"></div>
-
-            {#if !showSidebarThread}
-                <div in:fade={{ duration: 200 }} class="sticky bottom-0 right-0 self-end flex flex-col gap-4 z-10">
-                    {#if showMessageInput}
-                        <div class="bg-base-100 dark:bg-base-200 border border-base-300 rounded-selector w-sm md:w-2xl"
-                            transition:fly={{ x: 100, duration: 200 }}
-                        >
-                            <MessageInput bind:this={toggleableMessageInput} 
-                                onSend={async (message) => {
-                                    // isStickToBottom = true; // Reset stick-to-bottom when showing sidebar
-                                    showSidebarThread = true;
-                                    showMessageInput = false;
-
-                                    return sharedChat.current?.sendMessage(message, includeFilesInMessage.length > 0 ? includeFilesInMessage : undefined);
-                                }} 
-                            >
-                                {#snippet customActions()}
-                                    {#if includeFilesInMessage.length > 0}
-                                        {#each includeFilesInMessage as file (file.uri)}
-                                            <div class="badge badge-sm badge-primary gap-1 group">
-                                                <button class="hidden group-hover:block cursor-pointer text-white/50 hover:text-white transition-colors" 
-                                                    onclick={() => {
-                                                        includeFilesInMessage = includeFilesInMessage.filter((f) => f.uri !== file.uri);
-                                                    }} 
-                                                >
-                                                    <X class="size-3" />
-                                                </button>
-                                                <File class="size-3 block group-hover:hidden" />
-                                                {file.name}
-                                            </div>
-                                        {/each}
-                                    {/if}
-                                {/snippet}
-                            </MessageInput>
-                        </div>  
-                    {/if}
-
-                    <button class="float-right btn btn-lg btn-circle btn-primary self-end tooltip tooltip-left" onclick={async () => {
-                        showMessageInput = !showMessageInput;
-                        await tick();
-                        toggleableMessageInput?.focus();
-                    }} data-tip={showMessageInput ? 'Hide chat' : 'Show chat'}>
-                        <MessageCircleMore class="size-6" />
-                    </button>
-                </div>
-            {/if}
         </div>
     </div>
 {:else}

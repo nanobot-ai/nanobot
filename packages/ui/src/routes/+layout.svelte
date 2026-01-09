@@ -258,7 +258,7 @@
 
 	<!-- Collapsed sidebar toggle (desktop only) -->
 	{#if isSidebarCollapsed}
-		<div class="absolute top-0 left-0 z-10 hidden h-15 items-center bg-transparent p-2 lg:flex">
+		<div class="absolute top-0 left-0 z-50 hidden h-15 items-center bg-transparent p-2 lg:flex">
 			<div class="flex items-center gap-2">
 				<a href={root} class="flex items-center gap-2 text-xl font-bold hover:opacity-80">
 					<img src={currentLogoUrl} alt="Nanobot" class="h-12" />
