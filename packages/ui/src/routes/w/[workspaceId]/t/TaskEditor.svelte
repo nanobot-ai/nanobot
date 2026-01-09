@@ -399,7 +399,7 @@
             >
                 <div class="w-full flex justify-between items-center p-4 bg-base-100 shrink-0">
                     <div class="w-full"></div>
-                    <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-right" data-tip="Close" 
+                    <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" data-tip="Close" 
                         onclick={() => {
                             showSidebarThread = false;
                             includeFilesInMessage = [];
@@ -426,7 +426,7 @@
         {/if}
         <div class="
             flex flex-col grow p-4 pt-0 overflow-y-auto max-h-dvh transition-all duration-200 ease-in-out 
-            {layout.isSidebarCollapsed ? 'mt-10' : ''}
+            {layout.isSidebarCollapsed && !showSidebarThread ? 'mt-13' : ''}
             {isResizing ? 'select-none' : ''}
         " 
             bind:this={scrollContainer}

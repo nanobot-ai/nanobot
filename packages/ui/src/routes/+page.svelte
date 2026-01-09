@@ -55,7 +55,7 @@
 
 {#if workspaceEnabled}
 <div class="h-dvh w-full overflow-y-auto">
-	<div class="{layout.isSidebarCollapsed ? 'pt-18' : ''} mx-auto pt-6 p-8 flex flex-col gap-4 max-w-7xl w-full">
+	<div class="{layout.isSidebarCollapsed ? 'pt-18' : ''} mx-auto pt-6 p-8 flex flex-col gap-4 max-w-7xl w-full transition-[padding] duration-100 ease-out">
 		<h1 class="text-3xl font-semibold">Dashboard</h1>
 		<div class="grid grid-cols-12 gap-4">
 			<div class="flex flex-col col-span-8 gap-4">
