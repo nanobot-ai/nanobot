@@ -55,6 +55,8 @@ attachmentsLoop:
 		clientName := c.s.data.CurrentAgent(ctx)
 		if strings.HasPrefix(uri, "nanobot://") {
 			clientName = "nanobot.resources"
+		} else if strings.HasPrefix(uri, "workspace://") {
+			clientName = "workspaceResources"
 		}
 
 		client, err := c.s.runtime.GetClient(ctx, clientName)
@@ -70,12 +72,19 @@ attachmentsLoop:
 			return nil, err
 		}
 
+		// Preserve original name from attachment if provided
+		originalName, _ := data["name"].(string)
+
 		for _, content := range resource.Contents {
 			dataURI := content.ToDataURI()
 			attachmentData := map[string]any{
 				"url": dataURI,
+				"uri": uri, // Original URI for file reference (e.g., workspace://...)
 			}
-			if content.Name != "" {
+			// Use original name if provided, otherwise fall back to content.Name
+			if originalName != "" {
+				attachmentData["name"] = originalName
+			} else if content.Name != "" {
 				attachmentData["name"] = content.Name
 			}
 			newAttachments = append(newAttachments, attachmentData)

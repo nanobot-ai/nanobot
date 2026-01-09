@@ -149,12 +149,14 @@ export interface Event {
 
 export interface Notification {
 	id: string;
-	type: 'success' | 'error' | 'warning' | 'info';
+	type: 'success' | 'error' | 'warning' | 'info' | 'action';
 	title: string;
 	message?: string;
 	timestamp: Date;
 	autoClose?: boolean;
 	duration?: number; // milliseconds
+	onConfirm?: () => void;
+	onCancel?: () => void;
 }
 
 export interface Prompts {
@@ -366,6 +368,7 @@ export interface WorkspaceClient {
 	readonly sessions: Session[];
 	readonly loading: boolean;
 
+	load(): Promise<void>;
 	readFile(path: string): Promise<Blob>;
 	writeFile(path: string, data: Blob | string): Promise<void>;
 	createFile(path: string, data: Blob | string): Promise<void>;
@@ -395,3 +398,22 @@ export interface InitializationResult {
 }
 
 export const UIPath = '/mcp?ui';
+
+export interface Server {
+	description: string;
+	icons: {
+		mimeType: string;
+		src: string;
+	}[];
+	name: string;
+	remotes?: {
+		type: string;
+		url: string;
+	}[];
+	repository?: {
+		source: string;
+		url: string;
+	};
+	title: string;
+	version: string;
+}

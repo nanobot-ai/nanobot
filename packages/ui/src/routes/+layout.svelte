@@ -6,13 +6,20 @@
 	import { defaultChatApi } from '$lib/chat.svelte';
 	import { NotificationStore } from '$lib/stores/notifications.svelte';
 	import { setNotificationContext } from '$lib/context/notifications.svelte';
+	import { setLayoutContext } from '$lib/context/layout.svelte';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { Menu, X, SidebarOpen, SidebarClose, Sun, Moon, SquarePen } from '@lucide/svelte';
 	import type { Chat } from '$lib/types';
 	import { resolve } from '$app/paths';
+	import { sharedChat } from '$lib/stores/chat.svelte';
+	import Workspaces from '$lib/components/Workspaces.svelte';
+	import { page } from '$app/state';
 
 	let { children } = $props();
+
+	let showWorkspaces = $derived(sharedChat.current?.workspaceEnabled ?? false);
+	let inverse = $derived(sharedChat.current?.workspaceEnabled ?? false);
 
 	let threads = $state<Chat[]>([]);
 	let isLoading = $state(true);
@@ -24,8 +31,27 @@
 	const newThread = resolve('/');
 	const notifications = new NotificationStore();
 
+	let scrollContainer = $state<HTMLElement | null>(null);
+
 	// Set notification context for global access
 	setNotificationContext(notifications);
+
+	// Set layout context for children to access and modify sidebar state
+	setLayoutContext({
+		get isSidebarCollapsed() {
+			return isSidebarCollapsed;
+		},
+		get isMobileSidebarOpen() {
+			return isMobileSidebarOpen;
+		},
+		setIsSidebarCollapsed(collapsed: boolean) {
+			isSidebarCollapsed = collapsed;
+		}
+	});
+
+	// starts with w/
+	const selectedTaskId = $derived(page.url.pathname.startsWith('/w/') ? page.url.searchParams.get('id') : null);
+	const selectedRunId = $derived(page.url.pathname.startsWith('/w/') ? page.url.searchParams.get('runId') : null);
 
 	onMount(async () => {
 		// Load sidebar state from localStorage (desktop only)
@@ -123,7 +149,8 @@
 	<!-- Sidebar - responsive behavior -->
 	<div
 		class="
-		bg-base-200 transition-all duration-300 ease-in-out
+		transition-all duration-300 ease-in-out
+		{inverse ? 'bg-base-100 dark:bg-base-200' : 'bg-base-200'}
 		{isSidebarCollapsed ? 'hidden lg:block lg:w-0' : 'hidden lg:block lg:w-80'}
 		{isMobileSidebarOpen ? 'fixed inset-y-0 left-0 z-40 block! w-80' : 'lg:relative'}
 	"
@@ -137,9 +164,11 @@
 					<img src={currentLogoUrl} alt="Nanobot" class="h-12" />
 				</a>
 				<div class="flex items-center gap-1">
-					<a href={newThread} class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
-						<SquarePen class="h-5 w-5" />
-					</a>
+					{#if !showWorkspaces}
+						<a href={newThread} class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
+							<SquarePen class="size-5" />
+						</a>
+					{/if}
 					<button
 						onclick={() => {
 							if (window.innerWidth >= 1024) {
@@ -168,17 +197,33 @@
 			</div>
 
 			<!-- Threads and Workspaces list -->
-			<div class="flex-1 overflow-hidden {!isSidebarCollapsed ? 'min-w-80' : ''}">
-				<div class="flex h-full flex-col">
-					<!-- Threads section (takes up ~40% of available space) -->
-					<div class='flex-shrink-0 overflow-y-auto'>
-						<Threads
-							{threads}
-							onRename={handleRenameThread}
-							onDelete={handleDeleteThread}
-							{isLoading}
-							onThreadClick={closeMobileSidebar}
-						/>
+			<div class="overflow-y-auto h-[calc(100%-3.5rem)] {!isSidebarCollapsed ? 'min-w-80' : ''}" bind:this={scrollContainer}>
+				<div class="flex flex-col">
+					{#if showWorkspaces}
+						<div class="shrink-0">
+							<Workspaces 
+								scrollContainerEl={scrollContainer} 
+								{inverse} 
+								{selectedTaskId}
+								{selectedRunId}
+							/>
+						</div>
+					{:else}
+						<!-- Threads section (takes up ~40% of available space) -->
+						<div class='shrink-0'>
+							<Threads
+								{threads}
+								onRename={handleRenameThread}
+								onDelete={handleDeleteThread}
+								{isLoading}
+								onThreadClick={closeMobileSidebar}
+								{inverse}
+							/>
+						</div>
+					{/if}
+
+					<div class="h-12">
+						<!-- placeholder so dark/light toggle doesn't block content -->
 					</div>
 				</div>
 			</div>
@@ -213,20 +258,22 @@
 
 	<!-- Collapsed sidebar toggle (desktop only) -->
 	{#if isSidebarCollapsed}
-		<div class="absolute top-0 left-0 z-10 hidden h-15 items-center bg-transparent p-2 lg:flex">
+		<div class="absolute top-0 left-0 z-50 hidden h-15 items-center bg-transparent p-2 lg:flex">
 			<div class="flex items-center gap-2">
 				<a href={root} class="flex items-center gap-2 text-xl font-bold hover:opacity-80">
 					<img src={currentLogoUrl} alt="Nanobot" class="h-12" />
 				</a>
-				<a href={newThread} class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
-					<SquarePen class="h-4 w-4" />
-				</a>
+				{#if !showWorkspaces}
+					<a href={newThread} class="btn p-1 btn-ghost btn-sm" aria-label="New thread">
+						<SquarePen class="h-4 w-4" />
+					</a>
+				{/if}
 				<button
 					onclick={toggleDesktopSidebar}
 					class="btn p-1 btn-ghost btn-sm"
 					aria-label="Open sidebar"
 				>
-					<SidebarOpen class="h-4 w-4" />
+					<SidebarOpen class="size-5" />
 				</button>
 			</div>
 		</div>
@@ -235,13 +282,15 @@
 	<!-- Mobile menu button -->
 	{#if !isMobileSidebarOpen}
 		<div class="absolute top-4 left-4 z-50 flex gap-2 lg:hidden">
-			<a
-				href={newThread}
-				class="btn border border-base-300 bg-base-100/80 btn-ghost backdrop-blur-sm btn-sm"
-				aria-label="New thread"
-			>
-				<SquarePen class="h-5 w-5" />
-			</a>
+			{#if !showWorkspaces}
+				<a
+					href={newThread}
+					class="btn border border-base-300 bg-base-100/80 btn-ghost backdrop-blur-sm btn-sm"
+					aria-label="New thread"
+				>
+					<SquarePen class="h-5 w-5" />
+				</a>
+			{/if}
 			<button
 				onclick={toggleMobileSidebar}
 				class="btn border border-base-300 bg-base-100/80 btn-ghost backdrop-blur-sm btn-sm"
@@ -253,7 +302,11 @@
 	{/if}
 
 	<!-- Main content area -->
-	<div class="h-dvh flex-1">
+	<div class="
+		h-dvh flex grow transition-all transition-discrete 
+		{isSidebarCollapsed ? 'md:max-w-full w-full' : 'md:max-w-[calc(100%-320px)]'}
+		{inverse ? 'bg-base-200 dark:bg-base-100' : 'bg-base-100'}
+	">
 		{@render children?.()}
 	</div>
 </div>

@@ -4,6 +4,7 @@ import {
 	type ChatResult,
 	type ChatRequest,
 	type ChatMessage,
+	type ChatMessageItemToolCall,
 	type ToolOutputItem,
 	type Elicitation,
 	type ElicitationResult,
@@ -23,6 +24,27 @@ import { SvelteDate } from 'svelte/reactivity';
 
 export interface CallToolResult {
 	content?: ToolOutputItem[];
+}
+
+export interface ToolCallInfo {
+	toolName: string;
+	filePath: string;
+	arguments: Record<string, unknown>;
+	message: ChatMessage;
+	item: ChatMessageItemToolCall;
+}
+
+export interface ChatServiceCallbacks {
+	/** Called when a tool modifies a file (detected via file_path in arguments) */
+	onFileModified?: (info: ToolCallInfo) => void;
+	/** Called when any tool is called */
+	onToolCall?: (info: ToolCallInfo) => void;
+	/** Called when chat is done processing */
+	onChatDone?: () => void;
+	/** Called when chat starts processing */
+	onChatStart?: () => void;
+	/** Called when a new message is received */
+	onMessage?: (message: ChatMessage) => void;
 }
 
 export class ChatAPI {
@@ -363,13 +385,15 @@ export class ChatService {
 	chatId: string;
 	uploadedFiles: UploadedFile[];
 	uploadingFiles: UploadingFile[];
+	workspaceEnabled: boolean;
 
-	private api: ChatAPI;
+	readonly api: ChatAPI;
 	private closer = () => {};
 	private history: ChatMessage[] | undefined;
-	private onChatDone: (() => void)[] = [];
+	private internalOnChatDone: (() => void)[] = [];
+	private callbacks: ChatServiceCallbacks = {};
 
-	constructor(opts?: { api?: ChatAPI; chatId?: string }) {
+	constructor(opts?: { api?: ChatAPI; chatId?: string; callbacks?: ChatServiceCallbacks }) {
 		this.api = opts?.api || defaultChatApi;
 		this.messages = $state<ChatMessage[]>([]);
 		this.history = $state<ChatMessage[]>();
@@ -381,8 +405,31 @@ export class ChatService {
 		this.agent = $state<Agent>({});
 		this.uploadedFiles = $state([]);
 		this.uploadingFiles = $state([]);
+		this.workspaceEnabled = $state(false);
+
+		if (opts?.callbacks) {
+			this.callbacks = opts.callbacks;
+		}
+		this.api
+			.capabilities()
+			.then((caps) => {
+				this.workspaceEnabled = caps?.workspace?.supported === true;
+			})
+			.catch(() => {
+				this.workspaceEnabled = false;
+			});
 		this.setChatId(opts?.chatId);
 	}
+
+	/** Set or update callbacks for chat events */
+	setCallbacks = (callbacks: ChatServiceCallbacks) => {
+		this.callbacks = { ...this.callbacks, ...callbacks };
+	};
+
+	/** Clear all callbacks */
+	clearCallbacks = () => {
+		this.callbacks = {};
+	};
 
 	close = () => {
 		this.closer();
@@ -450,6 +497,37 @@ export class ChatService {
 		)) as Resources;
 	};
 
+	/** Extract file paths from tool call arguments and trigger callbacks */
+	private processToolCalls(message: ChatMessage) {
+		if (!message.items) return;
+
+		for (const item of message.items) {
+			if (item.type === 'tool' && 'name' in item && item.arguments) {
+				const toolItem = item as ChatMessageItemToolCall;
+				try {
+					const args = JSON.parse(toolItem.arguments || '{}');
+					const info: ToolCallInfo = {
+						toolName: toolItem.name || '',
+						filePath: args.file_path || args.filePath || args.path || '',
+						arguments: args,
+						message,
+						item: toolItem
+					};
+
+					// Call onToolCall for any tool
+					this.callbacks.onToolCall?.(info);
+
+					// Call onFileModified if a file path was detected
+					if (info.filePath) {
+						this.callbacks.onFileModified?.(info);
+					}
+				} catch {
+					// Ignore JSON parse errors
+				}
+			}
+		}
+	}
+
 	private subscribe(chatId: string) {
 		this.closer();
 		if (!chatId) {
@@ -464,6 +542,10 @@ export class ChatService {
 					} else {
 						this.messages = appendMessage(this.messages, event.message);
 					}
+					// Process tool calls and trigger callbacks
+					this.processToolCalls(event.message);
+					// Trigger onMessage callback
+					this.callbacks.onMessage?.(event.message);
 				} else if (event.type == 'history-start') {
 					this.history = [];
 				} else if (event.type == 'history-end') {
@@ -471,12 +553,14 @@ export class ChatService {
 					this.history = undefined;
 				} else if (event.type == 'chat-in-progress') {
 					this.isLoading = true;
+					this.callbacks.onChatStart?.();
 				} else if (event.type == 'chat-done') {
 					this.isLoading = false;
-					for (const waiting of this.onChatDone) {
+					for (const waiting of this.internalOnChatDone) {
 						waiting();
 					}
-					this.onChatDone = [];
+					this.internalOnChatDone = [];
+					this.callbacks.onChatDone?.();
 				} else if (event.type == 'elicitation/create') {
 					this.elicitations = [
 						...this.elicitations,
@@ -532,7 +616,7 @@ export class ChatService {
 
 			this.messages = appendMessage(this.messages, response.message);
 			return new Promise<ChatResult | void>((resolve) => {
-				this.onChatDone.push(() => {
+				this.internalOnChatDone.push(() => {
 					this.isLoading = false;
 					const i = this.messages.findIndex((m) => m.id === response.message.id);
 					if (i !== -1 && i <= this.messages.length) {
