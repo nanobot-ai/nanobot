@@ -12,6 +12,7 @@
 	import { mockTasks } from "$lib/mocks/stores/tasks.svelte";
 	import StepRun from "../StepRun.svelte";
 	import { fade } from "svelte/transition";
+	import { getLayoutContext } from "$lib/context/layout.svelte";
 
     type Props = {
         workspaceId: string;
@@ -24,6 +25,9 @@
     const workspaceService = new WorkspaceService();
     const registryStore = createRegistryStore();
     setRegistryContext(registryStore);
+
+    const layout = getLayoutContext();
+    layout.setIsSidebarCollapsed(false);
 
     let workspace = $state<WorkspaceClient | null>(null);
     let task = $state<Task | null>(null);

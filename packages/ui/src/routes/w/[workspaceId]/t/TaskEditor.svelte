@@ -85,6 +85,8 @@
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
     const workspaceService = new WorkspaceService();
+    
+    layout.setIsSidebarCollapsed(true);
 
     /** Handle file modifications from chat to update task steps */
     async function handleFileModified(info: ToolCallInfo) {
