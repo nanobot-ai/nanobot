@@ -227,7 +227,11 @@ ${step.tools.join(', ')}
                             showBlockEditing={false}
                             readonly
                         >
-                            <StepRun messages={runSession.get(step.id)?.thread?.messages?.slice(1) ?? []} pending={runSession.get(step.id)?.pending ?? false} />
+                            <StepRun 
+                                messages={runSession.get(step.id)?.thread?.messages?.slice(1) ?? []} 
+                                pending={runSession.get(step.id)?.pending ?? false} 
+                                chatLoading={runSession.get(step.id)?.thread?.isLoading ?? false}
+                            />
                         </Step>
                     </div>
                 {/each}

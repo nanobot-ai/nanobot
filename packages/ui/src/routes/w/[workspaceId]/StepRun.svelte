@@ -4,10 +4,11 @@
 
     interface Props {
         messages: ChatMessage[];
+        chatLoading: boolean;
         pending: boolean;
     }
 
-    let { messages, pending }: Props = $props();
+    let { messages, pending, chatLoading }: Props = $props();
 
     let container: HTMLDivElement;
     let autoScroll = $state(true);
@@ -38,7 +39,11 @@
     onscroll={handleScroll}
     class="mt-4 w-full step-agent max-h-52 shadow-inner overflow-y-auto bg-base-200 dark:bg-base-100 rounded-field p-4"
 >
-    {#if pending}
+    {#if chatLoading}
+        <span class="skeleton skeleton-text w-full h-4 text-sm">
+            The step is being processed...
+        </span>
+    {:else if pending}
         <span class="skeleton skeleton-text w-full h-4 text-sm">
             Waiting for prior step to complete...
         </span>
