@@ -9,12 +9,13 @@ import { replaceAll } from '@milkdown/kit/utils';
 
     interface Props {
         value: string;
-        blockEditEnabled: boolean;
+        blockEditEnabled?: boolean;
         plugins: MilkdownPlugin[];
         onChange?: (value: string) => void;
+        readonly?: boolean;
     }
 
-    let { value, blockEditEnabled, plugins = [], onChange }: Props = $props();
+    let { value, blockEditEnabled, plugins = [], onChange, readonly }: Props = $props();
 
     let focused = $state(false);
     let prevValue = $state(untrack(() => value));
@@ -22,7 +23,7 @@ import { replaceAll } from '@milkdown/kit/utils';
     let isCrepeReady = false;
     let crepe: Crepe | null = null;
 
-    async function createEditor(node: HTMLElement, enableBlockEdit: boolean) {
+    async function createEditor(node: HTMLElement, enableBlockEdit: boolean, isReadonly: boolean) {
         const instance = new Crepe({
             root: node,
             defaultValue: value,
@@ -32,6 +33,10 @@ import { replaceAll } from '@milkdown/kit/utils';
                 [Crepe.Feature.BlockEdit]: enableBlockEdit
             },
         });
+        
+        if (isReadonly) {
+            instance.setReadonly(true);
+        }
 
         let isFirstUpdate = true;
         instance.editor
@@ -78,14 +83,15 @@ import { replaceAll } from '@milkdown/kit/utils';
 
     $effect(() => {
         if (editorNode) {
-            // Access blockEditEnabled to create dependency
+            // Access blockEditEnabled and readonly to create dependencies
             const enableBlockEdit = blockEditEnabled;
+            const isReadonly = readonly;
             const node = editorNode;
             
             destroyEditor();
             // Use untrack to prevent `value` (accessed in createEditor) from becoming a dependency
             untrack(() => {
-                createEditor(node, enableBlockEdit).then((instance) => {
+                createEditor(node, enableBlockEdit ?? false, isReadonly ?? false).then((instance) => {
                     crepe = instance;
                     isCrepeReady = true;
                 });

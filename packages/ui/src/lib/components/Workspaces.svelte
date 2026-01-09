@@ -13,6 +13,8 @@
 	import { page } from "$app/state";
     import * as mocks from '$lib/mocks';
 	import WorkspaceShare from "./WorkspaceShare.svelte";
+	import { mockTasks } from "$lib/mocks/stores/tasks.svelte";
+	import { formatTimeAgo } from "$lib/utils/time";
 
     interface Props {
         inverse?: boolean;
@@ -60,6 +62,15 @@
     let workspaces = $derived([...workspaceService.workspaces, mocks.workspace]);
     let sharedWorkspaces = $state<Workspace[]>(mocks.sharedWorkspaces);
     let workspacePermissions = $state(mocks.workspacePermissions);
+
+    let taskRuns = $derived(mockTasks.current.tasks.reduce<Record<string, { runs: { id: string; created: string }[] }>>((acc, task) => {
+        if (!acc[task.id]) {
+            acc[task.id] = { 
+                runs: task.runs.map((run) => ({ id: run.id, created: run.created })) 
+            };
+        }
+        return acc;
+    }, {}))
 
     onMount(() => {
         loadWorkspaces();
@@ -159,7 +170,7 @@
         if (details) details.open = !details.open;
         if (details && details.open) {
             loadingWorkspace.set(workspaceId, true);
-            if (workspaceId.startsWith('mock-')) {
+            if (mocks.workspaceIds.includes(workspaceId)) {
                 workspaceData.set(workspaceId, mocks.workspaceInstances[workspaceId]);
                 loadingWorkspace.set(workspaceId, false);
             } else {
@@ -435,48 +446,75 @@
                 {@render empty(title, permissions.includes('write'))}
             {:else}
                 {#each items as item, index (index)}
-                    <li class="flex flex-row justify-between w-full rounded-l-field p-1 {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">
-                        {#if permissions.includes('write') || permissions.includes('read')}
-                            <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="flex grow overflow-hidden rounded-r-none truncate hover:bg-transparent">{item}</a>
-                            <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left mr-1" popovertarget="popover-task-actions-{item}" style="anchor-name:--task-actions-anchor-{item}"
-                                data-tip="Edit workflow"
-                            >
-                                <EllipsisVertical class="size-4 shrink-0" />
-                            </button>
-                            <ul 
-                                id="popover-task-actions-{item}"
-                                class="dropdown menu min-w-36 rounded-box bg-base-100 shadow-sm"
-                                popover style="position-anchor:--task-actions-anchor-{item}"
-                            >
-                                <li>
-                                    <a 
-                                        href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)}
-                                        class="text-sm {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}"
-                                    >
-                                        <Play class="size-4" /> Run
-                                    </a>
-                                </li> 
-                                {#if permissions.includes('write')}
-                                    <li>
-                                        <button 
-                                            onmousedown={(e) => e.stopPropagation()} 
-                                            onclick={() => {
-                                                confirmDeleteTask = {
-                                                    taskId: item,
-                                                    workspaceId,
-                                                };
-                                                confirmDeleteTaskModal?.showModal();
-                                            }} 
-                                            class="menu-alert"
+                    <li class="flex grow">
+                        <details class="workspace-details w-full">
+                            <summary class="flex rounded-r-none px-2 items-center justify-between gap-2 [&::-webkit-details-marker]:hidden overflow-visible {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">
+                                <div class="flex items-center gap-2">
+                                    <span class="chevron-icon shrink-0">
+                                        <ChevronRight class="size-4 chevron-closed" />
+                                        <ChevronDown class="size-4 chevron-open" />
+                                    </span>
+
+                                    {#if permissions.includes('write') || permissions.includes('read')}
+                                        <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="flex grow overflow-hidden rounded-r-none truncate hover:bg-transparent">{item}</a>
+                                    {:else}
+                                        <a href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)} class="flex grow overflow-hidden rounded-r-none truncate hover:bg-transparent">{item}</a>
+                                    {/if}
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    {#if permissions.includes('write') || permissions.includes('read')}
+                                        <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left mr-1" popovertarget="popover-task-actions-{item}" style="anchor-name:--task-actions-anchor-{item}"
+                                            data-tip="Edit workflow"
                                         >
-                                            <Trash2 class="size-4" /> Delete
+                                            <EllipsisVertical class="size-4 shrink-0" />
                                         </button>
+                                        <ul 
+                                            id="popover-task-actions-{item}"
+                                            class="dropdown menu min-w-36 rounded-box bg-base-100 shadow-sm"
+                                            popover style="position-anchor:--task-actions-anchor-{item}"
+                                        >
+                                            <li>
+                                                <a 
+                                                    href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)}
+                                                    class="text-sm {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}"
+                                                >
+                                                    <Play class="size-4" /> Run
+                                                </a>
+                                            </li> 
+                                            {#if permissions.includes('write')}
+                                                <li>
+                                                    <button 
+                                                        onmousedown={(e) => e.stopPropagation()} 
+                                                        onclick={() => {
+                                                            confirmDeleteTask = {
+                                                                taskId: item,
+                                                                workspaceId,
+                                                            };
+                                                            confirmDeleteTaskModal?.showModal();
+                                                        }} 
+                                                        class="menu-alert"
+                                                    >
+                                                        <Trash2 class="size-4" /> Delete
+                                                    </button>
+                                                </li>
+                                            {/if}
+                                        </ul>
+                                    {/if}
+                                </div>
+                            </summary>
+                            <ul>
+                                {#each (taskRuns[item]?.runs ?? []) as run (run.id)}
+                                    <li>
+                                        <a
+                                            href={resolve(`/w/${workspaceId}/t?id=${item}&runId=${run.id}`)}
+                                            class="block p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}"
+                                        >
+                                            {formatTimeAgo(run.created).relativeTime}
+                                        </a>
                                     </li>
-                                {/if}
+                                {/each}
                             </ul>
-                        {:else}
-                            <a href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)} class="flex grow overflow-hidden rounded-r-none truncate hover:bg-transparent">{item}</a>
-                        {/if}
+                        </details>
                     </li>
                 {/each}
             {/if}

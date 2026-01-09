@@ -5,31 +5,34 @@
 	import { createVariablePillPlugin } from "$lib/plugins/variablePillPlugin";
 	import { getNotificationContext } from "$lib/context/notifications.svelte";
 	import { getRegistryContext } from "$lib/context/registry.svelte";
+	import type { Snippet } from "svelte";
 
     interface Props {
         taskId: string;
         task: Task;
         step: Step;
-        stepDescription: Map<string | number, boolean>;
-        stepBlockEditing: Map<string | number, boolean>;
-        onAddInput: (input: Input) => void;
-        onAddTaskInput: (input: Input) => void;
-        onRemoveTaskInput: (inputName: string) => void;
-        onDeleteStep: (stepId: string, filename: string) => void;
-        onToggleStepDescription: (id: string, value: boolean) => void;
-        onToggleStepBlockEditing: (id: string, value: boolean) => void;
-        onUpdateStep: (id: string, updates: Partial<Step>) => void;
-        visibleInputs: Input[];
-        onUpdateVisibleInputs: (inputs: Input[]) => void;
-        onSuggestImprovement: (opts: { uri: string, name: string, mimeType: string }) => void;
+        showDescription?: boolean;
+        showBlockEditing?: boolean;
+        onAddInput?: (input: Input) => void;
+        onAddTaskInput?: (input: Input) => void;
+        onRemoveTaskInput?: (inputName: string) => void;
+        onDeleteStep?: (stepId: string, filename: string) => void;
+        onToggleStepDescription?: (id: string, value: boolean) => void;
+        onToggleStepBlockEditing?: (id: string, value: boolean) => void;
+        onUpdateStep?: (id: string, updates: Partial<Step>) => void;
+        visibleInputs?: Input[];
+        onUpdateVisibleInputs?: (inputs: Input[]) => void;
+        onSuggestImprovement?: (opts: { uri: string, name: string, mimeType: string }) => void;
+        readonly?: boolean;
+        children?: Snippet<[{ item: Step }]>;
     }
 
     let { 
         taskId,
         task, 
         step, 
-        stepDescription, 
-        stepBlockEditing, 
+        showDescription, 
+        showBlockEditing, 
         onAddInput,
         onAddTaskInput,
         onRemoveTaskInput,
@@ -37,9 +40,11 @@
         onToggleStepDescription, 
         onToggleStepBlockEditing,
         onUpdateStep,
-        visibleInputs,
+        visibleInputs = [],
         onUpdateVisibleInputs,
         onSuggestImprovement,
+        readonly,
+        children,
     }: Props = $props();
     const notifications = getNotificationContext();
     const registry = getRegistryContext();
@@ -51,7 +56,7 @@
     
     function handleRemoveTool(toolName: string) {
         step.tools = step.tools.filter((tool) => tool !== toolName);
-        onUpdateStep(step.id, { tools: step.tools });
+        onUpdateStep?.(step.id, { tools: step.tools });
     }
 
     function blur() {
@@ -68,12 +73,12 @@
                     description: '',
                     default: ''
                 };
-                onAddTaskInput(newInput);
+                onAddTaskInput?.(newInput);
                 notifications.action(
                     `${variable}`, 
                     'A new variable has been added. Would you like to add more details to it now?',
                     () => {
-                        onAddInput(newInput);
+                        onAddInput?.(newInput);
                     },
                 );
             }
@@ -92,12 +97,12 @@
                         `${variable}`,
                         'Would you like to remove the variable details from this task?',
                         () => {
-                            onRemoveTaskInput(variable);
-                            onUpdateVisibleInputs(visibleInputs.filter((input) => input.name !== variable));
+                            onRemoveTaskInput?.(variable);
+                            onUpdateVisibleInputs?.(visibleInputs.filter((input) => input.name !== variable));
                         }
                     )
                 } else {
-                    onRemoveTaskInput(variable);
+                    onRemoveTaskInput?.(variable);
                 }
             }
         },
@@ -105,39 +110,46 @@
 </script>
 
 <div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 pb-8 task-step relative">
-    <div class="absolute top-3 right-3 z-2">
-        {@render stepMenu(step.id)}
-    </div>
+    {#if !readonly}
+        <div class="absolute top-3 right-3 z-2">
+            {@render stepMenu(step.id)}
+        </div>
+    {/if}
     
     <div class="flex flex-col pr-12">
         <input name="step-name" class="input input-ghost input-lg w-full font-semibold placeholder:text-base-content/30" type="text" placeholder="Step name" 
             value={step.name} 
-            oninput={(e) => onUpdateStep(step.id, { name: (e.target as HTMLInputElement).value })} 
+            oninput={(e) => onUpdateStep?.(step.id, { name: (e.target as HTMLInputElement).value })} 
+            disabled={readonly}
         />
-        {#if stepDescription.get(step.id) ?? false}
+        {#if showDescription}
             <input name="step-description" class="input text-[16px] input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Step description" 
                 value={step.description} 
-                oninput={(e) => onUpdateStep(step.id, { description: (e.target as HTMLInputElement).value })} 
+                oninput={(e) => onUpdateStep?.(step.id, { description: (e.target as HTMLInputElement).value })} 
+                disabled={readonly}
             />
         {/if}
     </div>
 
     <MarkdownEditor 
         value={step.content} 
-        blockEditEnabled={stepBlockEditing.get(step.id) ?? false} 
+        blockEditEnabled={showBlockEditing} 
         plugins={[variablePillPlugin]} 
-        onChange={(value) => onUpdateStep(step.id, { content: value })}
+        onChange={(value) => onUpdateStep?.(step.id, { content: value })}
+        {readonly}
     />
 
     {#if tools.length > 0}
         <div class="flex flex-wrap gap-2">
             {#each tools as tool (tool.name)}
             <div class="indicator group">
-                <div class="indicator-item group-hover:opacity-100 opacity-0 transition-opacity duration-150">
-                    <button class="btn btn-primary size-4 btn-circle tooltip" onclick={() => handleRemoveTool(tool.name)} data-tip="Remove tool">
-                        <X class="size-2" />
-                    </button>
-                </div>
+                {#if !readonly}
+                    <div class="indicator-item group-hover:opacity-100 opacity-0 transition-opacity duration-150">
+                        <button class="btn btn-primary size-4 btn-circle tooltip" onclick={() => handleRemoveTool(tool.name)} data-tip="Remove tool">
+                            <X class="size-2" />
+                        </button>
+                    </div>
+                {/if}
                 <div class="badge dark:bg-base-200 size-fit py-1">
                     {#if tool.icons?.[0]?.src}
                         <img alt={tool.title} src={tool.icons[0].src} class="size-4"/>
@@ -149,6 +161,10 @@
             </div>
             {/each}
         </div>
+    {/if}
+
+    {#if children}
+        {@render children({ item: step })}
     {/if}
 </div>
 
@@ -167,9 +183,9 @@
                     Description
                 </span>
                 <input type="checkbox" class="toggle toggle-sm" id={`step-${id}-description`} 
-                    checked={stepDescription.get(id) ?? false}
+                    checked={showDescription}
                     onchange={(e) => {
-                        onToggleStepDescription(id, (e.target as HTMLInputElement)?.checked ?? false);
+                        onToggleStepDescription?.(id, (e.target as HTMLInputElement)?.checked ?? false);
                     }}
                 />
             </label>
@@ -181,9 +197,9 @@
                     Enable block editing
                 </span>
                 <input type="checkbox" class="toggle toggle-sm" id={`step-${id}-block-editing`} 
-                    checked={stepBlockEditing.get(id) ?? false}
+                    checked={showBlockEditing}
                     onchange={(e) => {
-                        onToggleStepBlockEditing(id, (e.target as HTMLInputElement)?.checked ?? false);
+                        onToggleStepBlockEditing?.(id, (e.target as HTMLInputElement)?.checked ?? false);
                     }}
                 />
             </label>
@@ -191,7 +207,7 @@
         <li>
             <button class="flex items-center gap-2"
                 onclick={() => {
-                    onSuggestImprovement({
+                    onSuggestImprovement?.({
                         uri: `workspace://.nanobot/tasks/${taskId}/${id}`,
                         name: step.name,
                         mimeType: 'application/octet-stream',
@@ -217,7 +233,7 @@
             <button class="flex items-center gap-2 menu-alert"
                 onclick={() => {
                     const filename = `.nanobot/tasks/${taskId}/${id}`;
-                    onDeleteStep(id, filename);
+                    onDeleteStep?.(id, filename);
                     blur();
                 }}
             >
