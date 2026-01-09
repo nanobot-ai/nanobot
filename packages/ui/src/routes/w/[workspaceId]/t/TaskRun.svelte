@@ -33,6 +33,7 @@
 
     let scrollContainer = $state<HTMLElement | null>(null);
 
+    let runCreated = $state('');
     let runSession = new SvelteMap<string, { stepId: string, thread: ChatService, pending: boolean }>();
     let runArguments = $state<(Omit<Input, 'id'> & { value: string })[]>([]);
 
@@ -88,7 +89,8 @@
             // mock impl
             const match = mockTasks.current.tasks.find((task) => task.id === urlTaskId)?.runs.find((run) => run.id === runId);
             if (match) {
-                runArguments = match.arguments;
+                runArguments = match.arguments ?? [];
+                runCreated = match.created;
                 if (match.stepSessions) {
                     for (const stepSession of match.stepSessions) {
                         const thread = new ChatService();
@@ -186,6 +188,7 @@ ${step.tools.join(', ')}
 
 
 {#if initialLoadComplete && task}
+    {@const runCreatedDate = new Date(runCreated).toLocaleString().replace(',', '')}
     <div class="flex w-full h-dvh">
         <div class="
             flex flex-col grow p-4 pt-0 overflow-y-auto max-h-dvh transition-all duration-200 ease-in-out 
@@ -196,7 +199,7 @@ ${step.tools.join(', ')}
                 <div class="flex flex-col grow">
                     <div class="flex w-full items-center gap-4">
                         <input name="title" class="input input-ghost input-lg w-full font-semibold disabled:text-base-content" type="text" placeholder="Workflow title" 
-                            value={name} disabled
+                            value={`${name} - ${runCreatedDate}`} disabled
                         />
                     </div>
                 </div>
@@ -238,8 +241,8 @@ ${step.tools.join(', ')}
             </div>
             
             {#if summaryResults.length > 0}
-                <div class="md:px-22">
-                    <div class="mt-6 p-6 w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
+                <div class="md:px-22 mb-12">
+                    <div class="mt-6 p-6 pb-12 w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
                         <h4 class="text-xl font-semibold">Workflow Completed</h4>
                         <p class="text-sm text-base-content/50 text-center mt-1">
                             The workflow has completed successfully. Here are your summarized results:

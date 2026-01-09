@@ -152,7 +152,7 @@ import { replaceAll } from '@milkdown/kit/utils';
     }
 </script>
 
-<div use:editor></div>
+<div use:editor class:readonly></div>
 
 <style>
     :global(.milkdown) {
@@ -189,5 +189,14 @@ import { replaceAll } from '@milkdown/kit/utils';
 
     :global(.milkdown .milkdown-code-block) {
         border-radius: var(--radius-box);
+    }
+
+    .readonly :global(.milkdown .ProseMirror p.crepe-paragraph:empty::before),
+    .readonly :global(.milkdown .ProseMirror [data-placeholder]::before) {
+        display: none;
+    }
+
+    .readonly :global(.milkdown .ProseMirror p:has(> .ProseMirror-trailingBreak:only-child)) {
+        display: none;
     }
 </style>
