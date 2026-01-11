@@ -2,6 +2,7 @@ package auditlogs
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -41,11 +42,26 @@ type MCPWebhookStatus struct {
 	Message string `json:"message,omitempty"`
 }
 
-// RedactAPIKey redacts an API key, keeping only the first half
+// RedactAPIKey redacts an API key, keeping everything to the third hyphen, or the first 12 characters, whichever is longer.
+// If the API key is less than 20 characters, it compares the third hyphen prefix to the first half and returns whichever is longer.
 func RedactAPIKey(apiKey string) string {
-	l := len(apiKey)
-	if l < 2 {
-		return apiKey
+	if len(apiKey) < 2 {
+		return ""
 	}
-	return apiKey[:l/2]
+
+	parts := strings.SplitAfterN(apiKey, "-", 4)
+	prefix := strings.Join(parts[:min(3, len(parts))], "")
+
+	if len(apiKey) < 20 {
+		half := apiKey[:len(apiKey)/2]
+		if len(parts) >= 4 && len(prefix) > len(half) {
+			return prefix
+		}
+		return half
+	}
+
+	if len(parts) < 4 || len(prefix) < 12 {
+		return apiKey[:12]
+	}
+	return prefix
 }
