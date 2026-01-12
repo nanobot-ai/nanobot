@@ -213,7 +213,7 @@
         {/if}
     </div>
     {#if initialLoadComplete && task}
-        <div class="md:w-4xl px-4 w-full flex flex-col justify-center items-center z-20">
+        <div class="md:w-4xl pt-8 px-4 w-full flex flex-col justify-center items-center z-20">
             <div class="hero w-full bg-base-100 dark:bg-base-200 rounded-box shadow-xs dark:border-base-300 border-transparent border">
                 <div class="hero-content w-full grow flex-col md:flex-row">
                     <div class="pl-4 flex items-center gap-3">
