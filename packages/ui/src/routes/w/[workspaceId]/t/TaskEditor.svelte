@@ -24,9 +24,10 @@
     import * as mocks from '$lib/mocks';
 	import { mockTasks } from '$lib/mocks/stores/tasks.svelte';
 	import { setSharedChat, sharedChat } from '$lib/stores/chat.svelte';
-	import type { ToolCallInfo } from '$lib/chat.svelte';
+	import { ChatService, type ToolCallInfo } from '$lib/chat.svelte';
 	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 	import TaskRunInputs from './TaskRunInputs.svelte';
+	import StepRun from '../StepRun.svelte';
 	
     type Props = {
         workspaceId: string;
@@ -46,7 +47,6 @@
     let showTaskDescription = $state(false);
 
     let inputsModal = $state<ReturnType<typeof TaskRunInputs> | null>(null);
-    let runMode = $state<'normal' | 'debug'>('normal');
 
     let confirmDeleteStep = $state<{ stepId: string, filename: string } | null>(null);
     let confirmDeleteStepModal = $state<ReturnType<typeof ConfirmDelete> | null>(null);
@@ -78,6 +78,13 @@
     let inputDescription = new SvelteMap<string, boolean>();
     let inputDefault = new SvelteMap<string, boolean>();
     let hiddenInputs = $derived(task?.inputs.filter((input) => !visibleInputs.some((visibleInput) => visibleInput.name === input.name)) ?? []);
+
+    // for mocking a run
+    let runSession = new SvelteMap<string, { stepId: string, thread: ChatService, pending: boolean }>();
+    let timeoutHandlers = $state<ReturnType<typeof setTimeout>[]>([]);
+    let totalTime = $state(0);
+    let stepSummaries = $state<{ step: string, summary: string }[]>([]);
+    let running = $state(false);
 
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
@@ -144,6 +151,8 @@
     
     onDestroy(() => {
         sharedChat.current?.close();
+        runSession.forEach((session) => session.thread.close());
+        runSession.clear();
     });
 
     $effect(() => {
@@ -370,10 +379,86 @@
         if (mocks.taskIds.includes(taskId)) {
             const content = { id: runId, created, arguments: formData };
             mockTasks.addRun(taskId, content);
-            goto(resolve(`/w/${workspaceId}/t?id=${taskId}&runId=${runId}`), { keepFocus: true });
+
+            runMockTask(runId, formData);
         } else {
             // TODO: actual impl
         }
+    }
+
+    async function runMockTask(runId: string, formData?: (Input & { value: string })[]) {
+        if (!task) return;
+        
+        running = true;
+        const startTime = Date.now();
+        let stepSessions = [];
+        runSession.forEach((session) => session.thread.close());
+        runSession.clear();
+        // isStickToBottom = true; // Reset stick-to-bottom when starting a new run
+        let priorSteps = '';
+        let priorResponse = '';
+
+        for (const step of task.steps) {
+            const thread = workspace?.newSession ? await workspace?.newSession() : new ChatService();
+            runSession.set(step.id, { thread: thread!, stepId: step.id, pending: true });
+        }
+
+        // showSidebarThread = true;
+        for (const step of task.steps) {
+            runSession.set(step.id, { ...runSession.get(step.id)!, pending: false });
+
+            const message = `
+You are a task runner. You are given a task and a list of steps to run. You are to run the task step by step. \n\n
+
+You have the following arguments:
+${JSON.stringify(formData)} \n\n
+
+${priorSteps.length > 0 ? `
+You have already run the following steps:
+${priorSteps}
+` : ''} \n\n
+
+${priorResponse.length > 0 ? `
+You have given the following response to the previous step(s):
+${priorResponse}
+` : ''} \n\n
+
+You are currently running the following step: \n
+Step name: ${step.name} \n
+Step description: ${step.description} \n
+Step content: ${step.content} \n\n
+\n\n You have the following tools available to you:
+${step.tools.join(', ')}
+\n\n Do not indicate that you are simulating or mocking any data; act as if you are actually running the task.
+            `;
+            
+            // Wait for this thread to complete before starting the next one
+            const response = await runSession.get(step.id)?.thread?.sendMessage(message);
+            if (response) {
+                priorResponse += `${step.id} response: ${response.message}\n\n`;
+                const threadId = runSession.get(step.id)?.thread?.chatId;
+                if (threadId) {
+                    stepSessions.push({ stepId: step.id, threadId });
+                }
+            }
+            
+            priorSteps += `Step ${step.id}: ${step.name} \n\n`;
+        }
+
+        totalTime = Date.now() - startTime;
+        const finalHandler = setTimeout(() => {
+            let summaryTimer = 0;
+            for (const summaryResult of mocks.stepSummaries[taskId]) {
+                const handler = setTimeout(() => {
+                    stepSummaries.push(summaryResult);
+                }, summaryTimer);
+                summaryTimer += 1000;
+                timeoutHandlers.push(handler);
+            }
+        }, 1000);
+        timeoutHandlers.push(finalHandler);
+
+        mockTasks.updateRun(taskId, runId, stepSessions); 
     }
 </script>
 
@@ -403,7 +488,7 @@
                         <div class="flex shrink-0 items-center gap-2">
                             <div class="flex">
                                 <button class="btn btn-primary w-48" onclick={handleRun}>
-                                    {runMode === 'normal' ? 'Run' : 'Debug'} <Play class="size-4" /> 
+                                    Run <Play class="size-4" /> 
                                 </button>
                                 <!-- <div class="dropdown dropdown-end">
                                     <div tabindex="0" role="button" class="btn rounded-l-none btn-primary btn-square border-l-white">
@@ -582,7 +667,17 @@
                             }
                             //TODO:
                         }}
-                    />
+                    >
+                        {#if running}
+                            <div in:fade={{ duration: 150 }}>
+                                <StepRun 
+                                    messages={runSession.get(step.id)?.thread?.messages?.slice(1) ?? []} 
+                                    pending={runSession.get(step.id)?.pending ?? false} 
+                                    chatLoading={runSession.get(step.id)?.thread?.isLoading ?? false}
+                                />
+                            </div>
+                        {/if}
+                    </Step>
                 {/snippet}
             </DragDropList>
 
@@ -643,7 +738,7 @@
                 <div class="w-full flex-1 min-h-0 flex flex-col">
                     {#if sharedChat.current}
                         {#key sharedChat.current.chatId}
-                            <ThreadFromChat inline chat={sharedChat.current} files={includeFilesInMessage} />
+                            <ThreadFromChat inline chat={sharedChat.current} files={includeFilesInMessage} agent={{ name: 'Workflow Assistant', icon: '/assets/obot-icon-blue.svg' }} />
                         {/key}
                     {/if}
                 </div>

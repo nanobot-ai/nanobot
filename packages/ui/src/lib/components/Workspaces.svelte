@@ -526,8 +526,7 @@
                 {@render empty(title, permissions.includes('write'))}
             {:else}
                 {#each items as item, index (index)}
-                {@const name = mocks.taskData[item]?.name ?? item}
-                                                        
+                {@const name = mocks.taskData[item]?.name ?? item}           
                     <li class="flex grow">
                         <details class="workspace-details w-full" open={isExpanded(`workspace:${workspaceId}:task:${item}`)}
                             ontoggle={handleToggle(`workspace:${workspaceId}:task:${item}`)}>
@@ -593,15 +592,37 @@
                                     {@const runOnly = !permissions.includes('write') && !permissions.includes('read') && permissions.includes('execute')}
                                     {#each (taskRuns[item]?.runs ?? []) as run (run.id)}
                                         <li>
-                                            <a
-                                                href={resolve(`/w/${workspaceId}/t?id=${item}&runId=${run.id}${runOnly ? '&run=true' : ''}`)}
-                                                class="block h-full p-2 w-full overflow-hidden rounded-r-none truncate 
-                                                    {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}
-                                                    {selectedRunId && selectedRunId === run.id ? 'bg-base-200 dark:bg-base-100' : ''}
-                                                "
-                                            >
-                                                {new Date(run.created).toLocaleString().replace(',', '')}
-                                            </a>
+                                            <div class="flex items-center gap-2 rounded-r-none
+                                                {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}
+                                                {selectedRunId && selectedRunId === run.id ? 'bg-base-200 dark:bg-base-100' : ''}
+                                            ">
+                                                <a
+                                                    href={resolve(`/w/${workspaceId}/t?id=${item}&runId=${run.id}${runOnly ? '&run=true' : ''}`)}
+                                                    class="block h-full p-2 w-full overflow-hidden truncate"
+                                                >
+                                                    {new Date(run.created).toLocaleString().replace(',', '')}
+                                                </a>
+                                                <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left mr-1" popovertarget="popover-task-run-actions-{item}-{run.id}" style="anchor-name:--task-run-actions-anchor-{item}-{run.id}"
+                                                    data-tip="Edit workflow"
+                                                >
+                                                    <EllipsisVertical class="size-4 shrink-0" />
+                                                </button>
+                                                <ul 
+                                                    id="popover-task-run-actions-{item}-{run.id}"
+                                                    class="dropdown menu min-w-36 rounded-box bg-base-100 shadow-sm"
+                                                    popover style="position-anchor:--task-run-actions-anchor-{item}-{run.id}"
+                                                >
+                                                    <li>
+                                                        <button 
+                                                            onmousedown={(e) => e.stopPropagation()} 
+                                                            onclick={() => mockTasks.deleteRun(item, run.id)} 
+                                                            class="menu-alert"
+                                                        >
+                                                            <Trash2 class="size-4" /> Delete
+                                                        </button>
+                                                    </li>
+                                                </ul>
+                                            </div>
                                         </li>
                                     {/each}
                                 {:else}
@@ -728,27 +749,26 @@
                 <Share class="size-4" /> Share
             </button>
         </li>
-    {:else}
-        <li>
-            <button 
-                onmousedown={(e) => e.stopPropagation()} 
-                onclick={async (e) => {
-                    e.stopPropagation();
-                    workspaces = [...workspaces, {
-                        ...workspace,
-                        id: `copy-${workspace.id}`,
-                        name: `Copy of ${workspace.name}`,
-                        created: new Date().toISOString(),
-                    }];
-                    document.getElementById(`workspace-actions-${workspace.id}`)?.hidePopover();
-                }} 
-                class="text-sm"
-            >
-                <Copy class="size-4" />
-                Make a copy
-            </button>
-        </li>
     {/if}
+    <li>
+        <button 
+            onmousedown={(e) => e.stopPropagation()} 
+            onclick={async (e) => {
+                e.stopPropagation();
+                workspaces = [...workspaces, {
+                    ...workspace,
+                    id: `copy-${workspace.id}`,
+                    name: `Copy of ${workspace.name}`,
+                    created: new Date().toISOString(),
+                }];
+                document.getElementById(`workspace-actions-${workspace.id}`)?.hidePopover();
+            }} 
+            class="text-sm"
+        >
+            <Copy class="size-4" />
+            Make a copy
+        </button>
+    </li>
     {#if canWrite && !isShared}
         <li>
             <button 
@@ -811,7 +831,13 @@
     message="This workspace will be permanently deleted and cannot be recovered."
     onConfirm={() => {
         if (!confirmDeleteWorkspaceId) return;
-        workspaceService.deleteWorkspace(confirmDeleteWorkspaceId);
+
+
+        if (mocks.workspaceIds.includes(confirmDeleteWorkspaceId) || confirmDeleteWorkspaceId.startsWith('copy-')) {
+            workspaces = workspaces.filter((w) => w.id !== confirmDeleteWorkspaceId);            
+        } else {
+            workspaceService.deleteWorkspace(confirmDeleteWorkspaceId);
+        }
         confirmDeleteWorkspaceModal?.close();
     }}
 />
@@ -822,10 +848,22 @@
     message="This task will be permanently deleted and cannot be recovered."
     onConfirm={() => {
         if (!confirmDeleteTask) return;
-        const workspace = workspaceService.getWorkspace(confirmDeleteTask.workspaceId);
-        const allTaskFiles = workspace.files.filter((f) => f.name.startsWith(`.nanobot/tasks/${confirmDeleteTask?.taskId}`));
-        for (const file of allTaskFiles) {
-            workspace.deleteFile(file.name);
+
+        if (mocks.taskIds.includes(confirmDeleteTask.taskId)) {
+            const refWorkspace = workspaceData.get(confirmDeleteTask.workspaceId);
+            if (refWorkspace) {
+                // Create a new object to trigger Svelte reactivity
+                workspaceData.set(confirmDeleteTask.workspaceId, {
+                    ...refWorkspace,
+                    files: refWorkspace.files.filter((f) => !f.name.startsWith(`.nanobot/tasks/${confirmDeleteTask?.taskId}`))
+                } as unknown as WorkspaceInstance);
+            }
+        } else {
+            const workspace = workspaceService.getWorkspace(confirmDeleteTask.workspaceId);
+            const allTaskFiles = workspace.files.filter((f) => f.name.startsWith(`.nanobot/tasks/${confirmDeleteTask?.taskId}`));
+            for (const file of allTaskFiles) {
+                workspace.deleteFile(file.name);
+            }
         }
         confirmDeleteTaskModal?.close();
     }}

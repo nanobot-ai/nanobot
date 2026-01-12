@@ -231,7 +231,7 @@ export const taskData: Record<string, Task> = {
 	}
 };
 
-export const summaryResults: Record<string, { step: string; summary: string }[]> = {
+export const stepSummaries: Record<string, { step: string; summary: string }[]> = {
 	[taskIds[0]]: [
 		{
 			step: 'Add Member To Google Sheets',

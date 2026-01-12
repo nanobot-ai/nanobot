@@ -40,7 +40,7 @@
 
     let name = $derived(task?.name || task?.steps[0].name || '');
 
-    let summaryResults = $state<{ step: string, summary: string }[]>([]);
+    let stepSummaries = $state<{ step: string, summary: string }[]>([]);
     let timeoutHandlers = $state<ReturnType<typeof setTimeout>[]>([]);
     let totalTime = $state(0);
 
@@ -100,7 +100,7 @@
                     }
 
                     totalTime = Math.random() * 10000 + 1000;
-                    summaryResults = [...mocks.summaryResults[urlTaskId]];
+                    stepSummaries = [...mocks.stepSummaries[urlTaskId]];
                 } else {
                     showDetails = true;
                     runTask();
@@ -174,9 +174,9 @@ ${step.tools.join(', ')}
         totalTime = Date.now() - startTime;
         const finalHandler = setTimeout(() => {
             let summaryTimer = 0;
-            for (const summaryResult of mocks.summaryResults[urlTaskId]) {
+            for (const summaryResult of mocks.stepSummaries[urlTaskId]) {
                 const handler = setTimeout(() => {
-                    summaryResults.push(summaryResult);
+                    stepSummaries.push(summaryResult);
                 }, summaryTimer);
                 summaryTimer += 1000;
                 timeoutHandlers.push(handler);
@@ -244,7 +244,7 @@ ${step.tools.join(', ')}
                 </div>
             {/if}
             
-            {#if summaryResults.length > 0}
+            {#if stepSummaries.length > 0}
                 <div class="md:px-22 mb-12 flex flex-col justify-center {showDetails ? 'mt-6' : ''}">
                     <div class="p-6 pb-12 w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
                         <h4 class="text-xl font-semibold">Workflow Completed</h4>
@@ -255,7 +255,7 @@ ${step.tools.join(', ')}
                         <p class="text-sm text-base-content/50 text-center mt-1">Total time: {(totalTime / 1000).toFixed(1)}s, Total tokens: {(Math.floor(Math.random() * 10000) + 1000)}</p>
 
                         <div class="w-xl flex flex-col gap-4 mt-6">
-                            {#each summaryResults as result (result.step)}
+                            {#each stepSummaries as result (result.step)}
                                 <div in:fade class="flex flex-col">
                                     <h4 class="font-semibold">{result.step}</h4>
                                     <p class="text-sm text-base-content/50">
@@ -265,11 +265,11 @@ ${step.tools.join(', ')}
                             {/each}
                         </div>
 
-                        {#if !showDetails}
+                        <!-- {#if !showDetails}
                         <button class="mt-8 btn w-xs self-center" onclick={() => showDetails = true}>
                             View details
                         </button>
-                        {/if}
+                        {/if} -->
                     </div>
                 </div>
             {/if}

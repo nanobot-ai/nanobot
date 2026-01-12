@@ -4,7 +4,6 @@
 	import { setSharedChat } from '$lib/stores/chat.svelte';
 	import { onDestroy } from 'svelte';
 	import TaskEditor from './TaskEditor.svelte';
-	import TaskRun from './TaskRun.svelte';
 	import TaskRunner from './TaskRunner.svelte';
 
     let { data } = $props();
@@ -21,11 +20,7 @@
     });
 </script>
 
-{#if runId && !runOnly}
-    {#key runId}
-        <TaskRun {workspaceId} {urlTaskId} {runId} />
-    {/key}
-{:else if runOnly}
+{#if runId || runOnly}
     <TaskRunner {workspaceId} {urlTaskId} {runId} />
 {:else}
     <TaskEditor {workspaceId} {urlTaskId} />

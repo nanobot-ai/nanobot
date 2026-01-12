@@ -47,10 +47,10 @@
 		<!-- Agent Icon -->
 		{#if agent.icon}
 			<div class="mb-6">
-				<img bind:this={imgRef} src={agent.icon} alt={agent.name} class="h-16" />
+				<img bind:this={imgRef} src={agent.icon} alt={agent.name} class="rounded-full bg-primary/20 p-2 h-18" />
 			</div>
-			<!-- Agent Description -->
 			<div class="mb-8 text-center">
+				<h2 class="mb-2 text-2xl font-semibold text-base-content">{agent.name}</h2>
 				<p class="max-w-md text-base-content/70">{agent.description || ''}</p>
 			</div>
 		{:else}

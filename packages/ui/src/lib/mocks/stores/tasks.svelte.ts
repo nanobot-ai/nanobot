@@ -38,6 +38,7 @@ type TaskState = {
 		runId: string,
 		stepSessions: { stepId: string; threadId: string }[]
 	) => void;
+	deleteRun: (taskId: string, runId: string) => void;
 };
 
 function getInitialTasks(): Task[] {
@@ -58,10 +59,21 @@ const taskState = $state<TaskState>({
 		tasks: getInitialTasks()
 	},
 	addRun,
-	updateRun
+	updateRun,
+	deleteRun
 });
 
 export const mockTasks = taskState;
+
+function deleteRun(taskId: string, runId: string): void {
+	if (!browser) return;
+
+	const task = taskState.current.tasks.find((t) => t.id === taskId);
+	if (!task) return;
+
+	task.runs = task.runs.filter((r) => r.id !== runId);
+	localStorage.setItem('mock-tasks', JSON.stringify(taskState.current.tasks));
+}
 
 function addRun(
 	taskId: string,

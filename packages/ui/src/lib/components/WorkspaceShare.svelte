@@ -74,7 +74,7 @@
                 <div class="w-60 flex pb-0.5">
                     <div class="flex flex-1 text-xs font-semibold justify-center self-end">Read</div>
                     <div class="flex flex-1 text-xs font-semibold justify-center self-end">Write</div>
-                    <div class="flex flex-1 text-xs font-semibold justify-center self-end">Execute Only</div>
+                    <div class="flex flex-1 text-xs font-semibold justify-center self-end">Execute</div>
                 </div>
                 <div class="w-8"></div>
             </div>
