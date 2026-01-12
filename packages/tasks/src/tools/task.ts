@@ -53,7 +53,6 @@ export default createTool({
       path: "/mcp",
       sessionId: "new",
       workspaceId: ctx.workspaceId,
-      workspaceShared: true,
     });
 
     await chatClient.callMCPTool("chat", {

@@ -67,7 +67,13 @@ export class Manager implements SandboxManager {
 		if (!cfg.driverConfig && !opts?.create) {
 			throw new Error(`Sandbox ${cfg.id} not created yet`);
 		}
-		if (!cfg.driverConfig && opts?.create) {
+    if (!cfg.driverConfig && opts?.create) {
+      
+      // Ensure the parent is created, too.
+      if (cfg.parentId) {
+        await this.loadSandbox(await this.#getSandboxConfig(cfg.parentId), { create: true });
+      }
+      
 			cfg.driverConfig = await driver.createSandbox(cfg);
 			await this.fs.set(
 				`./sandboxes/${cfg.id}.json`,
@@ -401,11 +407,11 @@ class LazySandbox implements Sandbox {
 		return sandbox;
 	}
 
-	deleteFile(path: string): Promise<void> {
+	async deleteFile(path: string): Promise<void> {
 		return this.#getSandbox().then((sandbox) => sandbox.deleteFile(path));
 	}
 
-	readdir(
+	async readdir(
 		path: string,
 		opts?: { cursor?: string; recursive?: boolean; limit?: number },
 	): Promise<{
@@ -420,7 +426,7 @@ class LazySandbox implements Sandbox {
 		return this.#getSandbox().then((sandbox) => sandbox.readdir(path, opts));
 	}
 
-	execute(
+	async execute(
 		command: string,
 		args: string[],
 		opts?: {
@@ -434,11 +440,11 @@ class LazySandbox implements Sandbox {
 		);
 	}
 
-	kill(id: string, signal?: string): Promise<void> {
+	async kill(id: string, signal?: string): Promise<void> {
 		return this.#getSandbox().then((sandbox) => sandbox.kill(id, signal));
 	}
 
-	output(id: string): Promise<{
+	async output(id: string): Promise<{
 		output: string;
 		truncated: boolean;
 		exitCode: number;
@@ -447,7 +453,7 @@ class LazySandbox implements Sandbox {
 		return this.#getSandbox().then((sandbox) => sandbox.output(id));
 	}
 
-	readFile(
+	async readFile(
 		path: string,
 		opts?: { encoding?: Encoding; limit?: number; offset?: number },
 	): Promise<{
@@ -457,15 +463,15 @@ class LazySandbox implements Sandbox {
 		return this.#getSandbox().then((sandbox) => sandbox.readFile(path, opts));
 	}
 
-	release(id: string): Promise<void> {
+	async release(id: string): Promise<void> {
 		return this.#getSandbox().then((sandbox) => sandbox.release(id));
 	}
 
-	wait(id: string): Promise<{ exitCode: number; signal?: string }> {
+	async wait(id: string): Promise<{ exitCode: number; signal?: string }> {
 		return this.#getSandbox().then((sandbox) => sandbox.wait(id));
 	}
 
-	writeFile(
+	async writeFile(
 		path: string,
 		content: string,
 		opts?: { encoding?: Encoding },

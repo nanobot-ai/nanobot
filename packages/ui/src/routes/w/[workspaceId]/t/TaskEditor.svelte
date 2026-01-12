@@ -395,6 +395,8 @@
             runMockTask(runId, formData);
         } else {
             // TODO: actual impl
+            const chat = await workspace?.newSession();
+            await chat?.sendToolCall('DispatchTask', {taskName: taskId, arguments: formData});
         }
     }
 
