@@ -4,7 +4,7 @@
 	import DragDropList from '$lib/components/DragDropList.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
 	import { createRegistryStore, setRegistryContext } from '$lib/context/registry.svelte';
-	import { EllipsisVertical, GripVertical, PencilLine, Play, Plus, ReceiptText, X, MessageCircleMore } from '@lucide/svelte';
+	import { EllipsisVertical, GripVertical, PencilLine, Play, Plus, ReceiptText, X, MessageCircleMore, Square } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
@@ -83,7 +83,7 @@
     let runSession = new SvelteMap<string, { stepId: string, thread: ChatService, pending: boolean }>();
     let timeoutHandlers = $state<ReturnType<typeof setTimeout>[]>([]);
     let totalTime = $state(0);
-    let stepSummaries = $state<{ step: string, summary: string }[]>([]);
+    // let stepSummaries = $state<{ step: string, summary: string }[]>([]);
     let running = $state(false);
 
     const notifications = getNotificationContext();
@@ -348,6 +348,16 @@
         }
     }
 
+    function cancelRun() {
+        runSession.forEach((session) => session.thread.close());
+        runSession.clear();
+        running = false;
+        notifications.success('Workflow cancelled');
+        timeoutHandlers.forEach((handler) => clearTimeout(handler));
+        timeoutHandlers = [];
+        totalTime = 0;
+    }
+
     function startResize(e: MouseEvent) {
         e.preventDefault();
         isResizing = true;
@@ -439,6 +449,7 @@ ${step.tools.join(', ')}
                 const threadId = runSession.get(step.id)?.thread?.chatId;
                 if (threadId) {
                     stepSessions.push({ stepId: step.id, threadId });
+                    mockTasks.updateRun(taskId, runId, stepSessions);
                 }
             }
             
@@ -447,18 +458,10 @@ ${step.tools.join(', ')}
 
         totalTime = Date.now() - startTime;
         const finalHandler = setTimeout(() => {
-            let summaryTimer = 0;
-            for (const summaryResult of mocks.stepSummaries[taskId]) {
-                const handler = setTimeout(() => {
-                    stepSummaries.push(summaryResult);
-                }, summaryTimer);
-                summaryTimer += 1000;
-                timeoutHandlers.push(handler);
-            }
+            // stepSummaries = mocks.stepSummaries[taskId];
+            notifications.success('Workflow completed in ' + (totalTime / 1000).toFixed(1) + 's');
         }, 1000);
         timeoutHandlers.push(finalHandler);
-
-        mockTasks.updateRun(taskId, runId, stepSessions); 
     }
 </script>
 
@@ -487,8 +490,20 @@ ${step.tools.join(', ')}
                         {/if}
                         <div class="flex shrink-0 items-center gap-2">
                             <div class="flex">
-                                <button class="btn btn-primary w-48" onclick={handleRun}>
-                                    Run <Play class="size-4" /> 
+                                <button class="btn btn-primary w-48 {running ? 'tooltip tooltip-bottom' : ''}" data-tip="Cancel current run" 
+                                    onclick={() => {
+                                        if (running) {
+                                            cancelRun();
+                                        } else {
+                                            handleRun();
+                                        }
+                                    }}
+                                >
+                                    {#if running}
+                                        <Square class="size-4" />
+                                    {:else}
+                                        Run <Play class="size-4" /> 
+                                    {/if}
                                 </button>
                                 <!-- <div class="dropdown dropdown-end">
                                     <div tabindex="0" role="button" class="btn rounded-l-none btn-primary btn-square border-l-white">
