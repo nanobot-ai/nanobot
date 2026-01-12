@@ -602,9 +602,7 @@
                                                 >
                                                     {new Date(run.created).toLocaleString().replace(',', '')}
                                                 </a>
-                                                <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left mr-1" popovertarget="popover-task-run-actions-{item}-{run.id}" style="anchor-name:--task-run-actions-anchor-{item}-{run.id}"
-                                                    data-tip="Edit workflow"
-                                                >
+                                                <button class="btn btn-square btn-ghost btn-sm mr-1" popovertarget="popover-task-run-actions-{item}-{run.id}" style="anchor-name:--task-run-actions-anchor-{item}-{run.id}">
                                                     <EllipsisVertical class="size-4 shrink-0" />
                                                 </button>
                                                 <ul 
