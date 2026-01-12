@@ -325,6 +325,7 @@
                 </button>
             {:else if !runId}
                 <button class="btn btn-primary transition-all mt-4 {loading ? 'w-10 tooltip' : 'w-48'}"  onclick={() => {
+                    runArguments = [];
                     if (completed) {
                         reset();
                     } else {
