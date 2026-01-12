@@ -102,6 +102,7 @@
                     totalTime = Math.random() * 10000 + 1000;
                     summaryResults = [...mocks.summaryResults[urlTaskId]];
                 } else {
+                    showDetails = true;
                     runTask();
                 }
             }
