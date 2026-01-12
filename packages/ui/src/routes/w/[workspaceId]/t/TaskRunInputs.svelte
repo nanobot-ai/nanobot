@@ -13,6 +13,7 @@
     
     let inputsModal = $state<HTMLDialogElement | null>(null);
     let runFormData = $state<(Input & { value: string })[]>([]);
+    let name = $derived(task?.name || task?.steps[0].name || '');
 
     export function showModal() {
         const visibleInputMapping = new Map(additionalInputs?.map((input) => [input.id, input]) ?? []);
@@ -36,7 +37,7 @@
               <X class="size-4" />
           </button>
         </form>
-      <h4 class="text-lg font-semibold p-4 bg-base-100 dark:bg-base-200">Run Task</h4>
+      <h4 class="text-lg font-semibold p-4 bg-base-100 dark:bg-base-200">Run {name || 'Task'}</h4>
       <div class="p-4 flex flex-col gap-2">
           {#each runFormData as input (input.id)}
               <label class="input w-full">
