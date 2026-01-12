@@ -148,6 +148,7 @@
             loading = false;
             totalTime = 0;
             totalTokens = 0;
+            runArguments = [];
             return;
         }
         
@@ -158,6 +159,7 @@
         ongoingSteps.clear();
         totalTime = 0;
         totalTokens = 0;
+        runArguments = formData;
 
         if (mocks.taskIds.includes(urlTaskId)) {
             mockTasks.addRun(urlTaskId, {
