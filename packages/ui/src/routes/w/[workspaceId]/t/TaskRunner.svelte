@@ -12,6 +12,7 @@
     import * as mocks from '$lib/mocks';
 	import { ChatService } from "$lib/chat.svelte";
 	import { mockTasks } from "$lib/mocks/stores/tasks.svelte";
+	import TaskRunInputs from "./TaskRunInputs.svelte";
 	
     type Props = {
         workspaceId: string;
@@ -31,9 +32,8 @@
     let initialLoadComplete = $state(false);
     let compiling = $state(false);
 
-    let runFormData = $state<(Input & { value: string })[]>([]);
+    let inputsModal = $state<ReturnType<typeof TaskRunInputs> | null>(null);
     let loading = $state(false);
-    let disabled = $derived(runFormData.some((input) => input.value.trim().length === 0));
     let canceling =  $state(false);
     let completed = $state(false); // TODO: completed data to display?
 
@@ -119,10 +119,6 @@
         } else {
             task = await convertToTask(workspace, files, id);
         }
-        runFormData = task.inputs.map((input) => ({
-            ...input,
-            value: input.default || '',
-        }));
         clearTimeout(progressTimeout);
         progress = 100;
 
@@ -140,8 +136,8 @@
         }
     });
     
-    async function handleRun() {
-        if (disabled || !task) return;
+    async function handleRun(formData: (Input & { value: string })[]) {
+        if (!task) return;
         if (loading) {
             canceling = true;
             timeoutHandlers.forEach((handler) => clearTimeout(handler));
@@ -164,7 +160,7 @@
             mockTasks.addRun(urlTaskId, {
                 id: crypto.randomUUID(),
                 created: new Date().toISOString(),
-                arguments: runFormData,
+                arguments: formData,
                 stepSessions: [],
             });
         }
@@ -192,17 +188,8 @@
             totalTime = timeout;
             totalTokens = tokenCount;
 
-            let summaryTimer = 0;
-            for (const summaryResult of mocks.summaryResults[urlTaskId]) {
-                const handler = setTimeout(() => {
-                    summaryResults.push(summaryResult);
-                    if (summaryResults.length === mocks.summaryResults[urlTaskId].length) {
-                        loading = false;
-                    }
-                }, summaryTimer);
-                summaryTimer += 1000;
-                timeoutHandlers.push(handler);
-            }
+            summaryResults = [...mocks.summaryResults[urlTaskId]];
+            loading = false;
         }, timeout + 1000);
         timeoutHandlers.push(finalHandler);
     }
@@ -297,14 +284,14 @@
             {#if !loading && !completed}
                 <div class="w-full" out:slide={{ duration: 300 }}>
                     <div class="w-full flex flex-col justify-center items-center" out:fly={{ y: -100, duration: 200 }} >
-                        {#if runFormData.length > 0}
+                        {#if task.inputs.length > 0}
                             <div class="p-4 flex flex-col gap-2 w-full border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
-                                <p class="text-xs text-primary">To get started, please fill out the following information:</p>
+                                <p class="text-xs text-primary">To get started, the following information will need to be provided:</p>
                                 <div class="flex flex-col gap-2">
-                                    {#each runFormData as input (input.id)}
+                                    {#each task.inputs as input (input.id)}
                                         <label class="input w-full validator">
                                             <span class="label h-full font-semibold text-primary bg-primary/15">{input.name}</span>
-                                            <input type="text" bind:value={input.value} placeholder={input.description} required />
+                                            <input class="disabled:text-base-content" type="text" placeholder={input.description} required disabled />
                                         </label>
                                     {/each}
                                 </div>
@@ -369,9 +356,9 @@
                     if (completed) {
                         reset();
                     } else {
-                        handleRun();
+                        inputsModal?.showModal();
                     }
-                }} {disabled} data-tip={loading ? 'Cancel run' : undefined}>
+                }} data-tip={loading ? 'Cancel run' : undefined}>
                     {#if loading}
                         <Square class="size-4 shrink-0" />
                     {:else}
@@ -385,6 +372,8 @@
         <div in:fade|global={{ duration: 300 }} class="radial-progress text-primary" style="--value:{progress};" aria-valuenow="{progress}" role="progressbar">{progress}%</div>
     {/if}
 </div>
+
+<TaskRunInputs bind:this={inputsModal} onSubmit={handleRun} {task} />
 
 <style lang="postcss">
     :global(#thread-process #message-groups) {

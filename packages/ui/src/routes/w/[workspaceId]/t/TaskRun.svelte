@@ -12,7 +12,6 @@
 	import { mockTasks } from "$lib/mocks/stores/tasks.svelte";
 	import StepRun from "../StepRun.svelte";
 	import { fade } from "svelte/transition";
-	import { getLayoutContext } from "$lib/context/layout.svelte";
 
     type Props = {
         workspaceId: string;
@@ -26,9 +25,6 @@
     const registryStore = createRegistryStore();
     setRegistryContext(registryStore);
 
-    const layout = getLayoutContext();
-    layout.setIsSidebarCollapsed(false);
-
     let workspace = $state<WorkspaceClient | null>(null);
     let task = $state<Task | null>(null);
     let initialLoadComplete = $state(false);
@@ -40,6 +36,7 @@
     let runCreated = $state('');
     let runSession = new SvelteMap<string, { stepId: string, thread: ChatService, pending: boolean }>();
     let runArguments = $state<(Omit<Input, 'id'> & { value: string })[]>([]);
+    let showDetails = $state(false);
 
     let name = $derived(task?.name || task?.steps[0].name || '');
 
@@ -208,45 +205,47 @@ ${step.tools.join(', ')}
                     </div>
                 </div>
             </div>
-            <div>
-                <div class="px-22 mb-6 flex flex-col gap-4">
-                    <div class="w-full h-2"></div>
-                    {#each runArguments as input (input.name)}
-                        <div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 task-step relative">
-                            <div class="flex flex-col gap-2">
-                                <label class="input w-full">
-                                    <span class="label h-full font-semibold text-primary bg-primary/15 mr-0">${input.name}</span>
-                                    <input type="text" class="font-semibold placeholder:font-normal" disabled value={input.value} />
-                                </label>
+            {#if showDetails}
+                <div in:fade>
+                    <div class="px-22 mb-6 flex flex-col gap-4">
+                        <div class="w-full h-2"></div>
+                        {#each runArguments as input (input.name)}
+                            <div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 task-step relative">
+                                <div class="flex flex-col gap-2">
+                                    <label class="input w-full">
+                                        <span class="label h-full font-semibold text-primary bg-primary/15 mr-0">${input.name}</span>
+                                        <input type="text" class="font-semibold placeholder:font-normal" disabled value={input.value} />
+                                    </label>
+                                </div>
                             </div>
+                        {/each}
+                    </div>
+                </div>
+                <div in:fade class="md:pr-22 flex flex-col gap-6">
+                    {#each task.steps as step (step.id)}
+                        <div class="pl-22">
+                            <Step 
+                                taskId={urlTaskId}
+                                task={task!}
+                                {step}
+                                showDescription
+                                showBlockEditing={false}
+                                readonly
+                            >
+                                <StepRun 
+                                    messages={runSession.get(step.id)?.thread?.messages?.slice(1) ?? []} 
+                                    pending={runSession.get(step.id)?.pending ?? false} 
+                                    chatLoading={runSession.get(step.id)?.thread?.isLoading ?? false}
+                                />
+                            </Step>
                         </div>
                     {/each}
                 </div>
-            </div>
-            <div class="md:pr-22 flex flex-col gap-6">
-                {#each task.steps as step (step.id)}
-                    <div class="pl-22">
-                        <Step 
-                            taskId={urlTaskId}
-                            task={task!}
-                            {step}
-                            showDescription
-                            showBlockEditing={false}
-                            readonly
-                        >
-                            <StepRun 
-                                messages={runSession.get(step.id)?.thread?.messages?.slice(1) ?? []} 
-                                pending={runSession.get(step.id)?.pending ?? false} 
-                                chatLoading={runSession.get(step.id)?.thread?.isLoading ?? false}
-                            />
-                        </Step>
-                    </div>
-                {/each}
-            </div>
+            {/if}
             
             {#if summaryResults.length > 0}
-                <div class="md:px-22 mb-12">
-                    <div class="mt-6 p-6 pb-12 w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
+                <div class="md:px-22 mb-12 flex flex-col justify-center">
+                    <div class="my-6 p-6 pb-12 w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
                         <h4 class="text-xl font-semibold">Workflow Completed</h4>
                         <p class="text-sm text-base-content/50 text-center mt-1">
                             The workflow has completed successfully. Here are your summarized results:
@@ -265,6 +264,12 @@ ${step.tools.join(', ')}
                             {/each}
                         </div>
                     </div>
+
+                    {#if !showDetails}
+                    <button class="btn w-xs self-center" onclick={() => showDetails = true}>
+                        View details
+                    </button>
+                    {/if}
                 </div>
             {/if}
 

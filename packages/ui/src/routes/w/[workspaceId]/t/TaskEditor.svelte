@@ -4,7 +4,7 @@
 	import DragDropList from '$lib/components/DragDropList.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
 	import { createRegistryStore, setRegistryContext } from '$lib/context/registry.svelte';
-	import { ChevronDown, EllipsisVertical, GripVertical, PencilLine, Play, Plus, ReceiptText, X, Bug, MessageCircleMore } from '@lucide/svelte';
+	import { EllipsisVertical, GripVertical, PencilLine, Play, Plus, ReceiptText, X, MessageCircleMore } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
@@ -26,6 +26,7 @@
 	import { setSharedChat, sharedChat } from '$lib/stores/chat.svelte';
 	import type { ToolCallInfo } from '$lib/chat.svelte';
 	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
+	import TaskRunInputs from './TaskRunInputs.svelte';
 	
     type Props = {
         workspaceId: string;
@@ -44,8 +45,7 @@
     let showTaskTitle = $state(false);
     let showTaskDescription = $state(false);
 
-    let inputsModal = $state<HTMLDialogElement | null>(null);
-    let runFormData = $state<(Input & { value: string })[]>([]);
+    let inputsModal = $state<ReturnType<typeof TaskRunInputs> | null>(null);
     let runMode = $state<'normal' | 'debug'>('normal');
 
     let confirmDeleteStep = $state<{ stepId: string, filename: string } | null>(null);
@@ -59,7 +59,7 @@
     let stepDescription = new SvelteMap<number | string, boolean>();
 
     let showSidebarThread = $state(true);
-    let sidebarWidth = $state(520);
+    let sidebarWidth = $state(325);
     let isResizing = $state(false);
     
     let registryToolSelector = $state<ReturnType<typeof RegistryToolSelector> | null>(null);
@@ -82,8 +82,6 @@
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
     const workspaceService = new WorkspaceService();
-    
-    layout.setIsSidebarCollapsed(true);
 
     /** Handle file modifications from chat to update task steps */
     async function handleFileModified(info: ToolCallInfo) {
@@ -334,13 +332,7 @@
             return;
         }
 
-        const visibleInputMapping = new Map(visibleInputs.map((input) => [input.id, input]));
         if (task.inputs.length > 0) {
-            runFormData = task.inputs.map((input) => ({
-                ...input,
-                ...(visibleInputMapping.get(input.id) ?? {}),
-                value: input.default || visibleInputMapping.get(input.id)?.default || '',
-            }));
             inputsModal?.showModal();
         } else {
             submitRun();
@@ -354,8 +346,8 @@
         const startWidth = sidebarWidth;
         
         function onMouseMove(e: MouseEvent) {
-            // Sidebar is on the left side, so dragging right increases width
-            const delta = e.clientX - startX;
+            // Sidebar is on the right side, so dragging left increases width
+            const delta = startX - e.clientX;
             sidebarWidth = Math.max(400, Math.min(startWidth + delta, window.innerWidth - 800));
         }
         
@@ -370,13 +362,13 @@
     }
 
     // TODO: change below to actually hit the run task endpoint once available
-    async function submitRun() {
+    async function submitRun(formData?: (Input & { value: string })[]) {
         // navigate to run page
         const created = new Date().toISOString();
         const runId = crypto.randomUUID();
 
         if (mocks.taskIds.includes(taskId)) {
-            const content = { id: runId, created, arguments: runFormData };
+            const content = { id: runId, created, arguments: formData };
             mockTasks.addRun(taskId, content);
             goto(resolve(`/w/${workspaceId}/t?id=${taskId}&runId=${runId}`), { keepFocus: true });
         } else {
@@ -387,40 +379,6 @@
 
 {#if initialLoadComplete && task}
     <div class="flex w-full h-dvh {isResizing ? 'cursor-col-resize' : ''}">
-        {#if showSidebarThread}
-            <!-- Sidebar Thread -->
-            <div 
-                transition:fly={{ x: -100, duration: 200 }} 
-                class="border-l border-l-base-300 bg-base-100 h-dvh flex flex-col shrink-0 {isResizing ? 'select-none' : ''}"
-                style="width: {sidebarWidth}px; min-width: 400px;"
-            >
-                <div class="w-full flex justify-between items-center p-4 bg-base-100 shrink-0">
-                    <div class="w-full"></div>
-                    <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" data-tip="Close" 
-                        onclick={() => {
-                            showSidebarThread = false;
-                            includeFilesInMessage = [];
-                        }}
-                    >
-                        <X class="size-4" />
-                    </button>
-                </div>
-                <div class="w-full flex-1 min-h-0 flex flex-col">
-                    {#if sharedChat.current}
-                        {#key sharedChat.current.chatId}
-                            <ThreadFromChat inline chat={sharedChat.current} files={includeFilesInMessage} />
-                        {/key}
-                    {/if}
-                </div>
-            </div>
-            <!-- Resize Handle -->
-            <button 
-                type="button"
-                class="w-1 bg-base-300 hover:bg-primary/50 cursor-col-resize transition-all duration-150 shrink-0 active:bg-primary border-none p-0"
-                aria-label="Resize sidebar"
-                onmousedown={startResize}
-            ></button>
-        {/if}
         <div class="
             flex flex-col grow p-4 pt-0 overflow-y-auto max-h-dvh transition-all duration-150 
             {isResizing ? 'select-none' : ''}
@@ -444,10 +402,10 @@
                         {/if}
                         <div class="flex shrink-0 items-center gap-2">
                             <div class="flex">
-                                <button class="btn btn-primary rounded-r-none w-48" onclick={handleRun}>
+                                <button class="btn btn-primary w-48" onclick={handleRun}>
                                     {runMode === 'normal' ? 'Run' : 'Debug'} <Play class="size-4" /> 
                                 </button>
-                                <div class="dropdown dropdown-end">
+                                <!-- <div class="dropdown dropdown-end">
                                     <div tabindex="0" role="button" class="btn rounded-l-none btn-primary btn-square border-l-white">
                                         <ChevronDown class="size-4" />
                                     </div>
@@ -475,7 +433,7 @@
                                             </button>
                                         </li>
                                     </ul>
-                                </div>
+                                </div> -->
                             </div>
                             <button class="btn btn-ghost btn-square" popoverTarget="task-actions" style="anchor-name: --task-actions-anchor;">
                                 <EllipsisVertical class="text-base-content/50" />
@@ -507,20 +465,6 @@
                                         />
                                     </label>
                                 </li>
-                                {#if !showSidebarThread}
-                                    <li>
-                                        <button 
-                                            class="flex items-center gap-2"
-                                            onclick={() => {
-                                                showSidebarThread = true;
-                                                includeFilesInMessage = [];
-                                                document.getElementById('task-actions')?.hidePopover();
-                                            }}
-                                        >
-                                            <MessageCircleMore class="size-4" /> Show chat
-                                        </button>
-                                    </li>
-                                {/if}
                             </ul>
                         </div>
                     </div>
@@ -660,7 +604,51 @@
             </div>
 
             <div class="flex grow"></div>
+
+            {#if !showSidebarThread}
+                <div in:fade={{ duration: 200 }} class="sticky bottom-0 right-0 self-end flex flex-col gap-4 z-10">
+                    <button class="float-right btn btn-lg btn-circle btn-primary self-end tooltip tooltip-left" onclick={async () => {
+                        showSidebarThread = true;
+                    }} data-tip="Show chat">
+                        <MessageCircleMore class="size-6" />
+                    </button>
+                </div>
+            {/if}
         </div>
+        {#if showSidebarThread}
+            <!-- Resize Handle -->
+            <button 
+                type="button"
+                class="w-1 bg-base-300 hover:bg-primary/50 cursor-col-resize transition-all duration-150 shrink-0 active:bg-primary border-none p-0"
+                aria-label="Resize sidebar"
+                onmousedown={startResize}
+            ></button>
+            <!-- Sidebar Thread -->
+            <div 
+                transition:fly={{ x: 100, duration: 200 }} 
+                class="border-l border-l-base-300 bg-base-100 h-dvh flex flex-col shrink-0 {isResizing ? 'select-none' : ''}"
+                style="width: {sidebarWidth}px; min-width: 400px;"
+            >
+                <div class="w-full flex justify-between items-center p-4 bg-base-100 shrink-0">
+                    <div class="w-full"></div>
+                    <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" data-tip="Close" 
+                        onclick={() => {
+                            showSidebarThread = false;
+                            includeFilesInMessage = [];
+                        }}
+                    >
+                        <X class="size-4" />
+                    </button>
+                </div>
+                <div class="w-full flex-1 min-h-0 flex flex-col">
+                    {#if sharedChat.current}
+                        {#key sharedChat.current.chatId}
+                            <ThreadFromChat inline chat={sharedChat.current} files={includeFilesInMessage} />
+                        {/key}
+                    {/if}
+                </div>
+            </div>
+        {/if}
     </div>
 {:else}
     <div class="w-full flex flex-col gap-8">
@@ -679,33 +667,7 @@
     </div>
 {/if}
 
-<dialog bind:this={inputsModal} class="modal">
-  <div class="modal-box bg-base-200 dark:bg-base-100 p-0 border border-transparent dark:border-base-300">
-    <form method="dialog">
-        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
-            <X class="size-4" />
-        </button>
-      </form>
-    <h4 class="text-lg font-semibold p-4 bg-base-100 dark:bg-base-200">Run Task</h4>
-    <div class="p-4 flex flex-col gap-2">
-        {#each runFormData as input (input.id)}
-            <label class="input w-full">
-                <span class="label h-full font-semibold text-primary bg-primary/15">{input.name}</span>
-                <input type="text" bind:value={input.value} />
-            </label>
-        {/each}
-    </div>
-    <div class="modal-action mt-0 px-4 py-2 bg-base-100 dark:bg-base-200">
-        <form method="dialog">
-            <button class="btn btn-ghost" onclick={() => inputsModal?.close()}>Cancel</button>
-            <button class="btn btn-primary" onclick={submitRun}>Run</button>
-        </form>
-    </div>
-  </div>
-  <form method="dialog" class="modal-backdrop">
-    <button>close</button>
-  </form>
-</dialog>
+<TaskRunInputs bind:this={inputsModal} onSubmit={submitRun} {task} additionalInputs={visibleInputs} />
 
 <ConfirmDelete 
     bind:this={confirmDeleteStepModal}

@@ -22,7 +22,9 @@
 </script>
 
 {#if runId && !runOnly}
-    <TaskRun {workspaceId} {urlTaskId} {runId} />
+    {#key runId}
+        <TaskRun {workspaceId} {urlTaskId} {runId} />
+    {/key}
 {:else if runOnly}
     <TaskRunner {workspaceId} {urlTaskId} {runId} />
 {:else}

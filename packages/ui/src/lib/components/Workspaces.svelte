@@ -544,7 +544,7 @@
                                     {#if permissions.includes('write') || permissions.includes('read')}
                                         <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="flex min-h-8 grow overflow-hidden rounded-r-none truncate hover:bg-transparent items-center">{name}</a>
                                     {:else}
-                                        <a href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)} class="flex min-h-8 grow overflow-hidden rounded-r-none truncate hover:bg-transparent items-center">{item}</a>
+                                        <a href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)} class="flex min-h-8 grow overflow-hidden rounded-r-none truncate hover:bg-transparent items-center">{name}</a>
                                     {/if}
                                 </div>
                                 <div class="flex items-center gap-2">
@@ -715,7 +715,7 @@
             </ul>
         </li>
     {/if}
-    {#if isShared}
+    {#if permissions.includes('write')}
         <li>
             <button 
                 onmousedown={(e) => e.stopPropagation()} 
