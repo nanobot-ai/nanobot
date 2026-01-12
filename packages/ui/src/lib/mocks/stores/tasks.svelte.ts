@@ -17,6 +17,8 @@ type Task = {
 			stepId: string;
 			threadId: string;
 		}[];
+		totalTokens?: number;
+		totalTime?: number;
 	}[];
 };
 
@@ -31,12 +33,16 @@ type TaskState = {
 			created: string;
 			arguments?: TaskArgument[];
 			stepSessions?: { stepId: string; threadId: string }[];
+			totalTokens?: number;
+			totalTime?: number;
 		}
 	) => void;
 	updateRun: (
 		taskId: string,
 		runId: string,
-		stepSessions: { stepId: string; threadId: string }[]
+		stepSessions: { stepId: string; threadId: string }[],
+		totalTokens?: number,
+		totalTime?: number
 	) => void;
 	deleteRun: (taskId: string, runId: string) => void;
 };
@@ -82,6 +88,8 @@ function addRun(
 		created: string;
 		arguments?: TaskArgument[];
 		stepSessions?: { stepId: string; threadId: string }[];
+		totalTokens?: number;
+		totalTime?: number;
 	}
 ): void {
 	if (!browser) return;
@@ -99,7 +107,9 @@ function addRun(
 function updateRun(
 	taskId: string,
 	runId: string,
-	stepSessions: { stepId: string; threadId: string }[]
+	stepSessions: { stepId: string; threadId: string }[],
+	totalTokens?: number,
+	totalTime?: number
 ): void {
 	if (!browser) return;
 
@@ -110,5 +120,7 @@ function updateRun(
 	if (!run) return;
 
 	run.stepSessions = stepSessions;
+	run.totalTokens = totalTokens;
+	run.totalTime = totalTime;
 	localStorage.setItem('mock-tasks', JSON.stringify(taskState.current.tasks));
 }

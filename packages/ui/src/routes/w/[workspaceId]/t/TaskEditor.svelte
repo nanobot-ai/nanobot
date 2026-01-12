@@ -83,8 +83,9 @@
     let runSession = new SvelteMap<string, { stepId: string, thread: ChatService, pending: boolean }>();
     let timeoutHandlers = $state<ReturnType<typeof setTimeout>[]>([]);
     let totalTime = $state(0);
-    // let stepSummaries = $state<{ step: string, summary: string }[]>([]);
+    let totalTokens = $state(0);
     let running = $state(false);
+    let completed = $state(false);
 
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
@@ -352,6 +353,7 @@
         runSession.forEach((session) => session.thread.close());
         runSession.clear();
         running = false;
+        completed = false;
         notifications.success('Workflow cancelled');
         timeoutHandlers.forEach((handler) => clearTimeout(handler));
         timeoutHandlers = [];
@@ -439,7 +441,9 @@ Step description: ${step.description} \n
 Step content: ${step.content} \n\n
 \n\n You have the following tools available to you:
 ${step.tools.join(', ')}
-\n\n Do not indicate that you are simulating or mocking any data; act as if you are actually running the task.
+\n\n Do not indicate that you are simulating or mocking any data; act as if you have the tools available to you. Act as if you are actually running the task. \n
+If you make a tool call, only try once. If you fail, do not try again. And if you failed, act as if you had succeeded. \n
+Summarize your output in a single paragraph. Do not write in first person -- output as if you are a process.
             `;
             
             // Wait for this thread to complete before starting the next one
@@ -449,7 +453,7 @@ ${step.tools.join(', ')}
                 const threadId = runSession.get(step.id)?.thread?.chatId;
                 if (threadId) {
                     stepSessions.push({ stepId: step.id, threadId });
-                    mockTasks.updateRun(taskId, runId, stepSessions);
+                    mockTasks.updateRun(taskId, runId, stepSessions, totalTokens, totalTime);
                 }
             }
             
@@ -458,8 +462,8 @@ ${step.tools.join(', ')}
 
         totalTime = Date.now() - startTime;
         const finalHandler = setTimeout(() => {
-            // stepSummaries = mocks.stepSummaries[taskId];
-            notifications.success('Workflow completed in ' + (totalTime / 1000).toFixed(1) + 's');
+            completed = true;
+            totalTokens = Math.floor(Math.random() * 9000) + 1000;
         }, 1000);
         timeoutHandlers.push(finalHandler);
     }
@@ -492,14 +496,14 @@ ${step.tools.join(', ')}
                             <div class="flex">
                                 <button class="btn btn-primary w-48 {running ? 'tooltip tooltip-bottom' : ''}" data-tip="Cancel current run" 
                                     onclick={() => {
-                                        if (running) {
+                                        if (running && !completed) {
                                             cancelRun();
                                         } else {
                                             handleRun();
                                         }
                                     }}
                                 >
-                                    {#if running}
+                                    {#if running && !completed}
                                         <Square class="size-4" />
                                     {:else}
                                         Run <Play class="size-4" /> 
@@ -696,6 +700,21 @@ ${step.tools.join(', ')}
                 {/snippet}
             </DragDropList>
 
+            {#if completed}
+                <div in:fade out:slide={{ axis: 'y', duration: 150 }} class="w-full flex flex-col justify-center items-center py-4 pl-22 {showSidebarThread ? '' : 'md:pr-22'}">
+                    <div class="w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field p-6 pb-8">
+                        <h4 class="text-xl font-semibold">Workflow Completed</h4>
+                        <p class="text-sm text-base-content/50 text-center mt-1">
+                            The workflow has completed successfully. Here are your summarized results:
+                        </p>
+
+                        <p class="text-sm text-center mt-4">The workflow completed <b>{task.steps.length}</b> out of <b>{task.steps.length}</b> steps.</p> 
+                        <p class="text-sm text-center mt-1">It took a total time of <b>{(totalTime / 1000).toFixed(1)}s</b> to complete.</p>
+                        <p class="text-sm text-center mt-1">A total of <b>{totalTokens}</b> tokens were used.</p>
+                    </div>
+                </div>
+            {/if}
+
             <div class="flex items-center justify-center">
                 <button class="btn btn-primary btn-square tooltip" data-tip="Add new step"
                     onclick={() => {
@@ -794,6 +813,7 @@ ${step.tools.join(', ')}
 <RegistryToolSelector bind:this={registryToolSelector} 
     omit={currentAddingToolForStep?.tools ?? []}
     onToolsSelect={(names) => {
+        console.log(names);
         if (!currentAddingToolForStep) return;
         const stepIndex = task?.steps.findIndex((step) => step.id === currentAddingToolForStep?.id);
         if (stepIndex === undefined) return;

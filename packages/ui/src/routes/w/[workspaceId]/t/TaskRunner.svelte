@@ -89,6 +89,8 @@
             const matchingTaskRun = mockTasks.current.tasks.find((task) => task.id === urlTaskId)?.runs.find((run) => run.id === runId);
             runArguments = matchingTaskRun?.arguments ?? [];
             runTime = matchingTaskRun?.created ?? '';
+            totalTokens = matchingTaskRun?.totalTokens ?? Math.floor(Math.random() * 9000) + 1000;
+            totalTime = matchingTaskRun?.totalTime ?? Math.floor(Math.random() * 4000) + 1000;
         } else {
             completed = false;
             stepSummaries = [];
@@ -213,10 +215,11 @@
     }
 </script>
 
-<div class="flex w-full max-h-dvh justify-center items-center flex-col relative overflow-y-auto">
-    <div class="h-16 w-full flex px-4 items-center absolute top-0 left-0">
+<div class="w-full max-h-dvh justify-center items-center flex-col relative overflow-y-auto">
+    <div class="h-16 w-full flex px-4 items-center mb-4">
         <h2 in:fade class="text-xl font-semibold flex items-center gap-2">{name} {runTime ? `- ${new Date(runTime).toLocaleString()}` : ''} {#if loading}<LoaderCircle class="size-4 animate-spin shrink-0" />{/if}</h2>
     </div>
+    <div class="w-full flex flex-col h-[calc(100dvh-5rem)] justify-center items-center">
     {#if initialLoadComplete && task}
         <div class="md:w-4xl px-4 w-full flex flex-col justify-center items-center z-20">
             <div class="hero w-full bg-base-100 dark:bg-base-200 rounded-box shadow-xs dark:border-base-300 border-transparent border">
@@ -344,8 +347,9 @@
             {/if}
         </div>
     {:else}
-        <div in:fade|global={{ duration: 300 }} class="radial-progress text-primary" style="--value:{progress};" aria-valuenow="{progress}" role="progressbar">{progress}%</div>
+        <div in:fade|global={{ duration: 300 }} class="radial-progress text-primary -translate-y-6" style="--value:{progress};" aria-valuenow="{progress}" role="progressbar">{progress}%</div>
     {/if}
+    </div>
 </div>
 
 <TaskRunInputs bind:this={inputsModal} onSubmit={handleRun} {task} />
