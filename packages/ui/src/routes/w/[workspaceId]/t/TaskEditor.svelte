@@ -390,7 +390,7 @@
         >
             <div class="sticky top-0 left-0 w-full bg-base-200 dark:bg-base-100 z-10 py-4">
                 <div in:fade class="flex flex-col grow">
-                    <div class="flex w-full items-center gap-4 {layout.isSidebarCollapsed && !showSidebarThread ? 'pl-68' : ''}">
+                    <div class="flex w-full items-center gap-4 {layout.isSidebarCollapsed ? 'pl-68' : ''}">
                         {#if showAlternateHeader}
                             <p in:fade class="flex grow text-xl font-semibold">{task.name}</p>
                         {:else if showTaskTitle}

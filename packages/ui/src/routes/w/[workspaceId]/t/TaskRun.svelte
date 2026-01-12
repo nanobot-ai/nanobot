@@ -245,7 +245,7 @@ ${step.tools.join(', ')}
             
             {#if summaryResults.length > 0}
                 <div class="md:px-22 mb-12 flex flex-col justify-center">
-                    <div class="my-6 p-6 pb-12 w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
+                    <div class="p-6 w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field">
                         <h4 class="text-xl font-semibold">Workflow Completed</h4>
                         <p class="text-sm text-base-content/50 text-center mt-1">
                             The workflow has completed successfully. Here are your summarized results:
@@ -263,13 +263,13 @@ ${step.tools.join(', ')}
                                 </div>
                             {/each}
                         </div>
-                    </div>
 
-                    {#if !showDetails}
-                    <button class="btn w-xs self-center" onclick={() => showDetails = true}>
-                        View details
-                    </button>
-                    {/if}
+                        {#if !showDetails}
+                        <button class="mt-8 btn w-xs self-center" onclick={() => showDetails = true}>
+                            View details
+                        </button>
+                        {/if}
+                    </div>
                 </div>
             {/if}
 
