@@ -196,10 +196,11 @@ func (s *Server) readSession(ctx context.Context, sessionUUID, accountID string)
 
 	// Build the response data
 	responseData := map[string]any{
-		"id":        sess.SessionID,
-		"createdAt": sess.CreatedAt.Format(time.RFC3339Nano),
-		"updatedAt": sess.UpdatedAt.Format(time.RFC3339Nano),
-		"title":     sess.Description,
+		"id":           sess.SessionID,
+		"createdAt":    sess.CreatedAt.Format(time.RFC3339Nano),
+		"updatedAt":    sess.UpdatedAt.Format(time.RFC3339Nano),
+		"title":        sess.Description,
+		"startMessage": sess.StartMessage,
 	}
 
 	// Look up the associated workspace by session ID
@@ -207,6 +208,9 @@ func (s *Server) readSession(ctx context.Context, sessionUUID, accountID string)
 	if err == nil && workspace != nil {
 		if workspace.ParentID != nil && *workspace.ParentID != "" {
 			responseData["workspaceId"] = *workspace.ParentID
+		}
+		if workspace.RootID != nil && *workspace.RootID != "" {
+			responseData["rootId"] = *workspace.RootID
 		}
 		responseData["sessionWorkspaceId"] = workspace.UUID
 	}

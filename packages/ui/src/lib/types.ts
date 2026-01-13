@@ -359,9 +359,11 @@ export interface Session {
 export interface SessionDetails {
 	id: string;
 	title?: string;
+	startMessage?: string;
 	createdAt: string;
 	updatedAt?: string;
 	workspaceId?: string;
+	rootId?: string;
 	sessionWorkspaceId?: string;
 }
 

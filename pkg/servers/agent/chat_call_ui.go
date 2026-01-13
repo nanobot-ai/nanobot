@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -111,7 +112,9 @@ func (s *Server) describeSession(ctx context.Context, args any) <-chan struct{} 
 			for _, content := range ret.Content {
 				if content.Type == "text" {
 					description = content.Text
+					startMessage, _ := json.Marshal(args)
 					session.Set(types.DescriptionSessionKey, description)
+					session.Set(types.StartMessageSessionKey, string(startMessage))
 					break
 				}
 			}

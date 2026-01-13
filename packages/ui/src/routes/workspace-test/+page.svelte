@@ -696,11 +696,17 @@
                                 <div><strong>ID:</strong> {sessionInfo.id}</div>
                                 <div><strong>Created:</strong> {new Date(sessionInfo.createdAt).toLocaleString()}</div>
                                 <div><strong>Updated:</strong> {new Date(sessionInfo.updatedAt ?? '').toLocaleString()}</div>
+                                {#if sessionInfo.rootId}
+                                    <div><strong>Root ID:</strong> {sessionInfo.rootId}</div>
+                                {/if}
                                 {#if sessionInfo.workspaceId}
                                     <div><strong>Workspace ID:</strong> {sessionInfo.workspaceId}</div>
                                 {/if}
                                 {#if sessionInfo.sessionWorkspaceId}
                                     <div><strong>Session Workspace ID:</strong> {sessionInfo.sessionWorkspaceId}</div>
+                                {/if}
+                                {#if sessionInfo.startMessage}
+                                    <div><strong>Start Message:</strong> {sessionInfo.startMessage}</div>
                                 {/if}
                             </div>
                             <div class="card-actions justify-end mt-4">

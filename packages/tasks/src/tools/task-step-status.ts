@@ -2,7 +2,6 @@ import * as path from "node:path";
 import { createTool, toolResult } from "@nanobot-ai/nanomcp";
 import { ensureConnected } from "@nanobot-ai/workspace-client";
 import * as z from "zod";
-import { getTask, getTaskStep } from "../lib/task.ts";
 
 const schema = z.object({
   taskName: z.string().describe("The task name"),
@@ -70,7 +69,8 @@ export default createTool({
       needs_input: "?",
     };
 
-    let nextTaskText = "";
+    let nextTaskText =
+      "\n\nUse all the information from ALL the task step executions to give a summary of the steps you executed. Be concise and informative.";
     if (taskRecord.next) {
       nextTaskText = `\n\nYou must now use the ExecuteTaskStep tool to execute the next task step: taskName: ${taskName}, filename: ${taskRecord.next}`;
     }

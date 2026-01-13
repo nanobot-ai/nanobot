@@ -55,13 +55,14 @@ func scan(value any, obj any) error {
 
 type Session struct {
 	gorm.Model
-	Type        string        `json:"type,omitempty"`
-	SessionID   string        `json:"sessionId" gorm:"uniqueIndex;not null"`
-	Description string        `json:"description,omitempty"`
-	AccountID   string        `json:"accountId,omitempty"`
-	State       State         `json:"state" gorm:"type:json"`
-	Config      ConfigWrapper `json:"config,omitempty" gorm:"type:json"`
-	Cwd         string        `json:"cwd,omitempty"`
+	Type         string        `json:"type,omitempty"`
+	SessionID    string        `json:"sessionId" gorm:"uniqueIndex;not null"`
+	Description  string        `json:"description,omitempty"`
+	StartMessage string        `json:"startMessage,omitempty"`
+	AccountID    string        `json:"accountId,omitempty"`
+	State        State         `json:"state" gorm:"type:json"`
+	Config       ConfigWrapper `json:"config,omitzero" gorm:"type:json"`
+	Cwd          string        `json:"cwd,omitempty"`
 }
 
 type Token struct {

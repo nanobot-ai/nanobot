@@ -63,8 +63,10 @@ func (m *Manager) newRecord(id, accountID string) *Session {
 }
 
 func (m *Manager) loadAttributesFromRecord(stored *Session, session *mcp.ServerSession) {
-	session.GetSession().Set(types.DescriptionSessionKey, stored.Description)
-	session.GetSession().Set(types.AccountIDSessionKey, stored.AccountID)
+	sess := session.GetSession()
+	sess.Set(types.DescriptionSessionKey, stored.Description)
+	sess.Set(types.StartMessageSessionKey, stored.StartMessage)
+	sess.Set(types.AccountIDSessionKey, stored.AccountID)
 }
 
 func (m *Manager) saveAttributesToRecord(stored *Session, session *mcp.ServerSession) error {
@@ -72,8 +74,10 @@ func (m *Manager) saveAttributesToRecord(stored *Session, session *mcp.ServerSes
 		config types.Config
 	)
 
-	session.GetSession().Get(types.DescriptionSessionKey, &stored.Description)
-	session.GetSession().Get(types.ConfigSessionKey, &config)
+	sess := session.GetSession()
+	sess.Get(types.DescriptionSessionKey, &stored.Description)
+	sess.Get(types.StartMessageSessionKey, &stored.StartMessage)
+	sess.Get(types.ConfigSessionKey, &config)
 
 	stored.Config = ConfigWrapper(config)
 	return nil
