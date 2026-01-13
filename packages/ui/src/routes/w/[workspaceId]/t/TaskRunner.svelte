@@ -215,14 +215,14 @@
     }
 </script>
 
-<div class="w-full max-h-dvh justify-center items-center flex-col relative overflow-y-auto">
-    <div class="h-16 w-full flex px-4 items-center mb-4">
+<div class="w-full h-dvh flex flex-col relative">
+    <div class="h-16 w-full flex px-4 items-center shrink-0 z-30 sticky top-0 left-0">
         <h2 in:fade class="text-xl font-semibold flex items-center gap-2">{name} {runTime ? `- ${new Date(runTime).toLocaleString()}` : ''} {#if loading}<LoaderCircle class="size-4 animate-spin shrink-0" />{/if}</h2>
     </div>
-    <div class="w-full flex flex-col h-[calc(100dvh-5rem)] justify-center items-center">
+    <div class="w-full flex flex-col flex-1 items-center overflow-y-auto py-4">
     {#if initialLoadComplete && task}
-        <div class="md:w-4xl px-4 w-full flex flex-col justify-center items-center z-20">
-            <div class="hero w-full bg-base-100 dark:bg-base-200 rounded-box shadow-xs dark:border-base-300 border-transparent border">
+        <div class="md:w-4xl px-4 w-full flex flex-col items-center z-20 my-auto">
+            <div class="hero w-full bg-base-100 dark:bg-base-200 rounded-box shadow-xs dark:border-base-300 border-transparent border mb-4">
                 <div class="hero-content w-full grow flex-col md:flex-row">
                     <div class="flex flex-col gap-4 grow">
                         <div class="pl-4 flex items-center gap-3">
@@ -304,8 +304,7 @@
                     </ul>
                 </div>
             </div>
-        </div>
-        <div class="md:w-4xl p-4 w-full flex flex-col justify-center items-center z-20">
+
             {#if completed}
                 <div in:fade out:slide={{ axis: 'y', duration: 150 }} class="w-full flex flex-col justify-center items-center py-4">
                     <div class="w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field p-6 pb-8">
@@ -347,7 +346,7 @@
             {/if}
         </div>
     {:else}
-        <div in:fade|global={{ duration: 300 }} class="radial-progress text-primary -translate-y-6" style="--value:{progress};" aria-valuenow="{progress}" role="progressbar">{progress}%</div>
+        <div in:fade|global={{ duration: 300 }} class="radial-progress text-primary my-auto" style="--value:{progress};" aria-valuenow="{progress}" role="progressbar">{progress}%</div>
     {/if}
     </div>
 </div>
