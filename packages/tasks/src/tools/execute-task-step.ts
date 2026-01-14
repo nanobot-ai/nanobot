@@ -11,7 +11,7 @@ const schema = z.object({
 		.optional()
 		.describe("Optional filename for the task step (e.g., 'step1.md')"),
 	arguments: z
-		.record(z.string())
+		.array(z.record(z.string()))
 		.optional()
 		.describe("Optional arguments for the task"),
 });
@@ -46,9 +46,9 @@ ${tasksDescriptions}
 		// Collect input arguments
 		const args: Record<string, string> = {};
 		for (const input of task.inputs || []) {
-			const arg = taskArgs?.[input.name];
+			const arg = taskArgs?.find((arg) => arg.name === input.name);
 			if (arg) {
-				args[input.name] = arg;
+				args[input.name] = arg.value;
 			} else if (input.default) {
 				args[input.name] = input.default;
 			} else {
