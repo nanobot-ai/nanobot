@@ -28,7 +28,7 @@
 	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 	import TaskRunInputs from './TaskRunInputs.svelte';
 	import StepRun from '../StepRun.svelte';
-	
+
     type Props = {
         workspaceId: string;
         urlTaskId?: string;
@@ -61,7 +61,7 @@
     let showSidebarThread = $state(true);
     let sidebarWidth = $state(325);
     let isResizing = $state(false);
-    
+
     let registryToolSelector = $state<ReturnType<typeof RegistryToolSelector> | null>(null);
     let currentAddingToolForStep = $state<StepType | null>(null);
 
@@ -94,11 +94,11 @@
     /** Handle file modifications from chat to update task steps */
     async function handleFileModified(info: ToolCallInfo) {
         if (!task || !taskId || !workspace) return;
-        
+
         const filePath = info.filePath;
         const taskPrefix = `.nanobot/tasks/${taskId}/`;
         const workspacePrefix = `/workspace/${taskPrefix}`;
-        
+
         // Check if the modified file belongs to this task
         let relativePath = '';
         if (filePath.startsWith(workspacePrefix)) {
@@ -106,17 +106,17 @@
         } else if (filePath.startsWith(taskPrefix)) {
             relativePath = filePath;
         }
-        
+
         if (!relativePath || !relativePath.startsWith(taskPrefix)) return;
-        
+
         // Extract step identifier (e.g., "TASK.md" or "STEP_1.md")
         const stepFile = relativePath.replace(taskPrefix, '');
-        
+
         try {
             // Read and parse just the modified file
             const fileContent = await workspace.readFile(relativePath);
             const parsed = await parseFrontmatterMarkdown(fileContent);
-            
+
             // Find the step with matching id and update it
             const stepIndex = task.steps.findIndex(s => s.id === stepFile);
             if (stepIndex !== -1) {
@@ -128,7 +128,7 @@
                     content: parsed.content,
                     tools: parsed.tools
                 };
-                
+
                 // If this is the TASK.md file, also update task-level properties
                 if (stepFile === 'TASK.md') {
                     task.name = parsed.taskName;
@@ -149,7 +149,7 @@
         workspace = isMock ? mocks.workspaceInstances[workspaceId] : workspaceService.getWorkspace(workspaceId);
         registryStore.fetch();
     });
-    
+
     onDestroy(() => {
         sharedChat.current?.close();
         runSession.forEach((session) => session.thread.close());
@@ -182,12 +182,12 @@
         if (saveTimeout) {
             clearTimeout(saveTimeout);
         }
-        
+
         // Abort any ongoing save operation
         if (saveAbortController) {
             saveAbortController.abort();
         }
-        
+
         const taskSnapshot = $state.snapshot(task);
         const visibleInputsSnapshot = $state.snapshot(visibleInputs);
         saveTimeout = setTimeout(async () => {
@@ -220,7 +220,7 @@
                     console.info('save operation cancelled');
                     return;
                 }
-                
+
                 const exists = workspace?.files.find((f) => f.name === file.id);
                 try {
                     if (exists) {
@@ -240,16 +240,16 @@
 
     $effect(() => {
         if (!task) return;
-        
+
         // Serialize to track all nested changes (name, description, steps, and step properties)
         const taskJson = JSON.stringify(task);
         const visibleInputsJson = JSON.stringify(visibleInputs);
-        
+
         // Skip during loading or before initial load completes
         if (!initialLoadComplete) {
             return;
         }
-        
+
         // Only save if task actually changed from last saved state
         if (taskJson === lastSavedTaskJson && visibleInputsJson === lastSavedVisibleInputsJson) {
             return;
@@ -305,7 +305,7 @@
 
     $effect(() => {
         const files = workspace?.files ?? [];
-        
+
         if (urlTaskId && workspace && urlTaskId !== taskId && files.length > 0) {
             compileTask(urlTaskId, files);
         }
@@ -365,19 +365,19 @@
         isResizing = true;
         const startX = e.clientX;
         const startWidth = sidebarWidth;
-        
+
         function onMouseMove(e: MouseEvent) {
             // Sidebar is on the right side, so dragging left increases width
             const delta = startX - e.clientX;
             sidebarWidth = Math.max(400, Math.min(startWidth + delta, window.innerWidth - 800));
         }
-        
+
         function onMouseUp() {
             isResizing = false;
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
         }
-        
+
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
     }
@@ -396,13 +396,13 @@
         } else {
             // TODO: actual impl
             const chat = await workspace?.newSession();
-            await chat?.sendToolCall('DispatchTask', {taskName: taskId, arguments: formData});
+            await chat?.sendToolCall('ExecuteTaskStep', {taskName: taskId, arguments: formData});
         }
     }
 
     async function runMockTask(runId: string, formData?: (Input & { value: string })[]) {
         if (!task) return;
-        
+
         running = true;
         const startTime = Date.now();
         let stepSessions = [];
@@ -447,7 +447,7 @@ ${step.tools.join(', ')}
 If you make a tool call, only try once. If you fail, do not try again. And if you failed, act as if you had succeeded. \n
 Summarize your output in a single paragraph. Do not write in first person -- output as if you are a process.
             `;
-            
+
             // Wait for this thread to complete before starting the next one
             const response = await runSession.get(step.id)?.thread?.sendMessage(message);
             if (response) {
@@ -458,7 +458,7 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                     mockTasks.updateRun(taskId, runId, stepSessions, totalTokens, totalTime);
                 }
             }
-            
+
             priorSteps += `Step ${step.id}: ${step.name} \n\n`;
         }
 
@@ -474,9 +474,9 @@ Summarize your output in a single paragraph. Do not write in first person -- out
 {#if initialLoadComplete && task}
     <div class="flex w-full h-dvh {isResizing ? 'cursor-col-resize' : ''}">
         <div class="
-            flex flex-col grow p-4 pt-0 overflow-y-auto max-h-dvh transition-all duration-150 
+            flex flex-col grow p-4 pt-0 overflow-y-auto max-h-dvh transition-all duration-150
             {isResizing ? 'select-none' : ''}
-        " 
+        "
             bind:this={scrollContainer}
             onscroll={() => {
                 showAlternateHeader = (scrollContainer?.scrollTop ?? 0) > 100;
@@ -488,7 +488,7 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                         {#if showAlternateHeader}
                             <p in:fade class="flex grow text-xl font-semibold">{task.name}</p>
                         {:else if showTaskTitle}
-                            <input name="title" class="input input-ghost input-lg w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Workflow title" 
+                            <input name="title" class="input input-ghost input-lg w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Workflow title"
                                 bind:value={task.name}
                             />
                         {:else}
@@ -496,7 +496,7 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                         {/if}
                         <div class="flex shrink-0 items-center gap-2">
                             <div class="flex">
-                                <button class="btn btn-primary w-48 {running ? 'tooltip tooltip-bottom' : ''}" data-tip="Cancel current run" 
+                                <button class="btn btn-primary w-48 {running ? 'tooltip tooltip-bottom' : ''}" data-tip="Cancel current run"
                                     onclick={() => {
                                         if (running && !completed) {
                                             cancelRun();
@@ -508,7 +508,7 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                                     {#if running && !completed}
                                         <Square class="size-4" />
                                     {:else}
-                                        Run <Play class="size-4" /> 
+                                        Run <Play class="size-4" />
                                     {/if}
                                 </button>
                                 <!-- <div class="dropdown dropdown-end">
@@ -544,7 +544,7 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                             <button class="btn btn-ghost btn-square" popoverTarget="task-actions" style="anchor-name: --task-actions-anchor;">
                                 <EllipsisVertical class="text-base-content/50" />
                             </button>
-                        
+
                             <ul class="dropdown flex flex-col gap-1 dropdown-end dropdown-bottom menu w-64 rounded-box bg-base-100 dark:bg-base-300 shadow-sm border border-base-300"
                                 popover="auto" id="task-actions" style="position-anchor: --task-actions-anchor;">
                                 <li>
@@ -553,7 +553,7 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                                             <PencilLine class="size-4" />
                                             Workflow title
                                         </span>
-                                        <input type="checkbox" class="toggle toggle-sm" id="task-title" 
+                                        <input type="checkbox" class="toggle toggle-sm" id="task-title"
                                             checked={showTaskTitle}
                                             onchange={(e) => showTaskTitle = (e.target as HTMLInputElement)?.checked ?? false}
                                         />
@@ -565,7 +565,7 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                                             <ReceiptText class="size-4" />
                                             Workflow description
                                         </span>
-                                        <input type="checkbox" class="toggle toggle-sm" id="task-description" 
+                                        <input type="checkbox" class="toggle toggle-sm" id="task-description"
                                             checked={showTaskDescription}
                                             onchange={(e) => showTaskDescription = (e.target as HTMLInputElement)?.checked ?? false}
                                         />
@@ -583,8 +583,8 @@ Summarize your output in a single paragraph. Do not write in first person -- out
             </div>
             {#if visibleInputs.length > 0}
             <div bind:this={argumentsList}>
-                <DragDropList 
-                    bind:items={visibleInputs} 
+                <DragDropList
+                    bind:items={visibleInputs}
                     scrollContainerEl={scrollContainer}
                     class={showSidebarThread ? '' : 'md:pr-22'}
                     classes={{
@@ -594,7 +594,7 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                 >
                     {#snippet blockHandle({ startDrag })}
                         <div class="flex items-center gap-2">
-                            <TaskInputActions task={task!} availableInputs={hiddenInputs} 
+                            <TaskInputActions task={task!} availableInputs={hiddenInputs}
                                 onAddInput={(input) => {
                                     visibleInputs.push(input);
                                 }}
@@ -607,9 +607,9 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                         </div>
                     {/snippet}
                     {#snippet children({ item: input })}
-                        <TaskInput 
-                            task={task!} 
-                            {input} 
+                        <TaskInput
+                            task={task!}
+                            {input}
                             {inputDescription}
                             {inputDefault}
                             onHideInput={(id) => {
@@ -637,13 +637,13 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                 {#snippet blockHandle({ startDrag, currentItem })}
                     <div class="flex items-center gap-2">
                         {#if currentItem}
-                            <StepActions 
-                                task={task!} 
-                                item={currentItem} 
-                                availableInputs={hiddenInputs} 
+                            <StepActions
+                                task={task!}
+                                item={currentItem}
+                                availableInputs={hiddenInputs}
                                 onAddInput={(input) => {
                                     visibleInputs.push(input);
-                                }} 
+                                }}
                                 onOpenSelectTool={() => {
                                     currentAddingToolForStep = currentItem;
                                     registryToolSelector?.showModal();
@@ -656,7 +656,7 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                     </div>
                 {/snippet}
                 {#snippet children({ item: step })}
-                    <Step 
+                    <Step
                         taskId={taskId}
                         task={task!}
                         {step}
@@ -691,9 +691,9 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                     >
                         {#if running}
                             <div in:fade={{ duration: 150 }}>
-                                <StepRun 
-                                    messages={runSession.get(step.id)?.thread?.messages?.slice(1) ?? []} 
-                                    pending={runSession.get(step.id)?.pending ?? false} 
+                                <StepRun
+                                    messages={runSession.get(step.id)?.thread?.messages?.slice(1) ?? []}
+                                    pending={runSession.get(step.id)?.pending ?? false}
                                     chatLoading={runSession.get(step.id)?.thread?.isLoading ?? false}
                                 />
                             </div>
@@ -710,7 +710,7 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                             The workflow has completed successfully. Here are your summarized results:
                         </p>
 
-                        <p class="text-sm text-center mt-4">The workflow completed <b>{task.steps.length}</b> out of <b>{task.steps.length}</b> steps.</p> 
+                        <p class="text-sm text-center mt-4">The workflow completed <b>{task.steps.length}</b> out of <b>{task.steps.length}</b> steps.</p>
                         <p class="text-sm text-center mt-1">It took a total time of <b>{(totalTime / 1000).toFixed(1)}s</b> to complete.</p>
                         <p class="text-sm text-center mt-1">A total of <b>{totalTokens}</b> tokens were used.</p>
                     </div>
@@ -748,21 +748,21 @@ Summarize your output in a single paragraph. Do not write in first person -- out
         </div>
         {#if showSidebarThread}
             <!-- Resize Handle -->
-            <button 
+            <button
                 type="button"
                 class="w-1 bg-base-300 hover:bg-primary/50 cursor-col-resize transition-all duration-150 shrink-0 active:bg-primary border-none p-0"
                 aria-label="Resize sidebar"
                 onmousedown={startResize}
             ></button>
             <!-- Sidebar Thread -->
-            <div 
-                transition:fly={{ x: 100, duration: 200 }} 
+            <div
+                transition:fly={{ x: 100, duration: 200 }}
                 class="border-l border-l-base-300 bg-base-100 h-dvh flex flex-col shrink-0 {isResizing ? 'select-none' : ''}"
                 style="width: {sidebarWidth}px; min-width: 400px;"
             >
                 <div class="w-full flex justify-between items-center p-4 bg-base-100 shrink-0">
                     <div class="w-full"></div>
-                    <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" data-tip="Close" 
+                    <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" data-tip="Close"
                         onclick={() => {
                             showSidebarThread = false;
                             includeFilesInMessage = [];
@@ -800,7 +800,7 @@ Summarize your output in a single paragraph. Do not write in first person -- out
 
 <TaskRunInputs bind:this={inputsModal} onSubmit={submitRun} {task} additionalInputs={visibleInputs} />
 
-<ConfirmDelete 
+<ConfirmDelete
     bind:this={confirmDeleteStepModal}
     title="Delete this step?"
     message="This step will be permanently deleted and cannot be recovered."
@@ -812,7 +812,7 @@ Summarize your output in a single paragraph. Do not write in first person -- out
     }}
 />
 
-<RegistryToolSelector bind:this={registryToolSelector} 
+<RegistryToolSelector bind:this={registryToolSelector}
     omit={currentAddingToolForStep?.tools ?? []}
     onToolsSelect={(names) => {
         console.log(names);
@@ -820,7 +820,7 @@ Summarize your output in a single paragraph. Do not write in first person -- out
         const stepIndex = task?.steps.findIndex((step) => step.id === currentAddingToolForStep?.id);
         if (stepIndex === undefined) return;
         task!.steps[stepIndex].tools.push(...names);
-    }} 
+    }}
 />
 
 <style lang="postcss">

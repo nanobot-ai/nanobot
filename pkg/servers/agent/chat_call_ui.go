@@ -105,14 +105,14 @@ func (s *Server) describeSession(ctx context.Context, args any) <-chan struct{} 
 	if description == "" && s.agentName != "nanobot.summary" {
 		go func() {
 			defer close(result)
-			ret, err := s.runtime.Call(ctx, "nanobot.summary", "nanobot.summary", args)
+			startMessage, _ := json.Marshal(args)
+			ret, err := s.runtime.Call(ctx, "nanobot.summary", "nanobot.summary", fmt.Sprintf(`{"start_message": "%s"}`, string(startMessage)))
 			if err != nil {
 				return
 			}
 			for _, content := range ret.Content {
 				if content.Type == "text" {
 					description = content.Text
-					startMessage, _ := json.Marshal(args)
 					session.Set(types.DescriptionSessionKey, description)
 					session.Set(types.StartMessageSessionKey, string(startMessage))
 					break
