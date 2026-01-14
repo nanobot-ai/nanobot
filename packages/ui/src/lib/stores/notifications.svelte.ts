@@ -16,7 +16,7 @@ export class NotificationStore {
 					: notification.type !== 'error',
 			duration: notification.duration || (notification.type === 'error' ? 0 : 5000), // errors don't auto-close
 			onConfirm: notification.onConfirm,
-			onCancel: notification.onCancel,
+			onCancel: notification.onCancel
 		};
 
 		this.notifications.push(newNotification);
@@ -55,8 +55,14 @@ export class NotificationStore {
 	info(title: string, message?: string, duration?: number): string {
 		return this.add({ type: 'info', title, message, duration });
 	}
-	
-	action(title: string, message: string, onConfirm: () => void, onCancel?: () => void, duration?: number): string {
+
+	action(
+		title: string,
+		message: string,
+		onConfirm: () => void,
+		onCancel?: () => void,
+		duration?: number
+	): string {
 		return this.add({ type: 'action', title, message, onConfirm, onCancel, duration });
 	}
 }

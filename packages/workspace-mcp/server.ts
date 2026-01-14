@@ -13,30 +13,30 @@ import TerminalRelease from "./src/tools/terminal-release.ts";
 import TerminalWait from "./src/tools/terminal-wait.ts";
 
 const server = new Server(
-  {
-    name: "Nanobot Workspace MCP Server",
-    version: "0.0.1",
-  },
-  {
-    tools: {
-      listDir: ListDir,
-      readTextFile: ReadTextFile,
-      resolvePath: ResolvePath,
-      deleteFile: DeleteFile,
-      writeTextFile: WriteTextFile,
-      terminalCreate: TerminalCreate,
-      terminalKill: TerminalKill,
-      terminalOutput: TerminalOutput,
-      terminalRelease: TerminalRelease,
-      terminalWait: TerminalWait,
-      sessionCreate: SessionCreate,
-      sessionDelete: SessionDelete,
-    },
-  },
+	{
+		name: "Nanobot Workspace MCP Server",
+		version: "0.0.1",
+	},
+	{
+		tools: {
+			listDir: ListDir,
+			readTextFile: ReadTextFile,
+			resolvePath: ResolvePath,
+			deleteFile: DeleteFile,
+			writeTextFile: WriteTextFile,
+			terminalCreate: TerminalCreate,
+			terminalKill: TerminalKill,
+			terminalOutput: TerminalOutput,
+			terminalRelease: TerminalRelease,
+			terminalWait: TerminalWait,
+			sessionCreate: SessionCreate,
+			sessionDelete: SessionDelete,
+		},
+	},
 );
 
 export default server;
 
 if (import.meta.main) {
-  await server.serve(9011);
+	await server.serve(9011);
 }

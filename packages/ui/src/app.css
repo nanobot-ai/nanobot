@@ -112,16 +112,17 @@ body {
 }
 
 .input-ghost {
-    @layer daisyui.l1.l2 {
-        &:focus, &:focus-within {
-            border-color: var(--color-primary);
+	@layer daisyui.l1.l2 {
+		&:focus,
+		&:focus-within {
+			border-color: var(--color-primary);
 			outline-color: var(--color-primary);
-        }
-    }
+		}
+	}
 }
 
 *[popover] {
-	display: none
+	display: none;
 }
 
 *[popover]:popover-open {
@@ -152,11 +153,11 @@ body {
 
 .menu-alert {
 	font-size: var(--text-sm);
-    line-height: var(--tw-leading, var(--text-sm--line-height));
+	line-height: var(--tw-leading, var(--text-sm--line-height));
 	color: var(--color-error);
 	&:hover {
-        @media (hover: hover) {
-            background-color: color-mix(in oklab, var(--color-error) 5%, transparent);
-        }
-    }
+		@media (hover: hover) {
+			background-color: color-mix(in oklab, var(--color-error) 5%, transparent);
+		}
+	}
 }

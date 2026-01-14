@@ -67,13 +67,14 @@ export class Manager implements SandboxManager {
 		if (!cfg.driverConfig && !opts?.create) {
 			throw new Error(`Sandbox ${cfg.id} not created yet`);
 		}
-    if (!cfg.driverConfig && opts?.create) {
-      
-      // Ensure the parent is created, too.
-      if (cfg.parentId) {
-        await this.loadSandbox(await this.#getSandboxConfig(cfg.parentId), { create: true });
-      }
-      
+		if (!cfg.driverConfig && opts?.create) {
+			// Ensure the parent is created, too.
+			if (cfg.parentId) {
+				await this.loadSandbox(await this.#getSandboxConfig(cfg.parentId), {
+					create: true,
+				});
+			}
+
 			cfg.driverConfig = await driver.createSandbox(cfg);
 			await this.fs.set(
 				`./sandboxes/${cfg.id}.json`,
@@ -219,18 +220,18 @@ class CreateOnDemandSandbox implements Sandbox {
 		if (this.sandbox) {
 			return this.sandbox.resolvePath(path);
 		}
-		
+
 		// For CreateOnDemandSandbox, we need to delegate to the underlying sandbox
 		// But if it's not created yet, we can't know the workdir, so we assume absolute paths
 		if (path.startsWith("/")) {
 			return path;
 		}
-		
+
 		// If config.driverConfig exists and has a workdir property, use it
 		if (this.config.driverConfig && "workdir" in this.config.driverConfig) {
 			return `${this.config.driverConfig.workdir}/${path}`;
 		}
-		
+
 		// Default to /workspace if sandbox not created yet
 		return `/workspace/${path}`;
 	}
