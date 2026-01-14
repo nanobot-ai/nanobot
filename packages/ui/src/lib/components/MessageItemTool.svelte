@@ -45,12 +45,7 @@
 					width: `${coords[0]}`,
 					height: `${coords[1]}`
 				};
-			} else if (
-				coords &&
-				typeof coords === 'object' &&
-				'height' in coords &&
-				'width' in coords
-			) {
+			} else if (coords && typeof coords === 'object' && 'height' in coords && 'width' in coords) {
 				return {
 					width: `${coords.width}`,
 					height: `${coords.height}`
@@ -77,7 +72,7 @@
 </script>
 
 <div
-	class="text collapse mt-3 mb-2 w-full border border-base-100 bg-base-100 hover:collapse-arrow hover:border-base-300"
+	class="text collapse w-full border border-base-100 bg-base-100 hover:collapse-arrow hover:border-base-300"
 >
 	<input type="checkbox" />
 	<div class="collapse-title">
@@ -87,7 +82,7 @@
 			{:else}
 				<span class="loading loading-xs loading-spinner"></span>
 			{/if}
-			<span class="text-sm font-medium text-primary/60">Tool call: {item.name}</span>
+			<span class="text-sm font-medium text-primary/60">{item.name}</span>
 		</div>
 	</div>
 	<div class="collapse-content">

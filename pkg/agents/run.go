@@ -491,6 +491,7 @@ func (a *Agents) GetConfigForAgent(ctx context.Context, agentName string) (types
 
 func (a *Agents) configHook(ctx context.Context, baseConfig types.Config, agentName string) (types.Config, error) {
 	session := mcp.SessionFromContext(ctx).Root()
+	_, accountID := types.GetSessionAndAccountID(ctx)
 	var sessionInit types.SessionInitHook
 	session.Get(types.SessionInitSessionKey, &sessionInit)
 
@@ -499,6 +500,7 @@ func (a *Agents) configHook(ctx context.Context, baseConfig types.Config, agentN
 		Agent:     &agent,
 		Meta:      sessionInit.Meta,
 		SessionID: session.ID(),
+		AccountID: accountID,
 	}, "config", nil)
 	if err != nil {
 		return types.Config{}, fmt.Errorf("failed to invoke config hook: %w", err)

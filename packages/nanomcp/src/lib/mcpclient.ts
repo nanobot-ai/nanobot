@@ -34,6 +34,7 @@ export class SimpleClient {
 	readonly #url: string;
 	readonly #fetcher: typeof fetch;
 	#sessionId?: string;
+	#parentSessionId?: string;
 	#initializeResult?: InitializationResult;
 	#initializationPromise?: Promise<void>;
 	readonly #externalSession: boolean;
@@ -51,6 +52,7 @@ export class SimpleClient {
 		workspaceId?: string;
 		workspaceShared?: boolean;
 		sessionId?: string;
+		parentSessionId?: string;
 		logger?: typeof console.log;
 	}) {
 		const baseUrl = opts?.baseUrl || "";
@@ -58,6 +60,7 @@ export class SimpleClient {
 		this.#url = `${baseUrl}${path}`;
 		this.#fetcher = opts?.fetcher || fetch;
 		this.#logger = opts?.logger || console.log;
+		this.#parentSessionId = opts?.parentSessionId;
 		if (opts?.workspaceId) {
 			this.#url += `${this.#url.includes("?") ? "&" : "?"}workspace=${opts.workspaceId}`;
 			if (opts.workspaceShared) {
@@ -167,6 +170,13 @@ export class SimpleClient {
 						clientInfo: {
 							name: "nanobot-ui",
 							version: "0.0.1",
+						},
+						_meta: {
+							...(this.#parentSessionId && {
+								"ai.nanobot": {
+									parentSessionId: this.#parentSessionId,
+								},
+							}),
 						},
 					},
 				};
@@ -366,6 +376,7 @@ export class SimpleClient {
 			progressToken?: string;
 			async?: boolean;
 			abort?: AbortController;
+			meta?: Record<string, unknown>;
 		},
 	): Promise<T> {
 		const result = await this.exchange(
@@ -375,6 +386,7 @@ export class SimpleClient {
 				arguments: opts?.payload || {},
 				...(opts?.async && {
 					_meta: {
+						...(opts.meta || {}),
 						"ai.nanobot.async": true,
 						progressToken: opts?.progressToken,
 					},

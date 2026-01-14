@@ -45,7 +45,7 @@
 		elicitations,
 		onElicitationResult,
 		agent,
-		isLoading,
+		isLoading
 	}: Props = $props();
 
 	let messagesContainer: HTMLElement;

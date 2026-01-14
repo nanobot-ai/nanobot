@@ -17,6 +17,9 @@
 		"ci": "pnpm run check && pnpm run test && pnpm run build",
 		"prepublishOnly": "pnpm run ci"
 	},
+	"exports": {
+		".": "./server.ts"
+	},
 	"dependencies": {
 		"@nanobot-ai/nanomcp": "workspace:*",
 		"@nanobot-ai/workspace-client": "workspace:*"

@@ -126,7 +126,7 @@ func Meta(m map[string]any) map[string]any {
 
 func IsModelTool(t mcp.Tool) bool {
 	uiAttr, _ := t.Meta["ui"].(map[string]any)
-	visibility, _ := uiAttr["visibility"].([]string)
+	visibility, _ := uiAttr["visibility"].([]any)
 	return len(visibility) == 0 || slices.Contains(visibility, "model")
 }
 

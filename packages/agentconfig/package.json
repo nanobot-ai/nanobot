@@ -22,7 +22,6 @@
 	},
 	"dependencies": {
 		"@nanobot-ai/nanomcp": "workspace:*",
-		"@nanobot-ai/workspace-client": "workspace:*",
-		"jsonc-parser": "^3.3.1"
+		"@nanobot-ai/workspace-client": "workspace:*"
 	}
 }

@@ -50,18 +50,20 @@
 			document.documentElement.setAttribute('data-theme', currentTheme);
 		}
 
-		threads = await defaultChatApi.getThreads()
+		threads = await defaultChatApi.getThreads();
 		isLoading = false;
 	});
 
 	$effect(() => {
 		if (currentTheme) {
 			requestAnimationFrame(() => {
-				const logoUrlAttribute = getComputedStyle(document.documentElement).getPropertyValue('--logo-url');
+				const logoUrlAttribute = getComputedStyle(document.documentElement).getPropertyValue(
+					'--logo-url'
+				);
 				currentLogoUrl = logoUrlAttribute || '/assets/nanobot.svg';
 			});
 		}
-	})
+	});
 
 	function toggleDesktopSidebar() {
 		if (browser && window.innerWidth >= 1024) {
@@ -171,7 +173,7 @@
 			<div class="flex-1 overflow-hidden {!isSidebarCollapsed ? 'min-w-80' : ''}">
 				<div class="flex h-full flex-col">
 					<!-- Threads section (takes up ~40% of available space) -->
-					<div class='flex-shrink-0 overflow-y-auto'>
+					<div class="flex-shrink-0 overflow-y-auto">
 						<Threads
 							{threads}
 							onRename={handleRenameThread}

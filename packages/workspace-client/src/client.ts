@@ -113,7 +113,7 @@ export class WorkspaceClient {
 	): Promise<string> {
 		this.ensureConnected();
 
-		const result = await this.client.callTool({
+		const result = await this.#callTool({
 			name: "readTextFile",
 			arguments: {
 				sessionId: this.sessionId,
@@ -156,7 +156,7 @@ export class WorkspaceClient {
 		this.ensureConnected();
 
 		try {
-			const result = await this.client.callTool({
+			const result = await this.#callTool({
 				name: "writeTextFile",
 				arguments: {
 					sessionId: this.sessionId,
@@ -195,7 +195,7 @@ export class WorkspaceClient {
 	): Promise<ListDirResult> {
 		this.ensureConnected();
 
-		const result = await this.client.callTool(
+		const result = await this.#callTool(
 			{
 				name: "listDir",
 				arguments: {
@@ -258,7 +258,7 @@ export class WorkspaceClient {
 	async resolvePath(path: string): Promise<string> {
 		this.ensureConnected();
 
-		const result = await this.client.callTool({
+		const result = await this.#callTool({
 			name: "resolvePath",
 			arguments: {
 				sessionId: this.sessionId,
@@ -278,6 +278,17 @@ export class WorkspaceClient {
 		const firstContent = content[0] as TextContent | undefined;
 		return firstContent?.text || "";
 	}
+
+	#callTool: Client["callTool"] = async (args) => {
+		try {
+			return await this.client.callTool(args);
+		} catch (error) {
+			if (error instanceof Error && error.name === "WorkspaceClientError") {
+				throw error;
+			}
+			throw createError("Failed to call tool", "CALL_TOOL_ERROR", error);
+		}
+	};
 
 	/**
 	 * Creates a new terminal session and executes a command
@@ -301,7 +312,7 @@ export class WorkspaceClient {
 	): Promise<TerminalCreateResult> {
 		this.ensureConnected();
 
-		const result = await this.client.callTool(
+		const result = await this.#callTool(
 			{
 				name: "terminalCreate",
 				arguments: {
@@ -350,7 +361,7 @@ export class WorkspaceClient {
 	async terminalOutput(terminalId: string): Promise<TerminalOutputResult> {
 		this.ensureConnected();
 
-		const result = await this.client.callTool(
+		const result = await this.#callTool(
 			{
 				name: "terminalOutput",
 				arguments: {
@@ -404,7 +415,7 @@ export class WorkspaceClient {
 	async terminalWait(terminalId: string): Promise<TerminalWaitResult> {
 		this.ensureConnected();
 
-		const result = await this.client.callTool(
+		const result = await this.#callTool(
 			{
 				name: "terminalWait",
 				arguments: {
@@ -450,7 +461,7 @@ export class WorkspaceClient {
 	async terminalKill(terminalId: string, signal?: string): Promise<void> {
 		this.ensureConnected();
 
-		const result = await this.client.callTool({
+		const result = await this.#callTool({
 			name: "terminalKill",
 			arguments: {
 				sessionId: this.sessionId,
@@ -476,7 +487,7 @@ export class WorkspaceClient {
 	async terminalRelease(terminalId: string): Promise<void> {
 		this.ensureConnected();
 
-		const result = await this.client.callTool({
+		const result = await this.#callTool({
 			name: "terminalRelease",
 			arguments: {
 				sessionId: this.sessionId,
