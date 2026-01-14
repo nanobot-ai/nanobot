@@ -9,36 +9,33 @@
 	import { fade, fly, slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { WorkspaceService } from '$lib/workspace.svelte';
-	import type { Attachment, WorkspaceClient, WorkspaceFile } from '$lib/types';
+	import type { Attachment, ChatMessage, WorkspaceClient, WorkspaceFile } from '$lib/types';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
 	import { type Input, type Task, type Step as StepType } from './types';
-	import { compileOutputFiles, convertToTask, parseFrontmatterMarkdown, setupEmptyTask } from './utils';
+	import { compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
 	import StepActions from './StepActions.svelte';
 	import TaskInputActions from './TaskInputActions.svelte';
     import TaskInput from './TaskInput.svelte';
 	import Step from './Step.svelte';
 	import RegistryToolSelector from './RegistryToolSelector.svelte';
-	import { onDestroy, onMount } from 'svelte';
+	import { onMount } from 'svelte';
 	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
-    import * as mocks from '$lib/mocks';
-	import { mockTasks } from '$lib/mocks/stores/tasks.svelte';
-	import { setSharedChat, sharedChat } from '$lib/stores/chat.svelte';
-	import { ChatService, type ToolCallInfo } from '$lib/chat.svelte';
+    import { sharedChat } from '$lib/stores/chat.svelte';
+	import { ChatService } from '$lib/chat.svelte';
+	import { renderMarkdown } from '$lib/markdown';
 	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 	import TaskRunInputs from './TaskRunInputs.svelte';
 	import StepRun from '../StepRun.svelte';
 
     type Props = {
-        workspaceId: string;
+        workspace: WorkspaceClient;
         urlTaskId?: string;
     }
-    let { workspaceId, urlTaskId }: Props = $props();
+    let { workspace, urlTaskId }: Props = $props();
 
 	const registryStore = createRegistryStore();
 	setRegistryContext(registryStore);
 
-    let workspace = $state<WorkspaceClient | null>(null);
     let taskId = $state('');
     let task = $state<Task | null>(null);
     let initialLoadComplete = $state(false);
@@ -79,104 +76,155 @@
     let inputDefault = new SvelteMap<string, boolean>();
     let hiddenInputs = $derived(task?.inputs.filter((input) => !visibleInputs.some((visibleInput) => visibleInput.name === input.name)) ?? []);
 
-    // for mocking a run
-    let runSession = new SvelteMap<string, { stepId: string, thread: ChatService, pending: boolean }>();
-    let timeoutHandlers = $state<ReturnType<typeof setTimeout>[]>([]);
-    let totalTime = $state(0);
-    let totalTokens = $state(0);
+    let run = $state<ChatService | null>(null);
+    let runSession = new SvelteMap<string, { stepId: string, messages: ChatMessage[], pending: boolean, completed: boolean }>();
     let running = $state(false);
     let completed = $state(false);
+    
+    // Extract summary text from the last message when workflow completes
+    let runSummary = $derived.by(() => {
+        if (!run || run.messages.length === 0) return '';
+        const lastMessage = run.messages[run.messages.length - 1];
+        if (!lastMessage.items) return '';
+        // Find the text item in the last message
+        const textItem = lastMessage.items.find(item => item.type === 'text' && 'text' in item);
+        const text = textItem && 'text' in textItem ? textItem.text : '';
+        return text ? renderMarkdown(text) : '';
+    });
 
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
-    const workspaceService = new WorkspaceService();
 
-    /** Handle file modifications from chat to update task steps */
-    async function handleFileModified(info: ToolCallInfo) {
-        if (!task || !taskId || !workspace) return;
+    type StepSession = { stepId: string; messages: ChatMessage[]; pending: boolean; completed: boolean };
+    type SessionData = Record<string, StepSession>;
 
-        const filePath = info.filePath;
-        const taskPrefix = `.nanobot/tasks/${taskId}/`;
-        const workspacePrefix = `/workspace/${taskPrefix}`;
+    function isSummaryMessage(message: ChatMessage): boolean {
+        const items = message?.items ?? [];
+        return items.length > 0 && items.every(item => item.type === 'text');
+    }
 
-        // Check if the modified file belongs to this task
-        let relativePath = '';
-        if (filePath.startsWith(workspacePrefix)) {
-            relativePath = filePath.replace(`/workspace/`, '');
-        } else if (filePath.startsWith(taskPrefix)) {
-            relativePath = filePath;
-        }
-
-        if (!relativePath || !relativePath.startsWith(taskPrefix)) return;
-
-        // Extract step identifier (e.g., "TASK.md" or "STEP_1.md")
-        const stepFile = relativePath.replace(taskPrefix, '');
-
+    function parseToolArgs(item: { arguments?: string }): Record<string, unknown> | null {
         try {
-            // Read and parse just the modified file
-            const fileContent = await workspace.readFile(relativePath);
-            const parsed = await parseFrontmatterMarkdown(fileContent);
-
-            // Find the step with matching id and update it
-            const stepIndex = task.steps.findIndex(s => s.id === stepFile);
-            if (stepIndex !== -1) {
-                // Update the step in place
-                task.steps[stepIndex] = {
-                    ...task.steps[stepIndex],
-                    name: parsed.name,
-                    description: parsed.description,
-                    content: parsed.content,
-                    tools: parsed.tools
-                };
-
-                // If this is the TASK.md file, also update task-level properties
-                if (stepFile === 'TASK.md') {
-                    task.name = parsed.taskName;
-                    task.description = parsed.taskDescription;
-                    // Update inputs if provided
-                    if (parsed.inputs.length > 0) {
-                        task.inputs = parsed.inputs;
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('Failed to update step after file modification:', error);
+            return JSON.parse(item.arguments || '{}');
+        } catch {
+            return null;
         }
     }
 
-    onMount(() => {
-        const isMock = mocks.workspaceIds.includes(workspaceId);
-        workspace = isMock ? mocks.workspaceInstances[workspaceId] : workspaceService.getWorkspace(workspaceId);
-        registryStore.fetch();
-    });
+    function getStepIdFromExecuteTask(args: Record<string, unknown>, steps: StepType[]): string {
+        if (args.filename) {
+            const step = steps.find(s => s.id === args.filename);
+            return step?.id ?? '';
+        }
+        return steps[0]?.id ?? '';
+    }
 
-    onDestroy(() => {
-        sharedChat.current?.close();
-        runSession.forEach((session) => session.thread.close());
-        runSession.clear();
-    });
+    function createStepSession(stepId: string): StepSession {
+        return { stepId, messages: [], pending: true, completed: false };
+    }
+
+    function processExecuteTaskStep(
+        item: { name?: string; arguments?: string },
+        steps: StepType[],
+        sessionData: SessionData,
+        currentStepId: string
+    ): string {
+        const args = parseToolArgs(item);
+        if (!args) return currentStepId;
+
+        const stepId = getStepIdFromExecuteTask(args, steps);
+        if (stepId && !sessionData[stepId]) {
+            sessionData[stepId] = createStepSession(stepId);
+        }
+        return stepId || currentStepId;
+    }
+
+    function processTaskStepStatus(
+        item: { name?: string; arguments?: string },
+        sessionData: SessionData,
+        activeStepId: string
+    ): void {
+        if (!activeStepId) return;
+
+        const args = parseToolArgs(item);
+        if (!args) return;
+
+        const session = sessionData[activeStepId];
+        if (session && (args.status === 'succeeded' || args.status === 'failed')) {
+            session.pending = false;
+            session.completed = true;
+        }
+    }
+
+    function processMessage(
+        message: ChatMessage,
+        steps: StepType[],
+        sessionData: SessionData,
+        activeStepId: string,
+        skipMessage: boolean
+    ): string {
+        const items = message.items ?? [];
+
+        // Process tool calls in this message
+        for (const item of items) {
+            if (item.type === 'tool' && 'name' in item) {
+                if (item.name === 'ExecuteTaskStep') {
+                    activeStepId = processExecuteTaskStep(item, steps, sessionData, activeStepId);
+                } else if (item.name === 'TaskStepStatus') {
+                    processTaskStepStatus(item, sessionData, activeStepId);
+                }
+            }
+        }
+
+        if (!skipMessage && activeStepId && sessionData[activeStepId]) {
+            const session = sessionData[activeStepId];
+            if (!session.messages.some(m => m.id === message.id)) {
+                session.messages.push(message);
+            }
+        }
+
+        return activeStepId;
+    }
+
+    function buildSessionData(messages: ChatMessage[], steps: StepType[]): SessionData {
+        const sessionData: SessionData = {};
+        let activeStepId = '';
+
+        const lastMessage = messages[messages.length - 1];
+        const hasTrailingSummary = lastMessage && isSummaryMessage(lastMessage);
+
+        for (let i = 0; i < messages.length; i++) {
+            const isLastMessage = i === messages.length - 1;
+            const skipMessage = isLastMessage && hasTrailingSummary;
+
+            activeStepId = processMessage(messages[i], steps, sessionData, activeStepId, skipMessage);
+        }
+
+        return sessionData;
+    }
+
+    function areAllStepsCompleted(steps: StepType[], sessionData: SessionData): boolean {
+        return steps.every(step => sessionData[step.id]?.completed);
+    }
 
     $effect(() => {
-        if (workspace && !sharedChat.current) {
-            initChat();
+        // Update runSession during a task run
+        if (!run || !task || run.messages.length === 0) return;
+
+        const sessionData = buildSessionData(run.messages, task.steps);
+
+        for (const [stepId, data] of Object.entries(sessionData)) {
+            runSession.set(stepId, data);
+        }
+
+        if (areAllStepsCompleted(task.steps, sessionData)) {
+            completed = true;
         }
     })
 
-    async function initChat() {
-        const isMock = mocks.workspaceIds.includes(workspaceId);
-        const chat = isMock ? sharedChat.current : await workspace?.newSession({ editor: true });
-        if (chat) {
-            if (!isMock) {
-                chat.setCallbacks({
-                    onFileModified: handleFileModified,
-                    onChatDone: () => {
-                        workspace?.load();
-                    }
-                });
-            }
-            setSharedChat(chat);
-        }
-    }
+    onMount(() => {
+        registryStore.fetch();
+    });
 
     function debouncedSave() {
         if (saveTimeout) {
@@ -263,12 +311,7 @@
         if (!workspace) return;
         initialLoadComplete = false;
         task = null;
-
-        if (mocks.taskIds.includes(idToUse)) {
-            task = mocks.taskData[idToUse];
-        } else {
-            task = await convertToTask(workspace, files, idToUse);
-        }
+        task = await convertToTask(workspace, files, idToUse);
         taskId = idToUse;
 
         stepDescription.clear();
@@ -305,7 +348,6 @@
 
     $effect(() => {
         const files = workspace?.files ?? [];
-
         if (urlTaskId && workspace && urlTaskId !== taskId && files.length > 0) {
             compileTask(urlTaskId, files);
         }
@@ -345,19 +387,16 @@
         if (task.inputs.length > 0) {
             inputsModal?.showModal();
         } else {
+            running = true;
+            runSession.clear();
             submitRun();
         }
     }
 
     function cancelRun() {
-        runSession.forEach((session) => session.thread.close());
-        runSession.clear();
         running = false;
         completed = false;
-        notifications.success('Workflow cancelled');
-        timeoutHandlers.forEach((handler) => clearTimeout(handler));
-        timeoutHandlers = [];
-        totalTime = 0;
+        notifications.info('Workflow cancelled');
     }
 
     function startResize(e: MouseEvent) {
@@ -382,92 +421,10 @@
         document.addEventListener('mouseup', onMouseUp);
     }
 
-    // TODO: change below to actually hit the run task endpoint once available
     async function submitRun(formData?: (Input & { value: string })[]) {
-        // navigate to run page
-        const created = new Date().toISOString();
-        const runId = crypto.randomUUID();
-
-        if (mocks.taskIds.includes(taskId)) {
-            const content = { id: runId, created, arguments: formData };
-            mockTasks.addRun(taskId, content);
-
-            runMockTask(runId, formData);
-        } else {
-            // TODO: actual impl
-            const chat = await workspace?.newSession();
-            await chat?.sendToolCall('ExecuteTaskStep', {taskName: taskId, arguments: formData});
-        }
-    }
-
-    async function runMockTask(runId: string, formData?: (Input & { value: string })[]) {
-        if (!task) return;
-
-        running = true;
-        const startTime = Date.now();
-        let stepSessions = [];
-        runSession.forEach((session) => session.thread.close());
-        runSession.clear();
-        // isStickToBottom = true; // Reset stick-to-bottom when starting a new run
-        let priorSteps = '';
-        let priorResponse = '';
-
-        for (const step of task.steps) {
-            const thread = workspace?.newSession ? await workspace?.newSession() : new ChatService();
-            runSession.set(step.id, { thread: thread!, stepId: step.id, pending: true });
-        }
-
-        // showSidebarThread = true;
-        for (const step of task.steps) {
-            runSession.set(step.id, { ...runSession.get(step.id)!, pending: false });
-
-            const message = `
-You are a task runner. You are given a task and a list of steps to run. You are to run the task step by step. \n\n
-
-You have the following arguments:
-${JSON.stringify(formData)} \n\n
-
-${priorSteps.length > 0 ? `
-You have already run the following steps:
-${priorSteps}
-` : ''} \n\n
-
-${priorResponse.length > 0 ? `
-You have given the following response to the previous step(s):
-${priorResponse}
-` : ''} \n\n
-
-You are currently running the following step: \n
-Step name: ${step.name} \n
-Step description: ${step.description} \n
-Step content: ${step.content} \n\n
-\n\n You have the following tools available to you:
-${step.tools.join(', ')}
-\n\n Do not indicate that you are simulating or mocking any data; act as if you have the tools available to you. Act as if you are actually running the task. \n
-If you make a tool call, only try once. If you fail, do not try again. And if you failed, act as if you had succeeded. \n
-Summarize your output in a single paragraph. Do not write in first person -- output as if you are a process.
-            `;
-
-            // Wait for this thread to complete before starting the next one
-            const response = await runSession.get(step.id)?.thread?.sendMessage(message);
-            if (response) {
-                priorResponse += `${step.id} response: ${response.message}\n\n`;
-                const threadId = runSession.get(step.id)?.thread?.chatId;
-                if (threadId) {
-                    stepSessions.push({ stepId: step.id, threadId });
-                    mockTasks.updateRun(taskId, runId, stepSessions, totalTokens, totalTime);
-                }
-            }
-
-            priorSteps += `Step ${step.id}: ${step.name} \n\n`;
-        }
-
-        totalTime = Date.now() - startTime;
-        const finalHandler = setTimeout(() => {
-            completed = true;
-            totalTokens = Math.floor(Math.random() * 9000) + 1000;
-        }, 1000);
-        timeoutHandlers.push(finalHandler);
+        if (!task || !workspace) return;
+        run = await workspace.newSession();
+        await run?.sendToolCall('ExecuteTaskStep', {taskName: taskId, arguments: formData});
     }
 </script>
 
@@ -692,9 +649,8 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                         {#if running}
                             <div in:fade={{ duration: 150 }}>
                                 <StepRun
-                                    messages={runSession.get(step.id)?.thread?.messages?.slice(1) ?? []}
+                                    messages={runSession.get(step.id)?.messages ?? []}
                                     pending={runSession.get(step.id)?.pending ?? false}
-                                    chatLoading={runSession.get(step.id)?.thread?.isLoading ?? false}
                                 />
                             </div>
                         {/if}
@@ -703,16 +659,21 @@ Summarize your output in a single paragraph. Do not write in first person -- out
             </DragDropList>
 
             {#if completed}
-                <div in:fade out:slide={{ axis: 'y', duration: 150 }} class="w-full flex flex-col justify-center items-center py-4 pl-22 {showSidebarThread ? '' : 'md:pr-22'}">
+                <div in:fade out:slide={{ axis: 'y', duration: 150 }} class="w-full flex flex-col justify-center items-center pl-22 pb-4 {showSidebarThread ? '' : 'md:pr-22'}">
                     <div class="w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field p-6 pb-8">
                         <h4 class="text-xl font-semibold">Workflow Completed</h4>
-                        <p class="text-sm text-base-content/50 text-center mt-1">
+                        <p class="text text-base-content/50 text-center mt-1">
                             The workflow has completed successfully. Here are your summarized results:
                         </p>
 
-                        <p class="text-sm text-center mt-4">The workflow completed <b>{task.steps.length}</b> out of <b>{task.steps.length}</b> steps.</p>
-                        <p class="text-sm text-center mt-1">It took a total time of <b>{(totalTime / 1000).toFixed(1)}s</b> to complete.</p>
-                        <p class="text-sm text-center mt-1">A total of <b>{totalTokens}</b> tokens were used.</p>
+                        <p class="text text-center mt-4">The workflow completed <b>{task.steps.length}</b> out of <b>{task.steps.length}</b> steps.</p>
+                        <!-- <p class="text-sm text-center mt-1">It took a total time of <b>{(totalTime / 1000).toFixed(1)}s</b> to complete.</p>
+                        <p class="text-sm text-center mt-1">A total of <b>{totalTokens}</b> tokens were used.</p> -->
+                        {#if runSummary}
+                            <div class="prose mt-4 text-left w-full max-w-none">
+                                {@html runSummary}
+                            </div>
+                        {/if}
                     </div>
                 </div>
             {/if}
@@ -773,9 +734,7 @@ Summarize your output in a single paragraph. Do not write in first person -- out
                 </div>
                 <div class="w-full flex-1 min-h-0 flex flex-col">
                     {#if sharedChat.current}
-                        {#key sharedChat.current.chatId}
-                            <ThreadFromChat inline chat={sharedChat.current} files={includeFilesInMessage} agent={{ name: 'Workflow Assistant', icon: '/assets/obot-icon-blue.svg' }} />
-                        {/key}
+                        <ThreadFromChat inline chat={sharedChat.current} files={includeFilesInMessage} agent={{ name: 'Workflow Assistant', icon: '/assets/obot-icon-blue.svg' }} />
                     {/if}
                 </div>
             </div>

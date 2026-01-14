@@ -3,11 +3,15 @@ import { $prose } from '@milkdown/kit/utils';
 import type { Node } from '@milkdown/prose/model';
 import { Plugin, PluginKey } from '@milkdown/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/prose/view';
+import type { EditorView } from '@milkdown/prose/view';
 
 const variablePillKey = new PluginKey('variablePill');
 
 // Regex to match $VariableName (alphanumeric and underscores after $)
 const VARIABLE_REGEX = /\$([a-zA-Z_][a-zA-Z0-9_]*)/g;
+
+// Regex to match partial variable input ($ followed by optional letters)
+const PARTIAL_VARIABLE_REGEX = /\$([a-zA-Z_][a-zA-Z0-9_]*)?$/;
 
 // Separator characters that complete a variable (space, non-breaking space, dash, slash)
 const SEPARATOR_CHARS = new Set([' ', '\u00A0', '-', '/']);
@@ -15,6 +19,160 @@ const SEPARATOR_CHARS = new Set([' ', '\u00A0', '-', '/']);
 export interface VariablePillOptions {
 	onVariableAddition?: (variable: string) => void;
 	onVariableDeletion?: (variable: string) => void;
+	getAvailableVariables?: () => string[];
+}
+
+// Autocomplete state
+interface AutocompleteState {
+	active: boolean;
+	query: string;
+	startPos: number;
+	endPos: number;
+	selectedIndex: number;
+	suggestions: string[];
+}
+
+// Create autocomplete dropdown element
+function createAutocompleteDropdown(): HTMLElement {
+	const dropdown = document.createElement('div');
+	dropdown.className = 'variable-autocomplete-dropdown';
+	dropdown.style.cssText = `
+		position: absolute;
+		z-index: 1000;
+		background: var(--color-base-100, #fff);
+		border: 1px solid var(--color-base-300, #e5e5e5);
+		border-radius: 8px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+		max-height: 200px;
+		overflow-y: auto;
+		min-width: 150px;
+		display: none;
+	`;
+	document.body.appendChild(dropdown);
+	return dropdown;
+}
+
+// Render autocomplete suggestions
+function renderAutocompleteSuggestions(
+	dropdown: HTMLElement,
+	suggestions: string[],
+	selectedIndex: number,
+	onSelect: (variable: string) => void
+): void {
+	dropdown.innerHTML = '';
+
+	if (suggestions.length === 0) {
+		dropdown.style.display = 'none';
+		return;
+	}
+
+	suggestions.forEach((variable, index) => {
+		const item = document.createElement('div');
+		item.className = 'variable-autocomplete-item';
+		item.textContent = `$${variable}`;
+		item.style.cssText = `
+			padding: 8px 12px;
+			cursor: pointer;
+			font-family: var(--default-font-family);
+			font-size: 14px;
+			color: var(--color-base-content, #333);
+			${index === selectedIndex ? 'background: var(--color-primary, #3b82f6); color: var(--color-primary-content, #fff);' : ''}
+		`;
+
+		item.addEventListener('mouseenter', () => {
+			// Update visual selection on hover
+			dropdown.querySelectorAll('.variable-autocomplete-item').forEach((el, i) => {
+				(el as HTMLElement).style.background = i === index ? 'var(--color-primary, #3b82f6)' : '';
+				(el as HTMLElement).style.color =
+					i === index ? 'var(--color-primary-content, #fff)' : 'var(--color-base-content, #333)';
+			});
+		});
+
+		item.addEventListener('mousedown', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			onSelect(variable);
+		});
+
+		dropdown.appendChild(item);
+	});
+
+	dropdown.style.display = 'block';
+}
+
+// Position the dropdown near the cursor
+function positionDropdown(dropdown: HTMLElement, view: EditorView, pos: number): void {
+	const coords = view.coordsAtPos(pos);
+
+	dropdown.style.left = `${coords.left}px`;
+	dropdown.style.top = `${coords.bottom + 4}px`;
+
+	// Ensure dropdown doesn't go off-screen
+	requestAnimationFrame(() => {
+		const dropdownRect = dropdown.getBoundingClientRect();
+		if (dropdownRect.right > window.innerWidth) {
+			dropdown.style.left = `${window.innerWidth - dropdownRect.width - 8}px`;
+		}
+		if (dropdownRect.bottom > window.innerHeight) {
+			dropdown.style.top = `${coords.top - dropdownRect.height - 4}px`;
+		}
+	});
+}
+
+// Get text before cursor in the current text node
+function getTextBeforeCursor(doc: Node, pos: number): { text: string; startPos: number } | null {
+	try {
+		const $pos = doc.resolve(pos);
+		const parent = $pos.parent;
+
+		if (!parent.isTextblock) return null;
+
+		const textContent = parent.textContent;
+		const offset = $pos.parentOffset;
+		const textBefore = textContent.slice(0, offset);
+
+		// Find the start position of the parent textblock content
+		const startPos = pos - offset;
+
+		return { text: textBefore, startPos };
+	} catch {
+		return null;
+	}
+}
+
+// Check for partial variable input and return autocomplete state
+function checkForAutocomplete(
+	doc: Node,
+	pos: number,
+	getAvailableVariables: () => string[]
+): AutocompleteState | null {
+	const textInfo = getTextBeforeCursor(doc, pos);
+	if (!textInfo) return null;
+
+	const { text, startPos } = textInfo;
+	const match = text.match(PARTIAL_VARIABLE_REGEX);
+
+	if (!match) return null;
+
+	const query = match[1] || '';
+	const matchStart = startPos + match.index!;
+	const available = getAvailableVariables();
+
+	// Filter suggestions (case insensitive)
+	const suggestions = available.filter((v) => v.toLowerCase().startsWith(query.toLowerCase()));
+
+	// Don't show autocomplete if no suggestions or exact match already typed
+	if (suggestions.length === 0) return null;
+	if (suggestions.length === 1 && suggestions[0].toLowerCase() === query.toLowerCase()) return null;
+
+	return {
+		active: true,
+		query,
+		startPos: matchStart,
+		endPos: pos,
+		selectedIndex: 0,
+		suggestions
+	};
 }
 
 interface VariableMatch {
@@ -244,6 +402,75 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 		const pendingVariableTimers = new Map<string, ReturnType<typeof setTimeout>>();
 		const DEBOUNCE_MS = 500;
 
+		// Autocomplete state
+		let autocompleteState: AutocompleteState | null = null;
+		let autocompleteDropdown: HTMLElement | null = null;
+		let currentView: EditorView | null = null;
+
+		// Function to insert selected variable
+		function insertVariable(variable: string) {
+			if (!currentView || !autocompleteState) return;
+
+			const { state } = currentView;
+			const tr = state.tr.replaceWith(
+				autocompleteState.startPos,
+				autocompleteState.endPos,
+				state.schema.text(`$${variable} `)
+			);
+			currentView.dispatch(tr);
+			hideAutocomplete();
+		}
+
+		// Function to hide autocomplete
+		function hideAutocomplete() {
+			autocompleteState = null;
+			if (autocompleteDropdown) {
+				autocompleteDropdown.style.display = 'none';
+			}
+		}
+
+		// Function to update autocomplete
+		function updateAutocomplete(view: EditorView) {
+			if (!options.getAvailableVariables) {
+				hideAutocomplete();
+				return;
+			}
+
+			currentView = view;
+			const { state } = view;
+			const { selection } = state;
+
+			if (!selection.empty) {
+				hideAutocomplete();
+				return;
+			}
+
+			const newState = checkForAutocomplete(
+				state.doc,
+				selection.from,
+				options.getAvailableVariables
+			);
+
+			if (!newState) {
+				hideAutocomplete();
+				return;
+			}
+
+			// Create dropdown if it doesn't exist
+			if (!autocompleteDropdown) {
+				autocompleteDropdown = createAutocompleteDropdown();
+			}
+
+			autocompleteState = newState;
+			positionDropdown(autocompleteDropdown, view, newState.startPos);
+			renderAutocompleteSuggestions(
+				autocompleteDropdown,
+				newState.suggestions,
+				newState.selectedIndex,
+				insertVariable
+			);
+		}
+
 		return new Plugin({
 			key: variablePillKey,
 			state: {
@@ -320,6 +547,19 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 									const atEnd = isAtEndOfDocument(tr.doc, newVar.end);
 
 									if (hasSep || hasBlock || atEnd) {
+										// If user explicitly typed a separator, always add the variable
+										// Only skip if at end of document and variable could be autocompleted
+										if (!hasSep && !hasBlock && atEnd && options.getAvailableVariables) {
+											const available = options.getAvailableVariables();
+											const couldBeAutocompleted = available.some(
+												(v) =>
+													v.toLowerCase() !== prevVar.variable.toLowerCase() &&
+													v.toLowerCase().startsWith(prevVar.variable.toLowerCase())
+											);
+											if (couldBeAutocompleted) {
+												continue; // Don't add this variable yet, user might be autocompleting
+											}
+										}
 										options.onVariableAddition(prevVar.variable);
 										completedVariables.add(key);
 									}
@@ -348,6 +588,20 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 							const atEnd = isAtEndOfDocument(tr.doc, newVar.end);
 
 							if (hasSep || hasBlock || atEnd) {
+								// If user explicitly typed a separator, always add the variable
+								// Only skip if at end of document and variable could be autocompleted
+								if (!hasSep && !hasBlock && atEnd && options.getAvailableVariables) {
+									const available = options.getAvailableVariables();
+									const couldBeAutocompleted = available.some(
+										(v) =>
+											v.toLowerCase() !== newVar.variable.toLowerCase() &&
+											v.toLowerCase().startsWith(newVar.variable.toLowerCase())
+									);
+									if (couldBeAutocompleted) {
+										continue; // Don't add this variable yet, user might be autocompleting
+									}
+								}
+
 								// Clear any existing timer for this key
 								if (pendingVariableTimers.has(key)) {
 									clearTimeout(pendingVariableTimers.get(key));
@@ -358,6 +612,18 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 									pendingVariableTimers.delete(key);
 									// Double-check the variable still exists and isn't already completed
 									if (!completedVariables.has(key)) {
+										// Re-check if variable could be autocompleted
+										if (options.getAvailableVariables) {
+											const available = options.getAvailableVariables();
+											const couldBeAutocompleted = available.some(
+												(v) =>
+													v.toLowerCase() !== newVar.variable.toLowerCase() &&
+													v.toLowerCase().startsWith(newVar.variable.toLowerCase())
+											);
+											if (couldBeAutocompleted) {
+												return; // Don't add - user might be autocompleting
+											}
+										}
 										if (options.onVariableAddition) {
 											options.onVariableAddition(newVar.variable);
 										}
@@ -417,6 +683,55 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 				handleKeyDown(view, event) {
 					const { state } = view;
 					const { selection } = state;
+
+					// Handle autocomplete keyboard navigation
+					if (autocompleteState && autocompleteState.active) {
+						if (event.key === 'ArrowDown') {
+							event.preventDefault();
+							autocompleteState.selectedIndex = Math.min(
+								autocompleteState.selectedIndex + 1,
+								autocompleteState.suggestions.length - 1
+							);
+							if (autocompleteDropdown) {
+								renderAutocompleteSuggestions(
+									autocompleteDropdown,
+									autocompleteState.suggestions,
+									autocompleteState.selectedIndex,
+									insertVariable
+								);
+							}
+							return true;
+						}
+
+						if (event.key === 'ArrowUp') {
+							event.preventDefault();
+							autocompleteState.selectedIndex = Math.max(autocompleteState.selectedIndex - 1, 0);
+							if (autocompleteDropdown) {
+								renderAutocompleteSuggestions(
+									autocompleteDropdown,
+									autocompleteState.suggestions,
+									autocompleteState.selectedIndex,
+									insertVariable
+								);
+							}
+							return true;
+						}
+
+						if (event.key === 'Enter' || event.key === 'Tab') {
+							event.preventDefault();
+							const selectedVar = autocompleteState.suggestions[autocompleteState.selectedIndex];
+							if (selectedVar) {
+								insertVariable(selectedVar);
+							}
+							return true;
+						}
+
+						if (event.key === 'Escape') {
+							event.preventDefault();
+							hideAutocomplete();
+							return true;
+						}
+					}
 
 					// Only handle when there's no text selection (cursor is collapsed)
 					if (!selection.empty) return false;
@@ -484,6 +799,11 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 					mousedown(view, event) {
 						const target = event.target as HTMLElement;
 
+						// Hide autocomplete if clicking outside
+						if (autocompleteDropdown && !autocompleteDropdown.contains(target)) {
+							hideAutocomplete();
+						}
+
 						// Handle click on delete button (::after pseudo-element area)
 						if (target.classList.contains('variable-pill-completed')) {
 							const rect = target.getBoundingClientRect();
@@ -504,8 +824,33 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 						}
 
 						return false;
+					},
+
+					blur() {
+						// Delay hiding to allow click events on autocomplete items
+						setTimeout(() => {
+							hideAutocomplete();
+						}, 150);
+						return false;
 					}
 				}
+			},
+
+			view(editorView) {
+				currentView = editorView;
+				return {
+					update(view) {
+						currentView = view;
+						updateAutocomplete(view);
+					},
+					destroy() {
+						if (autocompleteDropdown) {
+							autocompleteDropdown.remove();
+							autocompleteDropdown = null;
+						}
+						currentView = null;
+					}
+				};
 			}
 		});
 	});

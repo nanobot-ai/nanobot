@@ -1,17 +1,24 @@
 <script lang="ts">
     import type { Workspace } from "$lib/types";
 	import { Search, X } from "@lucide/svelte";
-    import * as mocks from '$lib/mocks';
 
     interface Props {
         sharingWorkspace?: Workspace | null;
         onCancel?: () => void;
         onShare?: () => void;
     }
+
+    interface User {
+        name: string;
+        email: string;
+        id: string;
+    }
+
     let { sharingWorkspace, onCancel, onShare }: Props = $props();
     let shareWorkspaceModal = $state<HTMLDialogElement | null>(null);
     let query = $state('');
-    let selected = $state<typeof mocks.users[number][]>([]);
+    let selected = $state<User[]>([]);
+    let users = $state<User[]>([]);
 
     export function showModal() {
         query = '';
@@ -19,7 +26,7 @@
         shareWorkspaceModal?.showModal();
     }
 
-    let results = $derived(mocks.users.filter(user => 
+    let results = $derived(users.filter(user => 
         (user.name.toLowerCase().includes(query.toLowerCase()) 
         || user.email.toLowerCase().includes(query.toLowerCase()))
         && !selected.some(s => s.id === user.id)

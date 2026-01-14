@@ -89,7 +89,7 @@
                 />
             </label>
         </li>
-        {#if name.length > 0 && task!.inputs.some((input) => input.name === name)}
+        {#if name.length > 0 && task!.inputs.some((input) => input.name === name) && task!.steps.some((step) => new RegExp(`\\$${name}(?![a-zA-Z0-9_])`).test(step.content))}
             <li>
                 <button class="flex items-center gap-2"
                     onclick={() => { onHideInput(id) }}

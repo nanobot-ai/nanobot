@@ -1,33 +1,25 @@
 <script lang="ts">
 	import { createRegistryStore, getRegistryContext, setRegistryContext } from "$lib/context/registry.svelte";
 	import type { WorkspaceClient, WorkspaceFile } from "$lib/types";
-	import { WorkspaceService } from "$lib/workspace.svelte";
-	import { onDestroy, onMount, untrack } from "svelte";
+	import { onMount, untrack } from "svelte";
 	import { convertToTask } from "./utils";
 	import type { Input, Task } from "./types";
 	import { fade, slide } from "svelte/transition";
 	import { Circle, CircleCheck, ListTodo, LoaderCircle, Play, Square, Wrench } from "@lucide/svelte";
-	import { setSharedChat, sharedChat } from "$lib/stores/chat.svelte";
 	import { SvelteMap } from "svelte/reactivity";
-    import * as mocks from '$lib/mocks';
-	import { ChatService } from "$lib/chat.svelte";
-	import { mockTasks } from "$lib/mocks/stores/tasks.svelte";
-	import TaskRunInputs from "./TaskRunInputs.svelte";
+    import TaskRunInputs from "./TaskRunInputs.svelte";
 	
     type Props = {
-        workspaceId: string;
+        workspace: WorkspaceClient;
         urlTaskId: string;
         runId?: string;
     }
-    let { workspaceId, urlTaskId, runId }: Props = $props();
+    let { workspace, urlTaskId, runId }: Props = $props();
     
     const registryStore = createRegistryStore();
 	setRegistryContext(registryStore);
     const registry = getRegistryContext();
 
-    const workspaceService = new WorkspaceService();
-    
-    let workspace = $state<WorkspaceClient | null>(null);
     let task = $state<Task | null>(null);
     let initialLoadComplete = $state(false);
     let compiling = $state(false);
@@ -61,45 +53,25 @@
     let stepSummaries = $state<{ step: string, summary: string }[]>([]);
     
     onMount(() => {
-        const isMock = mocks.workspaceIds.includes(workspaceId);
-        if (urlTaskId && workspaceId) {
-            workspace = isMock ? mocks.workspaceInstances[workspaceId] : workspaceService.getWorkspace(workspaceId);
+        if (urlTaskId) {
             registryStore.fetch();
         }
     });
 
-    async function initChat() {
-        const isMock = mocks.workspaceIds.includes(workspaceId);
-        const chat = isMock ? new ChatService() : await workspace?.newSession({ editor: true });
-        if (chat) {
-            setSharedChat(chat);
-        }
-    }
-
-    $effect(() => {
-        if (workspace && !sharedChat.current) {
-            initChat();
-        }
-    })
-
     $effect(() => {
         if (runId) {
             completed = true;
-            stepSummaries = mocks.stepSummaries[urlTaskId];
-            const matchingTaskRun = mockTasks.current.tasks.find((task) => task.id === urlTaskId)?.runs.find((run) => run.id === runId);
-            runArguments = matchingTaskRun?.arguments ?? [];
-            runTime = matchingTaskRun?.created ?? '';
-            totalTokens = matchingTaskRun?.totalTokens ?? Math.floor(Math.random() * 9000) + 1000;
-            totalTime = matchingTaskRun?.totalTime ?? Math.floor(Math.random() * 4000) + 1000;
+            // TODO: get these from actual task run
+            stepSummaries = []; 
+            runArguments = [];
+            runTime = '';
+            totalTokens = 0;
+            totalTime = 0;
         } else {
             completed = false;
             stepSummaries = [];
         }
     })
-    
-    onDestroy(() => {
-        sharedChat.current?.close();
-    });
 
     async function compileTask(id: string, files: WorkspaceFile[]) {
         if (!workspace || !id || compiling) return;
@@ -119,11 +91,7 @@
             }, 3000);
         }, 1000);
 
-        if (mocks.taskIds.includes(id)) {
-            task = mocks.taskData[id];
-        } else {
-            task = await convertToTask(workspace, files, id);
-        }
+        task = await convertToTask(workspace, files, id);
         clearTimeout(progressTimeout);
         progress = 100;
 
@@ -163,18 +131,9 @@
         totalTokens = 0;
         runArguments = formData;
 
-        if (mocks.taskIds.includes(urlTaskId)) {
-            mockTasks.addRun(urlTaskId, {
-                id: crypto.randomUUID(),
-                created: new Date().toISOString(),
-                arguments: formData,
-                stepSessions: [],
-            });
-        }
-
         let timeout = 0;
         let tokenCount = 0;
-        for (const [index, step] of task.steps.entries()) {
+        for (const step of task.steps) {
             timeout += 1000;
             const handlerA = setTimeout(() => {
                 ongoingSteps.set(step.id, { loading: true, completed: false, oauth: '' });
@@ -187,7 +146,8 @@
 
             const handlerB = setTimeout(() => {
                 ongoingSteps.set(step.id, { loading: false, completed: true, totalTime: completeTime, tokens, oauth: '' });
-                stepSummaries.push(mocks.stepSummaries[urlTaskId][index]);
+                // TODO: get step summaries from actual task run
+                stepSummaries.push({ step: step.id, summary: '' });
             }, timeout);
             timeoutHandlers.push(handlerA, handlerB);
         }

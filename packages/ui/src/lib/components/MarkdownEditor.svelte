@@ -173,6 +173,7 @@ import { replaceAll } from '@milkdown/kit/utils';
         --crepe-color-hover: var(--color-base-300);
         --crepe-color-selected: var(--color-base-300);
         --crepe-color-inline-area: var(--color-base-300);
+        --crepe-font-family: var(--default-font-family);
     }
 
     :global(.milkdown .ProseMirror) {

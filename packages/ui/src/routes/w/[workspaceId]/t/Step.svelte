@@ -84,11 +84,12 @@
             }
         },
 		onVariableDeletion: (variable: string) => {
+            const variableRegex = new RegExp(`\\$${variable}(?![a-zA-Z0-9_])`);
             const stillExists = task?.steps.some((stepToCheck) => {
                 if (stepToCheck.id === step.id) {
                     return false; // already know this step removed the variable so return false
                 }
-                return stepToCheck.content.includes(`$${variable}`);
+                return variableRegex.test(stepToCheck.content);
             });
             if (!stillExists) {
                 const hasVisible = visibleInputs.some((input) => input.name === variable);
@@ -105,6 +106,13 @@
                     onRemoveTaskInput?.(variable);
                 }
             }
+        },
+        getAvailableVariables: () => {
+            // Combine task inputs and visible inputs, returning unique variable names
+            const taskInputNames = task?.inputs.map((input) => input.name) || [];
+            const visibleInputNames = visibleInputs.map((input) => input.name);
+            const allNames = [...new Set([...taskInputNames, ...visibleInputNames])];
+            return allNames;
         },
 	});
 </script>

@@ -5,6 +5,8 @@
 	import { onDestroy } from 'svelte';
 	import TaskEditor from './TaskEditor.svelte';
 	import TaskRunner from './TaskRunner.svelte';
+	import { WorkspaceService } from '$lib/workspace.svelte';
+	import type { WorkspaceClient } from '$lib/types';
 
     let { data } = $props();
     let workspaceId = $derived(data.workspaceId);
@@ -12,18 +14,36 @@
     let runOnly = $derived(page.url.searchParams.get('run') === 'true');
     let runId = $derived(page.url.searchParams.get('runId') ?? '');
 
-    const chat = new ChatService();
-    setSharedChat(chat);
+    const workspaceService = new WorkspaceService();
+    let chat = $state<ChatService | null>(null);
+    let workspace = $state<WorkspaceClient | null>(null);
+    let chatInitialized = $state(false);
+
+    $effect(() => {
+        if (workspaceId) {
+            workspace = workspaceService.getWorkspace(workspaceId);
+        }
+    })
+
+    $effect(() => {
+        if (workspace && !chatInitialized) {
+            chatInitialized = true;
+            chat = new ChatService();
+            setSharedChat(chat);
+        }
+    })
 
     onDestroy(() => {
-        chat.close();
+        chat?.close();
     });
 </script>
 
-{#if runId || runOnly}
-    <TaskRunner {workspaceId} {urlTaskId} {runId} />
-{:else}
-    <TaskEditor {workspaceId} {urlTaskId} />
+{#if workspace && chat}
+    {#if runId || runOnly}
+        <TaskRunner {workspace} {urlTaskId} {runId} />
+    {:else}
+        <TaskEditor {workspace} {urlTaskId} />
+    {/if}
 {/if}
 
 <svelte:head>

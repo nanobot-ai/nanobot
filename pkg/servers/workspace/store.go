@@ -133,7 +133,7 @@ func (s *Store) FindByParentIDWithSessions(ctx context.Context, parentID string)
 		Table("workspaces").
 		Select("workspaces.*, sessions.description as session_description").
 		Joins("LEFT JOIN sessions ON sessions.session_id = workspaces.session_id").
-		Where("(workspaces.parent_id = ? OR workspaces.root_id = ?) AND sessions.deleted_at is null", parentID, parentID).
+		Where("(workspaces.parent_id = ?) AND sessions.deleted_at is null", parentID).
 		Find(&results).Error
 	if err != nil {
 		return nil, err

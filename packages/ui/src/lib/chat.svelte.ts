@@ -36,10 +36,6 @@ export interface ToolCallInfo {
 }
 
 export interface ChatServiceCallbacks {
-	/** Called when a tool modifies a file (detected via file_path in arguments) */
-	onFileModified?: (info: ToolCallInfo) => void;
-	/** Called when any tool is called */
-	onToolCall?: (info: ToolCallInfo) => void;
 	/** Called when chat is done processing */
 	onChatDone?: () => void;
 	/** Called when chat starts processing */
@@ -529,37 +525,6 @@ export class ChatService {
 		)) as Resources;
 	};
 
-	/** Extract file paths from tool call arguments and trigger callbacks */
-	private processToolCalls(message: ChatMessage) {
-		if (!message.items) return;
-
-		for (const item of message.items) {
-			if (item.type === 'tool' && 'name' in item && item.arguments) {
-				const toolItem = item as ChatMessageItemToolCall;
-				try {
-					const args = JSON.parse(toolItem.arguments || '{}');
-					const info: ToolCallInfo = {
-						toolName: toolItem.name || '',
-						filePath: args.file_path || args.filePath || args.path || '',
-						arguments: args,
-						message,
-						item: toolItem
-					};
-
-					// Call onToolCall for any tool
-					this.callbacks.onToolCall?.(info);
-
-					// Call onFileModified if a file path was detected
-					if (info.filePath) {
-						this.callbacks.onFileModified?.(info);
-					}
-				} catch {
-					// Ignore JSON parse errors
-				}
-			}
-		}
-	}
-
 	private subscribe(chatId: string) {
 		this.closer();
 		if (!chatId) {
@@ -574,8 +539,6 @@ export class ChatService {
 					} else {
 						this.messages = appendMessage(this.messages, event.message);
 					}
-					// Process tool calls and trigger callbacks
-					this.processToolCalls(event.message);
 					// Trigger onMessage callback
 					this.callbacks.onMessage?.(event.message);
 				} else if (event.type == 'history-start') {
@@ -602,7 +565,7 @@ export class ChatService {
 						} as Elicitation
 					];
 				}
-				console.debug('Received event:', event);
+				// console.debug('Received event:', event);
 			},
 			{
 				events: [

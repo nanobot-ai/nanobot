@@ -150,12 +150,11 @@ export function compileOutputFiles(task: Task, visibleInputs: Input[], taskId: s
 					)
 				];
 				metadata['inputs'] = metadataInputs
-					.filter(
-						(input) =>
-							input.default ||
-							input.description ||
-							task.steps.some((step) => step.content.includes(`$${input.name}`))
-					)
+					.filter((input) => {
+						if (input.default || input.description) return true;
+						const variableRegex = new RegExp(`\\$${input.name}(?![a-zA-Z0-9_])`);
+						return task.steps.some((step) => variableRegex.test(step.content));
+					})
 					.map((input) => ({
 						name: input.name,
 						description: input.description,

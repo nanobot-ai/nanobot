@@ -1,19 +1,17 @@
 <script lang="ts">
 	import { WorkspaceInstance, WorkspaceService } from "$lib/workspace.svelte";
-	import { ChevronDown, ChevronRight, CircleX, Copy, EllipsisVertical, FileText, Folder, FolderOpen, ListTodo, PaintBucket, PencilLine, Play, Plus, Save, Share, Trash2 } from "@lucide/svelte";
+	import { ChevronDown, ChevronRight, CircleX, Copy, EllipsisVertical, FileText, Folder, FolderOpen, ListTodo, MessageSquare, PaintBucket, PencilLine, Play, Plus, Save, Share, Trash2 } from "@lucide/svelte";
 	import { onMount, tick } from "svelte";
 	import type { Component } from "svelte";
 	import DragDropList from "./DragDropList.svelte";
 	import { SvelteMap, SvelteSet } from "svelte/reactivity";
 	import { resolve } from '$app/paths';
 	import { goto } from "$app/navigation";
-	import type { WorkspaceFile } from "$lib/types";
+	import type { Session, WorkspaceFile } from "$lib/types";
 	import ConfirmDelete from "./ConfirmDelete.svelte";
 	import { getNotificationContext } from "$lib/context/notifications.svelte";
 	import { page } from "$app/state";
-    import * as mocks from '$lib/mocks';
 	import WorkspaceShare from "./WorkspaceShare.svelte";
-	import { mockTasks } from "$lib/mocks/stores/tasks.svelte";
 	import { browser } from '$app/environment';
 
     interface Props {
@@ -108,22 +106,15 @@
     let selectedColor = $state<string>('');
     let summaryPointerDownTime = 0;
 
-    let workspaces = $derived([...workspaceService.workspaces, mocks.workspace]);
-    let sharedWorkspaces = $state<Workspace[]>(mocks.sharedWorkspaces);
-    let workspacePermissions = $state(mocks.workspacePermissions);
+    let workspaces = $derived(workspaceService.workspaces);
+    let sharedWorkspaces = $state<Workspace[]>([]);
+    let workspacePermissions = $state<Record<string, string[]>>({});
 
-    let taskRuns = $derived(mockTasks.current.tasks.reduce<Record<string, { runs: { id: string; created: string }[] }>>((acc, task) => {
-        if (!acc[task.id]) {
-            acc[task.id] = { 
-                runs: task.runs.map((run) => ({ id: run.id, created: run.created })) 
-            };
-        }
-        return acc;
-    }, {}))
+    let taskRuns = $state<Record<string, { runs: { id: string; created: string }[] }>>({});
 
-    onMount(() => {
+    onMount(async () => {
         loadExpandedState();
-        loadWorkspaces();
+        await loadWorkspaces();
         // Restore data for expanded workspaces
         restoreExpandedWorkspaces();
     });
@@ -133,20 +124,24 @@
         for (const key of expandedSections) {
             if (key.startsWith('workspace:') && key.split(':').length === 2) {
                 const workspaceId = key.split(':')[1];
+                const workspaceExists = workspaces.some(w => w.id === workspaceId) || 
+                                       sharedWorkspaces.some(w => w.id === workspaceId);
+                if (!workspaceExists) {
+                    expandedSections.delete(key);
+                    saveExpandedState();
+                    continue;
+                }
+                
                 if (!workspaceData.has(workspaceId)) {
                     loadingWorkspace.set(workspaceId, true);
-                    if (mocks.workspaceIds.includes(workspaceId)) {
-                        workspaceData.set(workspaceId, mocks.workspaceInstances[workspaceId]);
+                    workspaceData.set(workspaceId, workspaceService.getWorkspace(workspaceId) as WorkspaceInstance);
+                    try {
+                        await workspaceData.get(workspaceId)?.load();
+                    } catch (err) {
+                        const error = err instanceof Error ? err.message : JSON.stringify(err);
+                        notifications.error('Error loading workspace', error);
+                    } finally {
                         loadingWorkspace.set(workspaceId, false);
-                    } else {
-                        workspaceData.set(workspaceId, workspaceService.getWorkspace(workspaceId) as WorkspaceInstance);
-                        try {
-                            await workspaceData.get(workspaceId)?.load();
-                        } catch (err) {
-                            console.error(err);
-                        } finally {
-                            loadingWorkspace.set(workspaceId, false);
-                        }
                     }
                 }
             }
@@ -249,21 +244,16 @@
         
         if (willOpen) {
             loadingWorkspace.set(workspaceId, true);
-            if (mocks.workspaceIds.includes(workspaceId)) {
-                workspaceData.set(workspaceId, mocks.workspaceInstances[workspaceId]);
+            workspaceData.set(workspaceId, workspaceService.getWorkspace(workspaceId) as WorkspaceInstance);
+            try {
+                await workspaceData.get(workspaceId)?.load();
+            } catch (err) {
+                console.error(err);
+                // TODO: handle error, temp disabled cause of mock shared workspaces
+                // const error = e instanceof Error ? e.message : JSON.stringify(e);
+                // notifications.error('Error loading workspace', error);
+            } finally {
                 loadingWorkspace.set(workspaceId, false);
-            } else {
-                workspaceData.set(workspaceId, workspaceService.getWorkspace(workspaceId) as WorkspaceInstance);
-                try {
-                    await workspaceData.get(workspaceId)?.load();
-                } catch (err) {
-                    console.error(err);
-                    // TODO: handle error, temp disabled cause of mock shared workspaces
-                    // const error = e instanceof Error ? e.message : JSON.stringify(e);
-                    // notifications.error('Error loading workspace', error);
-                } finally {
-                    loadingWorkspace.set(workspaceId, false);
-                }
             }
         }
     }
@@ -468,10 +458,10 @@
             }, {})
         }
         {@const files = (workspaceInstance?.files ?? []).filter((f: { name: string }) => !f.name.startsWith('.nanobot/tasks/'))}
-        <!-- {@const conversations = workspaceInstance?.sessions ?? []} -->
+        {@const conversations = workspaceInstance?.sessions ?? []}
         <ul>
             {@render tasksSection(workspace.id, tasks, permissions)}
-            <!-- {@render conversationsSection(workspace.id, conversations)} -->
+            {@render conversationsSection(workspace.id, conversations)}
             {@render filesSection(workspace.id, files, permissions)}
         </ul>
     {/if}
@@ -526,7 +516,7 @@
                 {@render empty(title, permissions.includes('write'))}
             {:else}
                 {#each items as item, index (index)}
-                {@const name = mocks.taskData[item]?.name ?? item}           
+                {@const name = item}           
                     <li class="flex grow">
                         <details class="workspace-details w-full" open={isExpanded(`workspace:${workspaceId}:task:${item}`)}
                             ontoggle={handleToggle(`workspace:${workspaceId}:task:${item}`)}>
@@ -613,7 +603,9 @@
                                                     <li>
                                                         <button 
                                                             onmousedown={(e) => e.stopPropagation()} 
-                                                            onclick={() => mockTasks.deleteRun(item, run.id)} 
+                                                            onclick={() => {
+                                                                // TODO: delete run
+                                                            }} 
                                                             class="menu-alert"
                                                         >
                                                             <Trash2 class="size-4" /> Delete
@@ -784,7 +776,7 @@
 </ul>
 {/snippet}
 
-<!-- {#snippet conversationsSection(_workspaceId: string, conversations: Session[])}
+{#snippet conversationsSection(workspaceId: string, conversations: Session[])}
 <li class="flex grow">
     <details class="workspace-details w-full">
         {@render sectionTitle('Conversations', MessageSquare, conversations)}
@@ -793,15 +785,23 @@
                 {@render empty('Conversations')}
             {:else}
                 {#each conversations as conversation, index (index)}
-                    <li class="w-full">
-                        <a href={resolve(`/c/${conversation.id}`)} class="block p-2 w-full overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">{conversation.title}</a>
+                    <li class="w-full flex items-center">
+                        <a href={resolve(`/c/${conversation.id}`)} class="flex p-2 grow overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">{conversation.title}</a>
+                        <button class="btn btn-square btn-ghost btn-sm"
+                            onclick={() => {
+                                const workspace = workspaceData.get(workspaceId);
+                                workspace?.deleteSession(conversation.id);
+                            }}
+                        >
+                            <Trash2 class="size-4" />
+                        </button>
                     </li>
                 {/each}
             {/if}
         </ul>
     </details>
 </li>
-{/snippet} -->
+{/snippet}
 
 {#snippet filesSection(_workspaceId: string, files: WorkspaceFile[], permissions: string[])}
 <li class="flex grow">
@@ -829,13 +829,7 @@
     message="This workspace will be permanently deleted and cannot be recovered."
     onConfirm={() => {
         if (!confirmDeleteWorkspaceId) return;
-
-
-        if (mocks.workspaceIds.includes(confirmDeleteWorkspaceId) || confirmDeleteWorkspaceId.startsWith('copy-')) {
-            workspaces = workspaces.filter((w) => w.id !== confirmDeleteWorkspaceId);            
-        } else {
-            workspaceService.deleteWorkspace(confirmDeleteWorkspaceId);
-        }
+        workspaceService.deleteWorkspace(confirmDeleteWorkspaceId);
         confirmDeleteWorkspaceModal?.close();
     }}
 />
@@ -846,22 +840,10 @@
     message="This task will be permanently deleted and cannot be recovered."
     onConfirm={() => {
         if (!confirmDeleteTask) return;
-
-        if (mocks.taskIds.includes(confirmDeleteTask.taskId)) {
-            const refWorkspace = workspaceData.get(confirmDeleteTask.workspaceId);
-            if (refWorkspace) {
-                // Create a new object to trigger Svelte reactivity
-                workspaceData.set(confirmDeleteTask.workspaceId, {
-                    ...refWorkspace,
-                    files: refWorkspace.files.filter((f) => !f.name.startsWith(`.nanobot/tasks/${confirmDeleteTask?.taskId}`))
-                } as unknown as WorkspaceInstance);
-            }
-        } else {
-            const workspace = workspaceService.getWorkspace(confirmDeleteTask.workspaceId);
-            const allTaskFiles = workspace.files.filter((f) => f.name.startsWith(`.nanobot/tasks/${confirmDeleteTask?.taskId}`));
-            for (const file of allTaskFiles) {
-                workspace.deleteFile(file.name);
-            }
+        const workspace = workspaceService.getWorkspace(confirmDeleteTask.workspaceId);
+        const allTaskFiles = workspace.files.filter((f) => f.name.startsWith(`.nanobot/tasks/${confirmDeleteTask?.taskId}`));
+        for (const file of allTaskFiles) {
+            workspace.deleteFile(file.name);
         }
         confirmDeleteTaskModal?.close();
     }}
