@@ -387,8 +387,6 @@
         if (task.inputs.length > 0) {
             inputsModal?.showModal();
         } else {
-            running = true;
-            runSession.clear();
             submitRun();
         }
     }
@@ -396,6 +394,13 @@
     function cancelRun() {
         running = false;
         completed = false;
+        runSession.clear();
+
+        if (run) {
+            run.close();
+            run = null;
+        }
+
         notifications.info('Workflow cancelled');
     }
 
@@ -423,6 +428,11 @@
 
     async function submitRun(formData?: (Input & { value: string })[]) {
         if (!task || !workspace) return;
+        // reset 
+        runSession.clear();
+        completed = false;
+
+        running = true;
         run = await workspace.newSession();
         await run?.sendToolCall('ExecuteTaskStep', {taskName: taskId, arguments: formData});
     }
