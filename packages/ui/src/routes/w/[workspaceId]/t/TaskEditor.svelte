@@ -9,9 +9,9 @@
 	import { fade, fly, slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import type { Attachment, ChatMessage, WorkspaceClient, WorkspaceFile } from '$lib/types';
+	import type { Attachment, WorkspaceClient, WorkspaceFile } from '$lib/types';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
-	import { type Input, type Task, type Step as StepType } from './types';
+	import { type Input, type Task, type Step as StepType, type StepSession } from './types';
 	import { areAllStepsCompleted, buildRunSummary, buildSessionData, compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
 	import StepActions from './StepActions.svelte';
 	import TaskInputActions from './TaskInputActions.svelte';
@@ -31,6 +31,7 @@
         workspace: WorkspaceClient;
         urlTaskId?: string;
     }
+
     let { workspace, urlTaskId }: Props = $props();
 
 	const registryStore = createRegistryStore();
@@ -77,11 +78,12 @@
     let hiddenInputs = $derived(task?.inputs.filter((input) => !visibleInputs.some((visibleInput) => visibleInput.name === input.name)) ?? []);
 
     let run = $state<ChatService | null>(null);
-    let runSession = new SvelteMap<string, { stepId: string, messages: ChatMessage[], pending: boolean, completed: boolean }>();
+    let runSession = new SvelteMap<string, StepSession>();
     let running = $state(false);
     let completed = $state(false);
+    let error = $state(false);
     
-    let runSummary = $derived(run ? buildRunSummary(run.messages) : '');
+    let runSummary = $derived(run && !error ? buildRunSummary(run.messages) : '');
 
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
@@ -318,7 +320,18 @@
             },
             onChatDone: () => {
                 completed = true;
-                // TODO: verify all steps completed?
+                const sessionData = buildSessionData(run?.messages ?? [], task?.steps ?? []);
+                error = !areAllStepsCompleted(task?.steps ?? [], sessionData);
+
+                for (const step of task?.steps ?? []) {
+                    runSession.set(step.id, {
+                        stepId: step.id,
+                        messages: sessionData[step.id]?.messages ?? [],
+                        pending: sessionData[step.id]?.pending ?? false,
+                        completed: sessionData[step.id]?.completed ?? false,
+                        error: sessionData[step.id]?.messages ? sessionData[step.id]?.messages.length === 0 : true,
+                    });
+                }
             }
         });
         await run?.sendToolCall('ExecuteTaskStep', {taskName: taskId, arguments: formData});
@@ -548,6 +561,7 @@
                                 <StepRun
                                     messages={runSession.get(step.id)?.messages ?? []}
                                     pending={runSession.get(step.id)?.pending ?? false}
+                                    error={runSession.get(step.id)?.error ?? false}
                                 />
                             </div>
                         {/if}
@@ -555,7 +569,7 @@
                 {/snippet}
             </DragDropList>
 
-            {#if completed}
+            {#if completed && !error}
                 <div in:fade out:slide={{ axis: 'y', duration: 150 }} class="w-full flex flex-col justify-center items-center pl-22 pb-4 {showSidebarThread ? '' : 'md:pr-22'}">
                     <div class="w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field p-6 pb-8">
                         <h4 class="text-xl font-semibold">Workflow Completed</h4>
