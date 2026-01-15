@@ -580,6 +580,7 @@
                                 {#if taskRuns[item]?.length > 0}
                                     {@const runOnly = !permissions.includes('write') && !permissions.includes('read') && permissions.includes('execute')}
                                     {#each taskRuns[item] as run (run.id)}
+                                        {console.log({ run })}
                                         <li in:slide={{ axis: 'y', duration: 150 }}>
                                             <div class="flex max-w-full items-center gap-2 rounded-r-none
                                                 {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}
@@ -589,7 +590,7 @@
                                                     href={resolve(`/w/${workspaceId}/t?id=${item}&runId=${run.id}${runOnly ? '&run=true' : ''}`)}
                                                     class="block h-full p-2 w-full overflow-hidden truncate"
                                                 >
-                                                    {run.title}
+                                                    {run.createdAt ? new Date(run.createdAt).toLocaleString() : run.title}
                                                 </a>
                                                 <button class="btn btn-square btn-ghost btn-sm mr-0.5" popovertarget="popover-task-run-actions-{item}-{run.id}" style="anchor-name:--task-run-actions-anchor-{item}-{run.id}">
                                                     <EllipsisVertical class="size-4 shrink-0" />

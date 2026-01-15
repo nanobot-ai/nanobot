@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ChatMessage, WorkspaceClient, WorkspaceFile } from "$lib/types";
+	import type { ChatMessage, SessionDetails, WorkspaceClient, WorkspaceFile } from "$lib/types";
 	import { untrack } from "svelte";
 	import { buildRunSummary, buildSessionData, convertToTask } from "./utils";
 	import type { Input, Task } from "./types";
@@ -14,6 +14,7 @@
     }
     let { workspace, urlTaskId, runId }: Props = $props();
 
+
     let task = $state<Task | null>(null);
     let initialLoadComplete = $state(false);
     let compiling = $state(false);
@@ -21,6 +22,7 @@
     let loading = $state(false);
     let error = $state(false);
 
+    let runDetails = $state<SessionDetails | null>(null);
     let runArguments = $state<(Omit<Input, 'id'> & { value: string })[]>([]);
     let run = $state<ChatService | null>(null);
     let compiledRunId = $state<string | null>(null);
@@ -69,6 +71,9 @@
             if (!taskReady || !workspace) return;
             if (currentRunId) {
                 loadRunSession();
+                workspace.getSessionDetails(runId).then((details) => {
+                    runDetails = details;
+                });
             } else {
                 stepSummaries = [];
             }
@@ -152,7 +157,7 @@
 <TaskRunContent 
     {task}
     {initialLoadComplete} 
-    appendTitle={run?.chatId ? `- ${run.chatId}` : ''}
+    appendTitle={`- ${runDetails?.createdAt ? new Date(runDetails.createdAt).toLocaleString() : ''}`}
     {loading} 
     {runArguments}
     {ongoingSteps}
