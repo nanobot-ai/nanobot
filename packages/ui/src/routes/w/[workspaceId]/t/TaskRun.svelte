@@ -28,8 +28,6 @@
     let progressTimeout: ReturnType<typeof setTimeout> | null = null;
     let progress = $state(0);
 
-    let name = $derived(task?.name || task?.steps[0].name || '');
-    let description = $derived((task?.description || task?.steps[0].description)?.trim() || '');
     let totalTime = $state(0);
     let totalTokens = $state(0);
     
@@ -90,6 +88,8 @@
         if (!task || !workspace) return;
 
         reset();
+        run = null;
+        compiledRunId = null;
         loading = true;
         run = await workspace.getSession(runId);
     }
@@ -137,9 +137,8 @@
 <TaskRunContent 
     {task}
     {initialLoadComplete} 
-    title={`${name} ${run?.chatId ? `- ${run.chatId}` : ''}`}
+    appendTitle={run?.chatId ? `- ${run.chatId}` : ''}
     {loading} 
-    {description} 
     {runArguments}
     {ongoingSteps}
     {stepSummaries}
@@ -149,6 +148,7 @@
     {totalTokens}
     {progress}
     loadingText="Loading the previous task run now. Please wait a moment..."
+    completed={!loading}
 />
 
 <style lang="postcss">
