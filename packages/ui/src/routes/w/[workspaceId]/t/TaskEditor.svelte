@@ -665,7 +665,7 @@
 />
 
 <RegistryToolSelector bind:this={registryToolSelector}
-    omit={currentAddingToolForStep?.tools ?? []}
+    omit={currentAddingToolForStep?.tools.map(tool => tool.name) ?? []}
     onToolsSelect={(names) => {
         if (!currentAddingToolForStep) return;
         const stepIndex = task?.steps.findIndex((step) => step.id === currentAddingToolForStep?.id);
