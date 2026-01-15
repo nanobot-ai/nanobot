@@ -18,6 +18,7 @@
     let task = $state<Task | null>(null);
     let initialLoadComplete = $state(false);
     let compiling = $state(false);
+    let prevTaskId = $state<string | null>(null);
 
     let inputsModal = $state<ReturnType<typeof TaskRunInputs> | null>(null);
     let loading = $state(false);
@@ -68,10 +69,11 @@
 
     $effect(() => {
         const files = workspace?.files ?? [];
-        if (urlTaskId && files.length > 0) {
+        if (urlTaskId && files.length > 0 && prevTaskId !== urlTaskId) {
              if (untrack(() => !compiling)) {
                 compileTask(urlTaskId, files);
                 resetRun();
+                prevTaskId = urlTaskId;
             }
         }
     });
