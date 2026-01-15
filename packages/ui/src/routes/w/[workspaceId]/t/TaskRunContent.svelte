@@ -9,9 +9,8 @@
     interface Props {
         task?: Task | null;
         initialLoadComplete: boolean;
-        title: string;
+        appendTitle?: string;
         loading: boolean;
-        description: string;
         runArguments: (Omit<Input, 'id'> & { value: string })[];
         ongoingSteps: SvelteMap<string, OngoingStep>;
         stepSummaries: { step: string, summary: string }[];
@@ -23,14 +22,14 @@
         progress: number;
         children?: Snippet;
         loadingText?: string;
+        completed: boolean;
     }
     
     let { 
         task, 
         initialLoadComplete, 
-        title, 
+        appendTitle,
         loading, 
-        description, 
         runArguments, 
         ongoingSteps, 
         stepSummaries,
@@ -42,14 +41,17 @@
         progress,
         children,
         loadingText,
+        completed,
     }: Props = $props();
     const registry = getRegistryContext();
     
+    let taskName = $derived(task?.name || task?.steps[0].name || '');
+    let taskDescription = $derived(task?.description || task?.steps[0].description || '');
     let tools = $derived.by(() => {
         if ((task?.steps?.length || 0) === 0) return [];
         if (registry.loading || registry.servers.length === 0) return [];
         
-        const tools = task?.steps.flatMap((step) => step.tools.map((toolName) => registry.getServerByName(toolName)).filter((tool) => tool !== undefined)) ?? [];
+        const tools = task?.steps.flatMap((step) => step.tools.map((tool) => registry.getServerByName(tool.name)).filter((tool) => tool !== undefined)) ?? [];
         return tools.filter((tool, index, self) => self.findIndex((t) => t.name === tool.name) === index);
     });
 
@@ -57,7 +59,7 @@
 
 <div class="w-full h-dvh flex flex-col relative">
     <div class="h-16 w-full flex px-4 items-center shrink-0 z-30 sticky top-0 left-0">
-        <h2 in:fade class="text-xl font-semibold flex items-center gap-2">{title} {#if loading}<LoaderCircle class="size-4 animate-spin shrink-0" />{/if}</h2>
+        <h2 in:fade class="text-xl font-semibold flex items-center gap-2">{taskName} {appendTitle} {#if loading}<LoaderCircle class="size-4 animate-spin shrink-0" />{/if}</h2>
     </div>
     <div class="w-full flex flex-col flex-1 items-center overflow-y-auto py-4">
     {#if initialLoadComplete && task}
@@ -70,15 +72,15 @@
                                 <ListTodo class="size-8 text-primary" />
                             </div>
                             <div class="w-xs">
-                                <h3 class="mt-2 text-2xl font-semibold">{name}</h3>
+                                <h3 class="text-2xl font-semibold">{taskName}</h3>
                                 {#if loading}
                                     <p in:fade class="font-light text-sm text-base-content/50">
                                         {loadingText}
                                     </p>
                                 {:else}
                                     <div in:fade>
-                                        {#if description.length > 0}
-                                            <p class="text-xs text-base-content/50 mt-1">{description}</p>
+                                        {#if taskDescription.length > 0}
+                                            <p class="text-xs text-base-content/50 mt-1">{taskDescription}</p>
                                         {/if}
                                         {#if tools.length > 0}
                                             <div class="flex flex-wrap gap-2 mt-2 mb-1">
@@ -150,7 +152,7 @@
                 </div>
             </div>
 
-            {#if !loading}
+            {#if completed}
                 <div in:fade out:slide={{ axis: 'y', duration: 150 }} class="w-full flex flex-col justify-center items-center py-4">
                     <div class="w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field p-6 pb-8">
                         <h4 class="text-xl font-semibold">{error ? 'Workflow Failed' : cancelled ? 'Workflow Cancelled' : 'Workflow Completed'}</h4>

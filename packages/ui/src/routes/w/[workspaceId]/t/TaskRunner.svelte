@@ -30,9 +30,6 @@
     let progressTimeout: ReturnType<typeof setTimeout> | null = null;
     let progress = $state(0);
 
-    let name = $derived(task?.name || task?.steps[0].name || '');
-    let description = $derived((task?.description || task?.steps[0].description)?.trim() || '');
-
     let totalTime = $state(0);
     let totalTokens = $state(0);
     let timeoutHandlers = $state<ReturnType<typeof setTimeout>[]>([]);
@@ -155,8 +152,8 @@
 <TaskRunContent
     {task}
     {initialLoadComplete}
-    loading={loading && !completed}
-    {description}
+    loading={loading}
+    {completed}
     {runArguments}
     {ongoingSteps}
     {stepSummaries}
@@ -166,7 +163,6 @@
     {totalTime}
     {totalTokens}
     {progress}
-    title={name}
     loadingText="Your task is currently running. Please wait a moment..."
 >
     {#if cancelled}
