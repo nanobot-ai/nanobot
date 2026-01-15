@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/gormdsn"
 	"gorm.io/datatypes"
@@ -123,8 +124,9 @@ func (s *Store) FindByParentID(ctx context.Context, parentID string) ([]Workspac
 // WorkspaceWithSession combines workspace and session data
 type WorkspaceWithSession struct {
 	WorkspaceRecord
-	SessionDescription  string `gorm:"column:session_description"`
-	SessionStartMessage string `gorm:"column:session_start_message"`
+	SessionDescription  string    `gorm:"column:session_description"`
+	SessionStartMessage string    `gorm:"column:session_start_message"`
+	SessionCreatedAt    time.Time `gorm:"column:session_created_at"`
 }
 
 // FindByParentIDWithSessions retrieves all workspace records with their session data for a given parent ID
@@ -132,7 +134,7 @@ func (s *Store) FindByParentIDWithSessions(ctx context.Context, parentID string)
 	var results []WorkspaceWithSession
 	err := s.db.WithContext(ctx).
 		Table("workspaces").
-		Select("workspaces.*, sessions.description as session_description, sessions.start_message as session_start_message").
+		Select("workspaces.*, sessions.description as session_description, sessions.start_message as session_start_message, sessions.created_at as session_created_at").
 		Joins("LEFT JOIN sessions ON sessions.session_id = workspaces.session_id").
 		Where("(workspaces.parent_id = ?) AND sessions.deleted_at is null", parentID).
 		Find(&results).Error

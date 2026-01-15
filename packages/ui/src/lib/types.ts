@@ -198,6 +198,7 @@ export interface Resource extends BaseMetadata, Icons {
 		[key: string]: unknown;
 		'ai.nanobot'?: {
 			startMessage?: string;
+			createdAt?: string;
 		};
 	};
 }
@@ -360,6 +361,7 @@ export interface Session {
 	id: string;
 	title: string;
 	parentTaskName?: string;
+	createdAt?: string;
 }
 
 export interface SessionDetails {

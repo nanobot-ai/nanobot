@@ -59,7 +59,9 @@
 
 <div class="w-full h-dvh flex flex-col relative">
     <div class="h-16 w-full flex px-4 items-center shrink-0 z-30 sticky top-0 left-0">
-        <h2 in:fade class="text-xl font-semibold flex items-center gap-2">{taskName} {appendTitle} {#if loading}<LoaderCircle class="size-4 animate-spin shrink-0" />{/if}</h2>
+        {#if initialLoadComplete}
+            <h2 in:fade class="text-xl font-semibold flex items-center gap-2">{taskName} {appendTitle} {#if loading}<LoaderCircle class="size-4 animate-spin shrink-0" />{/if}</h2>
+        {/if}
     </div>
     <div class="w-full flex flex-col flex-1 items-center overflow-y-auto py-4">
     {#if initialLoadComplete && task}

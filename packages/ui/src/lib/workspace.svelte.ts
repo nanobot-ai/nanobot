@@ -85,12 +85,14 @@ export class WorkspaceInstance implements WorkspaceClient {
 			this.sessions = result.resources
 				.filter((r) => r.uri.startsWith('session://'))
 				.map((r) => {
+					console.log({ r })
 					const parentTaskName = JSON.parse(r._meta?.['ai.nanobot']?.startMessage ?? '{}')?.payload
 						?.params?.taskName;
 					return {
 						id: r.uri.replace('session://', ''),
 						title: r.description || r.name,
-						parentTaskName
+						parentTaskName,
+						createdAt: r._meta?.['ai.nanobot']?.createdAt as string
 					};
 				});
 		} finally {
