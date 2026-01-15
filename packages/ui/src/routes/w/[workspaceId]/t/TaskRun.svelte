@@ -97,8 +97,21 @@
     async function compileRun(messages: ChatMessage[]) {
         if (!task) return;
         const sessionData = buildSessionData(messages, task.steps);
+        const sessionArgs: Record<string, typeof runArguments[number]> = {};
         for (const step of task.steps) {
             const data = sessionData[step.id];
+
+            // look for arguments in task run messages
+            for (const message of data?.messages ?? []) {
+                const item = message.items?.[0];
+                if (item?.type !== 'tool' || !('arguments' in item) || !item.arguments) continue;
+                const parsed = JSON.parse(item.arguments);
+                if (parsed.arguments?.[0]) {
+                    sessionArgs[step.id] = parsed.arguments[0];
+                    break;
+                }
+            }
+            
             ongoingSteps.set(step.id, { 
                 loading: false, 
                 completed: true,
@@ -108,6 +121,8 @@
                 error: !data || data.messages.length === 0,
             });
         }
+
+        runArguments = Object.values(sessionArgs);
 
         const ongoingStepsArr = Array.from(ongoingSteps.values());
         totalTokens = ongoingStepsArr.reduce((acc, step) => acc + (step.tokens ?? 0), 0);
