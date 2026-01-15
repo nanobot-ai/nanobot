@@ -50,12 +50,12 @@
     const registry = getRegistryContext();
     let tools = $derived(
         step.tools && step.tools.length > 0 && !registry.loading && registry.servers.length > 0 
-            ? step.tools.map((toolName) => registry.getServerByName(toolName)).filter((tool) => tool !== undefined) 
+            ? step.tools.map((tool) => registry.getServerByName(tool.name)).filter((tool) => tool !== undefined) 
             : []
     );
     
     function handleRemoveTool(toolName: string) {
-        step.tools = step.tools.filter((tool) => tool !== toolName);
+        step.tools = step.tools.filter((tool) => tool.name !== toolName);
         onUpdateStep?.(step.id, { tools: step.tools });
     }
 
