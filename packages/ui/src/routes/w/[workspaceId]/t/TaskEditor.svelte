@@ -25,6 +25,7 @@
 	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 	import TaskRunInputs from './TaskRunInputs.svelte';
 	import StepRun from '../StepRun.svelte';
+	import Elicitation from '$lib/components/Elicitation.svelte';
 
     type Props = {
         workspace: WorkspaceClient;
@@ -648,6 +649,18 @@
             <div class="skeleton h-32 w-full"></div>
         </div>
     </div>
+{/if}
+
+{#if run && run.elicitations && run.elicitations.length > 0}
+    {#key run.elicitations[0].id}
+        <Elicitation
+            elicitation={run.elicitations[0]}
+            open
+            onresult={(result) => {
+                run?.replyToElicitation(run.elicitations[0], result);
+            }}
+        />
+    {/key}
 {/if}
 
 <TaskRunInputs bind:this={inputsModal} onSubmit={submitRun} {task} additionalInputs={visibleInputs} />

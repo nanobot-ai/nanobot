@@ -8,6 +8,7 @@
 	import type { ChatService } from "$lib/chat.svelte";
 	import TaskRunContent from "./TaskRunContent.svelte";
 	import { LoaderCircle, Play, Square } from "@lucide/svelte";
+	import Elicitation from "$lib/components/Elicitation.svelte";
 	
     type Props = {
         workspace: WorkspaceClient;
@@ -187,46 +188,16 @@
     {/if}
 </TaskRunContent>
 
+{#if run && run.elicitations && run.elicitations.length > 0}
+    {#key run.elicitations[0].id}
+        <Elicitation
+            elicitation={run.elicitations[0]}
+            open
+            onresult={(result) => {
+                run?.replyToElicitation(run.elicitations[0], result);
+            }}
+        />
+    {/key}
+{/if}
+
 <TaskRunInputs bind:this={inputsModal} onSubmit={handleRun} {task} />
-
-<style lang="postcss">
-    :global(#thread-process #message-groups) {
-        padding-top: 0;
-        opacity: 0.15;
-    }
-    :global(#thread-process #message-groups .prose) {
-        font-size: 0.75rem;
-    }
-    :global(#thread-process #message-groups > div) {
-        min-height: unset !important;
-    }
-    :global(#thread-process #message-groups .h-59) {
-        display: none;
-    }
-
-    /* Timeline connector fill animation */
-    :global(.timeline-connector) {
-        position: relative !important;
-        background-color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
-        overflow: hidden !important;
-    }
-
-    :global(.timeline-connector::after) {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 0%;
-        background-color: var(--color-primary);
-        transition: height 0.4s ease-out;
-    }
-
-    :global(.timeline-connector.error::after) {
-        background-color: var(--color-error);
-    }
-
-    :global(.timeline-connector.completed::after, .timeline-connector.error::after) {
-        height: 100%;
-    }
-</style>
