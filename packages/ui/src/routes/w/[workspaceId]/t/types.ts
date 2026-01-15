@@ -48,6 +48,7 @@ export type StepSession = {
 	messages: ChatMessage[];
 	pending: boolean;
 	completed: boolean;
+	error?: boolean;
 };
 export type SessionData = Record<string, StepSession>;
 

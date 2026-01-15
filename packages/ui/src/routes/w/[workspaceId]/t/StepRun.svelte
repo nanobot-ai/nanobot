@@ -1,13 +1,15 @@
 <script lang="ts">
 	import Messages from "$lib/components/Messages.svelte";
 	import type { ChatMessage } from "$lib/types";
+	import { TriangleAlert } from "@lucide/svelte";
 
     interface Props {
         messages: ChatMessage[];
         pending: boolean;
+        error?: boolean;
     }
 
-    let { messages, pending }: Props = $props();
+    let { messages, pending, error }: Props = $props();
 
     let container: HTMLDivElement;
     let autoScroll = $state(true);
@@ -45,6 +47,15 @@
                 Waiting for step to complete...
             </span>
         {:else}
+            {#if error}
+                <div class="mb-3 rounded-lg border border-error/20 bg-error/10 p-3">
+                    <div class="mb-2 flex items-center gap-2 text-sm">
+                        <TriangleAlert class="size-4 text-error" />
+                        <span class="font-medium text-error">Error</span>
+                    </div>
+                    <pre class="mt-2 rounded bg-base-100 p-2 text-xs break-all whitespace-pre-wrap text-error">This step failed to complete.</pre>
+                </div>
+            {/if}
             <Messages inline messages={messages} />
         {/if}
     </div>
