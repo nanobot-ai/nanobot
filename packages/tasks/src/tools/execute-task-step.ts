@@ -60,8 +60,9 @@ ${tasksDescriptions}
 
 		// Create task execution record
 		const sessionId = ctx.sessionId || "default";
-		const taskDir = path.join(".nanobot", "status", sessionId);
+		const taskDir = path.join(".nanobot", sessionId, "status");
 		const taskFile = path.join(taskDir, "task.json");
+		const mcpServerFile = path.join(".nanobot", "mcp.json");
 
 		// Ensure the directory exists by trying to create it (writeTextFile will handle parent dirs)
 		const taskRecord = {
@@ -77,6 +78,24 @@ ${tasksDescriptions}
 			return toolResult.error(
 				`Failed to create task execution record: ${error instanceof Error ? error.message : String(error)}`,
 			);
+		}
+
+		// Write MCP servers file if task has tools
+		if (task.tools && task.tools.length > 0) {
+			const mcpServers: Record<string, { url: string }> = {};
+			for (const tool of task.tools) {
+				mcpServers[tool.name.replaceAll("/", "_")] = { url: tool.url };
+			}
+			try {
+				await client.writeTextFile(
+					mcpServerFile,
+					JSON.stringify({ mcpServers }, null, 2),
+				);
+			} catch (error) {
+				return toolResult.error(
+					`Failed to write MCP servers file: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			}
 		}
 
 		// Build the prompt for the LLM

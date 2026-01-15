@@ -214,6 +214,37 @@ export class WorkspaceClient {
 	}
 
 	/**
+	 * Deletes a file from the file system
+	 *
+	 * @param path - Path to the file to delete
+	 *
+	 * @example
+	 * ```typescript
+	 * await client.deleteFile("/path/to/file.txt");
+	 * ```
+	 */
+	async deleteFile(path: string): Promise<void> {
+		this.ensureConnected();
+
+		try {
+			const result = await this.client.callTool({
+				name: "deleteFile",
+				arguments: {
+					sessionId: this.sessionId,
+					path,
+				},
+			});
+
+			throwIfError(result, "Failed to delete file", "DELETE_FILE_ERROR");
+		} catch (error) {
+			if (error instanceof Error && error.name === "WorkspaceClientError") {
+				throw error;
+			}
+			throw createError("Failed to delete file", "DELETE_FILE_ERROR", error);
+		}
+	}
+
+	/**
 	 * Lists the contents of a directory
 	 *
 	 * @param path - Path to the directory to list
