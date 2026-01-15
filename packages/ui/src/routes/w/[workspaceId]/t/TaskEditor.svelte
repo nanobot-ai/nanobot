@@ -788,7 +788,7 @@
 />
 
 <RegistryToolSelector bind:this={registryToolSelector}
-    omit={currentAddingToolForStep?.tools.map(tool => tool.name) ?? []}
+    omit={currentAddingToolForStep?.tools ?? []}
     onToolsSelect={(names) => {
         console.log(names);
         if (!currentAddingToolForStep) return;

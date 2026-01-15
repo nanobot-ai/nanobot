@@ -3,11 +3,10 @@
 	import { getRegistryContext } from "$lib/context/registry.svelte";
 	import { SvelteMap } from "svelte/reactivity";
 	import { Check, Plus, Search, ServerIcon, X } from "@lucide/svelte";
-	import type { Server} from "$lib/types";
-	import type { Tool} from "./types";
+	import type { Server } from "$lib/types";
 
     interface Props {
-        onToolsSelect: (tools: Tool[]) => void;
+        onToolsSelect: (tools: string[]) => void;
         omit: string[];
     }
 
@@ -22,7 +21,7 @@
     const registry = getRegistryContext();
 
     let results = $derived.by(() => {
-        const withoutOmitted = registry.servers.filter(server => !omit.includes(server.name)).filter(server => server.remotes?.some(r => r.url));
+        const withoutOmitted = registry.servers.filter(server => !omit.includes(server.name));
         if (query) {
             return withoutOmitted.filter(server => server.title.toLowerCase().includes(query.toLowerCase()));
         } else {
@@ -128,7 +127,7 @@
                         Cancel
                     </button>
                     <button class="btn btn-primary" onclick={() => {
-                        onToolsSelect(Array.from(selected.values()).map(server => ({name: server.name, title: server.title, url: server.remotes?.find(remote => remote.url)?.url || ''})));
+                        onToolsSelect(Array.from(selected.values()).map(server => server.name));
                         dialog?.close();
                     }}>
                         Add

@@ -1,5 +1,5 @@
 import type { WorkspaceClient, WorkspaceFile } from '$lib/types';
-import type { Input, ParsedContent, ParsedFile, Step, Task, Tool } from './types';
+import type { Input, ParsedContent, ParsedFile, Step, Task } from './types';
 import YAML from 'yaml';
 
 export async function parseFrontmatterMarkdown(fileContent: Blob): Promise<ParsedContent> {
@@ -36,12 +36,7 @@ export async function parseFrontmatterMarkdown(fileContent: Blob): Promise<Parse
 		id: crypto.randomUUID()
 	}));
 
-	const tools: Tool[] =
-		(metadata.tools ?? []).map((tool: Tool) => ({
-			name: tool.name,
-			title: tool.title,
-			url: tool.url
-		})) ?? [];
+	const tools: string[] = (metadata.tools ?? []).map((tool: string) => tool) ?? [];
 
 	return {
 		taskName: metadata.task_name ?? '',
@@ -141,7 +136,7 @@ export function compileOutputFiles(task: Task, visibleInputs: Input[], taskId: s
 			name: step.name,
 			description: step.description,
 			next: index !== task.steps.length - 1 ? `STEP_${index + 1}.md` : '',
-			tools: step.tools.filter((tool) => tool.name)
+			tools: step.tools
 		};
 
 		if (index === 0) {
@@ -149,11 +144,9 @@ export function compileOutputFiles(task: Task, visibleInputs: Input[], taskId: s
 			metadata['task_description'] = taskDescription;
 			if (inputs.length > 0) {
 				const metadataInputs = [
-					...visibleInputs.filter((input) => input.name.trim().length > 0),
+					...visibleInputs.filter((input) => input.name),
 					...inputs.filter(
-						(input) =>
-							input.name.trim().length > 0 &&
-							!visibleInputs.some((visibleInput) => visibleInput.name === input.name)
+						(input) => !visibleInputs.some((visibleInput) => visibleInput.name === input.name)
 					)
 				];
 				metadata['inputs'] = metadataInputs
