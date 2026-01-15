@@ -120,9 +120,10 @@ func (s *Server) listSessions(ctx context.Context, accountID string) (*mcp.ListR
 				Name:     workspace.SessionDescription,
 				MimeType: types.SessionMimeType,
 				Meta: types.Meta(map[string]any{
-					"order":       workspace.Order,
-					"color":       workspace.Color,
-					"workspaceId": workspace.UUID,
+					"order":        workspace.Order,
+					"color":        workspace.Color,
+					"workspaceId":  workspace.UUID,
+					"startMessage": workspace.SessionStartMessage,
 				}),
 			}
 
