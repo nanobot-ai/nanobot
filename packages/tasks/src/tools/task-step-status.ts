@@ -28,7 +28,7 @@ export default createTool({
 		const client = await ensureConnected(ctx.workspaceId);
 
 		const sessionId = ctx.sessionId || "default";
-		const taskFile = path.join(".nanobot", "status", sessionId, "task.json");
+		const taskFile = path.join(".nanobot", sessionId, "status", "task.json");
 
 		// Read the existing task record
 		let taskRecord: Record<string, unknown>;
@@ -57,6 +57,7 @@ export default createTool({
 
 		try {
 			await client.writeTextFile(taskFile, JSON.stringify(taskRecord, null, 2));
+			await client.deleteFile(path.join(".nanobot", "mcp.json"));
 		} catch (error) {
 			return toolResult.error(
 				`Failed to update task execution record: ${error instanceof Error ? error.message : String(error)}`,
