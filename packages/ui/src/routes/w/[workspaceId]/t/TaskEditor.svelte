@@ -313,6 +313,9 @@
         running = true;
         run = await workspace.newSession();
         run.setCallbacks({
+            onChatStart: () => {
+                workspace?.load();
+            },
             onChatDone: () => {
                 completed = true;
                 // TODO: verify all steps completed?

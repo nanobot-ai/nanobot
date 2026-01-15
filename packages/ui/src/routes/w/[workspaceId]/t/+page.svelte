@@ -5,10 +5,10 @@
 	import { onDestroy, onMount } from 'svelte';
 	import TaskEditor from './TaskEditor.svelte';
 	import TaskRunner from './TaskRunner.svelte';
-	import { WorkspaceService } from '$lib/workspace.svelte';
 	import type { WorkspaceClient } from '$lib/types';
 	import TaskRun from './TaskRun.svelte';
 	import { createRegistryStore, setRegistryContext } from '$lib/context/registry.svelte';
+	import { getWorkspaceService } from '$lib/stores/workspace.svelte';
 
     let { data } = $props();
     let workspaceId = $derived(data.workspaceId);
@@ -16,7 +16,7 @@
     let runOnly = $derived(page.url.searchParams.get('run') === 'true');
     let runId = $derived(page.url.searchParams.get('runId') ?? '');
 
-    const workspaceService = new WorkspaceService();
+    const workspaceService = getWorkspaceService();
     let chat = $state<ChatService | null>(null);
     let workspace = $state<WorkspaceClient | null>(null);
     let chatInitialized = $state(false);
