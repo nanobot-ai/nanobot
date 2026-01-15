@@ -1,6 +1,6 @@
 <script lang="ts">
   import '$lib/../app.css';
-  import {WorkspaceService, type WorkspaceInstance} from '$lib/workspace.svelte';
+  import {type WorkspaceInstance} from '$lib/workspace.svelte';
   import {onMount} from 'svelte';
   import {
     AlertCircle,
@@ -19,8 +19,9 @@
   import type {SessionDetails} from "$lib/types";
   import type {ChatService} from '$lib/chat.svelte';
   import ThreadFromChat from "$lib/components/ThreadFromChat.svelte";
+	import { getWorkspaceService } from '$lib/stores/workspace.svelte';
 
-  const workspaceService = new WorkspaceService();
+  const workspaceService = getWorkspaceService();
 
   let loading = $state(false);
   let error = $state<string | null>(null);

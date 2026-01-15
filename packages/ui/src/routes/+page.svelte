@@ -6,16 +6,16 @@
 	import { resolve } from '$app/paths';
 	import { setSharedChat } from '$lib/stores/chat.svelte';
 	import ThreadFromChat from "$lib/components/ThreadFromChat.svelte";
-	import { WorkspaceService } from '$lib/workspace.svelte';
 	import { ChevronRight, Eye, File, Folder, ListTodo, Plus } from '@lucide/svelte';
 	import { formatTimeAgo } from '$lib/utils/time';
 	import * as mocks from '$lib/mocks';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
+	import { getWorkspaceService } from '$lib/stores/workspace.svelte';
 	
 	const chat = new ChatService();
 	let doClose = true;
 	let workspaceEnabled = $derived(chat.workspaceEnabled);
-	const workspaceService = new WorkspaceService();
+	const workspaceService = getWorkspaceService();
 	
 	let tasks = $state(mocks.tasks);
 	let files = $state(mocks.files);

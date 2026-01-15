@@ -1,10 +1,9 @@
 <script lang="ts">
-	import { WorkspaceInstance, WorkspaceService } from "$lib/workspace.svelte";
 	import { ChevronDown, ChevronRight, CircleX, Copy, EllipsisVertical, FileText, Folder, FolderOpen, ListTodo, PaintBucket, PencilLine, Play, Plus, Save, Share, Trash2 } from "@lucide/svelte";
 	import { onMount, tick } from "svelte";
 	import type { Component } from "svelte";
 	import DragDropList from "./DragDropList.svelte";
-	import { SvelteMap, SvelteSet } from "svelte/reactivity";
+	import { SvelteSet } from "svelte/reactivity";
 	import { resolve } from '$app/paths';
 	import { goto } from "$app/navigation";
 	import type { Session, WorkspaceFile } from "$lib/types";
@@ -13,6 +12,8 @@
 	import { page } from "$app/state";
 	import WorkspaceShare from "./WorkspaceShare.svelte";
 	import { browser } from '$app/environment';
+	import { getWorkspaceService, getWorkspaceData, getLoadingWorkspace, loadWorkspaceInstance } from "$lib/stores/workspace.svelte";
+	import { slide } from "svelte/transition";
 
     interface Props {
         inverse?: boolean;
@@ -36,10 +37,11 @@
 
     let loading = $state(false);
 
-    let loadingWorkspace = new SvelteMap<string, boolean>();
-    let workspaceData = new SvelteMap<string, WorkspaceInstance>();
+    // Use shared store instead of local state
+    const loadingWorkspace = getLoadingWorkspace();
+    const workspaceData = getWorkspaceData();
+    const workspaceService = getWorkspaceService();
 
-    const workspaceService = new WorkspaceService();
     const notifications = getNotificationContext();
 
     // Persist expanded state across route changes
@@ -131,15 +133,11 @@
                 }
                 
                 if (!workspaceData.has(workspaceId)) {
-                    loadingWorkspace.set(workspaceId, true);
-                    workspaceData.set(workspaceId, workspaceService.getWorkspace(workspaceId) as WorkspaceInstance);
                     try {
-                        await workspaceData.get(workspaceId)?.load();
+                        await loadWorkspaceInstance(workspaceId);
                     } catch (err) {
                         const error = err instanceof Error ? err.message : JSON.stringify(err);
                         notifications.error('Error loading workspace', error);
-                    } finally {
-                        loadingWorkspace.set(workspaceId, false);
                     }
                 }
             }
@@ -241,17 +239,13 @@
         toggleExpanded(key, willOpen);
         
         if (willOpen) {
-            loadingWorkspace.set(workspaceId, true);
-            workspaceData.set(workspaceId, workspaceService.getWorkspace(workspaceId) as WorkspaceInstance);
             try {
-                await workspaceData.get(workspaceId)?.load();
+                await loadWorkspaceInstance(workspaceId);
             } catch (err) {
                 console.error(err);
                 // TODO: handle error, temp disabled cause of mock shared workspaces
                 // const error = e instanceof Error ? e.message : JSON.stringify(e);
                 // notifications.error('Error loading workspace', error);
-            } finally {
-                loadingWorkspace.set(workspaceId, false);
             }
         }
     }
@@ -586,7 +580,7 @@
                                 {#if taskRuns[item]?.length > 0}
                                     {@const runOnly = !permissions.includes('write') && !permissions.includes('read') && permissions.includes('execute')}
                                     {#each taskRuns[item] as run (run.id)}
-                                        <li>
+                                        <li in:slide={{ axis: 'y', duration: 150 }}>
                                             <div class="flex max-w-full items-center gap-2 rounded-r-none
                                                 {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}
                                                 {selectedRunId && selectedRunId === run.id ? 'bg-base-200 dark:bg-base-100' : ''}
