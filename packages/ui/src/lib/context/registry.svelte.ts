@@ -67,6 +67,7 @@ export function createRegistryStore(): RegistryStore {
 				servers = [...servers, ...data.servers.map((server) => server.server)];
 			}
 
+			servers = servers.sort((a, b) => a.name.localeCompare(b.name));
 			lastFetchTime = Date.now();
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);

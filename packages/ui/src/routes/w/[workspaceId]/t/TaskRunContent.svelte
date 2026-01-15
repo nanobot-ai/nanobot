@@ -120,7 +120,7 @@
                                 {/if}
                                 <div class="timeline-middle">
                                     {#if stepStatus?.error}
-                                        <CircleAlert class="size-5 text-error" />
+                                        <CircleAlert class="size-5 text-error/40" />
                                     {:else if stepStatus?.completed}
                                         <CircleCheck class="size-5 text-primary" />
                                     {:else if ongoingSteps.get(step.id)?.loading}
@@ -185,3 +185,45 @@
     {/if}
     </div>
 </div>
+
+<style lang="postcss">
+    :global(#thread-process #message-groups) {
+        padding-top: 0;
+        opacity: 0.15;
+    }
+    :global(#thread-process #message-groups .prose) {
+        font-size: 0.75rem;
+    }
+    :global(#thread-process #message-groups > div) {
+        min-height: unset !important;
+    }
+    :global(#thread-process #message-groups .h-59) {
+        display: none;
+    }
+
+    /* Timeline connector fill animation */
+    :global(.timeline-connector) {
+        position: relative !important;
+        background-color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
+        overflow: hidden !important;
+    }
+
+    :global(.timeline-connector::after) {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 0%;
+        background-color: var(--color-primary);
+        transition: height 0.4s ease-out;
+    }
+
+    :global(.timeline-connector.error::after) {
+        background-color: color-mix(in oklch, var(--color-error) 40%, var(--color-base-100));
+    }
+
+    :global(.timeline-connector.completed::after, .timeline-connector.error::after) {
+        height: 100%;
+    }
+</style>
