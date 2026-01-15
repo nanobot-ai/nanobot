@@ -24,7 +24,7 @@
 	import { ChatService } from '$lib/chat.svelte';
 	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 	import TaskRunInputs from './TaskRunInputs.svelte';
-	import StepRun from '../StepRun.svelte';
+	import StepRun from './StepRun.svelte';
 	import Elicitation from '$lib/components/Elicitation.svelte';
 
     type Props = {

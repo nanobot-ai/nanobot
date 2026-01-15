@@ -127,6 +127,9 @@
 
         run = await workspace?.newSession();
         run.setCallbacks({
+            onChatStart: () => {
+                workspace?.load();
+            },
             onChatDone: () => {
                 completed = true;
                 loading = false;
