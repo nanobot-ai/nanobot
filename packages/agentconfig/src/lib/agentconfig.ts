@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import { hooks } from "@nanobot-ai/nanomcp";
 import {
 	ensureConnected,
@@ -22,7 +23,9 @@ async function addMcpServers(
 	client: WorkspaceClient,
 	config: hooks.AgentConfigHook,
 ) {
-	const mcpJson = await client.readTextFile(".nanobot/mcp.json", {
+	const mcpPath = path.join(".nanobot", "mcp.json");
+
+	const mcpJson = await client.readTextFile(mcpPath, {
 		ignoreNotFound: true,
 	});
 	if (!mcpJson) {
@@ -34,6 +37,9 @@ async function addMcpServers(
 	});
 	if (parsed.success) {
 		config.mcpServers = parsed.data.mcpServers;
+		if (parsed.data.mcpServers && config.agent) {
+			config.agent.mcpServers = Object.keys(parsed.data.mcpServers);
+		}
 	} else {
 		console.error(`Failed to parse MCP servers: ${parsed.error.message}`);
 	}

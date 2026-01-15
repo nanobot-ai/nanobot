@@ -2,6 +2,12 @@ import * as path from "node:path";
 import type { WorkspaceClient } from "@nanobot-ai/workspace-client";
 import { load } from "js-yaml";
 
+export type TaskTool = {
+	name: string;
+	title?: string;
+	url: string;
+};
+
 export type Task = {
 	id: string;
 	name: string;
@@ -9,6 +15,7 @@ export type Task = {
 	description?: string;
 	instructions: string;
 	inputs?: TaskInput[];
+	tools?: TaskTool[];
 	baseDir: string;
 };
 
@@ -28,13 +35,13 @@ const emptyTask: Task = {
 };
 
 function parseYAMLFrontMatter(text: string): {
-	frontMatter: Record<string, string>;
+	frontMatter: Record<string, unknown>;
 	instructions: string;
 } {
 	const match = text.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
 	if (!match) return { frontMatter: {}, instructions: text.trim() };
 	try {
-		const frontMatter = load(match[1]) as Record<string, string>;
+		const frontMatter = load(match[1]) as Record<string, unknown>;
 		return { frontMatter, instructions: match[2].trim() };
 	} catch {
 		return { frontMatter: {}, instructions: text.trim() };
@@ -76,10 +83,19 @@ async function getTaskByDirectoryName(
 
 	return {
 		id: taskName,
-		name: frontMatter.task_name || frontMatter.name || taskName,
-		next: frontMatter.next,
-		description: frontMatter.task_description || frontMatter.description || "",
+		name:
+			(frontMatter.task_name as string) ||
+			(frontMatter.name as string) ||
+			taskName,
+		next: frontMatter.next as string | undefined,
+		description:
+			(frontMatter.task_description as string) ||
+			(frontMatter.description as string) ||
+			"",
 		instructions: parsedContent,
+		tools: Array.isArray(frontMatter.tools)
+			? (frontMatter.tools as TaskTool[])
+			: [],
 		baseDir: taskDir,
 	};
 }
