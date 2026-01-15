@@ -188,7 +188,12 @@
 
     function buildSessionData(messages: ChatMessage[], steps: StepType[]): SessionData {
         const sessionData: SessionData = {};
-        let activeStepId = '';
+        
+       const firstStepId = steps[0]?.id ?? '';
+        if (firstStepId) {
+            sessionData[firstStepId] = createStepSession(firstStepId);
+        }
+        let activeStepId = firstStepId;
 
         const lastMessage = messages[messages.length - 1];
         const hasTrailingSummary = lastMessage && isSummaryMessage(lastMessage);
@@ -210,6 +215,7 @@
     $effect(() => {
         // Update runSession during a task run
         if (!run || !task || run.messages.length === 0) return;
+        console.log('run messages', run.messages);
 
         const sessionData = buildSessionData(run.messages, task.steps);
 
