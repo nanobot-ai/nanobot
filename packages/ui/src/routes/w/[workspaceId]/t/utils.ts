@@ -1,5 +1,14 @@
-import type { WorkspaceClient, WorkspaceFile } from '$lib/types';
-import type { Input, ParsedContent, ParsedFile, Step, Task } from './types';
+import { renderMarkdown } from '$lib/markdown';
+import type { ChatMessage, WorkspaceClient, WorkspaceFile } from '$lib/types';
+import type {
+	Input,
+	ParsedContent,
+	ParsedFile,
+	SessionData,
+	Step,
+	StepSession,
+	Task
+} from './types';
 import YAML from 'yaml';
 
 export async function parseFrontmatterMarkdown(fileContent: Blob): Promise<ParsedContent> {
@@ -198,4 +207,128 @@ export function setupEmptyTask(): Task {
 			}
 		]
 	};
+}
+
+function parseToolArgs(item: { arguments?: string }): Record<string, unknown> | null {
+	try {
+		return JSON.parse(item.arguments || '{}');
+	} catch {
+		return null;
+	}
+}
+
+function getStepIdFromExecuteTask(args: Record<string, unknown>, steps: Step[]): string {
+	if (args.filename) {
+		const step = steps.find((s) => s.id === args.filename);
+		return step?.id ?? '';
+	}
+	return steps[0]?.id ?? '';
+}
+
+function createStepSession(stepId: string): StepSession {
+	return { stepId, messages: [], pending: true, completed: false };
+}
+
+function processExecuteTaskStep(
+	item: { name?: string; arguments?: string },
+	steps: Step[],
+	sessionData: SessionData,
+	currentStepId: string
+): string {
+	const args = parseToolArgs(item);
+	if (!args) return currentStepId;
+
+	const stepId = getStepIdFromExecuteTask(args, steps);
+	if (stepId && !sessionData[stepId]) {
+		sessionData[stepId] = createStepSession(stepId);
+	}
+	return stepId || currentStepId;
+}
+
+function processTaskStepStatus(
+	item: { name?: string; arguments?: string },
+	sessionData: SessionData,
+	activeStepId: string
+): void {
+	if (!activeStepId) return;
+
+	const args = parseToolArgs(item);
+	if (!args) return;
+
+	const session = sessionData[activeStepId];
+	if (session && (args.status === 'succeeded' || args.status === 'failed')) {
+		session.pending = false;
+		session.completed = true;
+	}
+}
+
+export function processMessage(
+	message: ChatMessage,
+	steps: Step[],
+	sessionData: SessionData,
+	activeStepId: string,
+	skipMessage: boolean
+): string {
+	const items = message.items ?? [];
+
+	// Process tool calls in this message
+	for (const item of items) {
+		if (item.type === 'tool' && 'name' in item) {
+			if (item.name === 'ExecuteTaskStep') {
+				activeStepId = processExecuteTaskStep(item, steps, sessionData, activeStepId);
+			} else if (item.name === 'TaskStepStatus') {
+				processTaskStepStatus(item, sessionData, activeStepId);
+			}
+		}
+	}
+
+	if (!skipMessage && activeStepId && sessionData[activeStepId]) {
+		const session = sessionData[activeStepId];
+		if (!session.messages.some((m) => m.id === message.id)) {
+			session.messages.push(message);
+		}
+	}
+
+	return activeStepId;
+}
+
+function isSummaryMessage(message: ChatMessage): boolean {
+	const items = message?.items ?? [];
+	return items.length > 0 && items.every((item) => item.type === 'text');
+}
+
+export function buildSessionData(messages: ChatMessage[], steps: Step[]): SessionData {
+	const sessionData: SessionData = {};
+
+	const firstStepId = steps[0]?.id ?? '';
+	if (firstStepId) {
+		sessionData[firstStepId] = createStepSession(firstStepId);
+	}
+	let activeStepId = firstStepId;
+
+	const lastMessage = messages[messages.length - 1];
+	const hasTrailingSummary = lastMessage && isSummaryMessage(lastMessage);
+
+	for (let i = 0; i < messages.length; i++) {
+		const isLastMessage = i === messages.length - 1;
+		const skipMessage = isLastMessage && hasTrailingSummary;
+
+		activeStepId = processMessage(messages[i], steps, sessionData, activeStepId, skipMessage);
+	}
+
+	return sessionData;
+}
+
+export function areAllStepsCompleted(steps: Step[], sessionData: SessionData): boolean {
+	return steps.every((step) => sessionData[step.id]?.completed);
+}
+
+export function buildRunSummary(messages: ChatMessage[]): string {
+	if (messages.length === 0) return '';
+	const lastMessage = messages[messages.length - 1];
+	if (!lastMessage.items) return '';
+	// Find the text item in the last message
+	const textItem = lastMessage.items.find((item) => item.type === 'text' && 'text' in item);
+	const text = textItem && 'text' in textItem ? textItem.text : '';
+	return text ? renderMarkdown(text) : '';
 }

@@ -48,6 +48,7 @@
     }: Props = $props();
     const notifications = getNotificationContext();
     const registry = getRegistryContext();
+    
     let tools = $derived(
         step.tools && step.tools.length > 0 && !registry.loading && registry.servers.length > 0 
             ? step.tools.map((toolName) => registry.getServerByName(toolName)).filter((tool) => tool !== undefined) 

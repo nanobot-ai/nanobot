@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { WorkspaceInstance, WorkspaceService } from "$lib/workspace.svelte";
-	import { ChevronDown, ChevronRight, CircleX, Copy, EllipsisVertical, FileText, Folder, FolderOpen, ListTodo, MessageSquare, PaintBucket, PencilLine, Play, Plus, Save, Share, Trash2 } from "@lucide/svelte";
+	import { ChevronDown, ChevronRight, CircleX, Copy, EllipsisVertical, FileText, Folder, FolderOpen, ListTodo, PaintBucket, PencilLine, Play, Plus, Save, Share, Trash2 } from "@lucide/svelte";
 	import { onMount, tick } from "svelte";
 	import type { Component } from "svelte";
 	import DragDropList from "./DragDropList.svelte";
@@ -109,8 +109,6 @@
     let workspaces = $derived(workspaceService.workspaces);
     let sharedWorkspaces = $state<Workspace[]>([]);
     let workspacePermissions = $state<Record<string, string[]>>({});
-
-    let taskRuns = $state<Record<string, { runs: { id: string; created: string }[] }>>({});
 
     onMount(async () => {
         loadExpandedState();
@@ -458,10 +456,17 @@
             }, {})
         }
         {@const files = (workspaceInstance?.files ?? []).filter((f: { name: string }) => !f.name.startsWith('.nanobot/tasks/'))}
-        {@const conversations = workspaceInstance?.sessions ?? []}
+        {@const sessions = workspaceInstance?.sessions ?? []}
+        {@const taskRuns = sessions
+            .filter((s: Session) => s.parentTaskName)
+            .reduce<Record<string, Session[]>>((acc, s: Session) => {
+                acc[s.parentTaskName!] = [...(acc[s.parentTaskName!] ?? []), s];
+                return acc;
+            }, {})}
+        <!-- {@const conversations = sessions.filter((s: Session) => !s.parentTaskName)} -->
         <ul>
-            {@render tasksSection(workspace.id, tasks, permissions)}
-            {@render conversationsSection(workspace.id, conversations)}
+            {@render tasksSection(workspace.id, tasks, permissions, taskRuns)}
+            <!-- {@render conversationsSection(workspace.id, conversations)} -->
             {@render filesSection(workspace.id, files, permissions)}
         </ul>
     {/if}
@@ -504,7 +509,7 @@
     </summary>
 {/snippet}
 
-{#snippet tasksSection(workspaceId: string, tasks: Record<string, boolean>, permissions: string[])}
+{#snippet tasksSection(workspaceId: string, tasks: Record<string, boolean>, permissions: string[], taskRuns: Record<string, Session[]>)}
 {@const items = Object.keys(tasks)}
 {@const title =  'Workflows'}
 <li class="flex grow">
@@ -578,11 +583,11 @@
                                 </div>
                             </summary>
                             <ul>
-                                {#if taskRuns[item]?.runs?.length > 0}
+                                {#if taskRuns[item]?.length > 0}
                                     {@const runOnly = !permissions.includes('write') && !permissions.includes('read') && permissions.includes('execute')}
-                                    {#each (taskRuns[item]?.runs ?? []) as run (run.id)}
+                                    {#each taskRuns[item] as run (run.id)}
                                         <li>
-                                            <div class="flex items-center gap-2 rounded-r-none
+                                            <div class="flex max-w-full items-center gap-2 rounded-r-none
                                                 {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}
                                                 {selectedRunId && selectedRunId === run.id ? 'bg-base-200 dark:bg-base-100' : ''}
                                             ">
@@ -590,9 +595,9 @@
                                                     href={resolve(`/w/${workspaceId}/t?id=${item}&runId=${run.id}${runOnly ? '&run=true' : ''}`)}
                                                     class="block h-full p-2 w-full overflow-hidden truncate"
                                                 >
-                                                    {new Date(run.created).toLocaleString().replace(',', '')}
+                                                    {run.title}
                                                 </a>
-                                                <button class="btn btn-square btn-ghost btn-sm mr-1" popovertarget="popover-task-run-actions-{item}-{run.id}" style="anchor-name:--task-run-actions-anchor-{item}-{run.id}">
+                                                <button class="btn btn-square btn-ghost btn-sm mr-0.5" popovertarget="popover-task-run-actions-{item}-{run.id}" style="anchor-name:--task-run-actions-anchor-{item}-{run.id}">
                                                     <EllipsisVertical class="size-4 shrink-0" />
                                                 </button>
                                                 <ul 
@@ -604,7 +609,7 @@
                                                         <button 
                                                             onmousedown={(e) => e.stopPropagation()} 
                                                             onclick={() => {
-                                                                // TODO: delete run
+                                                                workspaceData.get(workspaceId)?.deleteSession(run.id);
                                                             }} 
                                                             class="menu-alert"
                                                         >
@@ -776,7 +781,7 @@
 </ul>
 {/snippet}
 
-{#snippet conversationsSection(workspaceId: string, conversations: Session[])}
+<!-- {#snippet conversationsSection(workspaceId: string, conversations: Session[])}
 <li class="flex grow">
     <details class="workspace-details w-full">
         {@render sectionTitle('Conversations', MessageSquare, conversations)}
@@ -801,7 +806,7 @@
         </ul>
     </details>
 </li>
-{/snippet}
+{/snippet} -->
 
 {#snippet filesSection(_workspaceId: string, files: WorkspaceFile[], permissions: string[])}
 <li class="flex grow">

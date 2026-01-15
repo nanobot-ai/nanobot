@@ -12,7 +12,7 @@
 	import type { Attachment, ChatMessage, WorkspaceClient, WorkspaceFile } from '$lib/types';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
 	import { type Input, type Task, type Step as StepType } from './types';
-	import { compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
+	import { areAllStepsCompleted, buildRunSummary, buildSessionData, compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
 	import StepActions from './StepActions.svelte';
 	import TaskInputActions from './TaskInputActions.svelte';
     import TaskInput from './TaskInput.svelte';
@@ -22,7 +22,6 @@
 	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
     import { sharedChat } from '$lib/stores/chat.svelte';
 	import { ChatService } from '$lib/chat.svelte';
-	import { renderMarkdown } from '$lib/markdown';
 	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 	import TaskRunInputs from './TaskRunInputs.svelte';
 	import StepRun from '../StepRun.svelte';
@@ -81,144 +80,16 @@
     let running = $state(false);
     let completed = $state(false);
     
-    // Extract summary text from the last message when workflow completes
-    let runSummary = $derived.by(() => {
-        if (!run || run.messages.length === 0) return '';
-        const lastMessage = run.messages[run.messages.length - 1];
-        if (!lastMessage.items) return '';
-        // Find the text item in the last message
-        const textItem = lastMessage.items.find(item => item.type === 'text' && 'text' in item);
-        const text = textItem && 'text' in textItem ? textItem.text : '';
-        return text ? renderMarkdown(text) : '';
-    });
+    let runSummary = $derived(run ? buildRunSummary(run.messages) : '');
 
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
 
-    type StepSession = { stepId: string; messages: ChatMessage[]; pending: boolean; completed: boolean };
-    type SessionData = Record<string, StepSession>;
-
-    function isSummaryMessage(message: ChatMessage): boolean {
-        const items = message?.items ?? [];
-        return items.length > 0 && items.every(item => item.type === 'text');
-    }
-
-    function parseToolArgs(item: { arguments?: string }): Record<string, unknown> | null {
-        try {
-            return JSON.parse(item.arguments || '{}');
-        } catch {
-            return null;
-        }
-    }
-
-    function getStepIdFromExecuteTask(args: Record<string, unknown>, steps: StepType[]): string {
-        if (args.filename) {
-            const step = steps.find(s => s.id === args.filename);
-            return step?.id ?? '';
-        }
-        return steps[0]?.id ?? '';
-    }
-
-    function createStepSession(stepId: string): StepSession {
-        return { stepId, messages: [], pending: true, completed: false };
-    }
-
-    function processExecuteTaskStep(
-        item: { name?: string; arguments?: string },
-        steps: StepType[],
-        sessionData: SessionData,
-        currentStepId: string
-    ): string {
-        const args = parseToolArgs(item);
-        if (!args) return currentStepId;
-
-        const stepId = getStepIdFromExecuteTask(args, steps);
-        if (stepId && !sessionData[stepId]) {
-            sessionData[stepId] = createStepSession(stepId);
-        }
-        return stepId || currentStepId;
-    }
-
-    function processTaskStepStatus(
-        item: { name?: string; arguments?: string },
-        sessionData: SessionData,
-        activeStepId: string
-    ): void {
-        if (!activeStepId) return;
-
-        const args = parseToolArgs(item);
-        if (!args) return;
-
-        const session = sessionData[activeStepId];
-        if (session && (args.status === 'succeeded' || args.status === 'failed')) {
-            session.pending = false;
-            session.completed = true;
-        }
-    }
-
-    function processMessage(
-        message: ChatMessage,
-        steps: StepType[],
-        sessionData: SessionData,
-        activeStepId: string,
-        skipMessage: boolean
-    ): string {
-        const items = message.items ?? [];
-
-        // Process tool calls in this message
-        for (const item of items) {
-            if (item.type === 'tool' && 'name' in item) {
-                if (item.name === 'ExecuteTaskStep') {
-                    activeStepId = processExecuteTaskStep(item, steps, sessionData, activeStepId);
-                } else if (item.name === 'TaskStepStatus') {
-                    processTaskStepStatus(item, sessionData, activeStepId);
-                }
-            }
-        }
-
-        if (!skipMessage && activeStepId && sessionData[activeStepId]) {
-            const session = sessionData[activeStepId];
-            if (!session.messages.some(m => m.id === message.id)) {
-                session.messages.push(message);
-            }
-        }
-
-        return activeStepId;
-    }
-
-    function buildSessionData(messages: ChatMessage[], steps: StepType[]): SessionData {
-        const sessionData: SessionData = {};
-        
-       const firstStepId = steps[0]?.id ?? '';
-        if (firstStepId) {
-            sessionData[firstStepId] = createStepSession(firstStepId);
-        }
-        let activeStepId = firstStepId;
-
-        const lastMessage = messages[messages.length - 1];
-        const hasTrailingSummary = lastMessage && isSummaryMessage(lastMessage);
-
-        for (let i = 0; i < messages.length; i++) {
-            const isLastMessage = i === messages.length - 1;
-            const skipMessage = isLastMessage && hasTrailingSummary;
-
-            activeStepId = processMessage(messages[i], steps, sessionData, activeStepId, skipMessage);
-        }
-
-        return sessionData;
-    }
-
-    function areAllStepsCompleted(steps: StepType[], sessionData: SessionData): boolean {
-        return steps.every(step => sessionData[step.id]?.completed);
-    }
-
     $effect(() => {
         // Update runSession during a task run
         if (!run || !task || run.messages.length === 0) return;
-        console.log('run messages', run.messages);
 
         const sessionData = buildSessionData(run.messages, task.steps);
-
         for (const [stepId, data] of Object.entries(sessionData)) {
             runSession.set(stepId, data);
         }
@@ -440,6 +311,12 @@
 
         running = true;
         run = await workspace.newSession();
+        run.setCallbacks({
+            onChatDone: () => {
+                completed = true;
+                // TODO: verify all steps completed?
+            }
+        });
         await run?.sendToolCall('ExecuteTaskStep', {taskName: taskId, arguments: formData});
     }
 </script>
@@ -790,7 +667,6 @@
 <RegistryToolSelector bind:this={registryToolSelector}
     omit={currentAddingToolForStep?.tools ?? []}
     onToolsSelect={(names) => {
-        console.log(names);
         if (!currentAddingToolForStep) return;
         const stepIndex = task?.steps.findIndex((step) => step.id === currentAddingToolForStep?.id);
         if (stepIndex === undefined) return;

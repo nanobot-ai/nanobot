@@ -1,0 +1,194 @@
+<script lang="ts">
+	import type { ChatMessage, WorkspaceClient, WorkspaceFile } from "$lib/types";
+	import { untrack } from "svelte";
+	import { buildRunSummary, buildSessionData, convertToTask } from "./utils";
+	import type { Input, Task } from "./types";
+	import { SvelteMap } from "svelte/reactivity";
+    import type { ChatService } from "$lib/chat.svelte";
+	import TaskRunContent from "./TaskRunContent.svelte";
+	
+    type Props = {
+        workspace: WorkspaceClient;
+        urlTaskId: string;
+        runId: string;
+    }
+    let { workspace, urlTaskId, runId }: Props = $props();
+
+    let task = $state<Task | null>(null);
+    let initialLoadComplete = $state(false);
+    let compiling = $state(false);
+
+    let loading = $state(false);
+    let error = $state(false);
+
+    let runArguments = $state<(Omit<Input, 'id'> & { value: string })[]>([]);
+    let run = $state<ChatService | null>(null);
+    let compiledRunId = $state<string | null>(null);
+
+    let progressTimeout: ReturnType<typeof setTimeout> | null = null;
+    let progress = $state(0);
+
+    let name = $derived(task?.name || task?.steps[0].name || '');
+    let description = $derived((task?.description || task?.steps[0].description)?.trim() || '');
+    let totalTime = $state(0);
+    let totalTokens = $state(0);
+    
+    const ongoingSteps = new SvelteMap<string, { loading: boolean, completed: boolean, oauth: string, totalTime?: number, tokens?: number, error?: boolean }>();
+    let stepSummaries = $state<{ step: string, summary: string }[]>([]);
+    let runSummary = $derived(run && !error ? buildRunSummary(run.messages) : '');
+
+    async function compileTask(id: string, files: WorkspaceFile[]) {
+        if (!workspace || !id || compiling) return;
+        
+        compiling = true;
+        if (progressTimeout) {
+            clearTimeout(progressTimeout);
+        }
+
+        initialLoadComplete = false;
+
+        progress = 0;
+        progressTimeout = setTimeout(() => {
+            progress = 30;
+            progressTimeout = setTimeout(() => {
+                progress = 75;
+            }, 3000);
+        }, 1000);
+
+        task = await convertToTask(workspace, files, id);
+        clearTimeout(progressTimeout);
+        progress = 100;
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        initialLoadComplete = true;
+        compiling = false;
+    }
+
+    $effect(() => {
+        const currentRunId = runId; // track runId
+        const taskReady = !!task; // track when task becomes available
+        untrack(() => {
+            if (!taskReady || !workspace) return;
+            if (currentRunId) {
+                loadRunSession();
+            } else {
+                stepSummaries = [];
+            }
+        });
+    })
+
+    function reset() {
+        runArguments = [];
+        loading = false;
+        ongoingSteps.clear();
+        stepSummaries = [];
+        totalTime = 0;
+        totalTokens = 0;
+    }
+
+    async function loadRunSession() {
+        if (!task || !workspace) return;
+
+        reset();
+        loading = true;
+        run = await workspace.getSession(runId);
+    }
+    
+    async function compileRun(messages: ChatMessage[]) {
+        if (!task) return;
+        const sessionData = buildSessionData(messages, task.steps);
+        for (const step of task.steps) {
+            const data = sessionData[step.id];
+            ongoingSteps.set(step.id, { 
+                loading: false, 
+                completed: true,
+                oauth: '', 
+                totalTime: Math.floor(Math.random() * 6000) + 1000, 
+                tokens: Math.floor(Math.random() * 4000) + 1000,
+                error: !data || data.messages.length === 0,
+            });
+        }
+
+        const ongoingStepsArr = Array.from(ongoingSteps.values());
+        totalTokens = ongoingStepsArr.reduce((acc, step) => acc + (step.tokens ?? 0), 0);
+        totalTime = ongoingStepsArr.reduce((acc, step) => acc + (step.totalTime ?? 0), 0);
+        error = ongoingStepsArr.some((step) => step.error);
+
+        loading = false;
+    }
+
+    $effect(() => {
+        if (run && run.messages.length > 0 && task && compiledRunId !== runId) {
+            compiledRunId = runId;
+            compileRun(run.messages);
+        }
+    })
+
+    $effect(() => {
+        const files = workspace?.files ?? [];
+        if (urlTaskId && files.length > 0) {
+             if (untrack(() => !compiling)) {
+                compileTask(urlTaskId, files);
+            }
+        }
+    });
+</script>
+
+<TaskRunContent 
+    {task}
+    {initialLoadComplete} 
+    title={`${name} ${run?.chatId ? `- ${run.chatId}` : ''}`}
+    {loading} 
+    {description} 
+    {runArguments}
+    {ongoingSteps}
+    {stepSummaries}
+    {runSummary}
+    {error}
+    {totalTime}
+    {totalTokens}
+    {progress}
+    loadingText="Loading the previous task run now. Please wait a moment..."
+/>
+
+<style lang="postcss">
+    :global(#thread-process #message-groups) {
+        padding-top: 0;
+        opacity: 0.15;
+    }
+    :global(#thread-process #message-groups .prose) {
+        font-size: 0.75rem;
+    }
+    :global(#thread-process #message-groups > div) {
+        min-height: unset !important;
+    }
+    :global(#thread-process #message-groups .h-59) {
+        display: none;
+    }
+
+    /* Timeline connector fill animation */
+    :global(.timeline-connector) {
+        position: relative !important;
+        background-color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
+        overflow: hidden !important;
+    }
+
+    :global(.timeline-connector::after) {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 0%;
+        background-color: var(--color-primary);
+        transition: height 0.4s ease-out;
+    }
+
+    :global(.timeline-connector.error::after) {
+        background-color: var(--color-error);
+    }
+
+    :global(.timeline-connector.completed::after, .timeline-connector.error::after) {
+        height: 100%;
+    }
+</style>

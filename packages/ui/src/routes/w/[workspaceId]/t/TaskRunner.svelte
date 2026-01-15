@@ -1,77 +1,45 @@
 <script lang="ts">
-	import { createRegistryStore, getRegistryContext, setRegistryContext } from "$lib/context/registry.svelte";
 	import type { WorkspaceClient, WorkspaceFile } from "$lib/types";
-	import { onMount, untrack } from "svelte";
-	import { convertToTask } from "./utils";
+	import { untrack } from "svelte";
+	import { areAllStepsCompleted, buildRunSummary, buildSessionData, convertToTask } from "./utils";
 	import type { Input, Task } from "./types";
-	import { fade, slide } from "svelte/transition";
-	import { Circle, CircleCheck, ListTodo, LoaderCircle, Play, Square, Wrench } from "@lucide/svelte";
 	import { SvelteMap } from "svelte/reactivity";
     import TaskRunInputs from "./TaskRunInputs.svelte";
+	import type { ChatService } from "$lib/chat.svelte";
+	import TaskRunContent from "./TaskRunContent.svelte";
+	import { LoaderCircle, Play, Square } from "@lucide/svelte";
 	
     type Props = {
         workspace: WorkspaceClient;
         urlTaskId: string;
-        runId?: string;
     }
-    let { workspace, urlTaskId, runId }: Props = $props();
-    
-    const registryStore = createRegistryStore();
-	setRegistryContext(registryStore);
-    const registry = getRegistryContext();
-
+    let { workspace, urlTaskId }: Props = $props();
     let task = $state<Task | null>(null);
     let initialLoadComplete = $state(false);
     let compiling = $state(false);
 
     let inputsModal = $state<ReturnType<typeof TaskRunInputs> | null>(null);
     let loading = $state(false);
-    let canceling =  $state(false);
-    let completed = $state(false); // TODO: completed data to display?
+    let cancelled =  $state(false);
+    let completed = $state(false);
+    let error = $state(false);
 
     let runArguments = $state<(Omit<Input, 'id'> & { value: string })[]>([]);
-    let runTime = $state('');
+    let run = $state<ChatService | null>(null);
 
     let progressTimeout: ReturnType<typeof setTimeout> | null = null;
     let progress = $state(0);
 
     let name = $derived(task?.name || task?.steps[0].name || '');
     let description = $derived((task?.description || task?.steps[0].description)?.trim() || '');
-    let tools = $derived.by(() => {
-        if ((task?.steps?.length || 0) === 0) return [];
-        if (registry.loading || registry.servers.length === 0) return [];
-        
-        const tools = task?.steps.flatMap((step) => step.tools.map((toolName) => registry.getServerByName(toolName)).filter((tool) => tool !== undefined)) ?? [];
-        return tools.filter((tool, index, self) => self.findIndex((t) => t.name === tool.name) === index);
-    })
 
     let totalTime = $state(0);
     let totalTokens = $state(0);
     let timeoutHandlers = $state<ReturnType<typeof setTimeout>[]>([]);
 
-    const ongoingSteps = new SvelteMap<string, { loading: boolean, completed: boolean, oauth: string, totalTime?: number, tokens?: number }>();
+    const ongoingSteps = new SvelteMap<string, { loading: boolean, completed: boolean, oauth: string, totalTime?: number, tokens?: number, error?: boolean }>();
     let stepSummaries = $state<{ step: string, summary: string }[]>([]);
-    
-    onMount(() => {
-        if (urlTaskId) {
-            registryStore.fetch();
-        }
-    });
-
-    $effect(() => {
-        if (runId) {
-            completed = true;
-            // TODO: get these from actual task run
-            stepSummaries = []; 
-            runArguments = [];
-            runTime = '';
-            totalTokens = 0;
-            totalTime = 0;
-        } else {
-            completed = false;
-            stepSummaries = [];
-        }
-    })
+    let runSummary = $derived(run && !error ? buildRunSummary(run.messages) : '');
 
     async function compileTask(id: string, files: WorkspaceFile[]) {
         if (!workspace || !id || compiling) return;
@@ -95,7 +63,7 @@
         clearTimeout(progressTimeout);
         progress = 100;
 
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 500));
         initialLoadComplete = true;
         compiling = false;
     }
@@ -105,211 +73,123 @@
         if (urlTaskId && files.length > 0) {
              if (untrack(() => !compiling)) {
                 compileTask(urlTaskId, files);
+                resetRun();
             }
         }
     });
-    
-    async function handleRun(formData: (Input & { value: string })[]) {
-        if (!task) return;
-        if (loading) {
-            canceling = true;
-            timeoutHandlers.forEach((handler) => clearTimeout(handler));
+
+    $effect(() => {
+        // Update runSession during an ongoing task run
+        if (!run || !task || run.messages.length === 0 || completed) return;
+
+        const sessionData = buildSessionData(run.messages, task.steps);
+        for (const [stepId, data] of Object.entries(sessionData)) {
+            const existingStep = untrack(() => ongoingSteps.get(stepId));
+            ongoingSteps.set(stepId, {
+                loading: data.pending,
+                completed: data.completed,
+                oauth: '',
+                totalTime: existingStep?.totalTime ?? Math.floor(Math.random() * 6000) + 1000,
+                tokens: existingStep?.tokens ?? Math.floor(Math.random() * 4000) + 1000,
+                error: false,
+            });
+        }
+
+        if (areAllStepsCompleted(task.steps, sessionData)) {
             completed = true;
             loading = false;
-            totalTime = 0;
-            totalTokens = 0;
-            runArguments = [];
-            return;
         }
-        
-        canceling = false;
-        loading = true;
-        completed = false;
-        timeoutHandlers = [];
-        ongoingSteps.clear();
-        totalTime = 0;
-        totalTokens = 0;
-        runArguments = formData;
+    })
 
-        let timeout = 0;
-        let tokenCount = 0;
-        for (const step of task.steps) {
-            timeout += 1000;
-            const handlerA = setTimeout(() => {
-                ongoingSteps.set(step.id, { loading: true, completed: false, oauth: '' });
-            }, timeout);
-            
-            const completeTime = Math.floor(Math.random() * 4000) + 1000;
-            const tokens = Math.floor(Math.random() * 9000) + 1000;
-            timeout += completeTime; // 1-5 seconds
-            tokenCount += tokens;
-
-            const handlerB = setTimeout(() => {
-                ongoingSteps.set(step.id, { loading: false, completed: true, totalTime: completeTime, tokens, oauth: '' });
-                // TODO: get step summaries from actual task run
-                stepSummaries.push({ step: step.id, summary: '' });
-            }, timeout);
-            timeoutHandlers.push(handlerA, handlerB);
-        }
-        const finalHandler = setTimeout(() => {
-            completed = true;
-            totalTime = timeout;
-            totalTokens = tokenCount;
-            loading = false;
-        }, timeout + 1000);
-        timeoutHandlers.push(finalHandler);
-    }
-
-    function reset() {
+    function resetRun(isCancel?: boolean) {
         runArguments = [];
         timeoutHandlers.forEach((handler) => clearTimeout(handler));
         timeoutHandlers = [];
 
+        cancelled = isCancel ?? false;
         loading = false;
         completed = false;
-        canceling = false;
         ongoingSteps.clear();
         stepSummaries = [];
         totalTime = 0;
         totalTokens = 0;
     }
+    
+    // TODO:
+    async function handleRun(formData: (Input & { value: string })[]) {
+        if (!task) return;
+        if (loading) {
+            resetRun(true);
+            return;
+        }
+        
+        resetRun();
+        loading = true;
+        runArguments = formData;
+
+        run = await workspace?.newSession();
+        run.setCallbacks({
+            onChatDone: () => {
+                completed = true;
+                loading = false;
+                const sessionData = buildSessionData(run?.messages ?? [], task?.steps ?? []);
+                error = !areAllStepsCompleted(task?.steps ?? [], sessionData);
+
+                for (const step of task?.steps ?? []) {
+                    const existingStep = ongoingSteps.get(step.id);
+                    ongoingSteps.set(step.id, {
+                        loading: false,
+                        completed: sessionData[step.id]?.completed ?? false,
+                        oauth: '',
+                        totalTime: existingStep?.totalTime ?? Math.floor(Math.random() * 6000) + 1000,
+                        tokens: existingStep?.tokens ?? Math.floor(Math.random() * 4000) + 1000,
+                        error: sessionData[step.id]?.messages ? sessionData[step.id]?.messages.length === 0 : true,
+                    });
+                }
+            }
+        });
+        await run?.sendToolCall('ExecuteTaskStep', {taskName: urlTaskId, arguments: formData});
+    }
 </script>
 
-<div class="w-full h-dvh flex flex-col relative">
-    <div class="h-16 w-full flex px-4 items-center shrink-0 z-30 sticky top-0 left-0">
-        <h2 in:fade class="text-xl font-semibold flex items-center gap-2">{name} {runTime ? `- ${new Date(runTime).toLocaleString()}` : ''} {#if loading}<LoaderCircle class="size-4 animate-spin shrink-0" />{/if}</h2>
-    </div>
-    <div class="w-full flex flex-col flex-1 items-center overflow-y-auto py-4">
-    {#if initialLoadComplete && task}
-        <div class="md:w-4xl px-4 w-full flex flex-col items-center z-20 my-auto">
-            <div class="hero w-full bg-base-100 dark:bg-base-200 rounded-box shadow-xs dark:border-base-300 border-transparent border mb-4">
-                <div class="hero-content w-full grow flex-col md:flex-row">
-                    <div class="flex flex-col gap-4 grow">
-                        <div class="pl-4 flex items-center gap-3">
-                            <div class="rounded-full p-2 border-2 border-primary bg-primary/10 {loading ? 'animate-pulse' : ''} w-fit">
-                                <ListTodo class="size-8 text-primary" />
-                            </div>
-                            <div class="w-xs">
-                                <h3 class="mt-2 text-2xl font-semibold">{name}</h3>
-                                {#if loading}
-                                    <p in:fade class="font-light text-sm text-base-content/50">Your task is currently running. Please wait a moment...</p>
-                                {:else}
-                                    <div in:fade>
-                                        {#if description.length > 0}
-                                            <p class="text-xs text-base-content/50 mt-1">{description}</p>
-                                        {/if}
-                                        {#if tools.length > 0}
-                                            <div class="flex flex-wrap gap-2 mt-2 mb-1">
-                                                {#each tools as tool (tool.name)}
-                                                    <div class="badge badge-sm badge-soft gap-1">
-                                                        {#if tool.icons?.[0]?.src}
-                                                            <img alt={tool.title} src={tool.icons[0].src} class="size-4" />
-                                                        {:else}
-                                                            <Wrench class="size-4" />
-                                                        {/if}
-                                                        {tool.title}
-                                                    </div>
-                                                {/each}
-                                            </div>
-                                        {/if}
-                                    </div>
-                                {/if}
-                            </div>
-                        </div>
-                        {#if runArguments.length > 0}
-                            <div class="flex flex-col gap-4">
-                                {#each runArguments as input (input.name)}
-                                    <label class="input input-sm w-full border border-base-300">
-                                        <span class="label h-full font-semibold text-primary bg-primary/15">{input.name}</span>
-                                        <input disabled type="text" bind:value={input.value} />
-                                    </label>
-                                {/each}
-                            </div>
-                        {/if}
-                    </div>
-                    <ul in:fade class="timeline timeline-snap-icon timeline-vertical timeline-compact grow">
-                        {#each task.steps as step, index (step.id)}
-                            <li>
-                                {#if index > 0}
-                                    <hr class="timeline-connector w-0.5 {ongoingSteps.get(task.steps[index - 1].id)?.completed ? 'completed' : ''}" />
-                                {/if}
-                                <div class="timeline-middle">
-                                    {#if ongoingSteps.get(step.id)?.completed || completed}
-                                        <CircleCheck class="size-5 text-primary" />
-                                    {:else if ongoingSteps.get(step.id)?.loading}
-                                        <LoaderCircle class="size-5 animate-spin shrink-0 text-base-content/50" />
-                                    {:else}
-                                        <Circle class="size-5 text-base-content/50" />
-                                    {/if}
-                                </div>
-                                <div class="timeline-end timeline-box border-0 shadow-none pl-1 py-2">
-                                    <div>
-                                        {step.name} 
-                                        {#if ongoingSteps.get(step.id)?.completed}
-                                            <span in:fade class="text-xs text-base-content/35">({ongoingSteps.get(step.id)?.totalTime ? `${(ongoingSteps.get(step.id)!.totalTime! / 1000).toFixed(1)}s` : ''})</span>
-                                        {/if}
-                                        {#if ongoingSteps.get(step.id)?.tokens}
-                                            <span in:fade class="text-xs italic text-base-content/35">{ongoingSteps.get(step.id)?.tokens ? `${ongoingSteps.get(step.id)!.tokens!} tokens` : ''}</span>
-                                        {/if}
-                                    </div>
-                                    {#if stepSummaries[index]?.summary}
-                                        <p in:slide={{ axis: 'y', duration: 150 }} class="text-sm text-base-content/50 mt-2">{stepSummaries[index].summary}</p>
-                                    {/if}
-                                </div>
-                                {#if index < task.steps.length - 1}
-                                    <hr class="timeline-connector w-0.5 {ongoingSteps.get(step.id)?.completed ? 'completed' : ''}" />
-                                {/if}
-                            </li>
-                        {/each}
-                    </ul>
-                </div>
-            </div>
-
-            {#if completed}
-                <div in:fade out:slide={{ axis: 'y', duration: 150 }} class="w-full flex flex-col justify-center items-center py-4">
-                    <div class="w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field p-6 pb-8">
-                        <h4 class="text-xl font-semibold">{canceling ? 'Workflow Cancelled' : 'Workflow Completed'}</h4>
-                        <p class="text-sm text-base-content/50 text-center mt-1">
-                            {#if canceling}
-                                The workflow has been cancelled. Would you like to run it again?
-                            {:else}
-                                The workflow has completed successfully. Here are your summarized results:
-                            {/if}
-                        </p>
-
-                        <p class="text-sm text-center mt-4">The workflow completed <b>{task.steps.length}</b> out of <b>{task.steps.length}</b> steps.</p> 
-                        <p class="text-sm text-center mt-1">It took a total time of <b>{(totalTime / 1000).toFixed(1)}s</b> to complete.</p>
-                        <p class="text-sm text-center mt-1">A total of <b>{totalTokens}</b> tokens were used.</p>
-                    </div>
-                </div>
-            {/if}
-
-            {#if canceling}
-                <button class="btn w-10 mt-4" disabled>
-                    <LoaderCircle class="size-4 animate-spin shrink-0" />
-                </button>
-            {:else if !runId}
-                <button class="btn btn-primary transition-all mt-4 {loading ? 'w-10 tooltip' : 'w-48'}"  onclick={() => {
-                    if (completed || loading) {
-                        reset();
-                    } else {
-                        inputsModal?.showModal();
-                    }
-                }} data-tip={loading ? 'Cancel run' : undefined}>
-                    {#if loading}
-                        <Square class="size-4 shrink-0" />
-                    {:else}
-                        Run 
-                        <Play class="size-4 shrink-0" />
-                    {/if}
-                </button>
-            {/if}
-        </div>
+<TaskRunContent
+    {task}
+    {initialLoadComplete}
+    loading={loading && !completed}
+    {description}
+    {runArguments}
+    {ongoingSteps}
+    {stepSummaries}
+    {runSummary}
+    {error}
+    {cancelled}
+    {totalTime}
+    {totalTokens}
+    {progress}
+    title={name}
+    loadingText="Your task is currently running. Please wait a moment..."
+>
+    {#if cancelled}
+        <button class="btn w-10 mt-4" disabled>
+            <LoaderCircle class="size-4 animate-spin shrink-0" />
+        </button>
     {:else}
-        <div in:fade|global={{ duration: 300 }} class="radial-progress text-primary my-auto" style="--value:{progress};" aria-valuenow="{progress}" role="progressbar">{progress}%</div>
+        <button class="btn btn-primary transition-all mt-4 {loading ? 'w-10 tooltip' : 'w-48'}"  onclick={() => {
+            if (completed || loading) {
+                resetRun(true);
+            } else {
+                inputsModal?.showModal();
+            }
+        }} data-tip={loading ? 'Cancel run' : undefined}>
+            {#if loading}
+                <Square class="size-4 shrink-0" />
+            {:else}
+                Run 
+                <Play class="size-4 shrink-0" />
+            {/if}
+        </button>
     {/if}
-    </div>
-</div>
+</TaskRunContent>
 
 <TaskRunInputs bind:this={inputsModal} onSubmit={handleRun} {task} />
 
@@ -346,7 +226,11 @@
         transition: height 0.4s ease-out;
     }
 
-    :global(.timeline-connector.completed::after) {
+    :global(.timeline-connector.error::after) {
+        background-color: var(--color-error);
+    }
+
+    :global(.timeline-connector.completed::after, .timeline-connector.error::after) {
         height: 100%;
     }
 </style>

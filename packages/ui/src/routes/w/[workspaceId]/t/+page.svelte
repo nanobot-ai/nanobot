@@ -2,11 +2,13 @@
 	import { page } from '$app/state';
 	import { ChatService } from '$lib/chat.svelte';
 	import { setSharedChat } from '$lib/stores/chat.svelte';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import TaskEditor from './TaskEditor.svelte';
 	import TaskRunner from './TaskRunner.svelte';
 	import { WorkspaceService } from '$lib/workspace.svelte';
 	import type { WorkspaceClient } from '$lib/types';
+	import TaskRun from './TaskRun.svelte';
+	import { createRegistryStore, setRegistryContext } from '$lib/context/registry.svelte';
 
     let { data } = $props();
     let workspaceId = $derived(data.workspaceId);
@@ -18,6 +20,13 @@
     let chat = $state<ChatService | null>(null);
     let workspace = $state<WorkspaceClient | null>(null);
     let chatInitialized = $state(false);
+
+    const registryStore = createRegistryStore();
+	setRegistryContext(registryStore);
+
+    onMount(() => {
+        registryStore.fetch();
+    })
 
     $effect(() => {
         if (workspaceId) {
@@ -39,8 +48,10 @@
 </script>
 
 {#if workspace && chat}
-    {#if runId || runOnly}
-        <TaskRunner {workspace} {urlTaskId} {runId} />
+    {#if runId}
+        <TaskRun {workspace} {urlTaskId} {runId} />
+    {:else if runOnly}
+        <TaskRunner {workspace} {urlTaskId} />
     {:else}
         <TaskEditor {workspace} {urlTaskId} />
     {/if}

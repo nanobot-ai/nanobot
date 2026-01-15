@@ -643,8 +643,6 @@ export class ChatService {
 	sendToolCall = async (toolName: string, params?: Record<string, unknown>) => {
 		if (!toolName.trim() || this.isLoading) return;
 
-		console.log('loading');
-
 		this.isLoading = true;
 
 		if (!this.chatId) {

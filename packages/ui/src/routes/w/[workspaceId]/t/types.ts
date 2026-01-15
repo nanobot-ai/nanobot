@@ -1,3 +1,5 @@
+import type { ChatMessage } from '$lib/types';
+
 export type Input = {
 	name: string;
 	description: string;
@@ -34,3 +36,20 @@ export type ParsedContent = {
 export type ParsedFile = {
 	id: string;
 } & ParsedContent;
+
+export type StepSession = {
+	stepId: string;
+	messages: ChatMessage[];
+	pending: boolean;
+	completed: boolean;
+};
+export type SessionData = Record<string, StepSession>;
+
+export type OngoingStep = {
+	loading: boolean;
+	completed: boolean;
+	oauth: string;
+	totalTime?: number;
+	tokens?: number;
+	error?: boolean;
+};
