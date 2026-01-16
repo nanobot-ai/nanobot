@@ -167,16 +167,18 @@
                                 The workflow has completed successfully. Here are your summarized results:
                             {/if}
                         </p>
+                        
+                        {#if runSummary}
+                            <div transition:fade class="prose mt-4 text-left w-full max-w-none">
+                                {@html runSummary}
+                            </div>
+                            <div class="divider"></div>
+                        {/if}
 
-                        <p class="text-sm text-center mt-4">The workflow completed <b>{task.steps.length}</b> out of <b>{task.steps.length}</b> steps.</p> 
+                        <p class="text-sm text-center ">The workflow completed <b>{task.steps.length}</b> out of <b>{task.steps.length}</b> steps.</p> 
                         <p class="text-sm text-center mt-1">It took a total time of <b>{(totalTime / 1000).toFixed(1)}s</b> to complete.</p>
                         <p class="text-sm text-center mt-1">A total of <b>{totalTokens}</b> tokens were used.</p>
                         
-                        {#if runSummary}
-                            <div transition:fade class="prose-sm mt-4 text-left w-full max-w-none">
-                                {@html runSummary}
-                            </div>
-                        {/if}
                     </div>
                 </div>
             {/if}
