@@ -594,7 +594,7 @@
             {/if}
 
             <div class="flex items-center justify-center">
-                <button class="btn btn-primary btn-square tooltip" data-tip="Add new step"
+                <button class="btn btn-primary btn-square tooltip {showSidebarThread ? 'translate-x-11' : ''}" data-tip="Add new step"
                     onclick={() => {
                         const newStep = {
                             id: `STEP_${task!.steps.length}.md`,
