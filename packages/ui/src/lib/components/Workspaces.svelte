@@ -22,6 +22,12 @@
         selectedRunId?: string | null;
     }
 
+    interface WorkspaceTask {
+        id: string;
+        taskId: string;
+        name: string;
+    }
+
     type WorkspaceManifest = {
         name: string;
         color?: string;
@@ -446,10 +452,12 @@
     {:else}
         {@const workspaceInstance = workspaceData.get(workspace.id)}
         {@const tasks = (workspaceInstance?.files ?? [])
-            .filter((f: { name: string }) => f.name.startsWith('.nanobot/tasks/'))
-            .reduce<Record<string, boolean>>((acc, f: { name: string }) => {
-                const taskId = f.name.split('/')[2];
-                acc[taskId] = true;
+            .filter((f) => f.name.startsWith('.nanobot/tasks/'))
+            .reduce<Record<string, WorkspaceTask>>((acc, f) => {
+                if (f.name.endsWith('TASK.md')) {
+                    const taskId = f.name.split('/')[2];
+                    acc[f.name] = { id: f.name, taskId, name: f.file?.taskName as string || f.file?.name as string || taskId };
+                }
                 return acc;
             }, {})
         }
@@ -507,8 +515,8 @@
     </summary>
 {/snippet}
 
-{#snippet tasksSection(workspaceId: string, tasks: Record<string, boolean>, permissions: string[], taskRuns: Record<string, Session[]>)}
-{@const items = Object.keys(tasks)}
+{#snippet tasksSection(workspaceId: string, tasks: Record<string, WorkspaceTask>, permissions: string[], taskRuns: Record<string, Session[]>)}
+{@const items = Object.values(tasks)}
 {@const title =  'Workflows'}
 <li class="flex grow">
     <details class="workspace-details w-full" open={isExpanded(`workspace:${workspaceId}:tasks`)}
@@ -519,13 +527,13 @@
                 {@render empty(title, permissions.includes('write'))}
             {:else}
                 {#each items as item, index (index)}
-                {@const name = item}           
+                {@const name = item.name}           
                     <li class="flex grow">
-                        <details class="workspace-details w-full" open={isExpanded(`workspace:${workspaceId}:task:${item}`)}
-                            ontoggle={handleToggle(`workspace:${workspaceId}:task:${item}`)}>
+                        <details class="workspace-details w-full" open={isExpanded(`workspace:${workspaceId}:task:${item.taskId}`)}
+                            ontoggle={handleToggle(`workspace:${workspaceId}:task:${item.taskId}`)}>
                             <summary class="flex rounded-r-none px-2 items-center justify-between gap-2 [&::-webkit-details-marker]:hidden overflow-visible 
                                 {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'} 
-                                {selectedTaskId && !selectedRunId  && selectedTaskId === item ? 'bg-base-200 dark:bg-base-100' : ''}
+                                {selectedTaskId && !selectedRunId  && selectedTaskId === item.id ? 'bg-base-200 dark:bg-base-100' : ''}
                             ">
                                 <div class="flex w-full items-center gap-2">
                                     <span class="chevron-icon shrink-0">
@@ -534,12 +542,20 @@
                                     </span>
 
                                     {#if permissions.includes('write') || permissions.includes('read')}
-                                        <a href={resolve(`/w/${workspaceId}/t?id=${item}`)} class="flex min-h-8 grow overflow-hidden rounded-r-none truncate hover:bg-transparent items-center">{name}</a>
+                                        <a href={resolve(`/w/${workspaceId}/t?id=${item.taskId}`)} 
+                                            class="flex min-h-8 grow rounded-r-none truncate hover:bg-transparent items-center"
+                                            onclick={() => toggleExpanded(`workspace:${workspaceId}:task:${item.taskId}`, !isExpanded(`workspace:${workspaceId}:task:${item.taskId}`))}
+                                        >
+                                            {name}
+                                        </a>
                                     {:else}
-                                        <a href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)} class="flex min-h-8 grow overflow-hidden rounded-r-none truncate hover:bg-transparent items-center">{name}</a>
+                                        <a href={resolve(`/w/${workspaceId}/t?id=${item.taskId}&run=true`)} 
+                                            class="flex min-h-8 grow rounded-r-none truncate hover:bg-transparent items-center"
+                                            onclick={() => toggleExpanded(`workspace:${workspaceId}:task:${item.taskId}`, !isExpanded(`workspace:${workspaceId}:task:${item.taskId}`))}
+                                        >
+                                            {name}
+                                        </a>
                                     {/if}
-                                </div>
-                                <div class="flex items-center gap-2">
                                     {#if permissions.includes('write') || permissions.includes('read')}
                                         <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left mr-1" popovertarget="popover-task-actions-{item}" style="anchor-name:--task-actions-anchor-{item}"
                                             data-tip="Edit workflow"
@@ -565,7 +581,7 @@
                                                         onmousedown={(e) => e.stopPropagation()} 
                                                         onclick={() => {
                                                             confirmDeleteTask = {
-                                                                taskId: item,
+                                                                taskId: item.taskId,
                                                                 workspaceId,
                                                             };
                                                             confirmDeleteTaskModal?.showModal();
@@ -581,10 +597,9 @@
                                 </div>
                             </summary>
                             <ul>
-                                {#if taskRuns[item]?.length > 0}
+                                {#if taskRuns[item.taskId]?.length > 0}
                                     {@const runOnly = !permissions.includes('write') && !permissions.includes('read') && permissions.includes('execute')}
-                                    {#each taskRuns[item] as run (run.id)}
-                                        {console.log({ run })}
+                                    {#each taskRuns[item.taskId] as run (run.id)}
                                         <li in:slide={{ axis: 'y', duration: 150 }}>
                                             <div class="flex max-w-full items-center gap-2 rounded-r-none
                                                 {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}

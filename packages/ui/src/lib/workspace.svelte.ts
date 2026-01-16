@@ -76,16 +76,23 @@ export class WorkspaceInstance implements WorkspaceClient {
 			// Map workspace:// resources to File objects and sort
 			this.files = result.resources
 				.filter((r) => r.uri.startsWith('workspace://'))
-				.map((r) => ({
-					name: r.name.replace('workspace://', '')
-				}))
+				.map((r) => {
+					const file: WorkspaceFile = {
+						name: r.name.replace('workspace://', '')
+					};
+					// Extract file metadata from _meta for markdown files
+					const fileMeta = r._meta?.['ai.nanobot']?.file as Record<string, unknown> | undefined;
+					if (fileMeta) {
+						file.file = fileMeta;
+					}
+					return file;
+				})
 				.sort((a, b) => a.name.localeCompare(b.name));
 
 			// Map session:// resources to Session objects
 			this.sessions = result.resources
 				.filter((r) => r.uri.startsWith('session://'))
 				.map((r) => {
-					console.log({ r })
 					const parentTaskName = JSON.parse(r._meta?.['ai.nanobot']?.startMessage ?? '{}')?.payload
 						?.params?.taskName;
 					return {
