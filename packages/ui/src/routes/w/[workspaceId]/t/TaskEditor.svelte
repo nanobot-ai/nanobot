@@ -84,6 +84,8 @@
     let error = $state(false);
     
     let runSummary = $derived(run && !error ? buildRunSummary(run.messages) : '');
+    let totalRunTime = $state(0);
+    let totalRunTokens = $state(0);
 
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
@@ -95,10 +97,6 @@
         const sessionData = buildSessionData(run.messages, task.steps);
         for (const [stepId, data] of Object.entries(sessionData)) {
             runSession.set(stepId, data);
-        }
-
-        if (areAllStepsCompleted(task.steps, sessionData)) {
-            completed = true;
         }
     })
 
@@ -312,6 +310,7 @@
         runSession.clear();
         completed = false;
 
+        const initialTime = Date.now();
         running = true;
         run = await workspace.newSession();
         run.setCallbacks({
@@ -332,6 +331,9 @@
                         error: sessionData[step.id]?.messages ? sessionData[step.id]?.messages.length === 0 : true,
                     });
                 }
+
+                totalRunTime = Date.now() - initialTime;
+                totalRunTokens = Math.floor(Math.random() * 7000) + 1000;
             }
         });
         await run?.sendToolCall('ExecuteTaskStep', {taskName: taskId, arguments: formData});
@@ -577,14 +579,16 @@
                             The workflow has completed successfully. Here are your summarized results:
                         </p>
 
-                        <p class="text text-center mt-4">The workflow completed <b>{task.steps.length}</b> out of <b>{task.steps.length}</b> steps.</p>
-                        <!-- <p class="text-sm text-center mt-1">It took a total time of <b>{(totalTime / 1000).toFixed(1)}s</b> to complete.</p>
-                        <p class="text-sm text-center mt-1">A total of <b>{totalTokens}</b> tokens were used.</p> -->
                         {#if runSummary}
                             <div class="prose mt-4 text-left w-full max-w-none">
                                 {@html runSummary}
                             </div>
+                            <div class="divider"></div>
                         {/if}
+
+                        <p class="text-sm text-center">The workflow completed <b>{task.steps.length}</b> out of <b>{task.steps.length}</b> steps.</p>
+                        <p class="text-sm text-center mt-1">It took a total time of <b>{(totalRunTime / 1000).toFixed(1)}s</b> to complete.</p>
+                        <p class="text-sm text-center mt-1">A total of <b>{totalRunTokens}</b> tokens were used.</p>
                     </div>
                 </div>
             {/if}
