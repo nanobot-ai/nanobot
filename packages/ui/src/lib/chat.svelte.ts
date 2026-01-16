@@ -4,6 +4,7 @@ import {
 	type ChatResult,
 	type ChatRequest,
 	type ChatMessage,
+	type ChatMessageItemToolCall,
 	type ToolOutputItem,
 	type Elicitation,
 	type ElicitationResult,
@@ -15,7 +16,8 @@ import {
 	type UploadedFile,
 	type UploadingFile,
 	type Resource,
-	type Resources
+	type Resources,
+	type ChatToolRequest
 } from './types';
 import { getNotificationContext } from './context/notifications.svelte';
 import { SimpleClient } from './mcpclient';
@@ -23,6 +25,23 @@ import { SvelteDate } from 'svelte/reactivity';
 
 export interface CallToolResult {
 	content?: ToolOutputItem[];
+}
+
+export interface ToolCallInfo {
+	toolName: string;
+	filePath: string;
+	arguments: Record<string, unknown>;
+	message: ChatMessage;
+	item: ChatMessageItemToolCall;
+}
+
+export interface ChatServiceCallbacks {
+	/** Called when chat is done processing */
+	onChatDone?: () => void;
+	/** Called when chat starts processing */
+	onChatStart?: () => void;
+	/** Called when a new message is received */
+	onMessage?: (message: ChatMessage) => void;
 }
 
 export class ChatAPI {
@@ -195,6 +214,37 @@ export class ChatAPI {
 		});
 	}
 
+	async sendChatToolCall(request: ChatToolRequest): Promise<ChatResult> {
+		await this.callMCPTool<CallToolResult>('chat', {
+			payload: {
+				type: 'tool',
+				payload: {
+					toolName: request.toolName,
+					params: request.params
+				}
+			},
+			sessionId: request.threadId,
+			progressToken: request.id,
+			async: true
+		});
+		const message: ChatMessage = {
+			id: request.id,
+			role: 'assistant',
+			created: now(),
+			items: [
+				{
+					id: request.id + '_0',
+					type: 'tool',
+					name: request.toolName,
+					arguments: JSON.stringify(request.params)
+				}
+			]
+		};
+		return {
+			message
+		};
+	}
+
 	async sendMessage(request: ChatRequest): Promise<ChatResult> {
 		await this.callMCPTool<CallToolResult>('chat', {
 			payload: {
@@ -363,13 +413,15 @@ export class ChatService {
 	chatId: string;
 	uploadedFiles: UploadedFile[];
 	uploadingFiles: UploadingFile[];
+	workspaceEnabled: boolean;
 
-	private api: ChatAPI;
+	readonly api: ChatAPI;
 	private closer = () => {};
 	private history: ChatMessage[] | undefined;
-	private onChatDone: (() => void)[] = [];
+	private internalOnChatDone: (() => void)[] = [];
+	private callbacks: ChatServiceCallbacks = {};
 
-	constructor(opts?: { api?: ChatAPI; chatId?: string }) {
+	constructor(opts?: { api?: ChatAPI; chatId?: string; callbacks?: ChatServiceCallbacks }) {
 		this.api = opts?.api || defaultChatApi;
 		this.messages = $state<ChatMessage[]>([]);
 		this.history = $state<ChatMessage[]>();
@@ -381,8 +433,31 @@ export class ChatService {
 		this.agent = $state<Agent>({});
 		this.uploadedFiles = $state([]);
 		this.uploadingFiles = $state([]);
+		this.workspaceEnabled = $state(false);
+
+		if (opts?.callbacks) {
+			this.callbacks = opts.callbacks;
+		}
+		this.api
+			.capabilities()
+			.then((caps) => {
+				this.workspaceEnabled = caps?.workspace?.supported === true;
+			})
+			.catch(() => {
+				this.workspaceEnabled = false;
+			});
 		this.setChatId(opts?.chatId);
 	}
+
+	/** Set or update callbacks for chat events */
+	setCallbacks = (callbacks: ChatServiceCallbacks) => {
+		this.callbacks = { ...this.callbacks, ...callbacks };
+	};
+
+	/** Clear all callbacks */
+	clearCallbacks = () => {
+		this.callbacks = {};
+	};
 
 	close = () => {
 		this.closer();
@@ -424,7 +499,7 @@ export class ChatService {
 	};
 
 	private reloadAgent = async () => {
-		const agents = await this.api.listAgents({ sessionId: this.chatId });
+		const agents = await this.api.listAgents();
 		if (agents.agents?.length > 0) {
 			this.agent = agents.agents[0];
 		}
@@ -464,6 +539,8 @@ export class ChatService {
 					} else {
 						this.messages = appendMessage(this.messages, event.message);
 					}
+					// Trigger onMessage callback
+					this.callbacks.onMessage?.(event.message);
 				} else if (event.type == 'history-start') {
 					this.history = [];
 				} else if (event.type == 'history-end') {
@@ -471,12 +548,14 @@ export class ChatService {
 					this.history = undefined;
 				} else if (event.type == 'chat-in-progress') {
 					this.isLoading = true;
+					this.callbacks.onChatStart?.();
 				} else if (event.type == 'chat-done') {
 					this.isLoading = false;
-					for (const waiting of this.onChatDone) {
+					for (const waiting of this.internalOnChatDone) {
 						waiting();
 					}
-					this.onChatDone = [];
+					this.internalOnChatDone = [];
+					this.callbacks.onChatDone?.();
 				} else if (event.type == 'elicitation/create') {
 					this.elicitations = [
 						...this.elicitations,
@@ -486,7 +565,7 @@ export class ChatService {
 						} as Elicitation
 					];
 				}
-				console.debug('Received event:', event);
+				// console.debug('Received event:', event);
 			},
 			{
 				events: [
@@ -532,7 +611,56 @@ export class ChatService {
 
 			this.messages = appendMessage(this.messages, response.message);
 			return new Promise<ChatResult | void>((resolve) => {
-				this.onChatDone.push(() => {
+				this.internalOnChatDone.push(() => {
+					this.isLoading = false;
+					const i = this.messages.findIndex((m) => m.id === response.message.id);
+					if (i !== -1 && i <= this.messages.length) {
+						resolve({
+							message: this.messages[i + 1]
+						});
+					} else {
+						resolve();
+					}
+				});
+			});
+		} catch (error) {
+			this.isLoading = false;
+			this.messages = appendMessage(this.messages, {
+				id: crypto.randomUUID(),
+				role: 'assistant',
+				created: now(),
+				items: [
+					{
+						id: crypto.randomUUID(),
+						type: 'text',
+						text: `Sorry, I couldn't send your message. Please try again. Error: ${error}`
+					}
+				]
+			});
+		}
+	};
+
+	sendToolCall = async (toolName: string, params?: Record<string, unknown>) => {
+		if (!toolName.trim() || this.isLoading) return;
+
+		this.isLoading = true;
+
+		if (!this.chatId) {
+			await this.newChat();
+		}
+
+		try {
+			const response = await this.api.sendChatToolCall({
+				id: crypto.randomUUID(),
+				threadId: this.chatId,
+				toolName,
+				params
+			});
+			this.uploadedFiles = [];
+
+			this.messages = appendMessage(this.messages, response.message);
+			return new Promise<ChatResult | void>((resolve) => {
+				this.internalOnChatDone.push(() => {
 					this.isLoading = false;
 					const i = this.messages.findIndex((m) => m.id === response.message.id);
 					if (i !== -1 && i <= this.messages.length) {

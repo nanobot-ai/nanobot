@@ -4,13 +4,18 @@
 FROM ubuntu:24.04 AS builder
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y \
+# Clean apt lists first to avoid GPG signature issues in Docker cache
+RUN rm -rf /var/lib/apt/lists/* && \
+    apt-get update && apt-get install -y \
     git \
     curl \
     build-essential \
     pkg-config \
+    libssl-dev \
     libfuse3-dev \
     libunwind-dev \
+    libssl-dev \
+    cmake \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust toolchain
@@ -29,7 +34,9 @@ RUN cargo build --release
 FROM ubuntu:24.04
 
 # Install runtime dependencies
-RUN apt-get update && apt-get install -y \
+# Clean apt lists first to avoid GPG signature issues in Docker cache
+RUN rm -rf /var/lib/apt/lists/* && \
+    apt-get update && apt-get install -y \
     ripgrep \
     git \
     curl \
@@ -61,7 +68,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install latest Node.js (using NodeSource)
-RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
+# Clean apt lists first to avoid GPG signature issues in Docker cache
+RUN rm -rf /var/lib/apt/lists/* && \
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
     apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 

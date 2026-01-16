@@ -58,6 +58,7 @@ type SampleConfirmRequest struct {
 type Attachment struct {
 	Name     string `json:"name,omitempty"`
 	URL      string `json:"url"`
+	URI      string `json:"uri,omitempty"`
 	MimeType string `json:"mimeType,omitempty"`
 }
 
@@ -101,10 +102,10 @@ type AgentDisplay struct {
 }
 
 type Workspace struct {
-	ID         string                 `json:"id"`
-	Name       string                 `json:"name"`
-	Order      int                    `json:"order"`
-	Color      string                 `json:"color,omitempty"`
-	Icons      []mcp.Icon             `json:"icons,omitempty"`
-	Attributes map[string]interface{} `json:"attributes,omitempty"`
+	ID         string         `json:"id"`
+	Name       string         `json:"name"`
+	Order      int            `json:"order"`
+	Color      string         `json:"color,omitempty"`
+	Icons      []mcp.Icon     `json:"icons,omitempty"`
+	Attributes map[string]any `json:"attributes,omitempty"`
 }

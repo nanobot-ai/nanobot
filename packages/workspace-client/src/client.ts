@@ -44,6 +44,10 @@ export class WorkspaceClient {
 	private transport: StreamableHTTPClientTransport;
 	private sessionId: string;
 	private connected = false;
+	private connectionPromise: Promise<void> | null = null;
+	private readonly url: URL;
+	private readonly clientName: string;
+	private readonly clientVersion: string;
 
 	/**
 	 * Creates a new WorkspaceClient instance
@@ -55,11 +59,15 @@ export class WorkspaceClient {
 			config.sessionId ||
 			`session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
-		this.transport = new StreamableHTTPClientTransport(new URL(config.url));
+		this.url = new URL(config.url);
+		this.clientName = config.clientInfo?.name || "@nanobot-ai/workspace-client";
+		this.clientVersion = config.clientInfo?.version || "1.0.0";
+
+		this.transport = new StreamableHTTPClientTransport(this.url);
 		this.client = new Client(
 			{
-				name: config.clientInfo?.name || "@nanobot-ai/workspace-client",
-				version: config.clientInfo?.version || "1.0.0",
+				name: this.clientName,
+				version: this.clientVersion,
 			},
 			{
 				capabilities: {},
@@ -70,16 +78,47 @@ export class WorkspaceClient {
 	/**
 	 * Establishes connection to the MCP server
 	 * Must be called before using any other methods
+	 * Safe to call multiple times - will return the same promise if already connecting
 	 */
 	async connect(): Promise<void> {
+		// If already connected, return immediately
 		if (this.connected) {
 			return;
 		}
 
+		// If connection is in progress, wait for it to complete
+		if (this.connectionPromise) {
+			return this.connectionPromise;
+		}
+
+		// Start new connection attempt
+		this.connectionPromise = this.doConnect();
+
+		try {
+			await this.connectionPromise;
+		} finally {
+			// Clear the promise so retry attempts can happen after failures
+			this.connectionPromise = null;
+		}
+	}
+
+	private async doConnect(): Promise<void> {
 		try {
 			await this.client.connect(this.transport);
 			this.connected = true;
 		} catch (error) {
+			// If connection fails, we need to recreate the transport for retry attempts
+			// because the transport may have been started and cannot be reused
+			this.transport = new StreamableHTTPClientTransport(this.url);
+			this.client = new Client(
+				{
+					name: this.clientName,
+					version: this.clientVersion,
+				},
+				{
+					capabilities: {},
+				},
+			);
 			throw createError(
 				"Failed to connect to MCP server",
 				"CONNECTION_ERROR",
@@ -171,6 +210,37 @@ export class WorkspaceClient {
 				throw error;
 			}
 			throw createError("Failed to write file", "WRITE_FILE_ERROR", error);
+		}
+	}
+
+	/**
+	 * Deletes a file from the file system
+	 *
+	 * @param path - Path to the file to delete
+	 *
+	 * @example
+	 * ```typescript
+	 * await client.deleteFile("/path/to/file.txt");
+	 * ```
+	 */
+	async deleteFile(path: string): Promise<void> {
+		this.ensureConnected();
+
+		try {
+			const result = await this.client.callTool({
+				name: "deleteFile",
+				arguments: {
+					sessionId: this.sessionId,
+					path,
+				},
+			});
+
+			throwIfError(result, "Failed to delete file", "DELETE_FILE_ERROR");
+		} catch (error) {
+			if (error instanceof Error && error.name === "WorkspaceClientError") {
+				throw error;
+			}
+			throw createError("Failed to delete file", "DELETE_FILE_ERROR", error);
 		}
 	}
 

@@ -68,6 +68,13 @@ export class Manager implements SandboxManager {
 			throw new Error(`Sandbox ${cfg.id} not created yet`);
 		}
 		if (!cfg.driverConfig && opts?.create) {
+			// Ensure the parent is created, too.
+			if (cfg.parentId) {
+				await this.loadSandbox(await this.#getSandboxConfig(cfg.parentId), {
+					create: true,
+				});
+			}
+
 			cfg.driverConfig = await driver.createSandbox(cfg);
 			await this.fs.set(
 				`./sandboxes/${cfg.id}.json`,
@@ -210,11 +217,21 @@ class CreateOnDemandSandbox implements Sandbox {
 	}
 
 	resolvePath(path: string): string {
+		if (this.sandbox) {
+			return this.sandbox.resolvePath(path);
+		}
+
 		// For CreateOnDemandSandbox, we need to delegate to the underlying sandbox
 		// But if it's not created yet, we can't know the workdir, so we assume absolute paths
 		if (path.startsWith("/")) {
 			return path;
 		}
+
+		// If config.driverConfig exists and has a workdir property, use it
+		if (this.config.driverConfig && "workdir" in this.config.driverConfig) {
+			return `${this.config.driverConfig.workdir}/${path}`;
+		}
+
 		// Default to /workspace if sandbox not created yet
 		return `/workspace/${path}`;
 	}
@@ -252,7 +269,7 @@ class CreateOnDemandSandbox implements Sandbox {
 		return this.sandbox;
 	}
 
-	readFile(
+	async readFile(
 		path: string,
 		opts?: { encoding?: Encoding; limit?: number; offset?: number },
 	): Promise<{
@@ -262,7 +279,7 @@ class CreateOnDemandSandbox implements Sandbox {
 		return this.#create(true).then((sandbox) => sandbox.readFile(path, opts));
 	}
 
-	writeFile(
+	async writeFile(
 		path: string,
 		content: string,
 		opts?: { encoding?: Encoding },
@@ -272,11 +289,11 @@ class CreateOnDemandSandbox implements Sandbox {
 		);
 	}
 
-	deleteFile(path: string): Promise<void> {
+	async deleteFile(path: string): Promise<void> {
 		return this.#create().then((sandbox) => sandbox.deleteFile(path));
 	}
 
-	readdir(
+	async readdir(
 		path: string,
 		opts?: { cursor?: string; recursive?: boolean; limit?: number },
 	): Promise<{
@@ -291,7 +308,7 @@ class CreateOnDemandSandbox implements Sandbox {
 		return this.#create(true).then((sandbox) => sandbox.readdir(path, opts));
 	}
 
-	execute(
+	async execute(
 		command: string,
 		args: string[],
 		opts?: {
@@ -305,11 +322,11 @@ class CreateOnDemandSandbox implements Sandbox {
 		);
 	}
 
-	kill(id: string, signal?: string): Promise<void> {
+	async kill(id: string, signal?: string): Promise<void> {
 		return this.#create().then((sandbox) => sandbox.kill(id, signal));
 	}
 
-	output(id: string): Promise<{
+	async output(id: string): Promise<{
 		output: string;
 		truncated: boolean;
 		exitCode: number;
@@ -318,11 +335,11 @@ class CreateOnDemandSandbox implements Sandbox {
 		return this.#create().then((sandbox) => sandbox.output(id));
 	}
 
-	wait(id: string): Promise<{ exitCode: number; signal?: string }> {
+	async wait(id: string): Promise<{ exitCode: number; signal?: string }> {
 		return this.#create().then((sandbox) => sandbox.wait(id));
 	}
 
-	release(id: string): Promise<void> {
+	async release(id: string): Promise<void> {
 		return this.#create().then((sandbox) => sandbox.release(id));
 	}
 }
@@ -391,11 +408,11 @@ class LazySandbox implements Sandbox {
 		return sandbox;
 	}
 
-	deleteFile(path: string): Promise<void> {
+	async deleteFile(path: string): Promise<void> {
 		return this.#getSandbox().then((sandbox) => sandbox.deleteFile(path));
 	}
 
-	readdir(
+	async readdir(
 		path: string,
 		opts?: { cursor?: string; recursive?: boolean; limit?: number },
 	): Promise<{
@@ -410,7 +427,7 @@ class LazySandbox implements Sandbox {
 		return this.#getSandbox().then((sandbox) => sandbox.readdir(path, opts));
 	}
 
-	execute(
+	async execute(
 		command: string,
 		args: string[],
 		opts?: {
@@ -424,11 +441,11 @@ class LazySandbox implements Sandbox {
 		);
 	}
 
-	kill(id: string, signal?: string): Promise<void> {
+	async kill(id: string, signal?: string): Promise<void> {
 		return this.#getSandbox().then((sandbox) => sandbox.kill(id, signal));
 	}
 
-	output(id: string): Promise<{
+	async output(id: string): Promise<{
 		output: string;
 		truncated: boolean;
 		exitCode: number;
@@ -437,7 +454,7 @@ class LazySandbox implements Sandbox {
 		return this.#getSandbox().then((sandbox) => sandbox.output(id));
 	}
 
-	readFile(
+	async readFile(
 		path: string,
 		opts?: { encoding?: Encoding; limit?: number; offset?: number },
 	): Promise<{
@@ -447,15 +464,15 @@ class LazySandbox implements Sandbox {
 		return this.#getSandbox().then((sandbox) => sandbox.readFile(path, opts));
 	}
 
-	release(id: string): Promise<void> {
+	async release(id: string): Promise<void> {
 		return this.#getSandbox().then((sandbox) => sandbox.release(id));
 	}
 
-	wait(id: string): Promise<{ exitCode: number; signal?: string }> {
+	async wait(id: string): Promise<{ exitCode: number; signal?: string }> {
 		return this.#getSandbox().then((sandbox) => sandbox.wait(id));
 	}
 
-	writeFile(
+	async writeFile(
 		path: string,
 		content: string,
 		opts?: { encoding?: Encoding },

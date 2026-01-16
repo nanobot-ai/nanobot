@@ -86,6 +86,7 @@ func (s *Server) initWorkspace(ctx context.Context, params types.SessionInitHook
 		Model:     gorm.Model{},
 		UUID:      uuid.String(),
 		AccountID: accountID,
+		RootID:    currentWorkspace.RootID,
 		ParentID:  &workspaceUUID,
 		SessionID: sessionID,
 	}
@@ -93,6 +94,10 @@ func (s *Server) initWorkspace(ctx context.Context, params types.SessionInitHook
 	if u.Query().Get("shared") == "true" {
 		newWorkspace = *currentWorkspace
 	} else {
+		if currentWorkspace.RootID == nil {
+			newWorkspace.RootID = &workspaceUUID
+		}
+
 		uri := fmt.Sprintf("%s?parentId=%s", newWorkspace.UUID, *newWorkspace.ParentID)
 
 		_, err = s.service.Call(ctx, "nanobot.workspace.provider", "sessionCreate", map[string]any{
@@ -117,6 +122,9 @@ func (s *Server) initWorkspace(ctx context.Context, params types.SessionInitHook
 	}
 	if newWorkspace.ParentID != nil {
 		params.Meta["parentId"] = *newWorkspace.ParentID
+	}
+	if newWorkspace.RootID != nil {
+		params.Meta["rootId"] = *newWorkspace.RootID
 	}
 
 	return params, nil

@@ -20,6 +20,7 @@ const (
 	DefaultAgentSessionKey          = "defaultAgent"
 	AccountIDSessionKey             = "accountID"
 	DescriptionSessionKey           = "description"
+	StartMessageSessionKey          = "startMessage"
 	ResourceSubscriptionsSessionKey = "resourceSubscriptions"
 	PublicURLSessionKey             = "publicURL"
 )

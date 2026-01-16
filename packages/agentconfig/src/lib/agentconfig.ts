@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import { hooks } from "@nanobot-ai/nanomcp";
 import {
 	ensureConnected,
@@ -22,7 +23,9 @@ async function addMcpServers(
 	client: WorkspaceClient,
 	config: hooks.AgentConfigHook,
 ) {
-	const mcpJson = await client.readTextFile(".nanobot/mcp.json", {
+	const mcpPath = path.join(".nanobot", "mcp.json");
+
+	const mcpJson = await client.readTextFile(mcpPath, {
 		ignoreNotFound: true,
 	});
 	if (!mcpJson) {
@@ -34,6 +37,9 @@ async function addMcpServers(
 	});
 	if (parsed.success) {
 		config.mcpServers = parsed.data.mcpServers;
+		if (parsed.data.mcpServers && config.agent) {
+			config.agent.mcpServers = Object.keys(parsed.data.mcpServers);
+		}
 	} else {
 		console.error(`Failed to parse MCP servers: ${parsed.error.message}`);
 	}
@@ -71,22 +77,24 @@ export async function amendConfig(
 
 	await addMcpServers(client, config);
 
+	const mcpBaseURL = process.env.MCP_BASE_URL || "http://localhost:5173/mcp";
+
 	config.mcpServers = {
 		...(config.mcpServers || {}),
 		task: {
-			url: "http://localhost:5173/mcp/tasks",
+			url: `${mcpBaseURL}/tasks`,
 			headers: {
 				"X-Nanobot-Workspace-Id": workspaceId,
 			},
 		},
 		coder: {
-			url: "http://localhost:5173/mcp/coder",
+			url: `${mcpBaseURL}/coder`,
 			headers: {
 				"X-Nanobot-Workspace-Id": workspaceId,
 			},
 		},
 		workspaceResources: {
-			url: "http://localhost:5173/mcp/workspace-resources",
+			url: `${mcpBaseURL}/workspace-resources`,
 			headers: {
 				"X-Nanobot-Workspace-Id": workspaceId,
 			},

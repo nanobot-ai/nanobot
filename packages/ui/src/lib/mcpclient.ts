@@ -83,6 +83,7 @@ export class SimpleClient {
 			await this.#fetcher(this.#url, {
 				method: 'DELETE',
 				headers: {
+					Accept: 'application/json, text/event-stream',
 					'Mcp-Session-Id': this.#sessionId
 				}
 			});
@@ -133,6 +134,34 @@ export class SimpleClient {
 		this.#sseSubscriptions.clear();
 	}
 
+	/**
+	 * Parse response based on content type - handles both JSON and SSE formats
+	 */
+	async #parseResponse(resp: Response): Promise<JSONRPCResponse> {
+		const contentType = resp.headers.get('Content-Type') || '';
+
+		if (contentType.includes('text/event-stream')) {
+			// Parse SSE response - extract the last JSON message
+			const text = await resp.text();
+			const lines = text.split('\n');
+			let lastData = '';
+
+			for (const line of lines) {
+				if (line.startsWith('data: ')) {
+					lastData = line.slice(6);
+				}
+			}
+
+			if (lastData) {
+				return JSON.parse(lastData) as JSONRPCResponse;
+			}
+			throw new Error('No data in SSE response');
+		}
+
+		// Default to JSON parsing
+		return (await resp.json()) as JSONRPCResponse;
+	}
+
 	async getSessionDetails(): Promise<{ id: string; initializeResult?: InitializationResult }> {
 		return {
 			id: await this.#ensureSession(),
@@ -166,13 +195,16 @@ export class SimpleClient {
 				const initResp = await this.#fetcher(this.#url, {
 					method: 'POST',
 					headers: {
-						'Content-Type': 'application/json'
+						'Content-Type': 'application/json',
+						Accept: 'application/json, text/event-stream'
 					},
 					body: JSON.stringify(initRequest)
 				});
 
 				if (!initResp.ok) {
-					throw new Error(`Initialize failed: ${initResp.status} ${initResp.statusText}`);
+					throw new Error(
+						`Initialize failed: ${initResp.status} ${initResp.statusText} ${await initResp.text()}`
+					);
 				}
 
 				// Extract session ID from response header
@@ -181,8 +213,8 @@ export class SimpleClient {
 					throw new Error('No Mcp-Session-Id header in initialize response');
 				}
 
-				// Parse response to check for errors
-				const initData = (await initResp.json()) as JSONRPCResponse;
+				// Parse response based on content type
+				const initData = await this.#parseResponse(initResp);
 				if (initData.error) {
 					throw new Error(`Initialize error: ${initData.error}`);
 				}
@@ -206,6 +238,7 @@ export class SimpleClient {
 					method: 'POST',
 					headers: {
 						'Content-Type': 'application/json',
+						Accept: 'application/json, text/event-stream',
 						'Mcp-Session-Id': sessionId
 					},
 					body: JSON.stringify(initializedRequest)
@@ -241,6 +274,7 @@ export class SimpleClient {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
+				Accept: 'application/json, text/event-stream',
 				'Mcp-Session-Id': sessionId
 			},
 			body: JSON.stringify({
@@ -263,18 +297,22 @@ export class SimpleClient {
 
 		try {
 			// check for a protocol error
-			const data = (await resp.json()) as JSONRPCResponse;
+			const data = await this.#parseResponse(resp);
 			if (data.error) {
 				logError(data.error);
 				throw Error(`${data.error.message}: ${JSON.stringify(data.error)}`);
 			}
 		} catch (e) {
 			// If it's already an Error, rethrow it
-			if (e instanceof Error && e.message !== 'Unexpected end of JSON input') {
+			if (
+				e instanceof Error &&
+				e.message !== 'Unexpected end of JSON input' &&
+				!e.message.includes('No data in SSE')
+			) {
 				throw e;
 			}
-			// Otherwise ignore JSON parse errors
-			console.debug('[SimpleClient] Error parsing JSON in reply:', e);
+			// Otherwise ignore JSON/SSE parse errors for empty responses
+			console.debug('[SimpleClient] Error parsing response in reply:', e);
 		}
 	}
 
@@ -310,6 +348,7 @@ export class SimpleClient {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
+				Accept: 'application/json, text/event-stream',
 				'Mcp-Session-Id': sessionId
 			},
 			signal: opts?.abort?.signal,
@@ -333,7 +372,7 @@ export class SimpleClient {
 			throw new Error(text);
 		}
 
-		const data = (await resp.json()) as JSONRPCResponse;
+		const data = await this.#parseResponse(resp);
 		if (data.error) {
 			logError(data.error);
 			throw new Error(`${data.error.message}: ${JSON.stringify(data.error)}`);

@@ -122,6 +122,15 @@ export interface ChatRequest {
 	attachments?: Attachment[];
 }
 
+export interface ChatToolRequest {
+	id: string;
+	threadId: string;
+	toolName: string;
+	params?: Record<string, unknown>;
+	agent?: string;
+	attachments?: Attachment[];
+}
+
 export interface Attachment {
 	name?: string;
 	uri: string;
@@ -149,12 +158,14 @@ export interface Event {
 
 export interface Notification {
 	id: string;
-	type: 'success' | 'error' | 'warning' | 'info';
+	type: 'success' | 'error' | 'warning' | 'info' | 'action';
 	title: string;
 	message?: string;
 	timestamp: Date;
 	autoClose?: boolean;
 	duration?: number; // milliseconds
+	onConfirm?: () => void;
+	onCancel?: () => void;
 }
 
 export interface Prompts {
@@ -183,7 +194,14 @@ export interface Resource extends BaseMetadata, Icons {
 		lastModified?: string;
 	};
 	size?: number;
-	_meta?: { [key: string]: unknown };
+	_meta?: {
+		[key: string]: unknown;
+		'ai.nanobot'?: {
+			startMessage?: string;
+			createdAt?: string;
+			file?: Record<string, unknown>;
+		};
+	};
 }
 
 export interface Icons {
@@ -343,19 +361,24 @@ export interface Workspace extends Icons {
 export interface Session {
 	id: string;
 	title: string;
+	parentTaskName?: string;
+	createdAt?: string;
 }
 
 export interface SessionDetails {
 	id: string;
 	title?: string;
+	startMessage?: string;
 	createdAt: string;
 	updatedAt?: string;
 	workspaceId?: string;
+	rootId?: string;
 	sessionWorkspaceId?: string;
 }
 
 export interface WorkspaceFile {
 	name: string;
+	file?: Record<string, unknown>;
 }
 
 export interface WorkspaceClient {
@@ -366,6 +389,7 @@ export interface WorkspaceClient {
 	readonly sessions: Session[];
 	readonly loading: boolean;
 
+	load(): Promise<void>;
 	readFile(path: string): Promise<Blob>;
 	writeFile(path: string, data: Blob | string): Promise<void>;
 	createFile(path: string, data: Blob | string): Promise<void>;
@@ -395,3 +419,22 @@ export interface InitializationResult {
 }
 
 export const UIPath = '/mcp?ui';
+
+export interface Server {
+	description: string;
+	icons: {
+		mimeType: string;
+		src: string;
+	}[];
+	name: string;
+	remotes?: {
+		type: string;
+		url: string;
+	}[];
+	repository?: {
+		source: string;
+		url: string;
+	};
+	title: string;
+	version: string;
+}

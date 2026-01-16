@@ -1,6 +1,6 @@
 <script lang="ts">
   import '$lib/../app.css';
-  import {WorkspaceService, type WorkspaceInstance} from '$lib/workspace.svelte';
+  import {type WorkspaceInstance} from '$lib/workspace.svelte';
   import {onMount} from 'svelte';
   import {
     AlertCircle,
@@ -19,8 +19,9 @@
   import type {SessionDetails} from "$lib/types";
   import type {ChatService} from '$lib/chat.svelte';
   import ThreadFromChat from "$lib/components/ThreadFromChat.svelte";
+	import { getWorkspaceService } from '$lib/stores/workspace.svelte';
 
-  const workspaceService = new WorkspaceService();
+  const workspaceService = getWorkspaceService();
 
   let loading = $state(false);
   let error = $state<string | null>(null);
@@ -696,11 +697,17 @@
                                 <div><strong>ID:</strong> {sessionInfo.id}</div>
                                 <div><strong>Created:</strong> {new Date(sessionInfo.createdAt).toLocaleString()}</div>
                                 <div><strong>Updated:</strong> {new Date(sessionInfo.updatedAt ?? '').toLocaleString()}</div>
+                                {#if sessionInfo.rootId}
+                                    <div><strong>Root ID:</strong> {sessionInfo.rootId}</div>
+                                {/if}
                                 {#if sessionInfo.workspaceId}
                                     <div><strong>Workspace ID:</strong> {sessionInfo.workspaceId}</div>
                                 {/if}
                                 {#if sessionInfo.sessionWorkspaceId}
                                     <div><strong>Session Workspace ID:</strong> {sessionInfo.sessionWorkspaceId}</div>
+                                {/if}
+                                {#if sessionInfo.startMessage}
+                                    <div><strong>Start Message:</strong> {sessionInfo.startMessage}</div>
                                 {/if}
                             </div>
                             <div class="card-actions justify-end mt-4">
