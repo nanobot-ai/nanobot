@@ -8,6 +8,7 @@
 	import type { Snippet } from "svelte";
 
     interface Props {
+        class?: string;
         taskId: string;
         task: Task;
         step: Step;
@@ -28,6 +29,7 @@
     }
 
     let { 
+        class: klass,
         taskId,
         task, 
         step, 
@@ -118,7 +120,7 @@
 	});
 </script>
 
-<div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 pb-8 task-step relative">
+<div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 pb-8 task-step relative {klass}">
     {#if !readonly}
         <div class="absolute top-3 right-3 z-2">
             {@render stepMenu(step.id)}
