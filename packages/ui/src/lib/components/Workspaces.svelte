@@ -456,7 +456,7 @@
             .reduce<Record<string, WorkspaceTask>>((acc, f) => {
                 if (f.name.endsWith('TASK.md')) {
                     const taskId = f.name.split('/')[2];
-                    acc[f.name] = { id: f.name, taskId, name: f.file?.taskName as string || f.file?.name as string || taskId };
+                    acc[f.name] = { id: f.name, taskId, name: f.file?.task_name as string || f.file?.name as string || taskId };
                 }
                 return acc;
             }, {})
