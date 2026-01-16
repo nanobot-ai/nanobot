@@ -73,6 +73,17 @@ func printPrefix(prefix, content string) {
 }
 
 func formatPrefix(prefix string) string {
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err == nil {
+		if len(prefix) > width {
+			prefix = prefix[:width]
+			if width > 36 {
+				prefix = prefix[:width-18]
+			} else {
+				prefix = prefix[:width/2]
+			}
+		}
+	}
 	if len(prefix) < 3 || noColors {
 		return prefix
 	}
