@@ -199,6 +199,7 @@ export interface Resource extends BaseMetadata, Icons {
 		'ai.nanobot'?: {
 			startMessage?: string;
 			createdAt?: string;
+			file?: Record<string, unknown>;
 		};
 	};
 }
@@ -377,6 +378,7 @@ export interface SessionDetails {
 
 export interface WorkspaceFile {
 	name: string;
+	file?: Record<string, unknown>;
 }
 
 export interface WorkspaceClient {
