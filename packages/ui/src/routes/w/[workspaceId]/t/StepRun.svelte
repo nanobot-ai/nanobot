@@ -40,7 +40,7 @@
     <div
         bind:this={container}
         onscroll={handleScroll}
-        class="w-full step-agent max-h-52 shadow-inner overflow-y-auto bg-base-200 dark:bg-base-100 rounded-field p-4"
+        class="w-full step-agent shadow-inner bg-base-200 dark:bg-base-100 rounded-field p-4"
     >
         {#if pending && messages.length === 0}
             <span class="skeleton skeleton-text w-full h-4 text-sm">

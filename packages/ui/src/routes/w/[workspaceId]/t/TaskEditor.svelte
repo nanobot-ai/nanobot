@@ -4,7 +4,7 @@
 	import DragDropList from '$lib/components/DragDropList.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
 	import { createRegistryStore, setRegistryContext } from '$lib/context/registry.svelte';
-	import { EllipsisVertical, GripVertical, PencilLine, Play, Plus, ReceiptText, X, MessageCircleMore, Square } from '@lucide/svelte';
+	import { EllipsisVertical, GripVertical, PencilLine, Play, Plus, ReceiptText, X, MessageCircleMore, Square, CircleCheck, LoaderCircle, Circle, CircleAlert } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
@@ -83,22 +83,128 @@
     let completed = $state(false);
     let error = $state(false);
     
-    let runSummary = $derived(run && !error ? buildRunSummary(run.messages) : '');
+    let runSummary = $state('');
+    let currentRunStepId = $state<string | null>(null);
     let totalRunTime = $state(0);
     let totalRunTokens = $state(0);
+
+    // Auto-scroll state for keeping current running step in view
+    let stepElements = new SvelteMap<string, HTMLElement>();
+    let shouldAutoScroll = $state(true);
+    let isProgrammaticScroll = $state(false); // Flag to ignore programmatic scroll events
+    let scrollTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    // Svelte action to register step elements for auto-scroll
+    function registerStepElement(node: HTMLElement, stepId: string) {
+        stepElements.set(stepId, node);
+        return {
+            destroy() {
+                stepElements.delete(stepId);
+            }
+        };
+    }
+
+    // Reference to run summary element for scrolling on completion
+    let runSummaryElement = $state<HTMLElement | null>(null);
 
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
 
     $effect(() => {
         // Update runSession during a task run
-        if (!run || !task || run.messages.length === 0) return;
+        if (!run || !task || run.messages.length === 0 || completed) return;
 
+        let lastStepWithMessages: string | null = null;
+            
         const sessionData = buildSessionData(run.messages, task.steps);
         for (const [stepId, data] of Object.entries(sessionData)) {
+            if (sessionData[stepId]?.messages?.length > 0) {
+                lastStepWithMessages = stepId;
+            }
             runSession.set(stepId, data);
         }
+        currentRunStepId = lastStepWithMessages;
     })
+
+    // Check if user is near the bottom of the scroll container
+    function isNearBottom(): boolean {
+        if (!scrollContainer) return true;
+        const threshold = 100; // pixels from bottom to consider "at bottom"
+        const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+        return scrollHeight - scrollTop - clientHeight < threshold;
+    }
+
+    // Handle scroll events to detect user manual scrolling
+    function handleScroll() {
+        showAlternateHeader = (scrollContainer?.scrollTop ?? 0) > 100;
+
+        // Ignore scroll events caused by programmatic scrolling
+        if (isProgrammaticScroll) return;
+
+        // Clear existing timeout
+        if (scrollTimeout) {
+            clearTimeout(scrollTimeout);
+        }
+
+        // Debounce to detect when scroll stops, then check position
+        scrollTimeout = setTimeout(() => {
+            // User scrolled manually, check if they're near the bottom
+            if (isNearBottom()) {
+                shouldAutoScroll = true;
+            } else {
+                shouldAutoScroll = false;
+            }
+        }, 150);
+    }
+
+    // Auto-scroll effect for current running step
+    $effect(() => {
+        if (!running || completed || !currentRunStepId || !shouldAutoScroll) return;
+
+        // Track message count changes to trigger scroll on new content
+        const currentSession = runSession.get(currentRunStepId);
+        const messageCount = currentSession?.messages?.length ?? 0;
+        // Access messageCount to make this effect reactive to message changes
+        void messageCount;
+
+        const stepElement = stepElements.get(currentRunStepId);
+        if (!stepElement || !scrollContainer) return;
+
+        // Use requestAnimationFrame to ensure DOM has updated
+        requestAnimationFrame(() => {
+            if (!stepElement || !scrollContainer || !shouldAutoScroll) return;
+            
+            const containerRect = scrollContainer.getBoundingClientRect();
+            const stepRect = stepElement.getBoundingClientRect();
+            
+            // Calculate where the bottom of the step is relative to the container
+            const stepBottomRelativeToContainer = stepRect.bottom - containerRect.top;
+            const containerVisibleHeight = containerRect.height;
+            
+            // If the step's bottom is below the visible area, scroll to show it
+            if (stepBottomRelativeToContainer > containerVisibleHeight - 20) {
+                const scrollAmount = stepBottomRelativeToContainer - containerVisibleHeight + 40;
+                
+                // Mark as programmatic scroll to ignore scroll events
+                isProgrammaticScroll = true;
+                scrollContainer.scrollBy({
+                    top: scrollAmount,
+                    behavior: 'smooth'
+                });
+                // Clear flag after scroll animation completes
+                setTimeout(() => {
+                    isProgrammaticScroll = false;
+                }, 500);
+            }
+        });
+    });
+
+    // Reset auto-scroll when a new run starts
+    $effect(() => {
+        if (running && !completed) {
+            shouldAutoScroll = true;
+        }
+    });
 
     onMount(() => {
         registryStore.fetch();
@@ -187,6 +293,12 @@
 
     async function compileTask(idToUse: string, files: WorkspaceFile[]){
         if (!workspace) return;
+
+        // reset if there was a run
+        running = false;
+        runSession.clear();
+        completed = false;
+        
         initialLoadComplete = false;
         task = null;
         task = await convertToTask(workspace, files, idToUse);
@@ -275,7 +387,6 @@
         runSession.clear();
 
         if (run) {
-            run.close();
             run = null;
         }
 
@@ -304,11 +415,55 @@
         document.addEventListener('mouseup', onMouseUp);
     }
 
+    function scrollToRunSummary() {
+        // Wait for DOM to update with run summary, then scroll to bottom
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                if (runSummaryElement && scrollContainer) {
+                    const summaryRect = runSummaryElement.getBoundingClientRect();
+                    const containerRect = scrollContainer.getBoundingClientRect();
+                    const summaryBottomRelativeToContainer = summaryRect.bottom - containerRect.top;
+                    
+                    // Mark as programmatic scroll to ignore scroll events
+                    isProgrammaticScroll = true;
+                    // Scroll to show the bottom of the summary with some padding
+                    const targetScroll = scrollContainer.scrollTop + summaryBottomRelativeToContainer - containerRect.height + 40;
+                    scrollContainer.scrollTo({
+                        top: targetScroll,
+                        behavior: 'smooth'
+                    });
+                    // Clear flag after scroll animation completes
+                    setTimeout(() => {
+                        isProgrammaticScroll = false;
+                    }, 500);
+                }
+            }, 100); // Small delay to ensure the summary element is rendered
+        });
+    }
+
     async function submitRun(formData?: (Input & { value: string })[]) {
         if (!task || !workspace) return;
-        // reset 
+
+        if (run) {
+            run.close();
+            run = null;
+        }
+        // reset all run state
         runSession.clear();
         completed = false;
+        error = false;
+        runSummary = '';
+        currentRunStepId = null;
+
+        for (const step of task.steps) {
+            runSession.set(step.id, {
+                stepId: step.id,
+                messages: [],
+                pending: true,
+                completed: false,
+                error: false,
+            });
+        }
 
         const initialTime = Date.now();
         running = true;
@@ -334,6 +489,13 @@
 
                 totalRunTime = Date.now() - initialTime;
                 totalRunTokens = Math.floor(Math.random() * 7000) + 1000;
+
+                if (!error) {
+                    runSummary = buildRunSummary(run?.messages || []);
+                    if (shouldAutoScroll) {
+                        scrollToRunSummary();
+                    }
+                }
             }
         });
         await run?.sendToolCall('ExecuteTaskStep', {taskName: taskId, arguments: formData});
@@ -341,15 +503,13 @@
 </script>
 
 {#if initialLoadComplete && task}
-    <div class="flex w-full h-dvh {isResizing ? 'cursor-col-resize' : ''}">
+    <div class="flex w-full h-dvh relative {isResizing ? 'cursor-col-resize' : ''}">
         <div class="
             flex flex-col grow p-4 pt-0 overflow-y-auto max-h-dvh transition-all duration-150
             {isResizing ? 'select-none' : ''}
         "
             bind:this={scrollContainer}
-            onscroll={() => {
-                showAlternateHeader = (scrollContainer?.scrollTop ?? 0) > 100;
-            }}
+            onscroll={handleScroll}
         >
             <div class="sticky top-0 left-0 w-full bg-base-200 dark:bg-base-100 z-10 py-4">
                 <div in:fade class="flex flex-col grow">
@@ -380,35 +540,6 @@
                                         Run <Play class="size-4" />
                                     {/if}
                                 </button>
-                                <!-- <div class="dropdown dropdown-end">
-                                    <div tabindex="0" role="button" class="btn rounded-l-none btn-primary btn-square border-l-white">
-                                        <ChevronDown class="size-4" />
-                                    </div>
-                                    <ul tabindex="-1" class="menu dropdown-content bg-base-100 rounded-box z-1 w-64 p-2 shadow-sm">
-                                        <li>
-                                            <button class="flex flex-col gap-0 items-start"
-                                                onclick={() => {
-                                                    runMode = 'normal';
-                                                    (document.activeElement as HTMLElement)?.blur();
-                                                }}
-                                            >
-                                                <span class="flex items-center gap-2 font-medium"><Play class="size-3" /> Run</span>
-                                                <span class="text-xs text-base-content/50">Perform a standard workflow run, runs all steps at once and outputs a summarized result.</span>
-                                            </button>
-                                        </li>
-                                        <li>
-                                            <button class="flex flex-col gap-0 items-start"
-                                                onclick={() => {
-                                                    runMode = 'debug';
-                                                    (document.activeElement as HTMLElement)?.blur();
-                                                }}
-                                            >
-                                                <span class="flex items-center gap-2 font-medium"><Bug class="size-3" /> Debug</span>
-                                                <span class="text-xs text-base-content/50">Run the workflow in debug mode, runs step by step and outputs any errors that occur.</span>
-                                            </button>
-                                        </li>
-                                    </ul>
-                                </div> -->
                             </div>
                             <button class="btn btn-ghost btn-square" popoverTarget="task-actions" style="anchor-name: --task-actions-anchor;">
                                 <EllipsisVertical class="text-base-content/50" />
@@ -525,70 +656,91 @@
                     </div>
                 {/snippet}
                 {#snippet children({ item: step })}
-                    <Step
-                        taskId={taskId}
-                        task={task!}
-                        {step}
-                        showDescription={stepDescription.get(step.id) ?? false}
-                        showBlockEditing={stepBlockEditing.get(step.id) ?? false}
-                        onToggleStepDescription={(id, value) => stepDescription.set(id, value)}
-                        onToggleStepBlockEditing={(id, value) => stepBlockEditing.set(id, value)}
-                        onUpdateStep={(id, updates) => {
-                            const idx = task!.steps.findIndex(s => s.id === id);
-                            if (idx !== -1) Object.assign(task!.steps[idx], updates);
-                        }}
-                        onAddInput={(input) => visibleInputs.push(input)}
-                        onAddTaskInput={(input) => task!.inputs.push(input)}
-                        onRemoveTaskInput={(inputName) => {
-                            task!.inputs = task!.inputs.filter((input) => input.name !== inputName);
-                        }}
-                        onDeleteStep={(stepId, filename) => {
-                            confirmDeleteStep = {
-                                stepId,
-                                filename,
-                            };
-                            confirmDeleteStepModal?.showModal();
-                        }}
-                        {visibleInputs}
-                        onUpdateVisibleInputs={(inputs) => visibleInputs = inputs}
-                        onSuggestImprovement={async (file) => {
-                            if (!includeFilesInMessage.some((f) => f.uri === file.uri)) {
-                                includeFilesInMessage.push(file);
+                    <div use:registerStepElement={step.id}>
+                        <Step
+                            class={currentRunStepId === step.id && !completed 
+                                ? 'border-primary border-2' 
+                                    : currentRunStepId === step.id && error 
+                                        ? 'border-error border-2' : ''
                             }
-                            //TODO:
-                        }}
-                    >
-                        {#if running}
-                            <div in:fade={{ duration: 150 }}>
-                                <StepRun
-                                    messages={runSession.get(step.id)?.messages ?? []}
-                                    pending={runSession.get(step.id)?.pending ?? false}
-                                    error={runSession.get(step.id)?.error ?? false}
-                                />
-                            </div>
-                        {/if}
-                    </Step>
+                            taskId={taskId}
+                            task={task!}
+                            {step}
+                            showDescription={stepDescription.get(step.id) ?? false}
+                            showBlockEditing={stepBlockEditing.get(step.id) ?? false}
+                            onToggleStepDescription={(id, value) => stepDescription.set(id, value)}
+                            onToggleStepBlockEditing={(id, value) => stepBlockEditing.set(id, value)}
+                            onUpdateStep={(id, updates) => {
+                                const idx = task!.steps.findIndex(s => s.id === id);
+                                if (idx !== -1) Object.assign(task!.steps[idx], updates);
+                            }}
+                            onAddInput={(input) => visibleInputs.push(input)}
+                            onAddTaskInput={(input) => task!.inputs.push(input)}
+                            onRemoveTaskInput={(inputName) => {
+                                task!.inputs = task!.inputs.filter((input) => input.name !== inputName);
+                            }}
+                            onDeleteStep={(stepId, filename) => {
+                                confirmDeleteStep = {
+                                    stepId,
+                                    filename,
+                                };
+                                confirmDeleteStepModal?.showModal();
+                            }}
+                            {visibleInputs}
+                            onUpdateVisibleInputs={(inputs) => visibleInputs = inputs}
+                            onSuggestImprovement={async (file) => {
+                                if (!includeFilesInMessage.some((f) => f.uri === file.uri)) {
+                                    includeFilesInMessage.push(file);
+                                }
+                                //TODO:
+                            }}
+                        >
+                            {#if running}
+                                <div in:fade={{ duration: 150 }}>
+                                    <StepRun
+                                        messages={runSession.get(step.id)?.messages ?? []}
+                                        pending={runSession.get(step.id)?.pending ?? false}
+                                        error={runSession.get(step.id)?.error ?? false}
+                                    />
+                                </div>
+                            {/if}
+                        </Step>
+                    </div>
                 {/snippet}
             </DragDropList>
 
-            {#if completed && !error}
-                <div in:fade out:slide={{ axis: 'y', duration: 150 }} class="w-full flex flex-col justify-center items-center pl-22 pb-4 {showSidebarThread ? '' : 'md:pr-22'}">
+            
+            {#if running}
+                <div bind:this={runSummaryElement} in:fade out:slide={{ axis: 'y', duration: 150 }} class="w-full flex flex-col justify-center items-center pl-22 pb-4 {showSidebarThread ? '' : 'md:pr-22'}">
                     <div class="w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field p-6 pb-8">
-                        <h4 class="text-xl font-semibold">Workflow Completed</h4>
-                        <p class="text text-base-content/50 text-center mt-1">
-                            The workflow has completed successfully. Here are your summarized results:
-                        </p>
+                        {#if completed && !error}
+                            
+                                <h4 class="text-xl font-semibold">Workflow Completed</h4>
+                                <p class="text text-base-content/50 text-center mt-1">
+                                    The workflow has completed successfully. Here are your summarized results:
+                                </p>
 
-                        {#if runSummary}
-                            <div class="prose mt-4 text-left w-full max-w-none">
-                                {@html runSummary}
+                                {#if runSummary}
+                                    <div class="prose mt-4 text-left w-full max-w-none">
+                                        {@html runSummary}
+                                    </div>
+                                    <div class="divider"></div>
+                                {/if}
+
+                                <p class="text-sm text-center">The workflow completed <b>{task.steps.length}</b> out of <b>{task.steps.length}</b> steps.</p>
+                                <p class="text-sm text-center mt-1">It took a total time of <b>{(totalRunTime / 1000).toFixed(1)}s</b> to complete.</p>
+                                <p class="text-sm text-center mt-1">A total of <b>{totalRunTokens}</b> tokens were used.</p>
+                            
+                        {:else if error}
+                            <h4 class="text-xl font-semibold">Workflow Failed</h4>
+                            <p class="text-sm text-base-content/50 text-center mt-1">
+                                The workflow did not complete successfully. Please try again.
+                            </p>
+                        {:else}
+                            <div class="skeleton skeleton-text">
+                                The workflow is running...
                             </div>
-                            <div class="divider"></div>
                         {/if}
-
-                        <p class="text-sm text-center">The workflow completed <b>{task.steps.length}</b> out of <b>{task.steps.length}</b> steps.</p>
-                        <p class="text-sm text-center mt-1">It took a total time of <b>{(totalRunTime / 1000).toFixed(1)}s</b> to complete.</p>
-                        <p class="text-sm text-center mt-1">A total of <b>{totalRunTokens}</b> tokens were used.</p>
                     </div>
                 </div>
             {/if}
@@ -622,6 +774,7 @@
                 </div>
             {/if}
         </div>
+        
         {#if showSidebarThread}
             <!-- Resize Handle -->
             <button
@@ -653,6 +806,80 @@
                     {/if}
                 </div>
             </div>
+        {/if}
+
+        {#if running}
+        <div class="absolute bottom-4 left-4" in:fade>
+            <ul in:fade class="timeline timeline-snap-icon timeline-vertical timeline-compact grow">
+                {#if task}
+                    {#each task.steps as step, index (step.id)}
+                        {@const isBeforeCurrentStep = index < task.steps.findIndex(s => s.id === currentRunStepId)}
+                        <li>
+                            {#if index > 0}
+                                <hr class="timeline-connector w-0.5 {isBeforeCurrentStep ? 'completed' : ''}" />
+                            {/if}
+                            <div class="timeline-middle">
+                                {#if isBeforeCurrentStep || (currentRunStepId === step.id && completed)}
+                                    <CircleCheck class="size-5 text-primary" />
+                                {:else if currentRunStepId === step.id && !error && !completed}
+                                    <LoaderCircle class="size-5 animate-spin shrink-0 text-base-content/50" />
+                                {:else if currentRunStepId === step.id && error}
+                                    <CircleAlert class="size-5 text-error/50" />
+                                {:else}
+                                    <Circle class="size-5 text-base-content/50" />
+                                {/if}   
+                            </div>
+                            <button class="timeline-end timeline-box py-2 cursor-pointer hover:bg-base-200" onclick={() => {
+                                const stepElement = stepElements.get(step.id);
+                                if (stepElement && scrollContainer) {
+                                    // Mark as programmatic scroll
+                                    isProgrammaticScroll = true;
+                                    
+                                    // Scroll the step into view
+                                    stepElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    
+                                    // Clear programmatic flag after animation
+                                    setTimeout(() => {
+                                        isProgrammaticScroll = false;
+                                    }, 500);
+                                }
+                                
+                                // Manage auto-scroll based on which step was clicked
+                                if (step.id === currentRunStepId) {
+                                    // Clicked on current step - resume auto-scrolling
+                                    shouldAutoScroll = true;
+                                } else {
+                                    // Clicked on a different step - stop auto-scrolling
+                                    shouldAutoScroll = false;
+                                }
+                            }}>
+                                <div>
+                                    {step.name} 
+                                </div>
+                            </button>
+                            <hr class="timeline-connector w-0.5 {isBeforeCurrentStep ? 'completed' : ''}" />
+                        </li>
+                    {/each}
+                    <li>
+                        <hr class="timeline-connector w-0.5 {runSummary && completed ? 'completed' : ''}" />
+                        <div class="timeline-middle">
+                            {#if completed && runSummary}
+                                <CircleCheck class="size-5 text-primary" />
+                            {:else}
+                                <Circle class="size-5 text-base-content/50" />
+                            {/if}
+                        </div>
+                        <button class="timeline-end timeline-box py-2 {runSummary ? 'cursor-pointer hover:bg-base-200' : 'cursor-default opacity-50'}" onclick={() => {
+                            scrollToRunSummary();
+                        }}>
+                            <div>
+                                Run Summary
+                            </div>
+                        </button>
+                    </li>
+                {/if}
+            </ul>
+        </div>
         {/if}
     </div>
 {:else}

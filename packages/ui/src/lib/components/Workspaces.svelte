@@ -557,19 +557,19 @@
                                         </a>
                                     {/if}
                                     {#if permissions.includes('write') || permissions.includes('read')}
-                                        <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left mr-1" popovertarget="popover-task-actions-{item}" style="anchor-name:--task-actions-anchor-{item}"
+                                        <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left mr-1" popovertarget="popover-task-actions-{item.taskId}" style="anchor-name:--task-actions-anchor-{item.taskId}"
                                             data-tip="Edit workflow"
                                         >
                                             <EllipsisVertical class="size-4 shrink-0" />
                                         </button>
                                         <ul 
-                                            id="popover-task-actions-{item}"
+                                            id="popover-task-actions-{item.taskId}"
                                             class="dropdown menu min-w-36 rounded-box bg-base-100 shadow-sm"
-                                            popover style="position-anchor:--task-actions-anchor-{item}"
+                                            popover style="position-anchor:--task-actions-anchor-{item.taskId}"
                                         >
                                             <li>
                                                 <a 
-                                                    href={resolve(`/w/${workspaceId}/t?id=${item}&run=true`)}
+                                                    href={resolve(`/w/${workspaceId}/t?id=${item.taskId}&run=true`)}
                                                     class="text-sm {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}"
                                                 >
                                                     <Play class="size-4" /> Run
@@ -599,7 +599,7 @@
                             <ul>
                                 {#if taskRuns[item.taskId]?.length > 0}
                                     {@const runOnly = !permissions.includes('write') && !permissions.includes('read') && permissions.includes('execute')}
-                                    {#each taskRuns[item.taskId] as run (run.id)}
+                                    {#each taskRuns[item.taskId].sort((a, b) => new Date(a.createdAt ?? '').getTime() - new Date(b.createdAt ?? '').getTime()) as run (run.id)}
                                         <li in:slide={{ axis: 'y', duration: 150 }}>
                                             <div class="flex max-w-full items-center gap-2 rounded-r-none
                                                 {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}
@@ -611,13 +611,13 @@
                                                 >
                                                     {run.createdAt ? new Date(run.createdAt).toLocaleString() : run.title}
                                                 </a>
-                                                <button class="btn btn-square btn-ghost btn-sm mr-0.5" popovertarget="popover-task-run-actions-{item}-{run.id}" style="anchor-name:--task-run-actions-anchor-{item}-{run.id}">
+                                                <button class="btn btn-square btn-ghost btn-sm mr-0.5" popovertarget="popover-task-run-actions-{item.taskId}-{run.id}" style="anchor-name:--task-run-actions-anchor-{item.taskId}-{run.id}">
                                                     <EllipsisVertical class="size-4 shrink-0" />
                                                 </button>
                                                 <ul 
-                                                    id="popover-task-run-actions-{item}-{run.id}"
+                                                    id="popover-task-run-actions-{item.taskId}-{run.id}"
                                                     class="dropdown menu min-w-36 rounded-box bg-base-100 shadow-sm"
-                                                    popover style="position-anchor:--task-run-actions-anchor-{item}-{run.id}"
+                                                    popover style="position-anchor:--task-run-actions-anchor-{item.taskId}-{run.id}"
                                                 >
                                                     <li>
                                                         <button 
