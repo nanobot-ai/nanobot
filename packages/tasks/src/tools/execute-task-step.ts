@@ -80,22 +80,23 @@ ${tasksDescriptions}
 			);
 		}
 
+		const mcpServers: Record<string, { url: string }> = {};
 		// Write MCP servers file if task has tools
 		if (task.tools && task.tools.length > 0) {
-			const mcpServers: Record<string, { url: string }> = {};
 			for (const tool of task.tools) {
 				mcpServers[tool.name.replaceAll("/", "_")] = { url: tool.url };
 			}
-			try {
-				await client.writeTextFile(
-					mcpServerFile,
-					JSON.stringify({ mcpServers }, null, 2),
-				);
-			} catch (error) {
-				return toolResult.error(
-					`Failed to write MCP servers file: ${error instanceof Error ? error.message : String(error)}`,
-				);
-			}
+		}
+
+		try {
+			await client.writeTextFile(
+				mcpServerFile,
+				JSON.stringify({ mcpServers }, null, 2),
+			);
+		} catch (error) {
+			return toolResult.error(
+				`Failed to write MCP servers file: ${error instanceof Error ? error.message : String(error)}`,
+			);
 		}
 
 		// Build the prompt for the LLM
