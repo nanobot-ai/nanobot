@@ -606,7 +606,7 @@
                                                 {selectedRunId && selectedRunId === run.id ? 'bg-base-200 dark:bg-base-100' : ''}
                                             ">
                                                 <a
-                                                    href={resolve(`/w/${workspaceId}/t?id=${item}&runId=${run.id}${runOnly ? '&run=true' : ''}`)}
+                                                    href={resolve(`/w/${workspaceId}/t?id=${item.taskId}&runId=${run.id}${runOnly ? '&run=true' : ''}`)}
                                                     class="block h-full p-2 flex-1 min-w-0 overflow-hidden truncate"
                                                 >
                                                     {run.createdAt ? new Date(run.createdAt).toLocaleString() : run.title}
