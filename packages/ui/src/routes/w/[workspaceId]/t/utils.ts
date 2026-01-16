@@ -315,13 +315,17 @@ export function buildSessionData(messages: ChatMessage[], steps: Step[]): Sessio
 	let activeStepId = firstStepId;
 
 	const lastMessage = messages[messages.length - 1];
-	const hasTrailingSummary = lastMessage && isSummaryMessage(lastMessage);
+	const isLastMessageTextOnly = lastMessage && isSummaryMessage(lastMessage);
 
 	for (let i = 0; i < messages.length; i++) {
-		const isLastMessage = i === messages.length - 1;
-		const skipMessage = isLastMessage && hasTrailingSummary;
+		activeStepId = processMessage(messages[i], steps, sessionData, activeStepId, false);
+	}
 
-		activeStepId = processMessage(messages[i], steps, sessionData, activeStepId, skipMessage);
+	const allStepsCompleted = steps.every((step) => sessionData[step.id]?.completed);
+	if (allStepsCompleted && isLastMessageTextOnly && lastMessage) {
+		for (const session of Object.values(sessionData)) {
+			session.messages = session.messages.filter((m) => m.id !== lastMessage.id);
+		}
 	}
 
 	return sessionData;
