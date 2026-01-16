@@ -527,7 +527,7 @@
                                 {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'} 
                                 {selectedTaskId && !selectedRunId  && selectedTaskId === item ? 'bg-base-200 dark:bg-base-100' : ''}
                             ">
-                                <div class="flex items-center gap-2">
+                                <div class="flex w-full items-center gap-2">
                                     <span class="chevron-icon shrink-0">
                                         <ChevronRight class="size-4 chevron-closed" />
                                         <ChevronDown class="size-4 chevron-open" />
