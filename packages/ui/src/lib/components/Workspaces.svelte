@@ -98,6 +98,8 @@
     let confirmDeleteWorkspaceModal = $state<ReturnType<typeof ConfirmDelete> | null>(null);
     let confirmDeleteTask = $state<{ taskId: string, workspaceId: string } | null>(null);
     let confirmDeleteTaskModal = $state<ReturnType<typeof ConfirmDelete> | null>(null);
+    let confirmDeleteTaskRun = $state<{ sessionId: string, workspaceId: string } | null>(null);
+    let confirmDeleteTaskRunModal = $state<ReturnType<typeof ConfirmDelete> | null>(null);
 
     let sharingWorkspace = $state<Workspace | null>(null);
     let shareWorkspaceModal = $state<ReturnType<typeof WorkspaceShare> | null>(null);
@@ -265,7 +267,9 @@
 
 <div class="flex flex-col">
     {@render myWorkspaces()}
-    {@render sharedWorkspacesContent()}
+    {#if sharedWorkspaces.length > 0}
+        {@render sharedWorkspacesContent()}
+    {/if}
 </div>
 
 {#snippet workspaceTitle(workspace: Workspace)}
@@ -588,7 +592,7 @@
                                             ">
                                                 <a
                                                     href={resolve(`/w/${workspaceId}/t?id=${item}&runId=${run.id}${runOnly ? '&run=true' : ''}`)}
-                                                    class="block h-full p-2 w-full overflow-hidden truncate"
+                                                    class="block h-full p-2 flex-1 min-w-0 overflow-hidden truncate"
                                                 >
                                                     {run.createdAt ? new Date(run.createdAt).toLocaleString() : run.title}
                                                 </a>
@@ -604,7 +608,11 @@
                                                         <button 
                                                             onmousedown={(e) => e.stopPropagation()} 
                                                             onclick={() => {
-                                                                workspaceData.get(workspaceId)?.deleteSession(run.id);
+                                                                confirmDeleteTaskRun = {
+                                                                    sessionId: run.id,
+                                                                    workspaceId,
+                                                                };
+                                                                confirmDeleteTaskRunModal?.showModal();
                                                             }} 
                                                             class="menu-alert"
                                                         >
@@ -846,6 +854,18 @@
             workspace.deleteFile(file.name);
         }
         confirmDeleteTaskModal?.close();
+    }}
+/>
+
+<ConfirmDelete 
+    bind:this={confirmDeleteTaskRunModal}
+    title="Delete this task run?"
+    message="This task run will be permanently deleted and cannot be recovered."
+    onConfirm={() => {
+        if (!confirmDeleteTaskRun) return;
+        const workspace = workspaceService.getWorkspace(confirmDeleteTaskRun.workspaceId);
+        workspace.deleteSession(confirmDeleteTaskRun.sessionId);
+        confirmDeleteTaskRunModal?.close();
     }}
 />
 

@@ -22,7 +22,10 @@
     const registry = getRegistryContext();
 
     let results = $derived.by(() => {
-        const withoutOmitted = registry.servers.filter(server => !omit.includes(server.name));
+        const withoutOmitted = registry.servers
+            .filter(server => !omit.includes(server.name))
+            // seeing these are omitted
+            .filter(server => server.remotes?.some(r => r.url));
         if (query) {
             return withoutOmitted.filter(server => server.title.toLowerCase().includes(query.toLowerCase()));
         } else {
