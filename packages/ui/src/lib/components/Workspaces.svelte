@@ -640,7 +640,7 @@
 
 {#snippet workspaceMenuActions(workspace: Workspace, permissions: string[], isShared?: boolean)}
 {@const canWrite = permissions.includes('write')}
-<button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" popoverTarget="workspace-actions-{workspace.id}" style="anchor-name: --workspace-actions-anchor-{workspace.id};"
+<button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left mr-1" popoverTarget="workspace-actions-{workspace.id}" style="anchor-name: --workspace-actions-anchor-{workspace.id};"
     onmousedown={(e) => e.stopPropagation()}
     onclick={(e) => e.stopPropagation()}
     data-tip="Edit workspace"
