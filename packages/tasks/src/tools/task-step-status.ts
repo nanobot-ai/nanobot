@@ -72,7 +72,9 @@ export default createTool({
 
 		let nextTaskText =
 			"\n\nUse all the information from ALL the task step executions to give a summary of the steps you executed. Be concise and informative.";
-		if (taskRecord.next) {
+		if (taskRecord.status === "failed") {
+			nextTaskText += `\n\nThis task step failed. Be sure to include the error message and any relevant details in your explanation.`;
+		} else if (taskRecord.status === "succeeded" && taskRecord.next) {
 			nextTaskText = `\n\nYou must now use the ExecuteTaskStep tool to execute the next task step: taskName: ${taskName}, filename: ${taskRecord.next}`;
 		}
 
