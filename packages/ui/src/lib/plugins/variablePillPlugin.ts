@@ -515,6 +515,9 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 			// Mark the variable as completed immediately so it gets the blue styling
 			completedVariables.add(`${variable}:${startPos}`);
 
+			// Refocus the editor before dispatch to ensure onChange callback fires
+			// (clicking on dropdown causes focusout, but we need focus for the listener)
+			currentView.focus();
 			currentView.dispatch(tr);
 			hideAutocomplete();
 		}
@@ -544,6 +547,9 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 			// The new variable starts at the same position as the old one
 			completedVariables.add(`${newVariable}:${startPos}`);
 
+			// Refocus the editor before dispatch to ensure onChange callback fires
+			// (clicking on dropdown causes focusout, but we need focus for the listener)
+			currentView.focus();
 			currentView.dispatch(tr);
 			hidePillEditor();
 		}
