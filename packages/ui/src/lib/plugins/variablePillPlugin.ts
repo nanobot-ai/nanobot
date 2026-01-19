@@ -32,6 +32,16 @@ interface AutocompleteState {
 	suggestions: string[];
 }
 
+// Pill editor state (for editing existing pills)
+interface PillEditorState {
+	active: boolean;
+	variableStart: number;
+	variableEnd: number;
+	currentVariable: string;
+	selectedIndex: number;
+	suggestions: string[];
+}
+
 // Create autocomplete dropdown element
 function createAutocompleteDropdown(): HTMLElement {
 	const dropdown = document.createElement('div');
@@ -117,6 +127,83 @@ function positionDropdown(dropdown: HTMLElement, view: EditorView, pos: number):
 			dropdown.style.top = `${coords.top - dropdownRect.height - 4}px`;
 		}
 	});
+}
+
+// Position dropdown near an element (for pill editor)
+function positionDropdownNearElement(dropdown: HTMLElement, element: HTMLElement): void {
+	const rect = element.getBoundingClientRect();
+
+	dropdown.style.left = `${rect.left}px`;
+	dropdown.style.top = `${rect.bottom + 4}px`;
+
+	// Ensure dropdown doesn't go off-screen
+	requestAnimationFrame(() => {
+		const dropdownRect = dropdown.getBoundingClientRect();
+		if (dropdownRect.right > window.innerWidth) {
+			dropdown.style.left = `${window.innerWidth - dropdownRect.width - 8}px`;
+		}
+		if (dropdownRect.bottom > window.innerHeight) {
+			dropdown.style.top = `${rect.top - dropdownRect.height - 4}px`;
+		}
+	});
+}
+
+// Render pill editor suggestions (similar to autocomplete but highlights current variable)
+function renderPillEditorSuggestions(
+	dropdown: HTMLElement,
+	suggestions: string[],
+	selectedIndex: number,
+	currentVariable: string,
+	onSelect: (variable: string) => void
+): void {
+	dropdown.innerHTML = '';
+
+	if (suggestions.length === 0) {
+		dropdown.style.display = 'none';
+		return;
+	}
+
+	suggestions.forEach((variable, index) => {
+		const item = document.createElement('div');
+		item.className = 'variable-autocomplete-item';
+		
+		const isCurrent = variable === currentVariable;
+		const isSelected = index === selectedIndex;
+		
+		item.innerHTML = `<span>$${variable}</span>${isCurrent ? '<span style="margin-left: 8px; opacity: 0.6; font-size: 12px;">(current)</span>' : ''}`;
+		item.style.cssText = `
+			padding: 8px 12px;
+			cursor: pointer;
+			font-family: var(--default-font-family);
+			font-size: 14px;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			color: var(--color-base-content, #333);
+			${isSelected ? 'background: var(--color-primary, #3b82f6); color: var(--color-primary-content, #fff);' : ''}
+			${isCurrent && !isSelected ? 'opacity: 0.7;' : ''}
+		`;
+
+		item.addEventListener('mouseenter', () => {
+			dropdown.querySelectorAll('.variable-autocomplete-item').forEach((el, i) => {
+				(el as HTMLElement).style.background = i === index ? 'var(--color-primary, #3b82f6)' : '';
+				(el as HTMLElement).style.color =
+					i === index ? 'var(--color-primary-content, #fff)' : 'var(--color-base-content, #333)';
+			});
+		});
+
+		item.addEventListener('mousedown', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			if (!isCurrent) {
+				onSelect(variable);
+			}
+		});
+
+		dropdown.appendChild(item);
+	});
+
+	dropdown.style.display = 'block';
 }
 
 // Get text before cursor in the current text node
@@ -407,16 +494,27 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 		let autocompleteDropdown: HTMLElement | null = null;
 		let currentView: EditorView | null = null;
 
+		// Pill editor state
+		let pillEditorState: PillEditorState | null = null;
+		let pillEditorDropdown: HTMLElement | null = null;
+		let pillEditorElement: HTMLElement | null = null;
+
 		// Function to insert selected variable
 		function insertVariable(variable: string) {
 			if (!currentView || !autocompleteState) return;
 
 			const { state } = currentView;
+			const startPos = autocompleteState.startPos;
+
 			const tr = state.tr.replaceWith(
-				autocompleteState.startPos,
+				startPos,
 				autocompleteState.endPos,
 				state.schema.text(`$${variable} `)
 			);
+
+			// Mark the variable as completed immediately so it gets the blue styling
+			completedVariables.add(`${variable}:${startPos}`);
+
 			currentView.dispatch(tr);
 			hideAutocomplete();
 		}
@@ -427,6 +525,76 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 			if (autocompleteDropdown) {
 				autocompleteDropdown.style.display = 'none';
 			}
+		}
+
+		// Function to replace variable in pill editor
+		function replaceVariable(newVariable: string) {
+			if (!currentView || !pillEditorState) return;
+
+			const { state } = currentView;
+			const startPos = pillEditorState.variableStart;
+
+			const tr = state.tr.replaceWith(
+				startPos,
+				pillEditorState.variableEnd,
+				state.schema.text(`$${newVariable} `)
+			);
+
+			// Mark the new variable as completed immediately so it gets the blue styling
+			// The new variable starts at the same position as the old one
+			completedVariables.add(`${newVariable}:${startPos}`);
+
+			currentView.dispatch(tr);
+			hidePillEditor();
+		}
+
+		// Function to hide pill editor
+		function hidePillEditor() {
+			pillEditorState = null;
+			pillEditorElement = null;
+			if (pillEditorDropdown) {
+				pillEditorDropdown.style.display = 'none';
+			}
+		}
+
+		// Function to show pill editor
+		function showPillEditor(
+			element: HTMLElement,
+			start: number,
+			end: number,
+			currentVariable: string
+		) {
+			if (!options.getAvailableVariables) return;
+
+			const available = options.getAvailableVariables();
+			if (available.length === 0) return;
+
+			// Create dropdown if it doesn't exist
+			if (!pillEditorDropdown) {
+				pillEditorDropdown = createAutocompleteDropdown();
+			}
+
+			// Find the index of the current variable in the list
+			const currentIndex = available.indexOf(currentVariable);
+
+			pillEditorState = {
+				active: true,
+				variableStart: start,
+				variableEnd: end,
+				currentVariable,
+				selectedIndex: currentIndex >= 0 ? currentIndex : 0,
+				suggestions: available
+			};
+
+			pillEditorElement = element;
+			positionDropdownNearElement(pillEditorDropdown, element);
+			renderPillEditorSuggestions(
+				pillEditorDropdown,
+				available,
+				pillEditorState.selectedIndex,
+				currentVariable,
+				replaceVariable
+			);
 		}
 
 		// Function to update autocomplete
@@ -733,6 +901,59 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 						}
 					}
 
+					// Handle pill editor keyboard navigation
+					if (pillEditorState && pillEditorState.active) {
+						if (event.key === 'ArrowDown') {
+							event.preventDefault();
+							pillEditorState.selectedIndex = Math.min(
+								pillEditorState.selectedIndex + 1,
+								pillEditorState.suggestions.length - 1
+							);
+							if (pillEditorDropdown) {
+								renderPillEditorSuggestions(
+									pillEditorDropdown,
+									pillEditorState.suggestions,
+									pillEditorState.selectedIndex,
+									pillEditorState.currentVariable,
+									replaceVariable
+								);
+							}
+							return true;
+						}
+
+						if (event.key === 'ArrowUp') {
+							event.preventDefault();
+							pillEditorState.selectedIndex = Math.max(pillEditorState.selectedIndex - 1, 0);
+							if (pillEditorDropdown) {
+								renderPillEditorSuggestions(
+									pillEditorDropdown,
+									pillEditorState.suggestions,
+									pillEditorState.selectedIndex,
+									pillEditorState.currentVariable,
+									replaceVariable
+								);
+							}
+							return true;
+						}
+
+						if (event.key === 'Enter' || event.key === 'Tab') {
+							event.preventDefault();
+							const selectedVar = pillEditorState.suggestions[pillEditorState.selectedIndex];
+							if (selectedVar && selectedVar !== pillEditorState.currentVariable) {
+								replaceVariable(selectedVar);
+							} else {
+								hidePillEditor();
+							}
+							return true;
+						}
+
+						if (event.key === 'Escape') {
+							event.preventDefault();
+							hidePillEditor();
+							return true;
+						}
+					}
+
 					// Only handle when there's no text selection (cursor is collapsed)
 					if (!selection.empty) return false;
 
@@ -804,15 +1025,27 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 							hideAutocomplete();
 						}
 
-						// Handle click on delete button (::after pseudo-element area)
+						// Hide pill editor if clicking outside
+						if (
+							pillEditorDropdown &&
+							!pillEditorDropdown.contains(target) &&
+							target !== pillEditorElement &&
+							!pillEditorElement?.contains(target)
+						) {
+							hidePillEditor();
+						}
+
+						// Handle click on completed variable pill
 						if (target.classList.contains('variable-pill-completed')) {
 							const rect = target.getBoundingClientRect();
 							const clickX = event.clientX;
+							const start = parseInt(target.getAttribute('data-start') || '0', 10);
+							const end = parseInt(target.getAttribute('data-end') || '0', 10);
+							const variable = target.getAttribute('data-variable') || '';
+
 							// Check if click is in the rightmost 20px (where the × is)
 							if (clickX > rect.right - 20) {
-								const start = parseInt(target.getAttribute('data-start') || '0', 10);
-								const end = parseInt(target.getAttribute('data-end') || '0', 10);
-
+								// Delete the variable
 								if (start !== end) {
 									const tr = view.state.tr.delete(start, end);
 									view.dispatch(tr);
@@ -820,6 +1053,23 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 									event.stopPropagation();
 									return true;
 								}
+							} else {
+								// Click on pill body - show variable selector
+								currentView = view;
+								
+								// Toggle pill editor: hide if clicking same pill, show if different
+								if (
+									pillEditorState &&
+									pillEditorState.variableStart === start &&
+									pillEditorState.variableEnd === end
+								) {
+									hidePillEditor();
+								} else {
+									showPillEditor(target, start, end, variable);
+								}
+								event.preventDefault();
+								event.stopPropagation();
+								return true;
 							}
 						}
 
@@ -827,9 +1077,10 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 					},
 
 					blur() {
-						// Delay hiding to allow click events on autocomplete items
+						// Delay hiding to allow click events on dropdown items
 						setTimeout(() => {
 							hideAutocomplete();
+							hidePillEditor();
 						}, 150);
 						return false;
 					}
@@ -848,6 +1099,11 @@ export function createVariablePillPlugin(options: VariablePillOptions = {}): Mil
 							autocompleteDropdown.remove();
 							autocompleteDropdown = null;
 						}
+						if (pillEditorDropdown) {
+							pillEditorDropdown.remove();
+							pillEditorDropdown = null;
+						}
+						pillEditorElement = null;
 						currentView = null;
 					}
 				};
