@@ -120,7 +120,7 @@
 	});
 </script>
 
-<div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 pb-8 task-step relative {klass}">
+<div class="flex flex-col gap-2 bg-base-100 dark:bg-base-200 shadow-xs rounded-box p-4 pb-8 task-step relative transition-colors duration-200 {klass}">
     {#if !readonly}
         <div class="absolute top-3 right-3 z-2">
             {@render stepMenu(step.id)}

@@ -1,12 +1,12 @@
 <script lang="ts">
 	import '$lib/../app.css';
-    import { resolve } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import DragDropList from '$lib/components/DragDropList.svelte';
 	import { getLayoutContext } from '$lib/context/layout.svelte';
 	import { createRegistryStore, setRegistryContext } from '$lib/context/registry.svelte';
-	import { EllipsisVertical, GripVertical, PencilLine, Play, Plus, ReceiptText, X, MessageCircleMore, Square, CircleCheck, LoaderCircle, Circle, CircleAlert } from '@lucide/svelte';
+	import { GripVertical, Plus, MessageCircleMore } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { fade, fly, slide } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { Attachment, WorkspaceClient, WorkspaceFile } from '$lib/types';
@@ -15,17 +15,19 @@
 	import { areAllStepsCompleted, buildRunSummary, buildSessionData, compileOutputFiles, convertToTask, setupEmptyTask } from './utils';
 	import StepActions from './StepActions.svelte';
 	import TaskInputActions from './TaskInputActions.svelte';
-    import TaskInput from './TaskInput.svelte';
+	import TaskInput from './TaskInput.svelte';
 	import Step from './Step.svelte';
 	import RegistryToolSelector from './RegistryToolSelector.svelte';
 	import { onMount } from 'svelte';
 	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
-    import { sharedChat } from '$lib/stores/chat.svelte';
 	import { ChatService } from '$lib/chat.svelte';
-	import ThreadFromChat from '$lib/components/ThreadFromChat.svelte';
 	import TaskRunInputs from './TaskRunInputs.svelte';
 	import StepRun from './StepRun.svelte';
 	import Elicitation from '$lib/components/Elicitation.svelte';
+	import TaskEditorHeader from './TaskEditorHeader.svelte';
+	import TaskEditorRunSummary from './TaskEditorRunSummary.svelte';
+	import TaskEditorRunTimeline from './TaskEditorRunTimeline.svelte';
+	import TaskEditorSidebar from './TaskEditorSidebar.svelte';
 
     type Props = {
         workspace: WorkspaceClient;
@@ -87,28 +89,65 @@
     let currentRunStepId = $state<string | null>(null);
     let totalRunTime = $state(0);
     let totalRunTokens = $state(0);
+    let closeCurrentRunTimeline = $state(false);
 
-    // Auto-scroll state for keeping current running step in view
+    // auto-scrolling during a task run in the editor
     let stepElements = new SvelteMap<string, HTMLElement>();
     let shouldAutoScroll = $state(true);
-    let isProgrammaticScroll = $state(false); // Flag to ignore programmatic scroll events
+    let isProgrammaticScroll = $state(false);
     let scrollTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    // Svelte action to register step elements for auto-scroll
-    function registerStepElement(node: HTMLElement, stepId: string) {
-        stepElements.set(stepId, node);
-        return {
-            destroy() {
-                stepElements.delete(stepId);
-            }
-        };
-    }
-
-    // Reference to run summary element for scrolling on completion
-    let runSummaryElement = $state<HTMLElement | null>(null);
+    let mainContainerRef = $state<HTMLElement | null>(null);
+    let runSummaryComponent = $state<ReturnType<typeof TaskEditorRunSummary> | null>(null);
 
     const notifications = getNotificationContext();
     const layout = getLayoutContext();
+
+    function withProgrammaticScroll(action: () => void, delay = 500) {
+        isProgrammaticScroll = true;
+        action();
+        setTimeout(() => { isProgrammaticScroll = false; }, delay);
+    }
+
+    function resetRunState() {
+        closeCurrentRunTimeline = false;
+        running = false;
+        runSession.clear();
+        completed = false;
+        error = false;
+        runSummary = '';
+        currentRunStepId = null;
+    }
+
+    function markAsSaved() {
+        lastSavedTaskJson = JSON.stringify(task);
+        lastSavedVisibleInputsJson = JSON.stringify(visibleInputs);
+    }
+
+    function clearEditorMaps() {
+        stepDescription.clear();
+        inputDescription.clear();
+        inputDefault.clear();
+    }
+
+    function addVisibleInput(input: Input) {
+        visibleInputs.push(input);
+    }
+
+    function registerStepElement(node: HTMLElement, stepId: string) {
+        stepElements.set(stepId, node);
+        return { destroy: () => stepElements.delete(stepId) };
+    }
+
+    function scrollToStep(stepId: string) {
+        const stepElement = stepElements.get(stepId);
+        if (stepElement && scrollContainer) {
+            withProgrammaticScroll(() => {
+                stepElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+        }
+        shouldAutoScroll = stepId === currentRunStepId;
+    }
 
     $effect(() => {
         // Update runSession during a task run
@@ -161,45 +200,29 @@
     $effect(() => {
         if (!running || completed || !currentRunStepId || !shouldAutoScroll) return;
 
-        // Track message count changes to trigger scroll on new content
-        const currentSession = runSession.get(currentRunStepId);
-        const messageCount = currentSession?.messages?.length ?? 0;
-        // Access messageCount to make this effect reactive to message changes
+        const messageCount = runSession.get(currentRunStepId)?.messages?.length ?? 0;
         void messageCount;
 
         const stepElement = stepElements.get(currentRunStepId);
         if (!stepElement || !scrollContainer) return;
 
-        // Use requestAnimationFrame to ensure DOM has updated
         requestAnimationFrame(() => {
             if (!stepElement || !scrollContainer || !shouldAutoScroll) return;
             
             const containerRect = scrollContainer.getBoundingClientRect();
             const stepRect = stepElement.getBoundingClientRect();
+            const stepBottomRelative = stepRect.bottom - containerRect.top;
             
-            // Calculate where the bottom of the step is relative to the container
-            const stepBottomRelativeToContainer = stepRect.bottom - containerRect.top;
-            const containerVisibleHeight = containerRect.height;
-            
-            // If the step's bottom is below the visible area, scroll to show it
-            if (stepBottomRelativeToContainer > containerVisibleHeight - 20) {
-                const scrollAmount = stepBottomRelativeToContainer - containerVisibleHeight + 40;
-                
-                // Mark as programmatic scroll to ignore scroll events
-                isProgrammaticScroll = true;
-                scrollContainer.scrollBy({
-                    top: scrollAmount,
-                    behavior: 'smooth'
+            if (stepBottomRelative > containerRect.height - 20) {
+                const scrollAmount = stepBottomRelative - containerRect.height + 40;
+                withProgrammaticScroll(() => {
+                    scrollContainer!.scrollBy({ top: scrollAmount, behavior: 'smooth' });
                 });
-                // Clear flag after scroll animation completes
-                setTimeout(() => {
-                    isProgrammaticScroll = false;
-                }, 500);
             }
         });
     });
 
-    // Reset auto-scroll when a new run starts
+    // this is to reset an auto-scroll when a new run starts
     $effect(() => {
         if (running && !completed) {
             shouldAutoScroll = true;
@@ -215,7 +238,6 @@
             clearTimeout(saveTimeout);
         }
 
-        // Abort any ongoing save operation
         if (saveAbortController) {
             saveAbortController.abort();
         }
@@ -247,7 +269,6 @@
 
             const outputFiles = compileOutputFiles(taskSnapshot, visibleInputsSnapshot, taskId);
             for (const file of outputFiles) {
-                // Check if this save operation was cancelled
                 if (signal.aborted) {
                     console.info('save operation cancelled');
                     return;
@@ -294,45 +315,29 @@
     async function compileTask(idToUse: string, files: WorkspaceFile[]){
         if (!workspace) return;
 
-        // reset if there was a run
-        running = false;
-        runSession.clear();
-        completed = false;
-        
+        resetRunState();
         initialLoadComplete = false;
         task = null;
         task = await convertToTask(workspace, files, idToUse);
         taskId = idToUse;
 
-        stepDescription.clear();
+        clearEditorMaps();
         for (const step of task.steps) {
-            if (step.description) {
-                stepDescription.set(step.id, true);
-            }
+            if (step.description) stepDescription.set(step.id, true);
         }
 
-        // set up visible inputs
         visibleInputs = [];
-        inputDescription.clear();
-        inputDefault.clear();
         for (const input of task.inputs) {
             if (input.description.length || input.default?.length) {
                 visibleInputs.push(input);
-                if (input.description.length) {
-                    inputDescription.set(input.id, true);
-                }
-                if (input.default?.length) {
-                    inputDefault.set(input.id, true);
-                }
+                if (input.description.length) inputDescription.set(input.id, true);
+                if (input.default?.length) inputDefault.set(input.id, true);
             }
         }
 
         showTaskTitle = (task.name || '').length > 0;
         showTaskDescription = (task.description || '').length > 0;
-
-        // Mark this as the "saved" state so the effect doesn't trigger a save
-        lastSavedTaskJson = JSON.stringify(task);
-        lastSavedVisibleInputsJson = JSON.stringify(visibleInputs);
+        markAsSaved();
         initialLoadComplete = true;
     }
 
@@ -346,13 +351,10 @@
     function initNewTask() {
         task = setupEmptyTask();
         taskId = '';
-        stepDescription.clear();
-        lastSavedTaskJson = JSON.stringify(task);
-        lastSavedVisibleInputsJson = JSON.stringify(visibleInputs);
-        initialLoadComplete = true;
         visibleInputs = [];
-        inputDescription.clear();
-        inputDefault.clear();
+        clearEditorMaps();
+        markAsSaved();
+        initialLoadComplete = true;
     }
 
     onMount(() => {
@@ -382,14 +384,8 @@
     }
 
     function cancelRun() {
-        running = false;
-        completed = false;
-        runSession.clear();
-
-        if (run) {
-            run = null;
-        }
-
+        resetRunState();
+        run = null;
         notifications.info('Workflow cancelled');
     }
 
@@ -400,7 +396,6 @@
         const startWidth = sidebarWidth;
 
         function onMouseMove(e: MouseEvent) {
-            // Sidebar is on the right side, so dragging left increases width
             const delta = startX - e.clientX;
             sidebarWidth = Math.max(400, Math.min(startWidth + delta, window.innerWidth - 800));
         }
@@ -416,53 +411,29 @@
     }
 
     function scrollToRunSummary() {
-        // Wait for DOM to update with run summary, then scroll to bottom
         requestAnimationFrame(() => {
             setTimeout(() => {
+                const runSummaryElement = runSummaryComponent?.getElement();
                 if (runSummaryElement && scrollContainer) {
                     const summaryRect = runSummaryElement.getBoundingClientRect();
                     const containerRect = scrollContainer.getBoundingClientRect();
-                    const summaryBottomRelativeToContainer = summaryRect.bottom - containerRect.top;
-                    
-                    // Mark as programmatic scroll to ignore scroll events
-                    isProgrammaticScroll = true;
-                    // Scroll to show the bottom of the summary with some padding
-                    const targetScroll = scrollContainer.scrollTop + summaryBottomRelativeToContainer - containerRect.height + 40;
-                    scrollContainer.scrollTo({
-                        top: targetScroll,
-                        behavior: 'smooth'
+                    const targetScroll = scrollContainer.scrollTop + summaryRect.bottom - containerRect.top - containerRect.height + 40;
+                    withProgrammaticScroll(() => {
+                        scrollContainer!.scrollTo({ top: targetScroll, behavior: 'smooth' });
                     });
-                    // Clear flag after scroll animation completes
-                    setTimeout(() => {
-                        isProgrammaticScroll = false;
-                    }, 500);
                 }
-            }, 100); // Small delay to ensure the summary element is rendered
+            }, 100);
         });
     }
 
     async function submitRun(formData?: (Input & { value: string })[]) {
         if (!task || !workspace) return;
 
-        if (run) {
-            run.close();
-            run = null;
-        }
-        // reset all run state
-        runSession.clear();
-        completed = false;
-        error = false;
-        runSummary = '';
-        currentRunStepId = null;
+        if (run) { run.close(); run = null; }
+        resetRunState();
 
         for (const step of task.steps) {
-            runSession.set(step.id, {
-                stepId: step.id,
-                messages: [],
-                pending: true,
-                completed: false,
-                error: false,
-            });
+            runSession.set(step.id, { stepId: step.id, messages: [], pending: true, completed: false, error: false });
         }
 
         const initialTime = Date.now();
@@ -503,7 +474,7 @@
 </script>
 
 {#if initialLoadComplete && task}
-    <div class="flex w-full h-dvh relative {isResizing ? 'cursor-col-resize' : ''}">
+    <div bind:this={mainContainerRef} class="flex w-full h-dvh relative {isResizing ? 'cursor-col-resize' : ''}">
         <div class="
             flex flex-col grow p-4 pt-0 overflow-y-auto max-h-dvh transition-all duration-150
             {isResizing ? 'select-none' : ''}
@@ -511,76 +482,19 @@
             bind:this={scrollContainer}
             onscroll={handleScroll}
         >
-            <div class="sticky top-0 left-0 w-full bg-base-200 dark:bg-base-100 z-10 py-4">
-                <div in:fade class="flex flex-col grow">
-                    <div class="flex w-full items-center gap-4 {layout.isSidebarCollapsed ? 'pl-68' : ''}">
-                        {#if showAlternateHeader}
-                            <p in:fade class="flex grow text-xl font-semibold">{task.name}</p>
-                        {:else if showTaskTitle}
-                            <input name="title" class="input input-ghost input-lg w-full placeholder:text-base-content/30 font-semibold" type="text" placeholder="Workflow title"
-                                bind:value={task.name}
-                            />
-                        {:else}
-                            <div class="w-full"></div>
-                        {/if}
-                        <div class="flex shrink-0 items-center gap-2">
-                            <div class="flex">
-                                <button class="btn btn-primary w-48 {running ? 'tooltip tooltip-bottom' : ''}" data-tip="Cancel current run"
-                                    onclick={() => {
-                                        if (running && !completed) {
-                                            cancelRun();
-                                        } else {
-                                            handleRun();
-                                        }
-                                    }}
-                                >
-                                    {#if running && !completed}
-                                        <Square class="size-4" />
-                                    {:else}
-                                        Run <Play class="size-4" />
-                                    {/if}
-                                </button>
-                            </div>
-                            <button class="btn btn-ghost btn-square" popoverTarget="task-actions" style="anchor-name: --task-actions-anchor;">
-                                <EllipsisVertical class="text-base-content/50" />
-                            </button>
-
-                            <ul class="dropdown flex flex-col gap-1 dropdown-end dropdown-bottom menu w-64 rounded-box bg-base-100 dark:bg-base-300 shadow-sm border border-base-300"
-                                popover="auto" id="task-actions" style="position-anchor: --task-actions-anchor;">
-                                <li>
-                                    <label for="task-title" class="flex gap-2 justify-between items-center">
-                                        <span class="flex items-center gap-2">
-                                            <PencilLine class="size-4" />
-                                            Workflow title
-                                        </span>
-                                        <input type="checkbox" class="toggle toggle-sm" id="task-title"
-                                            checked={showTaskTitle}
-                                            onchange={(e) => showTaskTitle = (e.target as HTMLInputElement)?.checked ?? false}
-                                        />
-                                    </label>
-                                </li>
-                                <li>
-                                    <label for="task-description" class="flex gap-2 justify-between items-center">
-                                        <span class="flex items-center gap-2">
-                                            <ReceiptText class="size-4" />
-                                            Workflow description
-                                        </span>
-                                        <input type="checkbox" class="toggle toggle-sm" id="task-description"
-                                            checked={showTaskDescription}
-                                            onchange={(e) => showTaskDescription = (e.target as HTMLInputElement)?.checked ?? false}
-                                        />
-                                    </label>
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                    {#if !showAlternateHeader && showTaskDescription}
-                        <input out:slide={{ axis: 'y' }} name="description" class="input input-ghost w-full placeholder:text-base-content/30" type="text" placeholder="Workflow description"
-                            bind:value={task.description}
-                        />
-                    {/if}
-                </div>
-            </div>
+            <TaskEditorHeader
+                {task}
+                {running}
+                {completed}
+                {showAlternateHeader}
+                {showTaskTitle}
+                {showTaskDescription}
+                isSidebarCollapsed={layout.isSidebarCollapsed}
+                onRun={handleRun}
+                onCancel={cancelRun}
+                onToggleTitle={(v) => showTaskTitle = v}
+                onToggleDescription={(v) => showTaskDescription = v}
+            />
             {#if visibleInputs.length > 0}
             <div bind:this={argumentsList}>
                 <DragDropList
@@ -594,11 +508,7 @@
                 >
                     {#snippet blockHandle({ startDrag })}
                         <div class="flex items-center gap-2">
-                            <TaskInputActions task={task!} availableInputs={hiddenInputs}
-                                onAddInput={(input) => {
-                                    visibleInputs.push(input);
-                                }}
-                            />
+                            <TaskInputActions task={task!} availableInputs={hiddenInputs} onAddInput={addVisibleInput} />
                             {#if visibleInputs.length > 1}
                                 <button class="btn btn-ghost btn-square cursor-grab btn-sm tooltip tooltip-right" data-tip="Drag to reorder" onmousedown={startDrag}>
                                     <GripVertical class="text-base-content/50" />
@@ -641,13 +551,8 @@
                                 task={task!}
                                 item={currentItem}
                                 availableInputs={hiddenInputs}
-                                onAddInput={(input) => {
-                                    visibleInputs.push(input);
-                                }}
-                                onOpenSelectTool={() => {
-                                    currentAddingToolForStep = currentItem;
-                                    registryToolSelector?.showModal();
-                                }}
+                                onAddInput={addVisibleInput}
+                                onOpenSelectTool={() => { currentAddingToolForStep = currentItem; registryToolSelector?.showModal(); }}
                             />
                             <button class="btn btn-ghost btn-square cursor-grab btn-sm tooltip tooltip-right" onmousedown={startDrag} data-tip="Drag to reorder">
                                 <GripVertical class="text-base-content/50" />
@@ -658,11 +563,11 @@
                 {#snippet children({ item: step })}
                     <div use:registerStepElement={step.id}>
                         <Step
-                            class={currentRunStepId === step.id && !completed 
-                                ? 'border-primary border-2' 
+                            class="border-2 {currentRunStepId === step.id && !completed 
+                                ? 'border-primary' 
                                     : currentRunStepId === step.id && error 
-                                        ? 'border-error border-2' : ''
-                            }
+                                        ? 'border-error' : 'border-transparent'}
+                            "
                             taskId={taskId}
                             task={task!}
                             {step}
@@ -674,7 +579,7 @@
                                 const idx = task!.steps.findIndex(s => s.id === id);
                                 if (idx !== -1) Object.assign(task!.steps[idx], updates);
                             }}
-                            onAddInput={(input) => visibleInputs.push(input)}
+                            onAddInput={addVisibleInput}
                             onAddTaskInput={(input) => task!.inputs.push(input)}
                             onRemoveTaskInput={(inputName) => {
                                 task!.inputs = task!.inputs.filter((input) => input.name !== inputName);
@@ -711,38 +616,16 @@
 
             
             {#if running}
-                <div bind:this={runSummaryElement} in:fade out:slide={{ axis: 'y', duration: 150 }} class="w-full flex flex-col justify-center items-center pl-22 pb-4 {showSidebarThread ? '' : 'md:pr-22'}">
-                    <div class="w-full flex flex-col justify-center items-center border border-transparent dark:border-base-300 bg-base-100 dark:bg-base-200 shadow-xs rounded-field p-6 pb-8">
-                        {#if completed && !error}
-                            
-                                <h4 class="text-xl font-semibold">Workflow Completed</h4>
-                                <p class="text text-base-content/50 text-center mt-1">
-                                    The workflow has completed successfully. Here are your summarized results:
-                                </p>
-
-                                {#if runSummary}
-                                    <div class="prose mt-4 text-left w-full max-w-none">
-                                        {@html runSummary}
-                                    </div>
-                                    <div class="divider"></div>
-                                {/if}
-
-                                <p class="text-sm text-center">The workflow completed <b>{task.steps.length}</b> out of <b>{task.steps.length}</b> steps.</p>
-                                <p class="text-sm text-center mt-1">It took a total time of <b>{(totalRunTime / 1000).toFixed(1)}s</b> to complete.</p>
-                                <p class="text-sm text-center mt-1">A total of <b>{totalRunTokens}</b> tokens were used.</p>
-                            
-                        {:else if error}
-                            <h4 class="text-xl font-semibold">Workflow Failed</h4>
-                            <p class="text-sm text-base-content/50 text-center mt-1">
-                                The workflow did not complete successfully. Please try again.
-                            </p>
-                        {:else}
-                            <div class="skeleton skeleton-text">
-                                The workflow is running...
-                            </div>
-                        {/if}
-                    </div>
-                </div>
+                <TaskEditorRunSummary
+                    bind:this={runSummaryComponent}
+                    {task}
+                    {completed}
+                    {error}
+                    {runSummary}
+                    {totalRunTime}
+                    {totalRunTokens}
+                    {showSidebarThread}
+                />
             {/if}
 
             <div class="flex items-center justify-center">
@@ -776,110 +659,30 @@
         </div>
         
         {#if showSidebarThread}
-            <!-- Resize Handle -->
-            <button
-                type="button"
-                class="w-1 bg-base-300 hover:bg-primary/50 cursor-col-resize transition-all duration-150 shrink-0 active:bg-primary border-none p-0"
-                aria-label="Resize sidebar"
-                onmousedown={startResize}
-            ></button>
-            <!-- Sidebar Thread -->
-            <div
-                transition:fly={{ x: 100, duration: 200 }}
-                class="border-l border-l-base-300 bg-base-100 h-dvh flex flex-col shrink-0 {isResizing ? 'select-none' : ''}"
-                style="width: {sidebarWidth}px; min-width: 400px;"
-            >
-                <div class="w-full flex justify-between items-center p-4 bg-base-100 shrink-0">
-                    <div class="w-full"></div>
-                    <button class="btn btn-ghost btn-square btn-sm tooltip tooltip-left" data-tip="Close"
-                        onclick={() => {
-                            showSidebarThread = false;
-                            includeFilesInMessage = [];
-                        }}
-                    >
-                        <X class="size-4" />
-                    </button>
-                </div>
-                <div class="w-full flex-1 min-h-0 flex flex-col">
-                    {#if sharedChat.current}
-                        <ThreadFromChat inline chat={sharedChat.current} files={includeFilesInMessage} agent={{ name: 'Workflow Assistant', icon: '/assets/obot-icon-blue.svg' }} />
-                    {/if}
-                </div>
-            </div>
+            <TaskEditorSidebar
+                width={sidebarWidth}
+                {isResizing}
+                files={includeFilesInMessage}
+                onClose={() => {
+                    showSidebarThread = false;
+                    includeFilesInMessage = [];
+                }}
+                onStartResize={startResize}
+            />
         {/if}
 
-        {#if running}
-        <div class="absolute bottom-4 left-4" in:fade>
-            <ul in:fade class="timeline timeline-snap-icon timeline-vertical timeline-compact grow">
-                {#if task}
-                    {#each task.steps as step, index (step.id)}
-                        {@const isBeforeCurrentStep = index < task.steps.findIndex(s => s.id === currentRunStepId)}
-                        <li>
-                            {#if index > 0}
-                                <hr class="timeline-connector w-0.5 {isBeforeCurrentStep ? 'completed' : ''}" />
-                            {/if}
-                            <div class="timeline-middle">
-                                {#if isBeforeCurrentStep || (currentRunStepId === step.id && completed)}
-                                    <CircleCheck class="size-5 text-primary" />
-                                {:else if currentRunStepId === step.id && !error && !completed}
-                                    <LoaderCircle class="size-5 animate-spin shrink-0 text-base-content/50" />
-                                {:else if currentRunStepId === step.id && error}
-                                    <CircleAlert class="size-5 text-error/50" />
-                                {:else}
-                                    <Circle class="size-5 text-base-content/50" />
-                                {/if}   
-                            </div>
-                            <button class="timeline-end timeline-box py-2 cursor-pointer hover:bg-base-200" onclick={() => {
-                                const stepElement = stepElements.get(step.id);
-                                if (stepElement && scrollContainer) {
-                                    // Mark as programmatic scroll
-                                    isProgrammaticScroll = true;
-                                    
-                                    // Scroll the step into view
-                                    stepElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    
-                                    // Clear programmatic flag after animation
-                                    setTimeout(() => {
-                                        isProgrammaticScroll = false;
-                                    }, 500);
-                                }
-                                
-                                // Manage auto-scroll based on which step was clicked
-                                if (step.id === currentRunStepId) {
-                                    // Clicked on current step - resume auto-scrolling
-                                    shouldAutoScroll = true;
-                                } else {
-                                    // Clicked on a different step - stop auto-scrolling
-                                    shouldAutoScroll = false;
-                                }
-                            }}>
-                                <div>
-                                    {step.name} 
-                                </div>
-                            </button>
-                            <hr class="timeline-connector w-0.5 {isBeforeCurrentStep ? 'completed' : ''}" />
-                        </li>
-                    {/each}
-                    <li>
-                        <hr class="timeline-connector w-0.5 {runSummary && completed ? 'completed' : ''}" />
-                        <div class="timeline-middle">
-                            {#if completed && runSummary}
-                                <CircleCheck class="size-5 text-primary" />
-                            {:else}
-                                <Circle class="size-5 text-base-content/50" />
-                            {/if}
-                        </div>
-                        <button class="timeline-end timeline-box py-2 {runSummary ? 'cursor-pointer hover:bg-base-200' : 'cursor-default opacity-50'}" onclick={() => {
-                            scrollToRunSummary();
-                        }}>
-                            <div>
-                                Run Summary
-                            </div>
-                        </button>
-                    </li>
-                {/if}
-            </ul>
-        </div>
+        {#if running && !closeCurrentRunTimeline}
+            <TaskEditorRunTimeline
+                {task}
+                {currentRunStepId}
+                {completed}
+                {error}
+                {runSummary}
+                parentElement={mainContainerRef}
+                onStepClick={scrollToStep}
+                onSummaryClick={scrollToRunSummary}
+                onClose={() => closeCurrentRunTimeline = true}
+            />
         {/if}
     </div>
 {:else}
@@ -934,9 +737,3 @@
         task!.steps[stepIndex].tools.push(...names);
     }}
 />
-
-<style lang="postcss">
-    :global(.task-run-sidebar-content .prose) {
-        font-size: var(--text-sm);
-    }
-</style>
