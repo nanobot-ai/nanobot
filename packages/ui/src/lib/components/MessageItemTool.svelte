@@ -95,7 +95,7 @@
 </script>
 
 <div
-	class="text collapse mt-3 mb-2 w-full border border-base-100 bg-base-100 hover:collapse-arrow hover:border-base-300"
+	class="text collapse w-full border border-base-100 bg-base-100 hover:collapse-arrow hover:border-base-300"
 	class:collapse-open={isExpanded}
 	class:collapse-close={!isExpanded}
 >
