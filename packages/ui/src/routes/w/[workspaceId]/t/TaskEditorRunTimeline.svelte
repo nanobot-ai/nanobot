@@ -74,7 +74,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
 	bind:this={containerRef}
-	class="absolute select-none {isDragging ? 'cursor-grabbing' : 'cursor-grab'}"
+	class="absolute select-none group {isDragging ? 'cursor-grabbing' : 'cursor-grab'}"
 	style="left: {position.x}px; bottom: {position.y}px;"
 	in:fade
 	role="region"
@@ -82,7 +82,7 @@
 	onmousedown={startDrag}
 >
 	<button
-		class="cursor-pointer p-0.5 tooltip tooltip-left text-base-content/50 hover:text-base-content"
+		class="cursor-pointer p-0.5 tooltip tooltip-left text-base-content/50 hover:text-base-content group-hover:opacity-100 opacity-0 transition-opacity duration-150"
 		data-tip="Close"
 		onclick={onClose}
 	>
