@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { CircleCheck, LoaderCircle, Circle, CircleAlert, X } from '@lucide/svelte';
+	import { CircleCheck, LoaderCircle, Circle, CircleAlert, X, CircleMinus } from '@lucide/svelte';
 	import { fade } from 'svelte/transition';
 	import type { Task } from './types';
 
@@ -91,17 +91,20 @@
 	<ul in:fade class="timeline timeline-snap-icon timeline-vertical timeline-compact grow">
 		{#each task.steps as step, index (step.id)}
 			{@const isBeforeCurrentStep = index < task.steps.findIndex((s) => s.id === currentRunStepId)}
+			{@const isAfterCurrentStep = index > task.steps.findIndex((s) => s.id === currentRunStepId)}
 			<li>
 				{#if index > 0}
 					<hr class="timeline-connector w-0.5 {isBeforeCurrentStep ? 'completed' : ''}" />
 				{/if}
 				<div class="timeline-middle">
-					{#if isBeforeCurrentStep || (currentRunStepId === step.id && completed)}
+					{#if isBeforeCurrentStep || (currentRunStepId === step.id && completed && !error)}
 						<CircleCheck class="size-5 text-primary" />
 					{:else if currentRunStepId === step.id && !error && !completed}
 						<LoaderCircle class="size-5 animate-spin shrink-0 text-base-content/50" />
 					{:else if currentRunStepId === step.id && error}
 						<CircleAlert class="size-5 text-error/50" />
+					{:else if isAfterCurrentStep && error}
+						<CircleMinus class="size-5 text-error/50" />
 					{:else}
 						<Circle class="size-5 text-base-content/50" />
 					{/if}
@@ -122,6 +125,8 @@
 			<div class="timeline-middle">
 				{#if completed && runSummary}
 					<CircleCheck class="size-5 text-primary" />
+				{:else if error}
+					<CircleMinus class="size-5 text-error/50" />
 				{:else}
 					<Circle class="size-5 text-base-content/50" />
 				{/if}
