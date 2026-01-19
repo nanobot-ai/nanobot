@@ -52,7 +52,7 @@
                         goto(resolve(`/w/${workspaceId}/t?id=${taskId}&runId=${taskRun.id}`));
                     }}
                 >
-                    <td>{taskRun.createdAt}</td>
+                    <td>{new Date(taskRun.createdAt ?? '').toLocaleString()}</td>
                     <td>{taskRun.id}</td>
                     <td class="flex justify-end">
                         <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left" data-tip="Delete run"
