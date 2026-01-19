@@ -3,7 +3,7 @@
 	import type { Session, WorkspaceClient } from '$lib/types.js';
 	import { onMount } from 'svelte';
     import { resolve } from '$app/paths';
-	import { EllipsisVertical, Trash2 } from '@lucide/svelte';
+	import { Trash2 } from '@lucide/svelte';
 	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
 	import { goto } from '$app/navigation';
 

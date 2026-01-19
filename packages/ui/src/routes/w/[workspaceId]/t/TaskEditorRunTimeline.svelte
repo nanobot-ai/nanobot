@@ -110,7 +110,8 @@
 					{/if}
 				</div>
 				<button
-					class="timeline-end timeline-box py-2 cursor-pointer hover:bg-base-200"
+					class="timeline-end timeline-box py-2 cursor-pointer hover:bg-base-200
+						{currentRunStepId === step.id ? error ? 'border-error' : !completed ? 'border-primary' : '' : ''}"
 					onclick={() => onStepClick(step.id)}
 				>
 					<div>
@@ -133,8 +134,9 @@
 			</div>
 			<button
 				class="timeline-end timeline-box py-2 {runSummary
-					? 'cursor-pointer hover:bg-base-200'
-					: 'cursor-default opacity-50'}"
+					? 'border-primary cursor-pointer hover:bg-base-200'
+					: 'cursor-default opacity-50'}
+				"
 				onclick={onSummaryClick}
 			>
 				<div>Run Summary</div>
