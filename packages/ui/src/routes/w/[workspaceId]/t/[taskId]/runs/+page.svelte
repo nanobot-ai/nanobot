@@ -3,7 +3,7 @@
 	import type { Session, WorkspaceClient } from '$lib/types.js';
 	import { onMount } from 'svelte';
     import { resolve } from '$app/paths';
-	import { Trash2 } from '@lucide/svelte';
+	import { EllipsisVertical, Trash2 } from '@lucide/svelte';
 	import ConfirmDelete from '$lib/components/ConfirmDelete.svelte';
 	import { goto } from '$app/navigation';
 
@@ -15,9 +15,11 @@
     const workspaceService = getWorkspaceService();
     let workspace = $state<WorkspaceClient | null>(null);
     let taskRuns = $state<Session[]>([]);
+    let selectedRuns = $state<Session[]>([]);
+    let selectedRunIds = $derived(new Set<string>(selectedRuns.map((run) => run.id)));
 
     let confirmDeleteRunModal = $state<ReturnType<typeof ConfirmDelete> | null>(null);
-    let confirmDeleteRun = $state<Session | null>(null);
+    let confirmDeleteRuns = $state<Session[]>([]);
 
     onMount(() => {
         workspace = workspaceService.getWorkspace(workspaceId);
@@ -40,9 +42,33 @@
         <!-- head -->
         <thead>
             <tr>
+                <th>
+                    <input type="checkbox" class="checkbox checkbox-sm rounded-field" 
+                        indeterminate={selectedRuns.length > 0 && selectedRuns.length < taskRuns.length}
+                        checked={selectedRunIds.size === taskRuns.length}
+                        onclick={() => {
+                            if (selectedRuns.length > 0) {
+                                selectedRuns = [];
+                            } else {
+                                selectedRuns = [...taskRuns];
+                            }
+                        }}
+                    />
+                </th>
                 <th>Created</th>
                 <th>Id</th>
-                <th></th>
+                <th class="flex justify-end">
+                    <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left"
+                        data-tip="Delete selected runs"
+                        disabled={selectedRuns.length === 0}
+                        onclick={() => {
+                            confirmDeleteRuns = selectedRuns;
+                            confirmDeleteRunModal?.showModal();
+                        }}
+                    >
+                        <Trash2 class="size-4" />
+                    </button>
+                </th>
             </tr>
         </thead>
         <tbody>
@@ -52,13 +78,26 @@
                         goto(resolve(`/w/${workspaceId}/t?id=${taskId}&runId=${taskRun.id}`));
                     }}
                 >
+                    <td>
+                        <input type="checkbox" class="checkbox checkbox-sm rounded-field" 
+                            checked={selectedRunIds.has(taskRun.id)}
+                            onclick={(e) => {
+                                e.stopPropagation();
+                                if (selectedRuns.includes(taskRun)) {
+                                    selectedRuns = selectedRuns.filter((run) => run.id !== taskRun.id);
+                                } else {
+                                    selectedRuns = [...selectedRuns, taskRun];
+                                }
+                            }}
+                        />
+                    </td>
                     <td>{new Date(taskRun.createdAt ?? '').toLocaleString()}</td>
                     <td>{taskRun.id}</td>
                     <td class="flex justify-end">
-                        <button class="btn btn-square btn-ghost btn-sm tooltip tooltip-left" data-tip="Delete run"
-                            onclick={(e) => {
-                                e.stopPropagation();
-                                confirmDeleteRun = taskRun;
+                        <button class="hover:text-error btn btn-square btn-ghost btn-sm tooltip tooltip-left"
+                            data-tip="Delete run"
+                            onclick={() => {
+                                confirmDeleteRuns = [taskRun];
                                 confirmDeleteRunModal?.showModal();
                             }}
                         >
@@ -76,9 +115,12 @@
     title="Delete run"
     message="This run will be permanently deleted and cannot be recovered."
     onConfirm={() => {
-        if (!confirmDeleteRun) return;
-        workspace?.deleteSession(confirmDeleteRun.id);
-        confirmDeleteRun = null;
+        if (!confirmDeleteRuns.length) return;
+        for (const run of confirmDeleteRuns) {
+            workspace?.deleteSession(run.id);
+        }
+        confirmDeleteRuns = [];
+        selectedRuns = [];
     }}
 />
 
