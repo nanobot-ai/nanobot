@@ -1,11 +1,12 @@
 <script lang="ts">
-	import { EllipsisVertical, ReceiptText, Sparkles, ToolCase, Trash2, Wrench, X } from "@lucide/svelte";
+	import { EllipsisVertical, ReceiptText, ServerIcon, ServerOffIcon, Sparkles, ToolCase, Trash2, X } from "@lucide/svelte";
 	import type { Input, Step, Task } from "./types";
 	import MarkdownEditor from "$lib/components/MarkdownEditor.svelte";
 	import { createVariablePillPlugin } from "$lib/plugins/variablePillPlugin";
 	import { getNotificationContext } from "$lib/context/notifications.svelte";
 	import { getRegistryContext } from "$lib/context/registry.svelte";
 	import type { Snippet } from "svelte";
+	import type { Server } from "$lib/types";
 
     interface Props {
         class?: string;
@@ -51,9 +52,20 @@
     const notifications = getNotificationContext();
     const registry = getRegistryContext();
     
-    let tools = $derived(
+    let tools = $derived<(Server & { invalid?: boolean })[]>(
         step.tools && step.tools.length > 0 && !registry.loading && registry.servers.length > 0 
-            ? step.tools.map((tool) => registry.getServerByName(tool.name)).filter((tool) => tool !== undefined) 
+            ? step.tools.map((tool) => {
+                const match = registry.getServerByName(tool.name);
+                return {
+                    name: tool.name,
+                    title: '',
+                    icons: [],
+                    description: '',
+                    version: '',
+                    invalid: !match,
+                    ...match,
+                }
+            }) 
             : []
     );
     
@@ -161,13 +173,19 @@
                         </button>
                     </div>
                 {/if}
-                <div class="badge dark:bg-base-200 size-fit py-1">
-                    {#if tool.icons?.[0]?.src}
+                <div class="badge size-fit py-1 {tool.invalid ? 'bg-error/10 text-error' : 'dark:bg-base-200'} tooltip tooltip-xs" 
+                    data-tip={tool.invalid ? `${tool.name} is no longer available.` : undefined}
+                >   
+                        {#if tool.icons?.[0]?.src}
                         <img alt={tool.title} src={tool.icons[0].src} class="size-4"/>
+                    {:else if tool.invalid}
+                        <ServerOffIcon class="size-4" />
                     {:else}
-                        <Wrench class="size-4" />
+                        <ServerIcon class="size-4" />
                     {/if}
-                    {tool.title}
+                    <span class="truncate max-w-64">
+                        {tool.title || tool.name}
+                    </span>
                 </div>
             </div>
             {/each}

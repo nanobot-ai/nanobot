@@ -34,8 +34,8 @@
     })
 </script>
 
-<div class="flex flex-col gap-4 min-h-dvh w-full p-4">
-    <h2 class="text-2xl font-semibold">{taskName} Runs</h2>
+<div class="flex flex-col gap-4 min-h-dvh w-full p-4 overflow-y-auto">
+    <h2 class="text-2xl font-semibold">{taskName} <span class="text-base-content/50 text-lg font-extralight">Workflow Runs</span></h2>
     <table class="table bg-base-100 dark:bg-base-200 rounded-box">
         <!-- head -->
         <thead>
@@ -47,7 +47,7 @@
         </thead>
         <tbody>
             {#each taskRuns as taskRun (taskRun.id)}
-                <tr class="hover:bg-base-200/50 dark:hover:bg-base-300/50" 
+                <tr class="cursor-pointer hover:bg-base-200/50 dark:hover:bg-base-300/50" 
                     onclick={() => {
                         goto(resolve(`/w/${workspaceId}/t?id=${taskId}&runId=${taskRun.id}`));
                     }}
