@@ -175,13 +175,14 @@ export class SimpleClient {
 					method: "POST",
 					headers: {
 						"Content-Type": "application/json",
+						Accept: "application/json, text/event-stream",
 					},
 					body: JSON.stringify(initRequest),
 				});
 
 				if (!initResp.ok) {
 					throw new Error(
-						`Initialize failed: ${initResp.status} ${initResp.statusText}`,
+						`Initialize failed: ${initResp.status} ${initResp.statusText} ${await initResp.text()}`,
 					);
 				}
 
@@ -191,10 +192,12 @@ export class SimpleClient {
 					throw new Error("No Mcp-Session-Id header in initialize response");
 				}
 
-				// Parse response to check for errors
-				const initData = (await initResp.json()) as JSONRPCResponse;
+				// Parse response based on content type
+				const initData = await this.#parseResponse(initResp);
 				if (initData.error) {
-					throw new Error(`Initialize error: ${initData.error}`);
+					throw new Error(
+						`Initialize error: ${JSON.stringify(initData.error)}`,
+					);
 				}
 
 				// Store session ID and initialize result
@@ -215,6 +218,7 @@ export class SimpleClient {
 				const initializedResp = await this.#fetcher(this.#url, {
 					method: "POST",
 					headers: {
+						Accept: "application/json, text/event-stream",
 						"Content-Type": "application/json",
 						"Mcp-Session-Id": sessionId,
 					},
@@ -232,6 +236,34 @@ export class SimpleClient {
 		})();
 
 		return this.#initializationPromise;
+	}
+
+	/**
+	 * Parse response based on content type - handles both JSON and SSE formats
+	 */
+	async #parseResponse(resp: Response): Promise<JSONRPCResponse> {
+		const contentType = resp.headers.get("Content-Type") || "";
+
+		if (contentType.includes("text/event-stream")) {
+			// Parse SSE response - extract the last JSON message
+			const text = await resp.text();
+			const lines = text.split("\n");
+			let lastData = "";
+
+			for (const line of lines) {
+				if (line.startsWith("data: ")) {
+					lastData = line.slice(6);
+				}
+			}
+
+			if (lastData) {
+				return JSON.parse(lastData) as JSONRPCResponse;
+			}
+			throw new Error("No data in SSE response");
+		}
+
+		// Default to JSON parsing
+		return (await resp.json()) as JSONRPCResponse;
 	}
 
 	async #ensureSession(): Promise<string> {
@@ -324,6 +356,7 @@ export class SimpleClient {
 		const resp = await this.#fetcher(url, {
 			method: "POST",
 			headers: {
+				Accept: "application/json, text/event-stream",
 				"Content-Type": "application/json",
 				"Mcp-Session-Id": sessionId,
 			},
@@ -350,7 +383,8 @@ export class SimpleClient {
 			throw new Error(text);
 		}
 
-		const data = (await resp.json()) as JSONRPCResponse;
+		// Parse response based on content type
+		const data = await this.#parseResponse(resp);
 		if (data.error) {
 			this.#logger(data.error);
 			throw new Error(`${data.error.message}: ${JSON.stringify(data.error)}`);

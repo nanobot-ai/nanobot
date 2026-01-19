@@ -405,7 +405,8 @@ func (d *Data) ToolMapping(ctx context.Context, opts ...GetOption) (types.ToolMa
 	var c types.Config
 	session.Get(types.ConfigSessionKey, &c)
 
-	toolMappings, err := d.runtime.BuildToolMappings(ctx, append(d.getPublishedMCPServers(ctx), c.Publish.Tools...))
+	publishedMCPServers := d.getPublishedMCPServers(ctx)
+	toolMappings, err := d.runtime.BuildToolMappings(ctx, append(publishedMCPServers, c.Publish.Tools...))
 	if err != nil {
 		return nil, err
 	}

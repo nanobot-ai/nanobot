@@ -21,6 +21,10 @@
 	},
 	"dependencies": {
 		"@nanobot-ai/workspace-client": "workspace:*",
-		"@nanobot-ai/nanomcp": "workspace:*"
+		"@nanobot-ai/nanomcp": "workspace:*",
+		"js-yaml": "^4.1.1"
+	},
+	"devDependencies": {
+		"@types/js-yaml": "^4.0.9"
 	}
 }

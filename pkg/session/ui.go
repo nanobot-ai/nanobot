@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -97,6 +98,18 @@ func UISession(next http.Handler, sessionStore *Manager, apiHandler http.Handler
 			return
 		}
 
+		// Check if dev UI mode is enabled via environment variable
+		devUIURL := os.Getenv("NANOBOT_DEV_UI")
+		if devUIURL != "" {
+			// Proxy to dev server (default to localhost:5173 if just "true" is set)
+			if devUIURL == "true" || devUIURL == "1" {
+				devUIURL = "http://localhost:5173"
+			}
+			proxyURL, _ := url.ParseRequestURI(devUIURL)
+			httputil.NewSingleHostReverseProxy(proxyURL).ServeHTTP(rw, req)
+			return
+		}
+
 		uiFS, _ := fs.Sub(ui.FS, "dist")
 		_, err := fs.Stat(uiFS, "fallback.html")
 		if err == nil {
@@ -110,8 +123,8 @@ func UISession(next http.Handler, sessionStore *Manager, apiHandler http.Handler
 				http.ServeFileFS(rw, req, uiFS, "fallback.html")
 			}
 		} else {
-			url, _ := url.ParseRequestURI("http://localhost:5173")
-			httputil.NewSingleHostReverseProxy(url).ServeHTTP(rw, req)
+			proxyURL, _ := url.ParseRequestURI("http://localhost:5173")
+			httputil.NewSingleHostReverseProxy(proxyURL).ServeHTTP(rw, req)
 		}
 	})
 }

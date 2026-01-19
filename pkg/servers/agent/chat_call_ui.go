@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -55,6 +56,8 @@ attachmentsLoop:
 		clientName := c.s.data.CurrentAgent(ctx)
 		if strings.HasPrefix(uri, "nanobot://") {
 			clientName = "nanobot.resources"
+		} else if strings.HasPrefix(uri, "workspace://") {
+			clientName = "workspaceResources"
 		}
 
 		client, err := c.s.runtime.GetClient(ctx, clientName)
@@ -70,12 +73,19 @@ attachmentsLoop:
 			return nil, err
 		}
 
+		// Preserve original name from attachment if provided
+		originalName, _ := data["name"].(string)
+
 		for _, content := range resource.Contents {
 			dataURI := content.ToDataURI()
 			attachmentData := map[string]any{
 				"url": dataURI,
+				"uri": uri, // Original URI for file reference (e.g., workspace://...)
 			}
-			if content.Name != "" {
+			// Use original name if provided, otherwise fall back to content.Name
+			if originalName != "" {
+				attachmentData["name"] = originalName
+			} else if content.Name != "" {
 				attachmentData["name"] = content.Name
 			}
 			newAttachments = append(newAttachments, attachmentData)
@@ -95,7 +105,8 @@ func (s *Server) describeSession(ctx context.Context, args any) <-chan struct{} 
 	if description == "" && s.agentName != "nanobot.summary" {
 		go func() {
 			defer close(result)
-			ret, err := s.runtime.Call(ctx, "nanobot.summary", "nanobot.summary", args)
+			startMessage, _ := json.Marshal(args)
+			ret, err := s.runtime.Call(ctx, "nanobot.summary", "nanobot.summary", fmt.Sprintf(`{"start_message": "%s"}`, string(startMessage)))
 			if err != nil {
 				return
 			}
@@ -103,6 +114,7 @@ func (s *Server) describeSession(ctx context.Context, args any) <-chan struct{} 
 				if content.Type == "text" {
 					description = content.Text
 					session.Set(types.DescriptionSessionKey, description)
+					session.Set(types.StartMessageSessionKey, string(startMessage))
 					break
 				}
 			}

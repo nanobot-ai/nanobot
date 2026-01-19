@@ -11,7 +11,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.Execution, opts []types.CompletionOptions) error {
+func (a *Agents) toolCalls(ctx context.Context, run *types.Execution, opts []types.CompletionOptions) error {
 	for _, output := range run.Response.Output.Items {
 		functionCall := output.ToolCall
 
@@ -34,7 +34,7 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 			continue
 		}
 
-		callOutput, err := a.invoke(ctx, config, targetServer, tools.ToolCallInvocation{
+		callOutput, err := a.invoke(ctx, targetServer, tools.ToolCallInvocation{
 			MessageID: run.Response.Output.ID,
 			ItemID:    output.ID,
 			ToolCall:  *functionCall,
@@ -60,13 +60,12 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 	return nil
 }
 
-func (a *Agents) invoke(ctx context.Context, config types.Config, target types.TargetMapping[types.TargetTool], funcCall tools.ToolCallInvocation, opts []types.CompletionOptions) (*types.Message, error) {
+func (a *Agents) invoke(ctx context.Context, target types.TargetMapping[types.TargetTool], funcCall tools.ToolCallInvocation, opts []types.CompletionOptions) (*types.Message, error) {
 	var (
 		data map[string]any
 	)
 
 	if funcCall.ToolCall.Arguments != "" {
-		data = make(map[string]any)
 		if err := json.Unmarshal([]byte(funcCall.ToolCall.Arguments), &data); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal function call arguments: %w", err)
 		}

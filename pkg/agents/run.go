@@ -454,7 +454,7 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 			session.Set(previousExecutionKey, currentRun)
 		}
 
-		if err := a.toolCalls(ctx, config, currentRun, opts); err != nil {
+		if err := a.toolCalls(ctx, currentRun, opts); err != nil {
 			return nil, err
 		}
 

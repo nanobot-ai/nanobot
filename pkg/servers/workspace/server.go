@@ -61,7 +61,7 @@ func dbWorkspaceToDisplay(workspace *WorkspaceRecord) types.Workspace {
 
 	// Extract attributes JSON
 	if len(workspace.Attributes) > 0 {
-		var attrs map[string]interface{}
+		var attrs map[string]any
 		if err := json.Unmarshal(workspace.Attributes, &attrs); err == nil {
 			display.Attributes = attrs
 		}
@@ -120,9 +120,11 @@ func (s *Server) listSessions(ctx context.Context, accountID string) (*mcp.ListR
 				Name:     workspace.SessionDescription,
 				MimeType: types.SessionMimeType,
 				Meta: types.Meta(map[string]any{
-					"order":       workspace.Order,
-					"color":       workspace.Color,
-					"workspaceId": workspace.UUID,
+					"order":        workspace.Order,
+					"color":        workspace.Color,
+					"workspaceId":  workspace.UUID,
+					"startMessage": workspace.SessionStartMessage,
+					"createdAt":    workspace.SessionCreatedAt,
 				}),
 			}
 
@@ -196,10 +198,11 @@ func (s *Server) readSession(ctx context.Context, sessionUUID, accountID string)
 
 	// Build the response data
 	responseData := map[string]any{
-		"id":        sess.SessionID,
-		"createdAt": sess.CreatedAt.Format(time.RFC3339Nano),
-		"updatedAt": sess.UpdatedAt.Format(time.RFC3339Nano),
-		"title":     sess.Description,
+		"id":           sess.SessionID,
+		"createdAt":    sess.CreatedAt.Format(time.RFC3339Nano),
+		"updatedAt":    sess.UpdatedAt.Format(time.RFC3339Nano),
+		"title":        sess.Description,
+		"startMessage": sess.StartMessage,
 	}
 
 	// Look up the associated workspace by session ID
@@ -207,6 +210,9 @@ func (s *Server) readSession(ctx context.Context, sessionUUID, accountID string)
 	if err == nil && workspace != nil {
 		if workspace.ParentID != nil && *workspace.ParentID != "" {
 			responseData["workspaceId"] = *workspace.ParentID
+		}
+		if workspace.RootID != nil && *workspace.RootID != "" {
+			responseData["rootId"] = *workspace.RootID
 		}
 		responseData["sessionWorkspaceId"] = workspace.UUID
 	}
