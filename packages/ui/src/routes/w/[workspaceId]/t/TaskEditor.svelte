@@ -81,7 +81,7 @@
 
     let run = $state<ChatService | null>(null);
     let runSession = new SvelteMap<string, StepSession>();
-    let running = $state(false);
+    let running = $state<'in_progress' | 'finished' | null>(null);
     let completed = $state(false);
     let error = $state(false);
     
@@ -111,7 +111,7 @@
 
     function resetRunState() {
         closeCurrentRunTimeline = false;
-        running = false;
+        running = null;
         runSession.clear();
         completed = false;
         error = false;
@@ -437,13 +437,14 @@
         }
 
         const initialTime = Date.now();
-        running = true;
+        running = 'in_progress';
         run = await workspace.newSession();
         run.setCallbacks({
             onChatStart: () => {
                 workspace?.load();
             },
             onChatDone: () => {
+                running = 'finished';
                 completed = true;
                 const sessionData = buildSessionData(run?.messages ?? [], task?.steps ?? []);
                 error = !areAllStepsCompleted(task?.steps ?? [], sessionData);
@@ -484,7 +485,7 @@
         >
             <TaskEditorHeader
                 {task}
-                {running}
+                running={Boolean(running)}
                 {completed}
                 {showAlternateHeader}
                 {showTaskTitle}
@@ -510,7 +511,11 @@
                         <div class="flex items-center gap-2">
                             <TaskInputActions task={task!} availableInputs={hiddenInputs} onAddInput={addVisibleInput} />
                             {#if visibleInputs.length > 1}
-                                <button class="btn btn-ghost btn-square cursor-grab btn-sm tooltip tooltip-right" data-tip="Drag to reorder" onmousedown={startDrag}>
+                                <button class="btn btn-ghost btn-square cursor-grab btn-sm tooltip tooltip-right disabled:opacity-50" 
+                                    disabled={running === 'in_progress'}
+                                    data-tip="Drag to reorder" 
+                                    onmousedown={startDrag}
+                                >
                                     <GripVertical class="text-base-content/50" />
                                 </button>
                             {/if}
@@ -554,7 +559,11 @@
                                 onAddInput={addVisibleInput}
                                 onOpenSelectTool={() => { currentAddingToolForStep = currentItem; registryToolSelector?.showModal(); }}
                             />
-                            <button class="btn btn-ghost btn-square cursor-grab btn-sm tooltip tooltip-right" onmousedown={startDrag} data-tip="Drag to reorder">
+                            <button class="btn btn-ghost btn-square cursor-grab btn-sm tooltip tooltip-right disabled:opacity-50" 
+                                onmousedown={startDrag} 
+                                disabled={running === 'in_progress'}
+                                data-tip="Drag to reorder"
+                            >
                                 <GripVertical class="text-base-content/50" />
                             </button>
                         {/if}
