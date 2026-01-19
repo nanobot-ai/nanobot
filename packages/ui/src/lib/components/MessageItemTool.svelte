@@ -12,6 +12,24 @@
 	}
 
 	let { item, onSend }: Props = $props();
+
+	// Track if user has manually toggled the collapse state
+	let userHasToggled = $state(false);
+	// Track the expanded state - initially expanded (true)
+	let isExpanded = $state(true);
+
+	// Auto-collapse when tool finishes, unless user has manually toggled
+	$effect(() => {
+		if (item.output && !userHasToggled) {
+			isExpanded = false;
+		}
+	});
+
+	function handleToggle() {
+		userHasToggled = true;
+		isExpanded = !isExpanded;
+	}
+
 	let singleUIResource = $derived(
 		item.output?.content &&
 			item.output?.content?.filter((i) => {
@@ -78,8 +96,10 @@
 
 <div
 	class="text collapse mt-3 mb-2 w-full border border-base-100 bg-base-100 hover:collapse-arrow hover:border-base-300"
+	class:collapse-open={isExpanded}
+	class:collapse-close={!isExpanded}
 >
-	<input type="checkbox" />
+	<input type="checkbox" checked={isExpanded} onchange={handleToggle} />
 	<div class="collapse-title">
 		<div class="flex items-center gap-2">
 			{#if item.output}
