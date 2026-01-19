@@ -469,10 +469,8 @@
                 acc[s.parentTaskName!] = [...(acc[s.parentTaskName!] ?? []), s];
                 return acc;
             }, {})}
-        <!-- {@const conversations = sessions.filter((s: Session) => !s.parentTaskName)} -->
         <ul>
             {@render tasksSection(workspace.id, tasks, permissions, taskRuns)}
-            <!-- {@render conversationsSection(workspace.id, conversations)} -->
             {@render filesSection(workspace.id, files, permissions)}
         </ul>
     {/if}
@@ -598,46 +596,21 @@
                             </summary>
                             <ul>
                                 {#if taskRuns[item.taskId]?.length > 0}
-                                    {@const runOnly = !permissions.includes('write') && !permissions.includes('read') && permissions.includes('execute')}
-                                    {#each taskRuns[item.taskId].sort((a, b) => new Date(a.createdAt ?? '').getTime() - new Date(b.createdAt ?? '').getTime()) as run (run.id)}
-                                        <li in:slide={{ axis: 'y', duration: 150 }}>
+                                    {@render taskRunsSection(workspaceId, item.taskId, taskRuns[item.taskId], permissions)}
+                                    {#if taskRuns[item.taskId]?.length > 3}
+                                        <li>
                                             <div class="flex max-w-full items-center gap-2 rounded-r-none
                                                 {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}
-                                                {selectedRunId && selectedRunId === run.id ? 'bg-base-200 dark:bg-base-100' : ''}
                                             ">
                                                 <a
-                                                    href={resolve(`/w/${workspaceId}/t?id=${item.taskId}&runId=${run.id}${runOnly ? '&run=true' : ''}`)}
+                                                    href={resolve(`/w/${workspaceId}/t/${item.taskId}/runs`)}
                                                     class="block h-full p-2 flex-1 min-w-0 overflow-hidden truncate"
                                                 >
-                                                    {run.createdAt ? new Date(run.createdAt).toLocaleString() : run.title}
+                                                    See More...
                                                 </a>
-                                                <button class="btn btn-square btn-ghost btn-sm mr-0.5" popovertarget="popover-task-run-actions-{item.taskId}-{run.id}" style="anchor-name:--task-run-actions-anchor-{item.taskId}-{run.id}">
-                                                    <EllipsisVertical class="size-4 shrink-0" />
-                                                </button>
-                                                <ul 
-                                                    id="popover-task-run-actions-{item.taskId}-{run.id}"
-                                                    class="dropdown menu min-w-36 rounded-box bg-base-100 shadow-sm"
-                                                    popover style="position-anchor:--task-run-actions-anchor-{item.taskId}-{run.id}"
-                                                >
-                                                    <li>
-                                                        <button 
-                                                            onmousedown={(e) => e.stopPropagation()} 
-                                                            onclick={() => {
-                                                                confirmDeleteTaskRun = {
-                                                                    sessionId: run.id,
-                                                                    workspaceId,
-                                                                };
-                                                                confirmDeleteTaskRunModal?.showModal();
-                                                            }} 
-                                                            class="menu-alert"
-                                                        >
-                                                            <Trash2 class="size-4" /> Delete
-                                                        </button>
-                                                    </li>
-                                                </ul>
                                             </div>
                                         </li>
-                                    {/each}
+                                    {/if}
                                 {:else}
                                     <li>
                                         <p class="p-2 italic text-base-content/30 text-xs">No runs.</p>
@@ -651,6 +624,50 @@
         </ul>
     </details>
 </li>
+{/snippet}
+
+{#snippet taskRunsSection(workspaceId: string, taskId: string, runs: Session[], permissions: string[])}
+    {@const runOnly = !permissions.includes('write') && !permissions.includes('read') && permissions.includes('execute')}
+    {@const firstThreeRuns = runs.sort((a, b) => new Date(b.createdAt ?? '').getTime() - new Date(a.createdAt ?? '').getTime()).slice(0, 3)}
+    {#each firstThreeRuns as run (run.id)}
+        <li in:slide={{ axis: 'y', duration: 150 }}>
+            <div class="flex max-w-full items-center gap-2 rounded-r-none
+                {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}
+                {selectedRunId && selectedRunId === run.id ? 'bg-base-200 dark:bg-base-100' : ''}
+            ">
+                <a
+                    href={resolve(`/w/${workspaceId}/t?id=${taskId}&runId=${run.id}${runOnly ? '&run=true' : ''}`)}
+                    class="block h-full p-2 flex-1 min-w-0 overflow-hidden truncate"
+                >
+                    {run.createdAt ? new Date(run.createdAt).toLocaleString() : run.title}
+                </a>
+                <button class="btn btn-square btn-ghost btn-sm mr-0.5" popovertarget="popover-task-run-actions-{taskId}-{run.id}" style="anchor-name:--task-run-actions-anchor-{taskId}-{run.id}">
+                    <EllipsisVertical class="size-4 shrink-0" />
+                </button>
+                <ul 
+                    id="popover-task-run-actions-{taskId}-{run.id}"
+                    class="dropdown menu min-w-36 rounded-box bg-base-100 shadow-sm"
+                    popover style="position-anchor:--task-run-actions-anchor-{taskId}-{run.id}"
+                >
+                    <li>
+                        <button 
+                            onmousedown={(e) => e.stopPropagation()} 
+                            onclick={() => {
+                                confirmDeleteTaskRun = {
+                                    sessionId: run.id,
+                                    workspaceId,
+                                };
+                                confirmDeleteTaskRunModal?.showModal();
+                            }} 
+                            class="menu-alert"
+                        >
+                            <Trash2 class="size-4" /> Delete
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </li>
+    {/each}
 {/snippet}
 
 {#snippet workspaceMenuActions(workspace: Workspace, permissions: string[], isShared?: boolean)}
@@ -798,33 +815,6 @@
     {/if}
 </ul>
 {/snippet}
-
-<!-- {#snippet conversationsSection(workspaceId: string, conversations: Session[])}
-<li class="flex grow">
-    <details class="workspace-details w-full">
-        {@render sectionTitle('Conversations', MessageSquare, conversations)}
-        <ul>
-            {#if conversations.length === 0}
-                {@render empty('Conversations')}
-            {:else}
-                {#each conversations as conversation, index (index)}
-                    <li class="w-full flex items-center">
-                        <a href={resolve(`/c/${conversation.id}`)} class="flex p-2 grow overflow-hidden rounded-r-none truncate {inverse ? 'hover:bg-base-200 dark:hover:bg-base-100' : 'hover:bg-base-100'}">{conversation.title}</a>
-                        <button class="btn btn-square btn-ghost btn-sm"
-                            onclick={() => {
-                                const workspace = workspaceData.get(workspaceId);
-                                workspace?.deleteSession(conversation.id);
-                            }}
-                        >
-                            <Trash2 class="size-4" />
-                        </button>
-                    </li>
-                {/each}
-            {/if}
-        </ul>
-    </details>
-</li>
-{/snippet} -->
 
 {#snippet filesSection(_workspaceId: string, files: WorkspaceFile[], permissions: string[])}
 <li class="flex grow">

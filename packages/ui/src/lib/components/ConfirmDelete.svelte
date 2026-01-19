@@ -17,7 +17,7 @@
 </script>
 
 <dialog bind:this={confirmDeleteModal} class="modal">
-    <div class="modal-box">
+    <div class="modal-box dark:bg-base-200">
         <h3 class="text-lg font-bold">{title}</h3>
         {#if message}
             <p class="py-2">{message}</p>
