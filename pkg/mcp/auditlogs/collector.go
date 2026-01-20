@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"sync"
 	"time"
@@ -54,7 +55,10 @@ func (c *Collector) CollectMCPAuditEntry(entry MCPAuditLog) {
 		return
 	}
 
-	entry.Metadata = c.auditLogMetadata
+	// Copy the metadata to avoid sharing the same map across entries
+	if len(c.auditLogMetadata) > 0 {
+		entry.Metadata = maps.Clone(c.auditLogMetadata)
+	}
 
 	c.auditLock.Lock()
 	defer c.auditLock.Unlock()
