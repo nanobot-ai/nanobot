@@ -345,38 +345,8 @@ func (s *StringList) UnmarshalJSON(data []byte) error {
 }
 
 type Agent struct {
-	Name            string                    `json:"name,omitempty"`
-	ShortName       string                    `json:"shortName,omitempty"`
-	Description     string                    `json:"description,omitempty"`
-	Icon            string                    `json:"icon,omitempty"`
-	IconDark        string                    `json:"iconDark,omitempty"`
-	StarterMessages StringList                `json:"starterMessages,omitempty"`
-	Instructions    DynamicInstructions       `json:"instructions,omitzero"`
-	Model           string                    `json:"model,omitempty"`
-	MCPServers      StringList                `json:"mcpServers,omitempty"`
-	Tools           StringList                `json:"tools,omitempty"`
-	Agents          StringList                `json:"agents,omitempty"`
-	Prompts         StringList                `json:"prompts,omitzero"`
-	Resources       StringList                `json:"resources,omitzero"`
-	Reasoning       *AgentReasoning           `json:"reasoning,omitempty"`
-	ThreadName      string                    `json:"threadName,omitempty"`
-	Chat            *bool                     `json:"chat,omitempty"`
-	ToolExtensions  map[string]map[string]any `json:"toolExtensions,omitempty"`
-	ToolChoice      string                    `json:"toolChoice,omitempty"`
-	Temperature     *json.Number              `json:"temperature,omitempty"`
-	TopP            *json.Number              `json:"topP,omitempty"`
-	Output          *OutputSchema             `json:"output,omitempty"`
-	Truncation      string                    `json:"truncation,omitempty"`
-	MaxTokens       int                       `json:"maxTokens,omitempty"`
-	MimeTypes       []string                  `json:"mimeTypes,omitempty"`
-	Hooks           mcp.Hooks                 `json:"hooks,omitempty"`
-
-	// Selection criteria fields
-
-	Aliases      []string `json:"aliases,omitempty"`
-	Cost         float64  `json:"cost,omitempty"`
-	Speed        float64  `json:"speed,omitempty"`
-	Intelligence float64  `json:"intelligence,omitempty"`
+	HookAgent `json:",inline"`
+	Output    *OutputSchema `json:"output,omitempty"`
 }
 
 type AgentReasoning struct {
@@ -556,7 +526,7 @@ func (f Field) MarshalJSON() ([]byte, error) {
 
 func (o OutputSchema) ToSchema() json.RawMessage {
 	if len(o.Fields) > 0 {
-		data, _ := json.Marshal(BuildSimpleSchema(o.Name, o.Description, o.Fields))
+		data, _ := json.Marshal(buildSimpleSchema(o.Name, o.Description, o.Fields))
 		return data
 	}
 	return o.Schema
@@ -571,7 +541,7 @@ type InputSchema struct {
 
 func (i InputSchema) ToSchema() json.RawMessage {
 	if len(i.Fields) > 0 {
-		data, _ := json.Marshal(BuildSimpleSchema(i.Name, i.Description, i.Fields))
+		data, _ := json.Marshal(buildSimpleSchema(i.Name, i.Description, i.Fields))
 		return data
 	}
 	return i.Schema
@@ -581,7 +551,7 @@ func (i InputSchema) ToSchema() json.RawMessage {
 // but it is used to detect if a field is an enum based on the presence of parentheses.
 var enumSyntaxRegexp = regexp.MustCompile(`^.+\(.+,`)
 
-func BuildSimpleSchema(name, description string, args map[string]Field) map[string]any {
+func buildSimpleSchema(name, description string, args map[string]Field) map[string]any {
 	required := make([]string, 0)
 	jsonschema := map[string]any{
 		"type":                 "object",
@@ -609,7 +579,7 @@ func BuildSimpleSchema(name, description string, args map[string]Field) map[stri
 			}
 			if len(field.Fields) > 0 {
 				jsonschema["properties"].(map[string]any)[name].(map[string]any)["items"] =
-					BuildSimpleSchema("", "", field.Fields)
+					buildSimpleSchema("", "", field.Fields)
 			}
 		} else if strings.HasSuffix(name, "(int)") || strings.HasSuffix(name, "(integer)") {
 			name = strings.Split(name, "(")[0]
@@ -634,7 +604,7 @@ func BuildSimpleSchema(name, description string, args map[string]Field) map[stri
 			var (
 				enum []string
 			)
-			for _, arg := range strings.Split(strings.TrimSuffix(args, ")"), ",") {
+			for arg := range strings.SplitSeq(strings.TrimSuffix(args, ")"), ",") {
 				enum = append(enum, strings.TrimSpace(arg))
 			}
 			jsonschema["properties"].(map[string]any)[name] = map[string]any{
@@ -643,7 +613,7 @@ func BuildSimpleSchema(name, description string, args map[string]Field) map[stri
 				"enum":        enum,
 			}
 		} else if len(field.Fields) > 0 {
-			jsonschema["properties"].(map[string]any)[name] = BuildSimpleSchema("", field.Description, field.Fields)
+			jsonschema["properties"].(map[string]any)[name] = buildSimpleSchema("", field.Description, field.Fields)
 		} else {
 			jsonschema["properties"].(map[string]any)[name] = map[string]any{
 				"type":        "string",

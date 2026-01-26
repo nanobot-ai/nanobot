@@ -496,7 +496,7 @@ func (a *Agents) configHook(ctx context.Context, baseConfig types.Config, agentN
 
 	agent := baseConfig.Agents[agentName]
 	hookResult, err := mcp.InvokeHooks(ctx, a.registry, agent.Hooks, &types.AgentConfigHook{
-		Agent:     &agent,
+		Agent:     &agent.HookAgent,
 		Meta:      sessionInit.Meta,
 		SessionID: session.ID(),
 	}, "config", nil)
@@ -505,12 +505,18 @@ func (a *Agents) configHook(ctx context.Context, baseConfig types.Config, agentN
 	}
 
 	if hookResult.Agent != nil {
+		newAgent := types.Agent{
+			HookAgent: *hookResult.Agent,
+		}
 		if baseConfig.Agents == nil {
 			baseConfig.Agents = map[string]types.Agent{}
 		} else {
 			baseConfig.Agents = maps.Clone(baseConfig.Agents)
 		}
-		baseConfig.Agents[agentName] = *hookResult.Agent
+		if agent.Output != nil {
+			newAgent.Output = agent.Output
+		}
+		baseConfig.Agents[agentName] = newAgent
 	}
 
 	if len(hookResult.MCPServers) > 0 {
