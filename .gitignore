@@ -5,6 +5,7 @@
 .venv
 .vscode
 bin/*
+.nanobot/
 nanobot
 releases/*
 examples/customer/tools/travel2.sqlite
@@ -18,3 +19,6 @@ packages/ui/dist
 # Ignore zed files
 .zed/
 __debug_*
+
+task-runner.yaml
+WORKFLOW_SCHEMA.md
