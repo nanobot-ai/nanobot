@@ -42,6 +42,13 @@ This will give you the `nanobot` CLI, which you can use to run and manage your M
 
 ## Configuration
 
+Nanobot supports two configuration formats:
+
+1. **Single File Configuration** - A `nanobot.yaml` file
+2. **Directory-Based Configuration** - A directory with `.md` agent files
+
+### Single File Configuration
+
 Nanobot supports the following providers:
 
 - **OpenAI** (e.g. `gpt-4`)
@@ -84,6 +91,60 @@ nanobot run ./nanobot.yaml
 ```
 
 The UI will be available at [http://localhost:8080](http://localhost:8080).
+
+### Directory-Based Configuration
+
+Instead of using a `nanobot.yaml` file, you can organize your configuration as a directory structure where each agent is defined in its own `.md` file with YAML front-matter.
+
+**Directory Structure:**
+
+```
+my-config/
+├── main.md              # Main agent (auto-set as entrypoint)
+├── helper.md            # Additional agent
+└── mcpServers.yaml      # MCP server definitions
+```
+
+**Agent File Format (`main.md`):**
+
+```markdown
+---
+name: Shopping Assistant
+model: claude-3-7-sonnet-latest
+mcpServers:
+  - store
+temperature: 0.7
+---
+
+You are a helpful shopping assistant.
+
+Help users find products and answer their questions.
+```
+
+The YAML front-matter supports all agent configuration fields (model, name, mcpServers, tools, temperature, etc.), and the markdown body becomes the agent's instructions.
+
+**MCP Servers File (`mcpServers.yaml` or `mcpServers.json`):**
+
+```yaml
+store:
+  url: https://example.com/mcp
+  headers:
+    Authorization: Bearer ${MY_TOKEN}
+```
+
+**Usage:**
+
+```bash
+nanobot run ./my-config/
+```
+
+**Features:**
+
+- **Auto-entrypoint**: If `main.md` exists, it's automatically set as the default agent
+- **Agent ID**: Use the `id` field in front-matter, or defaults to the filename (without `.md`)
+- **README.md**: Automatically ignored (use it for documentation)
+
+See the [directory-config example](./examples/directory-config/) for a complete working example.
 
 ---
 

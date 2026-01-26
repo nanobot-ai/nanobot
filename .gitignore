@@ -19,7 +19,3 @@ packages/ui/dist
 # Ignore zed files
 .zed/
 __debug_*
-
-workflows/
-task-runner.yaml
-WORKFLOW_SCHEMA.md
