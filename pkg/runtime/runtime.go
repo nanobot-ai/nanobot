@@ -16,10 +16,9 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
 	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
 	"github.com/nanobot-ai/nanobot/pkg/servers/capabilities"
-	"github.com/nanobot-ai/nanobot/pkg/servers/coder"
-	"github.com/nanobot-ai/nanobot/pkg/servers/config"
 	"github.com/nanobot-ai/nanobot/pkg/servers/meta"
 	"github.com/nanobot-ai/nanobot/pkg/servers/resources"
+	"github.com/nanobot-ai/nanobot/pkg/servers/system"
 	"github.com/nanobot-ai/nanobot/pkg/servers/workspace"
 	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
@@ -105,12 +104,8 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 		return agent.NewServer(sessiondata.NewData(r), r, agentsService, name)
 	})
 
-	registry.AddServer("nanobot.coder", func(string) mcp.MessageHandler {
-		return coder.NewServer()
-	})
-
-	registry.AddServer("nanobot.config", func(string) mcp.MessageHandler {
-		return config.NewServer()
+	registry.AddServer("nanobot.system", func(string) mcp.MessageHandler {
+		return system.NewServer()
 	})
 
 	if opt.DSN != "" {

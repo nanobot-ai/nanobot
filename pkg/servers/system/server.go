@@ -1,4 +1,4 @@
-package coder
+package system
 
 import (
 	"bufio"
@@ -31,6 +31,18 @@ const (
 	maxLineLength      = 2000
 )
 
+var allowedTools = []string{
+	"bash",
+	"read",
+	"write",
+	"edit",
+	"glob",
+	"grep",
+	"todoRead",
+	"todoWrite",
+	"webFetch",
+}
+
 type Server struct {
 	tools mcp.ServerTools
 }
@@ -39,6 +51,8 @@ func NewServer() *Server {
 	s := &Server{}
 
 	s.tools = mcp.NewServerTools(
+		// Config tool to setup system tools based on permissions
+		mcp.NewServerTool("config", "Modifies the agent config based on the file system", s.config),
 		// Bash tool
 		mcp.NewServerTool("bash", `Executes a given bash command in a persistent shell session with optional timeout, ensuring proper handling and security measures.
 
@@ -190,6 +204,21 @@ func (s *Server) initialize(ctx context.Context, _ mcp.Message, params mcp.Initi
 			Version: version.Get().String(),
 		},
 	}, nil
+}
+
+func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (types.AgentConfigHook, error) {
+	if agent := params.Agent; agent != nil {
+		for _, tool := range agent.Permissions.Allowed(allowedTools) {
+			agent.MCPServers = append(agent.MCPServers, "nanobot.system/"+tool)
+		}
+
+		if params.MCPServers == nil {
+			params.MCPServers = make(map[string]types.AgentConfigHookMCPServer, 1)
+		}
+		params.MCPServers["nanobot.system"] = types.AgentConfigHookMCPServer{}
+	}
+
+	return params, nil
 }
 
 // Bash tool
@@ -558,8 +587,7 @@ func (s *Server) grep(ctx context.Context, params GrepParams) (string, error) {
 	currentFile := ""
 	fileSet := make(map[string]bool)
 
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	for _, line := range lines {
+	for line := range strings.SplitSeq(strings.TrimSpace(output), "\n") {
 		var data map[string]any
 		if err := json.Unmarshal([]byte(line), &data); err != nil {
 			continue

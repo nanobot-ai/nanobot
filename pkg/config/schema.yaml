@@ -587,6 +587,63 @@ definitions:
         description: |
           A map of hooks that will be executed at various stages of the Agent lifecycle.
           Currently supported hooks are "config", "request", and "response".
+      permissions:
+        type: object
+        description: |
+          Permissions that control which operations this agent can perform. Each permission
+          can be set to "allow" or "deny" to explicitly grant or revoke access.
+        additionalProperties: false
+        properties:
+          read:
+            type: string
+            enum: ["allow", "deny"]
+            description: |
+              Permission to read files using the Read tool.
+          write:
+            type: string
+            enum: ["allow", "deny"]
+            description: |
+              Permission to write files using the Write tool.
+          edit:
+            type: string
+            enum: ["allow", "deny"]
+            description: |
+              Permission to edit files using the Edit tool.
+          glob:
+            type: string
+            enum: ["allow", "deny"]
+            description: |
+              Permission to search for files using the Glob tool.
+          grep:
+            type: string
+            enum: ["allow", "deny"]
+            description: |
+              Permission to search file contents using the Grep tool.
+          todoRead:
+            type: string
+            enum: ["allow", "deny"]
+            description: |
+              Permission to read todo items using the TodoRead tool.
+          todoWrite:
+            type: string
+            enum: ["allow", "deny"]
+            description: |
+              Permission to write todo items using the TodoWrite tool.
+          webFetch:
+            type: string
+            enum: ["allow", "deny"]
+            description: |
+              Permission to fetch web content using the WebFetch tool.
+          bash:
+            type: string
+            enum: ["allow", "deny"]
+            description: |
+              Permission to execute bash commands using the Bash tool.
+          "*":
+            type: string
+            enum: ["allow", "deny"]
+            description: |
+              Catch-all permission for all tools listed above.
 
   Prompt:
     type: object
