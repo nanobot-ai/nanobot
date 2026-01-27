@@ -138,8 +138,7 @@ func (r *resource) Load(ctx context.Context) (result types.Config, _ error) {
 		return result, fmt.Errorf("error unmarshalling resource %s: %w", r.url, err)
 	}
 
-	s := getSchema()
-	if err := s.Validate(obj); err != nil {
+	if err := getSchema().Validate(obj); err != nil {
 		return result, fmt.Errorf("error validating resource %s: %w", r.url, err)
 	}
 
@@ -205,7 +204,21 @@ func (r *resource) read(ctx context.Context) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		return os.ReadFile(f)
+		if data, err := os.ReadFile(f); err == nil {
+			return data, nil
+		} else if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("error reading file %s: %w", f, err)
+		}
+
+		hasMd, err := hasMarkdownFiles(r.url)
+		if err != nil {
+			return nil, fmt.Errorf("error checking for markdown files in %s: %w", r.url, err)
+		}
+
+		if hasMd {
+			// Only markdown files - use directory loader
+			return loadFromDirectory(r.url)
+		}
 	}
 
 	if r.resourceType == "git" {

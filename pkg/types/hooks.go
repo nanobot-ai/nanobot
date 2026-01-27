@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 )
@@ -9,10 +10,44 @@ import (
 // AgentConfigHook is a hook that can be used to configure the agent.
 // Hook Name = "config"
 type AgentConfigHook struct {
-	Agent      *Agent                              `json:"agent,omitempty"`
+	Agent      *HookAgent                          `json:"agent,omitempty"`
 	Meta       map[string]any                      `json:"_meta,omitempty"`
 	SessionID  string                              `json:"sessionId,omitempty"`
 	MCPServers map[string]AgentConfigHookMCPServer `json:"mcpServers,omitempty"`
+}
+
+type HookAgent struct {
+	Name            string                    `json:"name,omitempty"`
+	ShortName       string                    `json:"shortName,omitempty"`
+	Description     string                    `json:"description,omitempty"`
+	Icon            string                    `json:"icon,omitempty"`
+	IconDark        string                    `json:"iconDark,omitempty"`
+	StarterMessages StringList                `json:"starterMessages,omitempty"`
+	Instructions    DynamicInstructions       `json:"instructions,omitzero"`
+	Model           string                    `json:"model,omitempty"`
+	MCPServers      StringList                `json:"mcpServers,omitempty"`
+	Tools           StringList                `json:"tools,omitempty"`
+	Agents          StringList                `json:"agents,omitempty"`
+	Prompts         StringList                `json:"prompts,omitzero"`
+	Resources       StringList                `json:"resources,omitzero"`
+	Reasoning       *AgentReasoning           `json:"reasoning,omitempty"`
+	ThreadName      string                    `json:"threadName,omitempty"`
+	Chat            *bool                     `json:"chat,omitempty"`
+	ToolExtensions  map[string]map[string]any `json:"toolExtensions,omitempty"`
+	ToolChoice      string                    `json:"toolChoice,omitempty"`
+	Temperature     *json.Number              `json:"temperature,omitempty"`
+	TopP            *json.Number              `json:"topP,omitempty"`
+	Truncation      string                    `json:"truncation,omitempty"`
+	MaxTokens       int                       `json:"maxTokens,omitempty"`
+	MimeTypes       []string                  `json:"mimeTypes,omitempty"`
+	Hooks           mcp.Hooks                 `json:"hooks,omitempty"`
+
+	// Selection criteria fields
+
+	Aliases      []string `json:"aliases,omitempty"`
+	Cost         float64  `json:"cost,omitempty"`
+	Speed        float64  `json:"speed,omitempty"`
+	Intelligence float64  `json:"intelligence,omitempty"`
 }
 
 type AgentConfigHookMCPServer struct {

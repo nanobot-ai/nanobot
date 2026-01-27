@@ -31,6 +31,7 @@ type Run struct {
 	AuditLogBatchSize            int               `usage:"Batch size for sending audit logs" default:"1000"`
 	AuditLogFlushIntervalSeconds int               `usage:"Interval for flushing audit logs" default:"5"`
 	Roots                        []string          `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
+	EntrypointAgent              string            `usage:"ID of the agent to use for chat" name:"agent"`
 	n                            *Nanobot
 }
 
@@ -122,6 +123,10 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		cfg, err := r.n.ReadConfig(cmd.Context(), cfgPath, optCopy)
 		if err != nil {
 			return types.Config{}, err
+		}
+
+		if r.EntrypointAgent != "" {
+			cfg.Publish.Entrypoint = types.StringList{r.EntrypointAgent}
 		}
 		return *cfg, nil
 	})

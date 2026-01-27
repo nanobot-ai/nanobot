@@ -16,6 +16,8 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
 	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
 	"github.com/nanobot-ai/nanobot/pkg/servers/capabilities"
+	"github.com/nanobot-ai/nanobot/pkg/servers/coder"
+	"github.com/nanobot-ai/nanobot/pkg/servers/config"
 	"github.com/nanobot-ai/nanobot/pkg/servers/meta"
 	"github.com/nanobot-ai/nanobot/pkg/servers/resources"
 	"github.com/nanobot-ai/nanobot/pkg/servers/workspace"
@@ -103,6 +105,14 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 		return agent.NewServer(sessiondata.NewData(r), r, agentsService, name)
 	})
 
+	registry.AddServer("nanobot.coder", func(string) mcp.MessageHandler {
+		return coder.NewServer()
+	})
+
+	registry.AddServer("nanobot.config", func(string) mcp.MessageHandler {
+		return config.NewServer()
+	})
+
 	if opt.DSN != "" {
 		var (
 			once  = &sync.Once{}
@@ -123,23 +133,17 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 			})
 			return resources.NewServer(store, r.Service, sessionStore)
 		})
-	}
 
-	if opt.DSN != "" {
-		store, err := workspace.NewStoreFromDSN(opt.DSN)
+		workspaceStore, err := workspace.NewStoreFromDSN(opt.DSN)
 		if err != nil {
 			panic(fmt.Errorf("failed to create workspace store: %w", err))
 		}
-		// Get session store (which is also opt.TokenStorage)
-		sessionStore, ok := opt.TokenStorage.(*session.Store)
-		if !ok {
-			panic(fmt.Errorf("token storage is not a session store"))
-		}
+
 		registry.AddServer("nanobot.workspace", func(string) mcp.MessageHandler {
-			return workspace.NewServer(store, sessionStore, r.Service)
+			return workspace.NewServer(workspaceStore, sessionStore, r.Service)
 		})
 		registry.AddServer("nanobot.capabilities", func(string) mcp.MessageHandler {
-			return capabilities.NewServer(store, r.Service)
+			return capabilities.NewServer(workspaceStore, r.Service)
 		})
 	}
 
