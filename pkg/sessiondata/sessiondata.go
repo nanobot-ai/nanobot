@@ -103,6 +103,7 @@ func (d *Data) Agents(ctx context.Context) ([]types.AgentDisplay, error) {
 	}
 
 	session.Get(types.ConfigSessionKey, &c)
+	currentAgent := types.CurrentAgent(ctx)
 
 	for _, key := range d.getEntrypoints(ctx) {
 		var (
@@ -111,6 +112,7 @@ func (d *Data) Agents(ctx context.Context) ([]types.AgentDisplay, error) {
 
 		if agent, ok := c.Agents[key]; ok {
 			agentDisplay = agent.ToDisplay(key)
+			agentDisplay.Current = key == currentAgent
 		} else if mcpServer, ok := c.MCPServers[key]; ok {
 			c, err := d.runtime.GetClient(ctx, key)
 			if err != nil {

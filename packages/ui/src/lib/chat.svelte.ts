@@ -1,25 +1,25 @@
-import {
-	type Event,
-	type Chat,
-	type ChatResult,
-	type ChatRequest,
-	type ChatMessage,
-	type ToolOutputItem,
-	type Elicitation,
-	type ElicitationResult,
-	type Prompts,
-	type Prompt,
-	type Agent,
-	type Agents,
-	type Attachment,
-	type UploadedFile,
-	type UploadingFile,
-	type Resource,
-	type Resources
-} from './types';
-import { getNotificationContext } from './context/notifications.svelte';
-import { SimpleClient } from './mcpclient';
-import { SvelteDate } from 'svelte/reactivity';
+import { SvelteDate } from "svelte/reactivity";
+import { getNotificationContext } from "./context/notifications.svelte";
+import { SimpleClient } from "./mcpclient";
+import type {
+	Agent,
+	Agents,
+	Attachment,
+	Chat,
+	ChatMessage,
+	ChatRequest,
+	ChatResult,
+	Elicitation,
+	ElicitationResult,
+	Event,
+	Prompt,
+	Prompts,
+	Resource,
+	Resources,
+	ToolOutputItem,
+	UploadedFile,
+	UploadingFile,
+} from "./types";
 
 export interface CallToolResult {
 	content?: ToolOutputItem[];
@@ -30,17 +30,17 @@ export class ChatAPI {
 	private readonly mcpClient: SimpleClient;
 
 	constructor(
-		baseUrl: string = '',
+		baseUrl: string = "",
 		opts?: {
 			fetcher?: typeof fetch;
 			sessionId?: string;
-		}
+		},
 	) {
 		this.baseUrl = baseUrl;
 		this.mcpClient = new SimpleClient({
 			baseUrl: baseUrl,
 			fetcher: opts?.fetcher,
-			sessionId: opts?.sessionId
+			sessionId: opts?.sessionId,
 		});
 	}
 
@@ -48,19 +48,27 @@ export class ChatAPI {
 		if (sessionId) {
 			return new SimpleClient({
 				baseUrl: this.baseUrl,
-				sessionId
+				sessionId,
 			});
 		}
 		return this.mcpClient;
 	}
 
-	async reply(id: string | number, result: unknown, opts?: { sessionId?: string }) {
+	async reply(
+		id: string | number,
+		result: unknown,
+		opts?: { sessionId?: string },
+	) {
 		// If sessionId is provided, create a new client instance with that session
 		const client = this.#getClient(opts?.sessionId);
 		await client.reply(id, result);
 	}
 
-	async exchange(method: string, params: unknown, opts?: { sessionId?: string }) {
+	async exchange(
+		method: string,
+		params: unknown,
+		opts?: { sessionId?: string },
+	) {
 		// If sessionId is provided, create a new client instance with that session
 		const client = this.#getClient(opts?.sessionId);
 		return await client.exchange(method, params);
@@ -75,7 +83,7 @@ export class ChatAPI {
 			async?: boolean;
 			abort?: AbortController;
 			parseResponse?: (data: CallToolResult) => T;
-		}
+		},
 	): Promise<T> {
 		// If sessionId is provided, create a new client instance with that session
 		const client = this.#getClient(opts?.sessionId);
@@ -83,18 +91,18 @@ export class ChatAPI {
 		try {
 			// Get the raw result from exchange to support parseResponse
 			const result = await client.exchange(
-				'tools/call',
+				"tools/call",
 				{
 					name: name,
 					arguments: opts?.payload || {},
 					...(opts?.async && {
 						_meta: {
-							'ai.nanobot.async': true,
-							progressToken: opts?.progressToken
-						}
-					})
+							"ai.nanobot.async": true,
+							progressToken: opts?.progressToken,
+						},
+					}),
 				},
-				{ abort: opts?.abort }
+				{ abort: opts?.abort },
 			);
 
 			if (opts?.parseResponse) {
@@ -102,7 +110,11 @@ export class ChatAPI {
 			}
 
 			// Handle structured content
-			if (result && typeof result === 'object' && 'structuredContent' in result) {
+			if (
+				result &&
+				typeof result === "object" &&
+				"structuredContent" in result
+			) {
 				return (result as { structuredContent: T }).structuredContent;
 			}
 
@@ -112,10 +124,10 @@ export class ChatAPI {
 			try {
 				const notifications = getNotificationContext();
 				const message = error instanceof Error ? error.message : String(error);
-				notifications.error('API Error', message);
+				notifications.error("API Error", message);
 			} catch {
 				// If context is not available (e.g., during SSR), just log
-				console.error('MCP Tool Error:', error);
+				console.error("MCP Tool Error:", error);
 			}
 			throw error;
 		}
@@ -124,7 +136,10 @@ export class ChatAPI {
 	async capabilities() {
 		const client = this.#getClient();
 		const { initializeResult } = await client.getSessionDetails();
-		return initializeResult?.capabilities?.experimental?.['ai.nanobot']?.session ?? {};
+		return (
+			initializeResult?.capabilities?.experimental?.["ai.nanobot"]?.session ??
+			{}
+		);
 	}
 
 	async deleteThread(threadId: string): Promise<void> {
@@ -133,33 +148,33 @@ export class ChatAPI {
 	}
 
 	async renameThread(threadId: string, title: string): Promise<Chat> {
-		return await this.callMCPTool<Chat>('update_chat', {
+		return await this.callMCPTool<Chat>("update_chat", {
 			payload: {
 				chatId: threadId,
-				title: title
-			}
+				title: title,
+			},
 		});
 	}
 
 	async listAgents(opts?: { sessionId?: string }): Promise<Agents> {
-		return await this.callMCPTool<Agents>('list_agents', opts);
+		return await this.callMCPTool<Agents>("list_agents", opts);
 	}
 
 	async getThreads(): Promise<Chat[]> {
 		return (
 			await this.callMCPTool<{
 				chats: Chat[];
-			}>('list_chats')
+			}>("list_chats")
 		).chats;
 	}
 
 	async createThread(): Promise<Chat> {
-		const client = this.#getClient('new');
+		const client = this.#getClient("new");
 		const { id } = await client.getSessionDetails();
 		return {
 			id,
-			title: 'New Chat',
-			created: new SvelteDate().toISOString()
+			title: "New Chat",
+			created: new SvelteDate().toISOString(),
 		};
 	}
 
@@ -171,60 +186,63 @@ export class ChatAPI {
 			description?: string;
 			sessionId?: string;
 			abort?: AbortController;
-		}
+		},
 	): Promise<Attachment> {
-		return await this.callMCPTool<Attachment>('create_resource', {
+		return await this.callMCPTool<Attachment>("create_resource", {
 			payload: {
 				blob,
 				mimeType,
 				name,
-				...(opts?.description && { description: opts.description })
+				...(opts?.description && { description: opts.description }),
 			},
 			sessionId: opts?.sessionId,
 			abort: opts?.abort,
 			parseResponse: (resp: CallToolResult) => {
-				if (resp.content?.[0]?.type === 'resource_link') {
+				if (resp.content?.[0]?.type === "resource_link") {
 					return {
-						uri: resp.content[0].uri
+						uri: resp.content[0].uri,
 					};
 				}
 				return {
-					uri: ''
+					uri: "",
 				};
-			}
+			},
 		});
 	}
 
-	async sendMessage(request: ChatRequest): Promise<ChatResult> {
-		await this.callMCPTool<CallToolResult>('chat', {
+	async sendMessage(
+		request: ChatRequest,
+		toolName?: string,
+	): Promise<ChatResult> {
+		await this.callMCPTool<CallToolResult>(toolName || "chat", {
 			payload: {
 				prompt: request.message,
 				attachments: request.attachments?.map((a) => {
 					return {
 						name: a.name,
 						url: a.uri,
-						mimeType: a.mimeType
+						mimeType: a.mimeType,
 					};
-				})
+				}),
 			},
 			sessionId: request.threadId,
 			progressToken: request.id,
-			async: true
+			async: true,
 		});
 		const message: ChatMessage = {
 			id: request.id,
-			role: 'user',
+			role: "user",
 			created: now(),
 			items: [
 				{
-					id: request.id + '_0',
-					type: 'text',
-					text: request.message
-				}
-			]
+					id: request.id + "_0",
+					type: "text",
+					text: request.message,
+				},
+			],
 		};
 		return {
-			message
+			message,
 		};
 	}
 
@@ -234,10 +252,12 @@ export class ChatAPI {
 		opts?: {
 			events?: string[];
 			batchInterval?: number;
-		}
+		},
 	): () => void {
-		console.log('Subscribing to thread:', threadId);
-		const eventSource = new EventSource(`${this.baseUrl}/api/events/${threadId}`);
+		console.log("Subscribing to thread:", threadId);
+		const eventSource = new EventSource(
+			`${this.baseUrl}/api/events/${threadId}`,
+		);
 
 		// Batching setup
 		const batchInterval = opts?.batchInterval ?? 200; // Default 200ms
@@ -268,8 +288,8 @@ export class ChatAPI {
 		eventSource.onmessage = (e) => {
 			const data = JSON.parse(e.data);
 			eventBuffer.push({
-				type: 'message',
-				message: data
+				type: "message",
+				message: data,
 			});
 			scheduleBatch();
 		};
@@ -280,17 +300,21 @@ export class ChatAPI {
 				const event: Event = {
 					id: idInt || e.lastEventId,
 					type: type as
-						| 'history-start'
-						| 'history-end'
-						| 'chat-in-progress'
-						| 'chat-done'
-						| 'elicitation/create'
-						| 'error',
-					data: JSON.parse(e.data)
+						| "history-start"
+						| "history-end"
+						| "chat-in-progress"
+						| "chat-done"
+						| "elicitation/create"
+						| "error",
+					data: JSON.parse(e.data),
 				};
 
 				// Certain events should be processed immediately (not batched)
-				if (type === 'history-start' || type === 'history-end' || type === 'chat-done') {
+				if (
+					type === "history-start" ||
+					type === "history-end" ||
+					type === "chat-done"
+				) {
 					// Flush any pending events first
 					flushBuffer();
 					if (batchTimer !== null) {
@@ -313,13 +337,13 @@ export class ChatAPI {
 				clearTimeout(batchTimer);
 				batchTimer = null;
 			}
-			onEvent({ type: 'error', error: String(e) });
-			console.error('EventSource failed:', e);
+			onEvent({ type: "error", error: String(e) });
+			console.error("EventSource failed:", e);
 			eventSource.close();
 		};
 
 		eventSource.onopen = () => {
-			console.log('EventSource connected for thread:', threadId);
+			console.log("EventSource connected for thread:", threadId);
 		};
 
 		return () => {
@@ -333,7 +357,10 @@ export class ChatAPI {
 	}
 }
 
-export function appendMessage(messages: ChatMessage[], newMessage: ChatMessage): ChatMessage[] {
+export function appendMessage(
+	messages: ChatMessage[],
+	newMessage: ChatMessage,
+): ChatMessage[] {
 	let found = false;
 	if (newMessage.id) {
 		messages = messages.map((oldMessage) => {
@@ -358,6 +385,8 @@ export class ChatService {
 	prompts: Prompt[];
 	resources: Resource[];
 	agent: Agent;
+	agents: Agent[];
+	selectedAgentId: string;
 	elicitations: Elicitation[];
 	isLoading: boolean;
 	chatId: string;
@@ -377,8 +406,10 @@ export class ChatService {
 		this.elicitations = $state<Elicitation[]>([]);
 		this.prompts = $state<Prompt[]>([]);
 		this.resources = $state<Resource[]>([]);
-		this.chatId = $state('');
+		this.chatId = $state("");
 		this.agent = $state<Agent>({});
+		this.agents = $state<Agent[]>([]);
+		this.selectedAgentId = $state("");
 		this.uploadedFiles = $state([]);
 		this.uploadingFiles = $state([]);
 		this.setChatId(opts?.chatId);
@@ -386,7 +417,7 @@ export class ChatService {
 
 	close = () => {
 		this.closer();
-		this.setChatId('');
+		this.setChatId("");
 	};
 
 	setChatId = async (chatId?: string) => {
@@ -424,29 +455,46 @@ export class ChatService {
 	};
 
 	private reloadAgent = async () => {
-		const agents = await this.api.listAgents({ sessionId: this.chatId });
-		if (agents.agents?.length > 0) {
-			this.agent = agents.agents[0];
+		const agentsData = await this.api.listAgents({ sessionId: this.chatId });
+		if (agentsData.agents?.length > 0) {
+			this.agents = agentsData.agents;
+			this.agent =
+				agentsData.agents.find((a) => a.current) || agentsData.agents[0];
+
+			// Only reset selectedAgentId if:
+			// 1. It's not set yet (empty string), OR
+			// 2. The currently selected agent is no longer in the agents list
+			const isSelectedAgentStillAvailable = agentsData.agents.some(
+				(a) => a.id === this.selectedAgentId,
+			);
+
+			if (!this.selectedAgentId || !isSelectedAgentStillAvailable) {
+				this.selectedAgentId = this.agent.id || "";
+			}
 		}
+	};
+
+	selectAgent = (agentId: string) => {
+		this.selectedAgentId = agentId;
 	};
 
 	listPrompts = async () => {
 		return (await this.api.exchange(
-			'prompts/list',
+			"prompts/list",
 			{},
 			{
-				sessionId: this.chatId
-			}
+				sessionId: this.chatId,
+			},
 		)) as Prompts;
 	};
 
 	listResources = async () => {
 		return (await this.api.exchange(
-			'resources/list',
+			"resources/list",
 			{},
 			{
-				sessionId: this.chatId
-			}
+				sessionId: this.chatId,
+			},
 		)) as Resources;
 	};
 
@@ -458,53 +506,58 @@ export class ChatService {
 		this.closer = this.api.subscribe(
 			chatId,
 			(event) => {
-				if (event.type == 'message' && event.message?.id) {
+				if (event.type == "message" && event.message?.id) {
 					if (this.history) {
 						this.history = appendMessage(this.history, event.message);
 					} else {
 						this.messages = appendMessage(this.messages, event.message);
 					}
-				} else if (event.type == 'history-start') {
+				} else if (event.type == "history-start") {
 					this.history = [];
-				} else if (event.type == 'history-end') {
+				} else if (event.type == "history-end") {
 					this.messages = this.history || [];
 					this.history = undefined;
-				} else if (event.type == 'chat-in-progress') {
+				} else if (event.type == "chat-in-progress") {
 					this.isLoading = true;
-				} else if (event.type == 'chat-done') {
+				} else if (event.type == "chat-done") {
 					this.isLoading = false;
 					for (const waiting of this.onChatDone) {
 						waiting();
 					}
 					this.onChatDone = [];
-				} else if (event.type == 'elicitation/create') {
+				} else if (event.type == "elicitation/create") {
 					this.elicitations = [
 						...this.elicitations,
 						{
 							id: event.id,
-							...(event.data as object)
-						} as Elicitation
+							...(event.data as object),
+						} as Elicitation,
 					];
 				}
-				console.debug('Received event:', event);
+				console.debug("Received event:", event);
 			},
 			{
 				events: [
-					'history-start',
-					'history-end',
-					'chat-in-progress',
-					'chat-done',
-					'elicitation/create'
-				]
-			}
+					"history-start",
+					"history-end",
+					"chat-in-progress",
+					"chat-done",
+					"elicitation/create",
+				],
+			},
 		);
 	}
 
-	replyToElicitation = async (elicitation: Elicitation, result: ElicitationResult) => {
+	replyToElicitation = async (
+		elicitation: Elicitation,
+		result: ElicitationResult,
+	) => {
 		await this.api.reply(elicitation.id, result, {
-			sessionId: this.chatId
+			sessionId: this.chatId,
 		});
-		this.elicitations = this.elicitations.filter((e) => e.id !== elicitation.id);
+		this.elicitations = this.elicitations.filter(
+			(e) => e.id !== elicitation.id,
+		);
 	};
 
 	newChat = async () => {
@@ -521,23 +574,35 @@ export class ChatService {
 			await this.newChat();
 		}
 
+		// Determine which tool to call based on selected agent
+		const currentAgent = this.agents.find((a) => a.current);
+		const toolName =
+			this.selectedAgentId === currentAgent?.id
+				? "chat"
+				: `${this.selectedAgentId}/chat`;
+
 		try {
-			const response = await this.api.sendMessage({
-				id: crypto.randomUUID(),
-				threadId: this.chatId,
-				message: message,
-				attachments: [...this.uploadedFiles, ...(attachments || [])]
-			});
+			const response = await this.api.sendMessage(
+				{
+					id: crypto.randomUUID(),
+					threadId: this.chatId,
+					message: message,
+					attachments: [...this.uploadedFiles, ...(attachments || [])],
+				},
+				toolName,
+			);
 			this.uploadedFiles = [];
 
 			this.messages = appendMessage(this.messages, response.message);
 			return new Promise<ChatResult | void>((resolve) => {
 				this.onChatDone.push(() => {
 					this.isLoading = false;
-					const i = this.messages.findIndex((m) => m.id === response.message.id);
+					const i = this.messages.findIndex(
+						(m) => m.id === response.message.id,
+					);
 					if (i !== -1 && i <= this.messages.length) {
 						resolve({
-							message: this.messages[i + 1]
+							message: this.messages[i + 1],
 						});
 					} else {
 						resolve();
@@ -548,15 +613,15 @@ export class ChatService {
 			this.isLoading = false;
 			this.messages = appendMessage(this.messages, {
 				id: crypto.randomUUID(),
-				role: 'assistant',
+				role: "assistant",
 				created: now(),
 				items: [
 					{
 						id: crypto.randomUUID(),
-						type: 'text',
-						text: `Sorry, I couldn't send your message. Please try again. Error: ${error}`
-					}
-				]
+						type: "text",
+						text: `Sorry, I couldn't send your message. Please try again. Error: ${error}`,
+					},
+				],
 			});
 		}
 	};
@@ -578,7 +643,7 @@ export class ChatService {
 		file: File,
 		opts?: {
 			controller?: AbortController;
-		}
+		},
 	): Promise<Attachment> => {
 		// Create thread if it doesn't exist
 		if (!this.chatId) {
@@ -592,7 +657,7 @@ export class ChatService {
 		this.uploadingFiles.push({
 			file,
 			id: fileId,
-			controller
+			controller,
 		});
 
 		try {
@@ -601,7 +666,7 @@ export class ChatService {
 				file,
 				uri: result.uri,
 				id: fileId,
-				mimeType: result.mimeType
+				mimeType: result.mimeType,
 			});
 			return result;
 		} finally {
@@ -609,7 +674,10 @@ export class ChatService {
 		}
 	};
 
-	private doUploadFile = async (file: File, controller: AbortController): Promise<Attachment> => {
+	private doUploadFile = async (
+		file: File,
+		controller: AbortController,
+	): Promise<Attachment> => {
 		// convert file to base64 string
 		const reader = new FileReader();
 		reader.readAsDataURL(file);
@@ -617,16 +685,16 @@ export class ChatService {
 			reader.onloadend = resolve;
 			reader.onerror = reject;
 		});
-		const base64 = (reader.result as string).split(',')[1];
+		const base64 = (reader.result as string).split(",")[1];
 
 		if (!this.chatId) {
-			throw new Error('Chat ID not set');
+			throw new Error("Chat ID not set");
 		}
 
 		return await this.api.createResource(file.name, file.type, base64, {
 			description: file.name,
 			sessionId: this.chatId,
-			abort: controller
+			abort: controller,
 		});
 	};
 }
