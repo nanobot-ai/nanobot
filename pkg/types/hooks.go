@@ -43,6 +43,10 @@ type HookAgent struct {
 	MimeTypes       []string                  `json:"mimeTypes,omitempty"`
 	Hooks           mcp.Hooks                 `json:"hooks,omitempty"`
 
+	// If providing tool overrides, any tools not included will be implicitly disabled.
+	// If providing no tool overrides, all tools will be enabled.
+	ToolOverrides mcp.ToolOverrides `json:"toolOverrides,omitzero"`
+
 	// Selection criteria fields
 
 	Aliases      []string `json:"aliases,omitempty"`

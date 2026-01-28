@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"sigs.k8s.io/yaml"
 )
@@ -161,6 +162,21 @@ func loadAgentsFromMarkdown(config *types.Config, dirPath string) error {
 		config.Publish.Entrypoint = append([]string{explicitDefaultAgent}, append(config.Publish.Entrypoint[:idx], config.Publish.Entrypoint[idx+1:]...)...)
 	} else if idx == -1 {
 		config.Publish.Entrypoint = append([]string{explicitDefaultAgent}, config.Publish.Entrypoint...)
+	}
+
+	// For all non-default agents, create tool overrides for their chat tools.
+	for agentID, agent := range config.Agents {
+		if agentID == explicitDefaultAgent {
+			continue
+		}
+
+		if agent.ToolOverrides == nil {
+			agent.ToolOverrides = make(mcp.ToolOverrides, 1)
+		}
+		agent.ToolOverrides["chat"] = mcp.ToolOverride{
+			Name: agentID + "/chat",
+		}
+		config.Agents[agentID] = agent
 	}
 
 	return nil

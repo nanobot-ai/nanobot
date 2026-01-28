@@ -67,7 +67,7 @@ func (d *Data) getEntrypoints(ctx context.Context) []string {
 }
 
 func (d *Data) SetCurrentAgent(ctx context.Context, newAgent string) error {
-	if newAgent == d.CurrentAgent(ctx) {
+	if newAgent == types.CurrentAgent(ctx) {
 		return nil
 	}
 
@@ -144,23 +144,6 @@ func (d *Data) Agents(ctx context.Context) ([]types.AgentDisplay, error) {
 
 	session.Set(agentsSessionKey, &agents)
 	return agents, nil
-}
-
-func (d *Data) CurrentAgent(ctx context.Context) string {
-	var (
-		session      = mcp.SessionFromContext(ctx)
-		currentAgent string
-		c            types.Config
-	)
-	if !session.Get(types.CurrentAgentSessionKey, &currentAgent) {
-		if !session.Get(types.DefaultAgentSessionKey, &currentAgent) {
-			session.Get(types.ConfigSessionKey, &c)
-			if len(c.Publish.Entrypoint) > 0 {
-				currentAgent = c.Publish.Entrypoint[0]
-			}
-		}
-	}
-	return currentAgent
 }
 
 func (d *Data) setURL(ctx context.Context) {
@@ -375,8 +358,10 @@ func (d *Data) getPublishedMCPServers(ctx context.Context) (result []string) {
 	)
 	session.Get(types.ConfigSessionKey, &c)
 
-	if currentAgent := d.CurrentAgent(ctx); currentAgent != "" {
-		result = append(result, currentAgent)
+	for _, e := range c.Publish.Entrypoint {
+		if _, ok := c.Agents[e]; ok {
+			result = append(result, e)
+		}
 	}
 
 	result = append(result, c.Publish.MCPServers...)
@@ -458,7 +443,7 @@ func (r *resourceTemplateMatchCache) Serialize(v any) (any, error) {
 
 func (d *Data) checkResourceMatch(ctx context.Context, uri, keySuffix string) (string, string, bool) {
 	var (
-		agent   = d.CurrentAgent(ctx)
+		agent   = types.CurrentAgent(ctx)
 		session = mcp.SessionFromContext(ctx)
 		cache   = resourceTemplateMatchCache{}
 		key     = fmt.Sprintf("%s::%s", agent, uri) + keySuffix
@@ -472,7 +457,7 @@ func (d *Data) checkResourceMatch(ctx context.Context, uri, keySuffix string) (s
 
 func (d *Data) cacheResourceMatch(ctx context.Context, uri, server, resourceName string) {
 	var (
-		agent   = d.CurrentAgent(ctx)
+		agent   = types.CurrentAgent(ctx)
 		session = mcp.SessionFromContext(ctx)
 		cache   = resourceTemplateMatchCache{}
 		key     = fmt.Sprintf("%s::%s", agent, uri)

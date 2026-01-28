@@ -117,6 +117,25 @@ func TestLoadFromDirectory_MultipleAgents(t *testing.T) {
 	if !entrypointMap["main"] {
 		t.Error("expected 'main' agent in entrypoint")
 	}
+
+	// Check tool overrides: default agent (helper, lexicographically first) should NOT have override
+	// Non-default agent (main) should have chat tool override
+	if helperAgent.ToolOverrides != nil && helperAgent.ToolOverrides["chat"].Name != "" {
+		t.Errorf("expected default agent 'helper' to NOT have chat tool override, got: %v", helperAgent.ToolOverrides)
+	}
+
+	if mainAgent.ToolOverrides == nil {
+		t.Fatal("expected 'main' agent to have ToolOverrides map")
+	}
+
+	chatOverride, exists := mainAgent.ToolOverrides["chat"]
+	if !exists {
+		t.Fatal("expected 'main' agent to have 'chat' tool override")
+	}
+
+	if chatOverride.Name != "main/chat" {
+		t.Errorf("expected 'main' agent chat tool override name to be 'main/chat', got '%s'", chatOverride.Name)
+	}
 }
 
 func TestLoadFromDirectory_JSON(t *testing.T) {
@@ -399,6 +418,25 @@ func TestLoadFromDirectory_DefaultAgent_Explicit(t *testing.T) {
 	if !entrypointMap["zulu"] {
 		t.Error("expected 'zulu' agent (explicitly marked default) in entrypoint")
 	}
+
+	// Check tool overrides: default agent (zulu, explicitly marked) should NOT have override
+	// Non-default agent (alpha) should have chat tool override
+	if zuluAgent.ToolOverrides != nil && zuluAgent.ToolOverrides["chat"].Name != "" {
+		t.Errorf("expected default agent 'zulu' to NOT have chat tool override, got: %v", zuluAgent.ToolOverrides)
+	}
+
+	if alphaAgent.ToolOverrides == nil {
+		t.Fatal("expected 'alpha' agent to have ToolOverrides map")
+	}
+
+	chatOverride, exists := alphaAgent.ToolOverrides["chat"]
+	if !exists {
+		t.Fatal("expected 'alpha' agent to have 'chat' tool override")
+	}
+
+	if chatOverride.Name != "alpha/chat" {
+		t.Errorf("expected 'alpha' agent chat tool override name to be 'alpha/chat', got '%s'", chatOverride.Name)
+	}
 }
 
 func TestLoadFromDirectory_DefaultAgent_MultipleDefaults_Error(t *testing.T) {
@@ -601,6 +639,25 @@ func TestLoadFromDirectory_ModeSubagentNotInEntrypoint(t *testing.T) {
 	if len(config.Publish.Entrypoint) != 1 || config.Publish.Entrypoint[0] != "primary" {
 		t.Errorf("expected entrypoint ['primary'] (subagent should not be included), got %v", config.Publish.Entrypoint)
 	}
+
+	// Check tool overrides: default agent (primary, lexicographically first non-subagent) should NOT have override
+	// Subagent (helper) should have chat tool override even though it's a subagent
+	if primaryAgent.ToolOverrides != nil && primaryAgent.ToolOverrides["chat"].Name != "" {
+		t.Errorf("expected default agent 'primary' to NOT have chat tool override, got: %v", primaryAgent.ToolOverrides)
+	}
+
+	if helperAgent.ToolOverrides == nil {
+		t.Fatal("expected 'helper' subagent to have ToolOverrides map")
+	}
+
+	chatOverride, exists := helperAgent.ToolOverrides["chat"]
+	if !exists {
+		t.Fatal("expected 'helper' subagent to have 'chat' tool override")
+	}
+
+	if chatOverride.Name != "helper/chat" {
+		t.Errorf("expected 'helper' subagent chat tool override name to be 'helper/chat', got '%s'", chatOverride.Name)
+	}
 }
 
 func TestLoadFromDirectory_ModeMixed(t *testing.T) {
@@ -668,6 +725,38 @@ func TestLoadFromDirectory_ModeMixed(t *testing.T) {
 
 	if entrypointMap["helper"] {
 		t.Error("subagent 'helper' should not be in entrypoint")
+	}
+
+	// Check tool overrides: default agent (chat, lexicographically first non-subagent) should NOT have override
+	// Non-default agents (primary and helper) should have chat tool overrides
+	if chatAgent.ToolOverrides != nil && chatAgent.ToolOverrides["chat"].Name != "" {
+		t.Errorf("expected default agent 'chat' to NOT have chat tool override, got: %v", chatAgent.ToolOverrides)
+	}
+
+	if primaryAgent.ToolOverrides == nil {
+		t.Fatal("expected 'primary' agent to have ToolOverrides map")
+	}
+
+	primaryChatOverride, exists := primaryAgent.ToolOverrides["chat"]
+	if !exists {
+		t.Fatal("expected 'primary' agent to have 'chat' tool override")
+	}
+
+	if primaryChatOverride.Name != "primary/chat" {
+		t.Errorf("expected 'primary' agent chat tool override name to be 'primary/chat', got '%s'", primaryChatOverride.Name)
+	}
+
+	if helperAgent.ToolOverrides == nil {
+		t.Fatal("expected 'helper' subagent to have ToolOverrides map")
+	}
+
+	helperChatOverride, exists := helperAgent.ToolOverrides["chat"]
+	if !exists {
+		t.Fatal("expected 'helper' subagent to have 'chat' tool override")
+	}
+
+	if helperChatOverride.Name != "helper/chat" {
+		t.Errorf("expected 'helper' subagent chat tool override name to be 'helper/chat', got '%s'", helperChatOverride.Name)
 	}
 }
 
