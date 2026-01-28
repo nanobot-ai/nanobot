@@ -495,6 +495,11 @@ func (a *Agents) configHook(ctx context.Context, baseConfig types.Config, agentN
 	session.Get(types.SessionInitSessionKey, &sessionInit)
 
 	agent := baseConfig.Agents[agentName]
+	if !slices.ContainsFunc(agent.Hooks, func(hook mcp.HookMapping) bool {
+		return hook.Name == "config" && slices.Contains(hook.Targets, "nanobot.system/config")
+	}) {
+		agent.Hooks = append(agent.Hooks, mcp.HookMapping{Name: "config", Targets: []string{"nanobot.system/config"}})
+	}
 	hookResult, err := mcp.InvokeHooks(ctx, a.registry, agent.Hooks, &types.AgentConfigHook{
 		Agent:     &agent.HookAgent,
 		Meta:      sessionInit.Meta,

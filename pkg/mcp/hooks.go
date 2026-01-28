@@ -69,7 +69,7 @@ func (s *stringList) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		var list []string
-		for _, item := range strings.Split(raw, ",") {
+		for item := range strings.SplitSeq(raw, ",") {
 			list = append(list, strings.TrimSpace(item))
 		}
 		*s = list

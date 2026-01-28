@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -336,7 +337,7 @@ func (s *StringList) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		var list []string
-		for _, item := range strings.Split(raw, ",") {
+		for item := range strings.SplitSeq(raw, ",") {
 			list = append(list, strings.TrimSpace(item))
 		}
 		*s = list
@@ -372,6 +373,124 @@ func (a Agent) ToDisplay(id string) AgentDisplay {
 		agent.Name = agent.ID
 	}
 	return agent
+}
+
+type AgentPermission string
+
+const (
+	AgentPermissionUnset AgentPermission = ""
+	AgentPermissionAllow AgentPermission = "allow"
+	AgentPermissionDeny  AgentPermission = "deny"
+)
+
+type AgentPermissions struct {
+	permissions [][2]string `json:"-"`
+}
+
+// Allowed returns a list of the allowed permissions from the input.
+func (a *AgentPermissions) Allowed(from []string) []string {
+	if a == nil || len(a.permissions) == 0 {
+		return from
+	}
+
+	var allowed []string
+	for _, pair := range from {
+		if a.IsAllowed(pair) {
+			allowed = append(allowed, pair)
+		}
+	}
+	return allowed
+}
+
+// IsAllowed returns true if the permission is allowed.
+func (a *AgentPermissions) IsAllowed(perm string) bool {
+	for _, pair := range slices.Backward(a.permissions) {
+		if pair[0] == perm || pair[0] == "*" {
+			return pair[1] == string(AgentPermissionAllow)
+		}
+	}
+	return true
+}
+
+func (a *AgentPermissions) UnmarshalJSON(data []byte) error {
+	// Parse as a generic map to preserve order using json.RawMessage
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	// We need to preserve order, so we'll decode in the order keys appear in the original JSON
+	// Since Go's map doesn't preserve order, we'll parse the raw JSON to extract key order
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+
+	// Read opening brace
+	if _, err := decoder.Token(); err != nil {
+		return err
+	}
+
+	a.permissions = nil
+
+	// Read key-value pairs in order
+	for decoder.More() {
+		// Read key
+		token, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		key, ok := token.(string)
+		if !ok {
+			return fmt.Errorf("expected string key, got %T", token)
+		}
+
+		// Read value
+		var value string
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+
+		a.permissions = append(a.permissions, [2]string{key, value})
+	}
+
+	// Read closing brace
+	if _, err := decoder.Token(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (a AgentPermissions) MarshalJSON() ([]byte, error) {
+	// Use a custom approach to maintain order
+	if len(a.permissions) == 0 {
+		return []byte("{}"), nil
+	}
+
+	var buf strings.Builder
+	buf.WriteString("{")
+
+	for i, pair := range a.permissions {
+		if i > 0 {
+			buf.WriteString(",")
+		}
+
+		// Marshal key
+		keyJSON, err := json.Marshal(pair[0])
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(keyJSON)
+		buf.WriteString(":")
+
+		// Marshal value
+		valueJSON, err := json.Marshal(pair[1])
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(valueJSON)
+	}
+
+	buf.WriteString("}")
+	return []byte(buf.String()), nil
 }
 
 const mcpServerName = "MCP Server"

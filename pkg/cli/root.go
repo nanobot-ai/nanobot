@@ -196,8 +196,7 @@ func (n *Nanobot) loadEnv() (map[string]string, error) {
 	} else if err != nil {
 		return nil, err
 	} else {
-		lines := strings.Split(string(data), "\n")
-		for _, line := range lines {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue
