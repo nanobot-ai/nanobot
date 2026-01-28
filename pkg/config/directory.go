@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"sigs.k8s.io/yaml"
 )
@@ -37,6 +37,7 @@ func hasMarkdownFiles(dirPath string) (bool, error) {
 
 type frontMatterAgent struct {
 	Default bool
+	Mode    string
 	types.Agent
 }
 
@@ -79,14 +80,15 @@ func parseMarkdownAgent(filePath string) (string, frontMatterAgent, error) {
 }
 
 // loadAgentsFromMarkdown scans a directory for .md files and parses them as agent definitions
-func loadAgentsFromMarkdown(dirPath string) (map[string]types.Agent, string, error) {
+func loadAgentsFromMarkdown(config *types.Config, dirPath string) error {
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
-		return nil, "", fmt.Errorf("error reading directory %s: %w", dirPath, err)
+		return fmt.Errorf("error reading directory %s: %w", dirPath, err)
 	}
 
 	var explicitDefaultAgent string
-	agents := make(map[string]types.Agent)
+	subagents := make(map[string]bool) // Track which agents are subagents
+	config.Agents = make(map[string]types.Agent)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -107,28 +109,64 @@ func loadAgentsFromMarkdown(dirPath string) (map[string]types.Agent, string, err
 		filePath := filepath.Join(dirPath, name)
 		agentID, agent, err := parseMarkdownAgent(filePath)
 		if err != nil {
-			return nil, "", err
+			return err
 		}
 
 		if agent.Default {
 			if explicitDefaultAgent != "" {
-				return nil, "", fmt.Errorf("multiple agents marked as default: '%s' and '%s'", explicitDefaultAgent, agentID)
+				return fmt.Errorf("multiple agents marked as default: '%s' and '%s'", explicitDefaultAgent, agentID)
 			}
 			explicitDefaultAgent = agentID
 		}
 
-		agents[agentID] = agent.Agent
+		switch agent.Mode {
+		case "", "chat", "primary", "all":
+			config.Publish.Entrypoint = append(config.Publish.Entrypoint, agentID)
+		case "subagent":
+			subagents[agentID] = true
+			if agent.Default {
+				return fmt.Errorf("agent '%s' in file %s cannot be both 'subagent' and 'default'", agentID, filePath)
+			}
+		default:
+			return fmt.Errorf("invalid mode '%s' for agent '%s' in file %s", agent.Mode, agentID, filePath)
+		}
+
+		config.Agents[agentID] = agent.Agent
 	}
 
-	if len(agents) == 0 {
-		return nil, "", fmt.Errorf("no agent .md files found in directory: %s", dirPath)
+	if len(config.Agents) == 0 {
+		return fmt.Errorf("no agent .md files found in directory: %s", dirPath)
 	}
 
-	return agents, explicitDefaultAgent, nil
+	// Auto-set default agent to first non-subagent lexicographically if no explicit default
+	if explicitDefaultAgent == "" {
+		for agentID := range config.Agents {
+			if subagents[agentID] {
+				continue
+			}
+			if explicitDefaultAgent == "" {
+				explicitDefaultAgent = agentID
+				continue
+			}
+			if agentID < explicitDefaultAgent {
+				explicitDefaultAgent = agentID
+			}
+		}
+	}
+
+	// Ensure the explicitDefaultAgent is the first in the entrypoint list
+	idx := slices.Index(config.Publish.Entrypoint, explicitDefaultAgent)
+	if idx > 0 {
+		config.Publish.Entrypoint = append([]string{explicitDefaultAgent}, append(config.Publish.Entrypoint[:idx], config.Publish.Entrypoint[idx+1:]...)...)
+	} else if idx == -1 {
+		config.Publish.Entrypoint = append([]string{explicitDefaultAgent}, config.Publish.Entrypoint...)
+	}
+
+	return nil
 }
 
 // loadMCPServers loads MCP server definitions from mcpServers.yaml or mcpServers.json
-func loadMCPServers(dirPath string) (map[string]mcp.Server, error) {
+func loadMCPServers(config *types.Config, dirPath string) error {
 	yamlPath := filepath.Join(dirPath, "mcpServers.yaml")
 	jsonPath := filepath.Join(dirPath, "mcpServers.json")
 
@@ -140,78 +178,57 @@ func loadMCPServers(dirPath string) (map[string]mcp.Server, error) {
 
 	// Error if both exist
 	if yamlExists && jsonExists {
-		return nil, fmt.Errorf("both mcpServers.yaml and mcpServers.json found in %s, only one is allowed", dirPath)
+		return fmt.Errorf("both mcpServers.yaml and mcpServers.json found in %s, only one is allowed", dirPath)
 	}
 
 	// If neither exists, return empty map (valid case)
 	if !yamlExists && !jsonExists {
-		return make(map[string]mcp.Server), nil
+		return nil
 	}
-
-	var servers map[string]mcp.Server
 
 	if yamlExists {
 		data, err := os.ReadFile(yamlPath)
 		if err != nil {
-			return nil, fmt.Errorf("error reading mcpServers.yaml: %w", err)
+			return fmt.Errorf("error reading mcpServers.yaml: %w", err)
 		}
-		if err := yaml.Unmarshal(data, &servers); err != nil {
-			return nil, fmt.Errorf("error parsing mcpServers.yaml: %w", err)
+		if err := yaml.Unmarshal(data, &config.MCPServers); err != nil {
+			return fmt.Errorf("error parsing mcpServers.yaml: %w", err)
 		}
 	} else if jsonExists {
 		data, err := os.ReadFile(jsonPath)
 		if err != nil {
-			return nil, fmt.Errorf("error reading mcpServers.json: %w", err)
+			return fmt.Errorf("error reading mcpServers.json: %w", err)
 		}
-		if err := json.Unmarshal(data, &servers); err != nil {
-			return nil, fmt.Errorf("error parsing mcpServers.json: %w", err)
+		if err := json.Unmarshal(data, &config.MCPServers); err != nil {
+			return fmt.Errorf("error parsing mcpServers.json: %w", err)
 		}
 	}
 
-	if servers == nil {
-		servers = make(map[string]mcp.Server)
+	// Validate that all referenced MCP servers exist
+	for agentID, agent := range config.Agents {
+		for _, serverRef := range agent.MCPServers {
+			// Remove a tool reference if it exists (e.g., "server-name/tool-name" -> "server-name")
+			serverRef, _, _ = strings.Cut(serverRef, "/")
+			if _, exists := config.MCPServers[serverRef]; !exists {
+				return fmt.Errorf("agent '%s' references MCP server '%s' which is not defined", agentID, serverRef)
+			}
+		}
 	}
 
-	return servers, nil
+	return nil
 }
 
 func loadFromDirectory(dirPath string) ([]byte, error) {
+	var config types.Config
 	// Load agents from .md files
-	agents, defaultAgent, err := loadAgentsFromMarkdown(dirPath)
-	if err != nil {
+	if err := loadAgentsFromMarkdown(&config, dirPath); err != nil {
 		return nil, err
 	}
 
 	// Load MCP servers
-	mcpServers, err := loadMCPServers(dirPath)
-	if err != nil {
+	if err := loadMCPServers(&config, dirPath); err != nil {
 		return nil, err
 	}
-
-	// Validate that all referenced MCP servers exist
-	for agentID, agent := range agents {
-		for _, serverRef := range agent.MCPServers {
-			if _, exists := mcpServers[serverRef]; !exists {
-				return nil, fmt.Errorf("agent '%s' references MCP server '%s' which is not defined", agentID, serverRef)
-			}
-		}
-	}
-
-	// Build config
-	config := types.Config{
-		Agents:     agents,
-		MCPServers: mcpServers,
-	}
-
-	// Auto-set entrypoint to first agent lexicographically if no entrypoint is set
-	if defaultAgent == "" && len(agents) > 0 {
-		for agentID := range agents {
-			if defaultAgent == "" || agentID < defaultAgent {
-				defaultAgent = agentID
-			}
-		}
-	}
-	config.Publish.Entrypoint = types.StringList{defaultAgent}
 
 	return json.Marshal(config)
 }
