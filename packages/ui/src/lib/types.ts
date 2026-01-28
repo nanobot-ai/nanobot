@@ -1,11 +1,13 @@
 import type { ChatService } from '$lib/chat.svelte';
 
 export interface Agent {
+	id: string;
 	name?: string;
 	description?: string;
 	icon?: string;
 	iconDark?: string;
 	starterMessages?: string[];
+	current?: boolean;
 }
 
 export interface Agents {
