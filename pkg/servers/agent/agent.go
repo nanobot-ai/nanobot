@@ -134,7 +134,7 @@ func (s *Server) readProgress(ctx context.Context) (ret []mcp.ResourceContent, _
 		IsError:       callResult.IsError,
 		Content:       callResult.Content,
 		InProgress:    progress.HasMore,
-		ToolName:      types.AgentTool,
+		ToolName:      types.AgentTool + callResult.Agent,
 		ProgressToken: progress.ProgressToken,
 	})
 	if err != nil {

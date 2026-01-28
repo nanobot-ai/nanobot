@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	AgentTool            = "chat"
-	AgentToolDescription = "Chat with the current agent"
+	AgentTool            = "chat-with-"
+	AgentToolDescription = "Chat with the agent"
 )
 
 var ChatInputSchema = []byte(`{

@@ -19,7 +19,7 @@ type chatCall struct {
 
 func (c chatCall) Definition() mcp.Tool {
 	return mcp.Tool{
-		Name:        types.AgentTool,
+		Name:        types.AgentTool + c.s.agentName,
 		Description: types.AgentToolDescription,
 		InputSchema: types.ChatInputSchema,
 	}

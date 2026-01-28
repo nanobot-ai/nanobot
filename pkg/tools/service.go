@@ -714,7 +714,7 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 		}
 	}
 
-	if _, ok := config.Agents[server]; ok && tool != types.AgentTool {
+	if _, ok := config.Agents[server]; ok && tool != types.AgentTool+server {
 		return s.sampleCall(ctx, server, args, SampleCallOptions{
 			ProgressToken: opt.ProgressToken,
 		})
@@ -809,7 +809,7 @@ func (s *Service) ListTools(ctx context.Context, opts ...ListToolsOptions) (resu
 		tools := filterTools(&mcp.ListToolsResult{
 			Tools: []mcp.Tool{
 				{
-					Name:        types.AgentTool,
+					Name:        types.AgentTool + agentName,
 					Description: agent.Description,
 					InputSchema: types.ChatInputSchema,
 				},

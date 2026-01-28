@@ -87,7 +87,7 @@ func loadAgentsFromMarkdown(config *types.Config, dirPath string) error {
 	}
 
 	var explicitDefaultAgent string
-	subagents := make(map[string]bool) // Track which agents are subagents
+	subagents := make(map[string]struct{}) // Track which agents are subagents
 	config.Agents = make(map[string]types.Agent)
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -123,7 +123,7 @@ func loadAgentsFromMarkdown(config *types.Config, dirPath string) error {
 		case "", "chat", "primary", "all":
 			config.Publish.Entrypoint = append(config.Publish.Entrypoint, agentID)
 		case "subagent":
-			subagents[agentID] = true
+			subagents[agentID] = struct{}{}
 			if agent.Default {
 				return fmt.Errorf("agent '%s' in file %s cannot be both 'subagent' and 'default'", agentID, filePath)
 			}
@@ -141,7 +141,7 @@ func loadAgentsFromMarkdown(config *types.Config, dirPath string) error {
 	// Auto-set default agent to first non-subagent lexicographically if no explicit default
 	if explicitDefaultAgent == "" {
 		for agentID := range config.Agents {
-			if subagents[agentID] {
+			if _, ok := subagents[agentID]; ok {
 				continue
 			}
 			if explicitDefaultAgent == "" {
@@ -152,6 +152,10 @@ func loadAgentsFromMarkdown(config *types.Config, dirPath string) error {
 				explicitDefaultAgent = agentID
 			}
 		}
+	}
+
+	if explicitDefaultAgent == "" {
+		return fmt.Errorf("no valid default agent could be determined from directory: %s", dirPath)
 	}
 
 	// Ensure the explicitDefaultAgent is the first in the entrypoint list
