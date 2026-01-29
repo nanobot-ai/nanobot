@@ -219,6 +219,8 @@ func (r *resource) read(ctx context.Context) ([]byte, error) {
 			// Only markdown files - use directory loader
 			return loadFromDirectory(r.url)
 		}
+
+		return nil, fmt.Errorf("%s does not exist", r.url)
 	}
 
 	if r.resourceType == "git" {
@@ -307,6 +309,9 @@ func gitRead(ctx context.Context, parts []string, ref string) ([]byte, error) {
 
 	owner, repo := parts[1], parts[2]
 	path := strings.Join(parts[3:], "/")
+	if path == "" {
+		path = "nanobot.yaml"
+	}
 
 	if ref == "" {
 		ref = "HEAD"
@@ -322,11 +327,6 @@ func statics(name string) *resource {
 		return &resource{
 			resourceType: "static",
 			static:       &UI,
-		}
-	case "nanobot.default":
-		return &resource{
-			resourceType: "static",
-			static:       &DefaultConfig,
 		}
 	}
 	return nil

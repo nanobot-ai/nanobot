@@ -22,6 +22,7 @@ import (
 
 type Run struct {
 	Auth
+	ConfigPath                   string            `usage:"Path to nanobot configuration file or directory" default:".nanobot/" name:"config" short:"c"`
 	ListenAddress                string            `usage:"Address to listen on" default:"localhost:8080" short:"a"`
 	DisableUI                    bool              `usage:"Disable the UI"`
 	ForceFetchToolList           bool              `usage:"Always fetch tools when listing instead of using session cache"`
@@ -45,17 +46,36 @@ func NewRun(n *Nanobot) *Run {
 }
 
 func (r *Run) Customize(cmd *cobra.Command) {
-	cmd.Use = "run [flags] NANOBOT [PROMPT]"
-	cmd.Short = "Run the nanobot with the specified config file"
-	cmd.Example = `
-  # Run the nanobot.yaml in the current directory
-  nanobot run .
+	cmd.Args = cobra.NoArgs
+	cmd.Use = "run [flags]"
+	cmd.Short = "Run the nanobot"
+	cmd.Long = `Run the nanobot using the specified configuration.
 
-  # Run the nanobot.yaml in the GitHub repo github.com/example/nanobot
-  nanobot run example/nanobot
+If a configuration is not specified with the --config, the nanobot.yaml in the .nanobot/ directory
+will be used if it exists. Otherwise, the markdown files in the .nanobot/ directory
+will be used as the configuration.
+
+To change the configuration location, use the --config flag. The same rules apply:
+- If --config is a file, then it will be used as the nanobot.yaml file.
+- If --config is a directory, then:
+	- If a nanobot.yaml file is found at the specified location, it will be used.
+	- If no nanobot.yaml file is found, the markdown files in the specified directory will be used.
+
+The configuration location can also be a URL, in which case the contents will be treated as a nanobot.yaml file.
+
+Lastly, the configuration location can be a GitHub repository in the form of "owner/repo". For the time being, this
+only supports YAML configuration files (i.e., nanobot.yaml) and not a directory of markdown files.
+`
+
+	cmd.Example = `
+  # Run the nanobot.yaml, if found, otherwise the markdown files in the .nanobot/ directory
+  nanobot run
+
+  # Run with the nanobot.yaml or agent markdown files in the GitHub repo github.com/example/nanobot
+  nanobot run --config example/nanobot
 
   # Run the nanobot.yaml at the URL
-  nanobot run https://....
+  nanobot run --config https://....
 `
 }
 
@@ -111,17 +131,12 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		TokenExchangeClientSecret: r.Auth.OAuthClientSecret,
 	}
 
-	cfgPath := "nanobot.default"
-	if len(args) > 0 {
-		cfgPath = args[0]
-	}
-
 	cfgFactory := types.ConfigFactory(func(ctx context.Context, profiles string) (types.Config, error) {
 		optCopy := runtimeOpt
 		if profiles != "" {
 			optCopy.Profiles = append(optCopy.Profiles, strings.Split(profiles, ",")...)
 		}
-		cfg, err := r.n.ReadConfig(cmd.Context(), cfgPath, optCopy)
+		cfg, err := r.n.ReadConfig(cmd.Context(), r.ConfigPath, optCopy)
 		if err != nil {
 			return types.Config{}, err
 		}
@@ -140,7 +155,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 
 	once, err := cfgFactory(cmd.Context(), "")
 	if err != nil {
-		return fmt.Errorf("failed to read config file %q: %w", args[0], err)
+		return fmt.Errorf("failed to read config from %q: %w", r.ConfigPath, err)
 	}
 
 	cfg, _ := json.MarshalIndent(once, "", "  ")
