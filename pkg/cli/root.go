@@ -61,6 +61,7 @@ type Nanobot struct {
 	MaxConcurrency          int               `usage:"The maximum number of concurrent tasks in a parallel loop" default:"10" hidden:"true"`
 	Chdir                   string            `usage:"Change directory to this path before running the nanobot" default:"." short:"C"`
 	State                   string            `usage:"Path to the state file" default:"./nanobot.db"`
+	ExcludeBuiltInAgents    bool              `usage:"Exclude built-in agents from the configuration"`
 
 	env map[string]string
 }
@@ -222,8 +223,8 @@ func (n *Nanobot) loadEnv() (map[string]string, error) {
 	return env, nil
 }
 
-func (n *Nanobot) ReadConfig(ctx context.Context, cfgPath string, opts ...runtime.Options) (*types.Config, error) {
-	cfg, _, err := config.Load(ctx, cfgPath, complete.Complete(opts...).Profiles...)
+func (n *Nanobot) ReadConfig(ctx context.Context, cfgPath string, includeDefaultAgents bool, opts ...runtime.Options) (*types.Config, error) {
+	cfg, _, err := config.Load(ctx, cfgPath, includeDefaultAgents, complete.Complete(opts...).Profiles...)
 	return cfg, err
 }
 

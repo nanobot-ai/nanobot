@@ -40,7 +40,7 @@ func (t *Targets) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	c, err := t.n.ReadConfig(cmd.Context(), args[0])
+	c, err := t.n.ReadConfig(cmd.Context(), args[0], !t.n.ExcludeBuiltInAgents)
 	if err != nil {
 		return err
 	}

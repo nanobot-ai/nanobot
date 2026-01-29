@@ -136,7 +136,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		if profiles != "" {
 			optCopy.Profiles = append(optCopy.Profiles, strings.Split(profiles, ",")...)
 		}
-		cfg, err := r.n.ReadConfig(cmd.Context(), r.ConfigPath, optCopy)
+		cfg, err := r.n.ReadConfig(cmd.Context(), r.ConfigPath, !r.n.ExcludeBuiltInAgents, optCopy)
 		if err != nil {
 			return types.Config{}, err
 		}
