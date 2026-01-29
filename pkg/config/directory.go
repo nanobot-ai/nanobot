@@ -169,10 +169,10 @@ func loadAgentsFromMarkdown(config *types.Config, dirPath string) error {
 	return nil
 }
 
-// loadMCPServers loads MCP server definitions from mcpServers.yaml or mcpServers.json
+// loadMCPServers loads MCP server definitions from mcp-servers.yaml or mcp-servers.json
 func loadMCPServers(config *types.Config, dirPath string) error {
-	yamlPath := filepath.Join(dirPath, "mcpServers.yaml")
-	jsonPath := filepath.Join(dirPath, "mcpServers.json")
+	yamlPath := filepath.Join(dirPath, "mcp-servers.yaml")
+	jsonPath := filepath.Join(dirPath, "mcp-servers.json")
 
 	_, yamlErr := os.Stat(yamlPath)
 	_, jsonErr := os.Stat(jsonPath)
@@ -182,7 +182,7 @@ func loadMCPServers(config *types.Config, dirPath string) error {
 
 	// Error if both exist
 	if yamlExists && jsonExists {
-		return fmt.Errorf("both mcpServers.yaml and mcpServers.json found in %s, only one is allowed", dirPath)
+		return fmt.Errorf("both mcp-servers.yaml and mcp-servers.json found in %s, only one is allowed", dirPath)
 	}
 
 	// If neither exists, return empty map (valid case)
@@ -193,18 +193,18 @@ func loadMCPServers(config *types.Config, dirPath string) error {
 	if yamlExists {
 		data, err := os.ReadFile(yamlPath)
 		if err != nil {
-			return fmt.Errorf("error reading mcpServers.yaml: %w", err)
+			return fmt.Errorf("error reading mcp-servers.yaml: %w", err)
 		}
 		if err := yaml.Unmarshal(data, &config.MCPServers); err != nil {
-			return fmt.Errorf("error parsing mcpServers.yaml: %w", err)
+			return fmt.Errorf("error parsing mcp-servers.yaml: %w", err)
 		}
 	} else if jsonExists {
 		data, err := os.ReadFile(jsonPath)
 		if err != nil {
-			return fmt.Errorf("error reading mcpServers.json: %w", err)
+			return fmt.Errorf("error reading mcp-servers.json: %w", err)
 		}
 		if err := json.Unmarshal(data, &config.MCPServers); err != nil {
-			return fmt.Errorf("error parsing mcpServers.json: %w", err)
+			return fmt.Errorf("error parsing mcp-servers.json: %w", err)
 		}
 	}
 

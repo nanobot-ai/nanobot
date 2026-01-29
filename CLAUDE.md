@@ -137,7 +137,7 @@ When working on the UI, Nanobot automatically forwards requests to the developme
 Configuration is YAML-based. Key top-level sections:
 
 - `agents` - Define agents with their models, tools, instructions, and behaviors
-- `mcpServers` - MCP server configurations (command, URL, Docker image, etc.)
+- `mcp-servers` - MCP server configurations (command, URL, Docker image, etc.)
 - `prompts` - Template definitions
 - `publish` - Defines what to expose when Nanobot itself acts as an MCP server
 - `env` - Environment variable definitions with descriptions and defaults
