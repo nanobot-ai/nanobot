@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"os/exec"
@@ -31,16 +32,17 @@ const (
 	maxLineLength      = 2000
 )
 
-var allowedTools = []string{
-	"bash",
-	"read",
-	"write",
-	"edit",
-	"glob",
-	"grep",
-	"todoRead",
-	"todoWrite",
-	"webFetch",
+var allowedTools = map[string][]string{
+	"bash":           []string{"bash"},
+	"read":           []string{"read"},
+	"write":          []string{"write", "edit"},
+	"edit":           []string{"edit"},
+	"glob":           []string{"glob"},
+	"grep":           []string{"grep"},
+	"todoRead":       []string{"todoRead"},
+	"todoWrite":      []string{"todoWrite"},
+	"webFetch":       []string{"webFetch"},
+	"builtin-skills": []string{"listSkills", "getSkill"},
 }
 
 type Server struct {
@@ -173,6 +175,9 @@ Usage notes:
   - Default timeout: 30 seconds, maximum: 120 seconds
   - This tool is read-only and does not modify any files
   - When a URL redirects to a different host, the tool will inform you and provide the redirect URL`, s.webFetch),
+		// Skills tools
+		mcp.NewServerTool("listSkills", "List all available skills with their names and descriptions", s.listSkills),
+		mcp.NewServerTool("getSkill", "Get the full content of a specific skill by name (with or without .md extension)", s.getSkill),
 	)
 
 	return s
@@ -208,8 +213,10 @@ func (s *Server) initialize(ctx context.Context, _ mcp.Message, params mcp.Initi
 
 func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (types.AgentConfigHook, error) {
 	if agent := params.Agent; agent != nil {
-		for _, tool := range agent.Permissions.Allowed(allowedTools) {
-			agent.MCPServers = append(agent.MCPServers, "nanobot.system/"+tool)
+		for _, perm := range agent.Permissions.Allowed(maps.Keys(allowedTools)) {
+			for _, tool := range allowedTools[perm] {
+				agent.MCPServers = append(agent.MCPServers, "nanobot.system/"+tool)
+			}
 		}
 
 		if params.MCPServers == nil {
