@@ -714,10 +714,15 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 		}
 	}
 
-	if _, ok := config.Agents[server]; ok && tool != types.AgentTool {
-		return s.sampleCall(ctx, server, args, SampleCallOptions{
-			ProgressToken: opt.ProgressToken,
-		})
+	if agent, ok := config.Agents[server]; ok {
+		if override := agent.ToolOverrides[types.AgentTool]; ok && override.Name == tool {
+			tool = types.AgentTool
+		}
+		if tool != types.AgentTool {
+			return s.sampleCall(ctx, server, args, SampleCallOptions{
+				ProgressToken: opt.ProgressToken,
+			})
+		}
 	}
 
 	c, err := s.GetClient(ctx, server)
@@ -806,10 +811,14 @@ func (s *Service) ListTools(ctx context.Context, opts ...ListToolsOptions) (resu
 			continue
 		}
 
+		toolName := types.AgentTool
+		if override, ok := agent.ToolOverrides[types.AgentTool]; ok && override.Name != "" {
+			toolName = override.Name
+		}
 		tools := filterTools(&mcp.ListToolsResult{
 			Tools: []mcp.Tool{
 				{
-					Name:        types.AgentTool,
+					Name:        toolName,
 					Description: agent.Description,
 					InputSchema: types.ChatInputSchema,
 				},

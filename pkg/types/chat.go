@@ -98,6 +98,7 @@ type AgentDisplay struct {
 	IconDark        string   `json:"iconDark"`
 	StarterMessages []string `json:"starterMessages"`
 	Base            bool     `json:"base"`
+	Current         bool     `json:"current"`
 }
 
 type Workspace struct {

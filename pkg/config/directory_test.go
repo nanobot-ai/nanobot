@@ -99,9 +99,42 @@ func TestLoadFromDirectory_MultipleAgents(t *testing.T) {
 		t.Errorf("expected helper agent name 'Helper Agent', got '%s'", helperAgent.Name)
 	}
 
-	// Check entrypoint set to first agent lexicographically (helper-agent)
-	if len(config.Publish.Entrypoint) != 1 || config.Publish.Entrypoint[0] != "helper" {
-		t.Errorf("expected entrypoint ['helper-agent'], got %v", config.Publish.Entrypoint)
+	// Both agents have no mode specified (defaults to ""), so both should be in entrypoint
+	if len(config.Publish.Entrypoint) != 2 {
+		t.Errorf("expected 2 agents in entrypoint, got %d: %v", len(config.Publish.Entrypoint), config.Publish.Entrypoint)
+	}
+
+	// Check that both agents are in entrypoint
+	entrypointMap := make(map[string]bool)
+	for _, agentID := range config.Publish.Entrypoint {
+		entrypointMap[agentID] = true
+	}
+
+	if !entrypointMap["helper"] {
+		t.Error("expected 'helper' agent in entrypoint")
+	}
+
+	if !entrypointMap["main"] {
+		t.Error("expected 'main' agent in entrypoint")
+	}
+
+	// Check tool overrides: default agent (helper, lexicographically first) should NOT have override
+	// Non-default agent (main) should have chat tool override
+	if helperAgent.ToolOverrides != nil && helperAgent.ToolOverrides["chat"].Name != "" {
+		t.Errorf("expected default agent 'helper' to NOT have chat tool override, got: %v", helperAgent.ToolOverrides)
+	}
+
+	if mainAgent.ToolOverrides == nil {
+		t.Fatal("expected 'main' agent to have ToolOverrides map")
+	}
+
+	chatOverride, exists := mainAgent.ToolOverrides["chat"]
+	if !exists {
+		t.Fatal("expected 'main' agent to have 'chat' tool override")
+	}
+
+	if chatOverride.Name != "main/chat" {
+		t.Errorf("expected 'main' agent chat tool override name to be 'main/chat', got '%s'", chatOverride.Name)
 	}
 }
 
@@ -366,9 +399,43 @@ func TestLoadFromDirectory_DefaultAgent_Explicit(t *testing.T) {
 		t.Errorf("expected zulu agent name 'Zulu Agent', got '%s'", zuluAgent.Name)
 	}
 
-	// Check entrypoint set to explicitly marked default agent (zulu), not lexicographically first (alpha)
-	if len(config.Publish.Entrypoint) != 1 || config.Publish.Entrypoint[0] != "zulu" {
-		t.Errorf("expected entrypoint ['zulu'] (explicitly marked default), got %v", config.Publish.Entrypoint)
+	// Both agents have no mode specified (defaults to ""), so both should be in entrypoint
+	// The explicitly marked default agent (zulu) should also be included (but already is)
+	if len(config.Publish.Entrypoint) != 2 {
+		t.Errorf("expected 2 agents in entrypoint, got %d: %v", len(config.Publish.Entrypoint), config.Publish.Entrypoint)
+	}
+
+	// Check that both agents are in entrypoint
+	entrypointMap := make(map[string]bool)
+	for _, agentID := range config.Publish.Entrypoint {
+		entrypointMap[agentID] = true
+	}
+
+	if !entrypointMap["alpha"] {
+		t.Error("expected 'alpha' agent in entrypoint")
+	}
+
+	if !entrypointMap["zulu"] {
+		t.Error("expected 'zulu' agent (explicitly marked default) in entrypoint")
+	}
+
+	// Check tool overrides: default agent (zulu, explicitly marked) should NOT have override
+	// Non-default agent (alpha) should have chat tool override
+	if zuluAgent.ToolOverrides != nil && zuluAgent.ToolOverrides["chat"].Name != "" {
+		t.Errorf("expected default agent 'zulu' to NOT have chat tool override, got: %v", zuluAgent.ToolOverrides)
+	}
+
+	if alphaAgent.ToolOverrides == nil {
+		t.Fatal("expected 'alpha' agent to have ToolOverrides map")
+	}
+
+	chatOverride, exists := alphaAgent.ToolOverrides["chat"]
+	if !exists {
+		t.Fatal("expected 'alpha' agent to have 'chat' tool override")
+	}
+
+	if chatOverride.Name != "alpha/chat" {
+		t.Errorf("expected 'alpha' agent chat tool override name to be 'alpha/chat', got '%s'", chatOverride.Name)
 	}
 }
 
@@ -385,6 +452,21 @@ func TestLoadFromDirectory_DefaultAgent_MultipleDefaults_Error(t *testing.T) {
 	// Error should mention both agent IDs
 	if !strings.Contains(err.Error(), "first") || !strings.Contains(err.Error(), "second") {
 		t.Errorf("expected error to mention both 'first' and 'second' agents, got: %v", err)
+	}
+}
+
+func TestLoadFromDirectory_DefaultSubagent_Error(t *testing.T) {
+	_, err := loadFromDirectory("testdata/directory-default-subagent-error")
+	if err == nil {
+		t.Fatal("expected error when agent is both default and subagent")
+	}
+
+	if !strings.Contains(err.Error(), "cannot be both 'subagent' and 'default'") {
+		t.Errorf("expected error about agent being both subagent and default, got: %v", err)
+	}
+
+	if !strings.Contains(err.Error(), "agent") {
+		t.Errorf("expected error to mention agent name, got: %v", err)
 	}
 }
 
@@ -420,5 +502,314 @@ func TestParseMarkdownAgent_NoDefaultField(t *testing.T) {
 	// Default should be false when not specified
 	if agent.Default != false {
 		t.Errorf("expected Default field to be false when not specified, got %v", agent.Default)
+	}
+}
+
+// Tests for mode field
+
+func TestLoadFromDirectory_ModeChatAddsToEntrypoint(t *testing.T) {
+	data, err := loadFromDirectory("testdata/directory-mode-chat")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var config types.Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("error unmarshaling config: %v", err)
+	}
+
+	// Agent should be loaded
+	if len(config.Agents) != 1 {
+		t.Errorf("expected 1 agent, got %d", len(config.Agents))
+	}
+
+	agent, exists := config.Agents["agent"]
+	if !exists {
+		t.Fatal("expected 'agent' agent to exist")
+	}
+
+	if agent.Name != "Chat Mode Agent" {
+		t.Errorf("expected agent name 'Chat Mode Agent', got '%s'", agent.Name)
+	}
+
+	// mode: chat should add agent to entrypoint
+	if len(config.Publish.Entrypoint) != 1 || config.Publish.Entrypoint[0] != "agent" {
+		t.Errorf("expected entrypoint ['agent'] for mode: chat, got %v", config.Publish.Entrypoint)
+	}
+}
+
+func TestLoadFromDirectory_ModePrimaryAddsToEntrypoint(t *testing.T) {
+	data, err := loadFromDirectory("testdata/directory-mode-primary")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var config types.Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("error unmarshaling config: %v", err)
+	}
+
+	// Agent should be loaded
+	if len(config.Agents) != 1 {
+		t.Errorf("expected 1 agent, got %d", len(config.Agents))
+	}
+
+	agent, exists := config.Agents["agent"]
+	if !exists {
+		t.Fatal("expected 'agent' agent to exist")
+	}
+
+	if agent.Name != "Primary Mode Agent" {
+		t.Errorf("expected agent name 'Primary Mode Agent', got '%s'", agent.Name)
+	}
+
+	// mode: primary should add agent to entrypoint
+	if len(config.Publish.Entrypoint) != 1 || config.Publish.Entrypoint[0] != "agent" {
+		t.Errorf("expected entrypoint ['agent'] for mode: primary, got %v", config.Publish.Entrypoint)
+	}
+}
+
+func TestLoadFromDirectory_ModeAllAddsToEntrypoint(t *testing.T) {
+	data, err := loadFromDirectory("testdata/directory-mode-all")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var config types.Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("error unmarshaling config: %v", err)
+	}
+
+	// Agent should be loaded
+	if len(config.Agents) != 1 {
+		t.Errorf("expected 1 agent, got %d", len(config.Agents))
+	}
+
+	agent, exists := config.Agents["agent"]
+	if !exists {
+		t.Fatal("expected 'agent' agent to exist")
+	}
+
+	if agent.Name != "All Mode Agent" {
+		t.Errorf("expected agent name 'All Mode Agent', got '%s'", agent.Name)
+	}
+
+	// mode: all should add agent to entrypoint
+	if len(config.Publish.Entrypoint) != 1 || config.Publish.Entrypoint[0] != "agent" {
+		t.Errorf("expected entrypoint ['agent'] for mode: all, got %v", config.Publish.Entrypoint)
+	}
+}
+
+func TestLoadFromDirectory_ModeSubagentNotInEntrypoint(t *testing.T) {
+	data, err := loadFromDirectory("testdata/directory-mode-subagent")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var config types.Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("error unmarshaling config: %v", err)
+	}
+
+	// Both agents should be loaded
+	if len(config.Agents) != 2 {
+		t.Errorf("expected 2 agents, got %d", len(config.Agents))
+	}
+
+	primaryAgent, exists := config.Agents["primary"]
+	if !exists {
+		t.Fatal("expected 'primary' agent to exist")
+	}
+
+	if primaryAgent.Name != "Primary Agent" {
+		t.Errorf("expected primary agent name 'Primary Agent', got '%s'", primaryAgent.Name)
+	}
+
+	helperAgent, exists := config.Agents["helper"]
+	if !exists {
+		t.Fatal("expected 'helper' agent to exist")
+	}
+
+	if helperAgent.Name != "Helper Agent" {
+		t.Errorf("expected helper agent name 'Helper Agent', got '%s'", helperAgent.Name)
+	}
+
+	// Only the primary agent (without mode specified) should be in entrypoint
+	// The helper agent has mode: subagent, so it should NOT be in entrypoint
+	if len(config.Publish.Entrypoint) != 1 || config.Publish.Entrypoint[0] != "primary" {
+		t.Errorf("expected entrypoint ['primary'] (subagent should not be included), got %v", config.Publish.Entrypoint)
+	}
+
+	// Check tool overrides: default agent (primary, lexicographically first non-subagent) should NOT have override
+	// Subagent (helper) should have chat tool override even though it's a subagent
+	if primaryAgent.ToolOverrides != nil && primaryAgent.ToolOverrides["chat"].Name != "" {
+		t.Errorf("expected default agent 'primary' to NOT have chat tool override, got: %v", primaryAgent.ToolOverrides)
+	}
+
+	if helperAgent.ToolOverrides == nil {
+		t.Fatal("expected 'helper' subagent to have ToolOverrides map")
+	}
+
+	chatOverride, exists := helperAgent.ToolOverrides["chat"]
+	if !exists {
+		t.Fatal("expected 'helper' subagent to have 'chat' tool override")
+	}
+
+	if chatOverride.Name != "helper/chat" {
+		t.Errorf("expected 'helper' subagent chat tool override name to be 'helper/chat', got '%s'", chatOverride.Name)
+	}
+}
+
+func TestLoadFromDirectory_ModeMixed(t *testing.T) {
+	data, err := loadFromDirectory("testdata/directory-mode-mixed")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var config types.Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("error unmarshaling config: %v", err)
+	}
+
+	// All three agents should be loaded
+	if len(config.Agents) != 3 {
+		t.Errorf("expected 3 agents, got %d", len(config.Agents))
+	}
+
+	chatAgent, exists := config.Agents["chat"]
+	if !exists {
+		t.Fatal("expected 'chat' agent to exist")
+	}
+
+	if chatAgent.Name != "Chat Agent" {
+		t.Errorf("expected chat agent name 'Chat Agent', got '%s'", chatAgent.Name)
+	}
+
+	primaryAgent, exists := config.Agents["primary"]
+	if !exists {
+		t.Fatal("expected 'primary' agent to exist")
+	}
+
+	if primaryAgent.Name != "Primary Agent" {
+		t.Errorf("expected primary agent name 'Primary Agent', got '%s'", primaryAgent.Name)
+	}
+
+	helperAgent, exists := config.Agents["helper"]
+	if !exists {
+		t.Fatal("expected 'helper' agent to exist")
+	}
+
+	if helperAgent.Name != "Helper Agent" {
+		t.Errorf("expected helper agent name 'Helper Agent', got '%s'", helperAgent.Name)
+	}
+
+	// Both chat and primary should be in entrypoint (mode: chat and mode: primary)
+	// The helper agent (mode: subagent) should NOT be in entrypoint
+	if len(config.Publish.Entrypoint) != 2 {
+		t.Errorf("expected 2 agents in entrypoint, got %d: %v", len(config.Publish.Entrypoint), config.Publish.Entrypoint)
+	}
+
+	// Check that both chat and primary are in entrypoint (order may vary)
+	entrypointMap := make(map[string]bool)
+	for _, agentID := range config.Publish.Entrypoint {
+		entrypointMap[agentID] = true
+	}
+
+	if !entrypointMap["chat"] {
+		t.Error("expected 'chat' agent in entrypoint")
+	}
+
+	if !entrypointMap["primary"] {
+		t.Error("expected 'primary' agent in entrypoint")
+	}
+
+	if entrypointMap["helper"] {
+		t.Error("subagent 'helper' should not be in entrypoint")
+	}
+
+	// Check tool overrides: default agent (chat, lexicographically first non-subagent) should NOT have override
+	// Non-default agents (primary and helper) should have chat tool overrides
+	if chatAgent.ToolOverrides != nil && chatAgent.ToolOverrides["chat"].Name != "" {
+		t.Errorf("expected default agent 'chat' to NOT have chat tool override, got: %v", chatAgent.ToolOverrides)
+	}
+
+	if primaryAgent.ToolOverrides == nil {
+		t.Fatal("expected 'primary' agent to have ToolOverrides map")
+	}
+
+	primaryChatOverride, exists := primaryAgent.ToolOverrides["chat"]
+	if !exists {
+		t.Fatal("expected 'primary' agent to have 'chat' tool override")
+	}
+
+	if primaryChatOverride.Name != "primary/chat" {
+		t.Errorf("expected 'primary' agent chat tool override name to be 'primary/chat', got '%s'", primaryChatOverride.Name)
+	}
+
+	if helperAgent.ToolOverrides == nil {
+		t.Fatal("expected 'helper' subagent to have ToolOverrides map")
+	}
+
+	helperChatOverride, exists := helperAgent.ToolOverrides["chat"]
+	if !exists {
+		t.Fatal("expected 'helper' subagent to have 'chat' tool override")
+	}
+
+	if helperChatOverride.Name != "helper/chat" {
+		t.Errorf("expected 'helper' subagent chat tool override name to be 'helper/chat', got '%s'", helperChatOverride.Name)
+	}
+}
+
+func TestLoadFromDirectory_ModeInvalid_Error(t *testing.T) {
+	_, err := loadFromDirectory("testdata/directory-mode-invalid")
+	if err == nil {
+		t.Fatal("expected error for invalid mode value")
+	}
+
+	if !strings.Contains(err.Error(), "invalid mode") {
+		t.Errorf("expected error about invalid mode, got: %v", err)
+	}
+
+	if !strings.Contains(err.Error(), "invalid_mode") {
+		t.Errorf("expected error to mention 'invalid_mode', got: %v", err)
+	}
+
+	if !strings.Contains(err.Error(), "agent") {
+		t.Errorf("expected error to mention agent name, got: %v", err)
+	}
+}
+
+func TestParseMarkdownAgent_ModeField(t *testing.T) {
+	agentID, agent, err := parseMarkdownAgent("testdata/directory-mode-chat/agent.md")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if agentID != "agent" {
+		t.Errorf("expected agent ID 'agent', got '%s'", agentID)
+	}
+
+	if agent.Mode != "chat" {
+		t.Errorf("expected Mode field to be 'chat', got '%s'", agent.Mode)
+	}
+
+	if agent.Agent.Name != "Chat Mode Agent" {
+		t.Errorf("expected name 'Chat Mode Agent', got '%s'", agent.Agent.Name)
+	}
+}
+
+func TestParseMarkdownAgent_NoModeField(t *testing.T) {
+	agentID, agent, err := parseMarkdownAgent("testdata/directory-simple/main.md")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if agentID != "main" {
+		t.Errorf("expected agent ID 'main', got '%s'", agentID)
+	}
+
+	// Mode should be empty string when not specified
+	if agent.Mode != "" {
+		t.Errorf("expected Mode field to be empty when not specified, got '%s'", agent.Mode)
 	}
 }

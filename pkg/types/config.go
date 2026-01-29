@@ -49,6 +49,23 @@ func GetSessionAndAccountID(ctx context.Context) (string, string) {
 	return session.ID(), accountID
 }
 
+func CurrentAgent(ctx context.Context) string {
+	var (
+		session      = mcp.SessionFromContext(ctx)
+		currentAgent string
+		c            Config
+	)
+	if !session.Get(CurrentAgentSessionKey, &currentAgent) {
+		if !session.Get(DefaultAgentSessionKey, &currentAgent) {
+			session.Get(ConfigSessionKey, &c)
+			if len(c.Publish.Entrypoint) > 0 {
+				currentAgent = c.Publish.Entrypoint[0]
+			}
+		}
+	}
+	return currentAgent
+}
+
 type Config struct {
 	Auth             *Auth                 `json:"auth,omitempty"`
 	Extends          StringList            `json:"extends,omitempty"`

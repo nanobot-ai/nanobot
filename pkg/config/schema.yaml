@@ -587,6 +587,14 @@ definitions:
         description: |
           A map of hooks that will be executed at various stages of the Agent lifecycle.
           Currently supported hooks are "config", "request", and "response".
+      toolOverrides:
+        type: object
+        description: |
+          A map of tool name to tool override configuration. This allows you to override
+          properties of tools provided by the MCP Server, such as the name, description,
+          or input schema, or to disable specific tools.
+        additionalProperties:
+          $ref: "#/definitions/ToolOverride"
       permissions:
         type: object
         description: |
