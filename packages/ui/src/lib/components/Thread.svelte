@@ -1,94 +1,111 @@
 <script lang="ts">
-	import Messages from './Messages.svelte';
-	import MessageInput from './MessageInput.svelte';
-	import type {
-		Attachment,
-		ChatMessage,
-		ChatResult,
-		Elicitation as ElicitationType,
-		ElicitationResult,
-		Prompt as PromptType,
-		Agent,
-		UploadingFile,
-		UploadedFile,
-		Resource
-	} from '$lib/types';
-	import Elicitation from '$lib/components/Elicitation.svelte';
-	import Prompt from '$lib/components/Prompt.svelte';
-	import { ChevronDown } from '@lucide/svelte';
+import { ChevronDown } from "@lucide/svelte";
+import Elicitation from "$lib/components/Elicitation.svelte";
+import Prompt from "$lib/components/Prompt.svelte";
+import type {
+	Agent,
+	Attachment,
+	ChatMessage,
+	ChatResult,
+	ElicitationResult,
+	Elicitation as ElicitationType,
+	Prompt as PromptType,
+	Resource,
+	UploadedFile,
+	UploadingFile,
+} from "$lib/types";
+import MessageInput from "./MessageInput.svelte";
+import Messages from "./Messages.svelte";
 
-	interface Props {
-		messages: ChatMessage[];
-		prompts: PromptType[];
-		resources: Resource[];
-		elicitations?: ElicitationType[];
-		onElicitationResult?: (elicitation: ElicitationType, result: ElicitationResult) => void;
-		onSendMessage?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
-		onFileUpload?: (file: File, opts?: { controller?: AbortController }) => Promise<Attachment>;
-		cancelUpload?: (fileId: string) => void;
-		uploadingFiles?: UploadingFile[];
-		uploadedFiles?: UploadedFile[];
-		isLoading?: boolean;
-		agent?: Agent;
+interface Props {
+	messages: ChatMessage[];
+	prompts: PromptType[];
+	resources: Resource[];
+	elicitations?: ElicitationType[];
+	onElicitationResult?: (
+		elicitation: ElicitationType,
+		result: ElicitationResult,
+	) => void;
+	onSendMessage?: (
+		message: string,
+		attachments?: Attachment[],
+	) => Promise<ChatResult | void>;
+	onFileUpload?: (
+		file: File,
+		opts?: { controller?: AbortController },
+	) => Promise<Attachment>;
+	cancelUpload?: (fileId: string) => void;
+	uploadingFiles?: UploadingFile[];
+	uploadedFiles?: UploadedFile[];
+	isLoading?: boolean;
+	agent?: Agent;
+	agents?: Agent[];
+	selectedAgentId?: string;
+	onAgentChange?: (agentId: string) => void;
+}
+
+let {
+	// Do not use _chat variable anywhere except these assignments
+	messages,
+	prompts,
+	resources,
+	onSendMessage,
+	onFileUpload,
+	cancelUpload,
+	uploadingFiles,
+	uploadedFiles,
+	elicitations,
+	onElicitationResult,
+	agent,
+	agents = [],
+	selectedAgentId = "",
+	onAgentChange,
+	isLoading,
+}: Props = $props();
+
+let messagesContainer: HTMLElement;
+let showScrollButton = $state(false);
+let previousLastMessageId = $state<string | null>(null);
+const hasMessages = $derived(messages && messages.length > 0);
+let selectedPrompt = $state<string | undefined>();
+
+// Watch for changes to the last message ID and scroll to bottom
+$effect(() => {
+	if (!messagesContainer) return;
+
+	// Make this reactive to changes in messages
+	void messages.length;
+
+	const lastDiv = messagesContainer.querySelector(
+		"#message-groups > :last-child",
+	);
+	const currentLastMessageId = lastDiv?.getAttribute("data-message-id");
+
+	if (currentLastMessageId && currentLastMessageId !== previousLastMessageId) {
+		// Wait for DOM update, then scroll to bottom
+		setTimeout(() => {
+			scrollToBottom();
+		}, 10);
+		previousLastMessageId = currentLastMessageId;
 	}
+});
 
-	let {
-		// Do not use _chat variable anywhere except these assignments
-		messages,
-		prompts,
-		resources,
-		onSendMessage,
-		onFileUpload,
-		cancelUpload,
-		uploadingFiles,
-		uploadedFiles,
-		elicitations,
-		onElicitationResult,
-		agent,
-		isLoading,
-	}: Props = $props();
+function handleScroll() {
+	if (!messagesContainer) return;
 
-	let messagesContainer: HTMLElement;
-	let showScrollButton = $state(false);
-	let previousLastMessageId = $state<string | null>(null);
-	let hasMessages = $derived(messages && messages.length > 0);
-	let selectedPrompt = $state<string | undefined>();
+	const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
+	const isNearBottom = scrollTop + clientHeight >= scrollHeight - 10; // 10px threshold
+	showScrollButton = !isNearBottom;
+}
 
-	// Watch for changes to the last message ID and scroll to bottom
-	$effect(() => {
-		if (!messagesContainer) return;
-
-		// Make this reactive to changes in messages
-		void messages.length;
-
-		const lastDiv = messagesContainer.querySelector('#message-groups > :last-child');
-		const currentLastMessageId = lastDiv?.getAttribute('data-message-id');
-
-		if (currentLastMessageId && currentLastMessageId !== previousLastMessageId) {
-			// Wait for DOM update, then scroll to bottom
-			setTimeout(() => {
-				scrollToBottom();
-			}, 10);
-			previousLastMessageId = currentLastMessageId;
-		}
-	});
-
-	function handleScroll() {
-		if (!messagesContainer) return;
-
-		const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
-		const isNearBottom = scrollTop + clientHeight >= scrollHeight - 10; // 10px threshold
-		showScrollButton = !isNearBottom;
+function scrollToBottom() {
+	if (messagesContainer) {
+		messagesContainer.scrollTo({
+			top: messagesContainer.scrollHeight,
+			behavior: "smooth",
+		});
 	}
-
-	function scrollToBottom() {
-		if (messagesContainer) {
-			messagesContainer.scrollTo({
-				top: messagesContainer.scrollHeight,
-				behavior: 'smooth'
-			});
-		}
-	}
+}
 </script>
 
 <div class="flex h-dvh w-full flex-col md:relative peer-[.workspace]:md:w-1/4">
@@ -144,6 +161,9 @@
 				onSend={onSendMessage}
 				{resources}
 				{messages}
+				{agents}
+				{selectedAgentId}
+				{onAgentChange}
 				onPrompt={(p) => (selectedPrompt = p)}
 				{onFileUpload}
 				disabled={isLoading}

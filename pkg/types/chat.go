@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	AgentTool            = "chat"
-	AgentToolDescription = "Chat with the current agent"
+	AgentTool            = "chat-with-"
+	AgentToolDescription = "Chat with the agent"
 )
 
 var ChatInputSchema = []byte(`{
@@ -98,6 +98,7 @@ type AgentDisplay struct {
 	IconDark        string   `json:"iconDark"`
 	StarterMessages []string `json:"starterMessages"`
 	Base            bool     `json:"base"`
+	Current         bool     `json:"current"`
 }
 
 type Workspace struct {

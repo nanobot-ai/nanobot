@@ -52,7 +52,7 @@ attachmentsLoop:
 			}
 		}
 
-		clientName := c.s.data.CurrentAgent(ctx)
+		clientName := types.CurrentAgent(ctx)
 		if strings.HasPrefix(uri, "nanobot://") {
 			clientName = "nanobot.resources"
 		}

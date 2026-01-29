@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -126,7 +127,13 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		}
 
 		if r.EntrypointAgent != "" {
-			cfg.Publish.Entrypoint = types.StringList{r.EntrypointAgent}
+			// Ensure the entrypoint agent is the first agent in the entrypoint list
+			idx := slices.Index(cfg.Publish.Entrypoint, r.EntrypointAgent)
+			if idx > 0 {
+				cfg.Publish.Entrypoint = append([]string{r.EntrypointAgent}, append(cfg.Publish.Entrypoint[:idx], cfg.Publish.Entrypoint[idx+1:]...)...)
+			} else if idx == -1 {
+				cfg.Publish.Entrypoint = append([]string{r.EntrypointAgent}, cfg.Publish.Entrypoint...)
+			}
 		}
 		return *cfg, nil
 	})

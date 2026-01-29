@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/log"
@@ -131,7 +132,7 @@ func printProgressURI(wl *sync.Mutex, rw http.ResponseWriter, req *http.Request,
 			}
 		}
 
-		if callResult.ToolName != types.AgentTool {
+		if !strings.HasPrefix(callResult.ToolName, types.AgentTool) {
 			continue
 		}
 

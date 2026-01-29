@@ -1,25 +1,25 @@
-import {
-	type Event,
-	type Chat,
-	type ChatResult,
-	type ChatRequest,
-	type ChatMessage,
-	type ToolOutputItem,
-	type Elicitation,
-	type ElicitationResult,
-	type Prompts,
-	type Prompt,
-	type Agent,
-	type Agents,
-	type Attachment,
-	type UploadedFile,
-	type UploadingFile,
-	type Resource,
-	type Resources
-} from './types';
+import { SvelteDate } from 'svelte/reactivity';
 import { getNotificationContext } from './context/notifications.svelte';
 import { SimpleClient } from './mcpclient';
-import { SvelteDate } from 'svelte/reactivity';
+import type {
+	Agent,
+	Agents,
+	Attachment,
+	Chat,
+	ChatMessage,
+	ChatRequest,
+	ChatResult,
+	Elicitation,
+	ElicitationResult,
+	Event,
+	Prompt,
+	Prompts,
+	Resource,
+	Resources,
+	ToolOutputItem,
+	UploadedFile,
+	UploadingFile
+} from './types';
 
 export interface CallToolResult {
 	content?: ToolOutputItem[];
@@ -195,8 +195,8 @@ export class ChatAPI {
 		});
 	}
 
-	async sendMessage(request: ChatRequest): Promise<ChatResult> {
-		await this.callMCPTool<CallToolResult>('chat', {
+	async sendMessage(request: ChatRequest, toolName: string): Promise<ChatResult> {
+		await this.callMCPTool<CallToolResult>(toolName, {
 			payload: {
 				prompt: request.message,
 				attachments: request.attachments?.map((a) => {
@@ -358,6 +358,8 @@ export class ChatService {
 	prompts: Prompt[];
 	resources: Resource[];
 	agent: Agent;
+	agents: Agent[];
+	selectedAgentId: string;
 	elicitations: Elicitation[];
 	isLoading: boolean;
 	chatId: string;
@@ -378,7 +380,9 @@ export class ChatService {
 		this.prompts = $state<Prompt[]>([]);
 		this.resources = $state<Resource[]>([]);
 		this.chatId = $state('');
-		this.agent = $state<Agent>({});
+		this.agent = $state<Agent>({ id: '' });
+		this.agents = $state<Agent[]>([]);
+		this.selectedAgentId = $state('');
 		this.uploadedFiles = $state([]);
 		this.uploadingFiles = $state([]);
 		this.setChatId(opts?.chatId);
@@ -424,9 +428,31 @@ export class ChatService {
 	};
 
 	private reloadAgent = async () => {
-		const agents = await this.api.listAgents({ sessionId: this.chatId });
-		if (agents.agents?.length > 0) {
-			this.agent = agents.agents[0];
+		const agentsData = await this.api.listAgents({ sessionId: this.chatId });
+		if (agentsData.agents?.length > 0) {
+			this.agents = agentsData.agents;
+			this.agent = agentsData.agents.find((a) => a.current) || agentsData.agents[0];
+
+			// Only reset selectedAgentId if:
+			// 1. It's not set yet (empty string), OR
+			// 2. The currently selected agent is no longer in the agents list
+			const isSelectedAgentStillAvailable = agentsData.agents.some(
+				(a) => a.id === this.selectedAgentId
+			);
+
+			if (!this.selectedAgentId || !isSelectedAgentStillAvailable) {
+				this.selectedAgentId = this.agent.id || '';
+			}
+		}
+	};
+
+	selectAgent = (agentId: string) => {
+		this.selectedAgentId = agentId;
+		// Keep this.agent in sync with the selectedAgentId so the UI
+		// (which may rely on chat.agent) reflects the newly selected agent.
+		const selectedAgent = this.agents?.find((a) => a.id === agentId);
+		if (selectedAgent) {
+			this.agent = selectedAgent;
 		}
 	};
 
@@ -521,13 +547,24 @@ export class ChatService {
 			await this.newChat();
 		}
 
+		// Determine which tool to call based on selected or current agent
+		const effectiveAgentId = this.selectedAgentId || this.agent?.id;
+		if (!effectiveAgentId) {
+			this.isLoading = false;
+			throw new Error('No agent selected or available for sending chat messages.');
+		}
+		const toolName = `chat-with-${effectiveAgentId}`;
+
 		try {
-			const response = await this.api.sendMessage({
-				id: crypto.randomUUID(),
-				threadId: this.chatId,
-				message: message,
-				attachments: [...this.uploadedFiles, ...(attachments || [])]
-			});
+			const response = await this.api.sendMessage(
+				{
+					id: crypto.randomUUID(),
+					threadId: this.chatId,
+					message: message,
+					attachments: [...this.uploadedFiles, ...(attachments || [])]
+				},
+				toolName
+			);
 			this.uploadedFiles = [];
 
 			this.messages = appendMessage(this.messages, response.message);
