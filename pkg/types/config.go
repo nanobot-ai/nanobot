@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"iter"
 	"regexp"
 	"slices"
 	"strings"
@@ -405,15 +406,19 @@ type AgentPermissions struct {
 }
 
 // Allowed returns a list of the allowed permissions from the input.
-func (a *AgentPermissions) Allowed(from []string) []string {
+func (a *AgentPermissions) Allowed(from iter.Seq[string]) []string {
 	if a == nil || len(a.permissions) == 0 {
-		return from
+		var result []string
+		for perm := range from {
+			result = append(result, perm)
+		}
+		return result
 	}
 
 	var allowed []string
-	for _, pair := range from {
-		if a.IsAllowed(pair) {
-			allowed = append(allowed, pair)
+	for perm := range from {
+		if a.IsAllowed(perm) {
+			allowed = append(allowed, perm)
 		}
 	}
 	return allowed
