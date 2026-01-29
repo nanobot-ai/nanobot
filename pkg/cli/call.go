@@ -39,7 +39,7 @@ func (e *Call) Customize(cmd *cobra.Command) {
 }
 
 func (e *Call) Run(cmd *cobra.Command, args []string) error {
-	cfg, err := e.n.ReadConfig(cmd.Context(), args[0])
+	cfg, err := e.n.ReadConfig(cmd.Context(), args[0], !e.n.ExcludeBuiltInAgents)
 	if err != nil {
 		return err
 	}

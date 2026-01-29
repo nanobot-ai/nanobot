@@ -36,9 +36,9 @@ func hasMarkdownFiles(dirPath string) (bool, error) {
 }
 
 type frontMatterAgent struct {
-	Default bool
-	Mode    string
-	types.Agent
+	Default     bool
+	Mode        string
+	types.Agent `json:",inline" yaml:",inline"`
 }
 
 // parseMarkdownAgent parses a single .md file into an Agent

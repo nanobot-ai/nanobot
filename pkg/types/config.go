@@ -364,7 +364,7 @@ func (s *StringList) UnmarshalJSON(data []byte) error {
 }
 
 type Agent struct {
-	HookAgent `json:",inline"`
+	HookAgent `json:",inline" yaml:",inline"`
 	Output    *OutputSchema `json:"output,omitempty"`
 }
 

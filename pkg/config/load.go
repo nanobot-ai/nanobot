@@ -4,17 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
+	"github.com/nanobot-ai/nanobot/pkg/config/agents"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func Load(ctx context.Context, path string, profiles ...string) (cfg *types.Config, cwd string, err error) {
+func Load(ctx context.Context, path string, includeDefaultAgents bool, profiles ...string) (cfg *types.Config, cwd string, err error) {
 	defer func() {
 		if err != nil {
 			if _, fErr := os.Stat(path); fErr == nil && !strings.HasPrefix(path, "/") && !strings.HasPrefix(path, ".") {
@@ -27,14 +31,22 @@ func Load(ctx context.Context, path string, profiles ...string) (cfg *types.Conf
 		return nil, "", fmt.Errorf("error resolving config path %s: %w", path, err)
 	}
 
-	return loadResource(ctx, configResource, profiles...)
-}
+	cfg, cwd, err = loadResource(ctx, configResource, profiles...)
+	if err != nil || !includeDefaultAgents {
+		return cfg, cwd, err
+	}
 
-func LoadFromConfig(ctx context.Context, config types.Config, profiles ...string) (*types.Config, string, error) {
-	return loadResource(ctx, &resource{
-		resourceType: "static",
-		static:       &config,
-	}, profiles...)
+	// Load built-in agents from embedded markdown files
+	schemaContent, err := fs.ReadFile(agents.Builtin, "WORKFLOW_SCHEMA.md")
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to read WORKFLOW_SCHEMA.md: %w", err)
+	}
+
+	if err := loadBuiltinAgents(cfg, string(schemaContent)); err != nil {
+		return nil, "", err
+	}
+
+	return cfg, cwd, nil
 }
 
 func loadResource(ctx context.Context, configResource *resource, profiles ...string) (*types.Config, string, error) {
@@ -176,4 +188,81 @@ func Merge(base, overlay types.Config) (types.Config, error) {
 
 	var result types.Config
 	return result, json.Unmarshal(mergedData, &result)
+}
+
+// loadBuiltinAgents reads built-in agent definitions from the embedded filesystem
+// and adds them to the config. The workflowSchema is prepended to each agent's instructions.
+func loadBuiltinAgents(cfg *types.Config, workflowSchema string) error {
+	// Initialize agents map if nil
+	if cfg.Agents == nil {
+		cfg.Agents = make(map[string]types.Agent)
+	}
+
+	// Read all entries from the embedded filesystem
+	entries, err := fs.ReadDir(agents.Builtin, ".")
+	if err != nil {
+		return fmt.Errorf("failed to read builtin agents directory: %w", err)
+	}
+
+	// Process each .md file (except WORKFLOW_SCHEMA.md)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+
+		// Skip the workflow schema file itself
+		if entry.Name() == "WORKFLOW_SCHEMA.md" {
+			continue
+		}
+
+		// Extract agent name from filename (remove .md extension)
+		agentName := strings.TrimSuffix(entry.Name(), ".md")
+
+		// Check if agent already exists in config (built-in agents are always present)
+		if _, exists := cfg.Agents[agentName]; exists {
+			return fmt.Errorf("cannot override built-in agent %q: agent name is reserved", agentName)
+		}
+
+		// Read the markdown file
+		content, err := fs.ReadFile(agents.Builtin, entry.Name())
+		if err != nil {
+			return fmt.Errorf("failed to read builtin agent %q: %w", entry.Name(), err)
+		}
+
+		// Parse frontmatter and body
+		frontmatterYAML, body, err := parseFrontMatter(content)
+		if err != nil {
+			return fmt.Errorf("failed to parse frontmatter for builtin agent %q: %w", entry.Name(), err)
+		}
+
+		// If no frontmatter, treat entire content as instructions
+		var agentFromYAML frontMatterAgent
+		if frontmatterYAML != nil {
+			if err := yaml.Unmarshal(frontmatterYAML, &agentFromYAML); err != nil {
+				return fmt.Errorf("failed to unmarshal frontmatter for builtin agent %q: %w", entry.Name(), err)
+			}
+		}
+
+		// Prepend workflow schema to instructions, wrapped in XML-style tags
+		schemaPrefix := "<workflow_schema>\n" + workflowSchema + "\n</workflow_schema>\n\n"
+		instructions := schemaPrefix + body
+		agentFromYAML.Instructions = types.DynamicInstructions{
+			Instructions: instructions,
+		}
+
+		// Create the agent
+		agent := types.Agent{
+			HookAgent: agentFromYAML.HookAgent,
+		}
+
+		// Add to config
+		cfg.Agents[agentName] = agent
+
+		// If the agent is not marked as a subagent, then add it to the entrypoint list
+		if agentFromYAML.Mode != "subagent" {
+			cfg.Publish.Entrypoint = append(cfg.Publish.Entrypoint, agentName)
+		}
+	}
+
+	return nil
 }
