@@ -5,12 +5,6 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-var DefaultConfig = types.Config{
-	Agents: map[string]types.Agent{
-		"main": {},
-	},
-}
-
 var UI = types.Config{
 	Hooks: []mcp.HookMapping{
 		{

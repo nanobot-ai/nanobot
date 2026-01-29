@@ -5,7 +5,7 @@
 .venv
 .vscode
 bin/*
-.nanobot/
+.nanobot/*
 nanobot
 releases/*
 examples/customer/tools/travel2.sqlite
