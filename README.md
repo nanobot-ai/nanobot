@@ -102,7 +102,7 @@ Instead of using a `nanobot.yaml` file, you can organize your configuration as a
 my-config/
 ├── main.md              # Main agent (auto-set as entrypoint)
 ├── helper.md            # Additional agent
-└── mcpServers.yaml      # MCP server definitions
+└── mcp-servers.yaml      # MCP server definitions
 ```
 
 **Agent File Format (`main.md`):**
@@ -123,7 +123,7 @@ Help users find products and answer their questions.
 
 The YAML front-matter supports all agent configuration fields (model, name, mcpServers, tools, temperature, etc.), and the markdown body becomes the agent's instructions.
 
-**MCP Servers File (`mcpServers.yaml` or `mcpServers.json`):**
+**MCP Servers File (`mcp-servers.yaml` or `mcp-servers.json`):**
 
 ```yaml
 store:

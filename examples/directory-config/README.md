@@ -8,7 +8,7 @@ This directory demonstrates the directory-based configuration format for nanobot
 directory-config/
 ├── main.md              # Main agent (default entrypoint)
 ├── helper.md            # Additional helper agent
-├── mcpServers.yaml      # MCP server definitions
+├── mcp-servers.yaml      # MCP server definitions
 └── README.md            # This file
 ```
 
@@ -41,7 +41,7 @@ The markdown content after the front-matter becomes the agent's instructions.
 
 ## MCP Servers File
 
-Define MCP servers in `mcpServers.yaml` or `mcpServers.json`:
+Define MCP servers in `mcp-servers.yaml` or`mcp-servers.json`:
 
 ```yaml
 myserver:
@@ -50,7 +50,7 @@ myserver:
     Authorization: Bearer ${MY_TOKEN}
 ```
 
-**Note:** You can only have ONE of `mcpServers.yaml` or `mcpServers.json`, not both.
+**Note:** You can only have ONE of `mcp-servers.yaml` or `mcp-servers.json`, not both.
 
 ## Usage
 

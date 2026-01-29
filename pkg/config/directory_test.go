@@ -144,10 +144,10 @@ func TestLoadFromDirectory_JSON(t *testing.T) {
 func TestLoadFromDirectory_BothMCPFiles_Error(t *testing.T) {
 	_, err := loadFromDirectory("testdata/directory-both-mcp")
 	if err == nil {
-		t.Fatal("expected error when both mcpServers.yaml and mcpServers.json exist")
+		t.Fatal("expected error when both mcp-servers.yaml and mcp-servers.json exist")
 	}
 
-	if !strings.Contains(err.Error(), "both mcpServers.yaml and mcpServers.json found") {
+	if !strings.Contains(err.Error(), "both mcp-servers.yaml and mcp-servers.json found") {
 		t.Errorf("expected error about both files, got: %v", err)
 	}
 }
