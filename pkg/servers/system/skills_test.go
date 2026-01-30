@@ -185,7 +185,7 @@ func TestGetSkill(t *testing.T) {
 		},
 		{
 			name:          "get mcp-curl skill",
-			skillName:     "mcp-skill",
+			skillName:     "mcp-curl",
 			expectError:   false,
 			shouldContain: "name: mcp-curl",
 		},
