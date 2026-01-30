@@ -328,7 +328,6 @@ export interface UploadingFile {
 }
 
 // Workspace types
-export const WorkspaceMimeType = 'application/vnd.nanobot.workspace+json';
 export const SessionMimeType = 'application/vnd.nanobot.session+json';
 
 // Forward declaration for WorkspaceClient

@@ -6,6 +6,7 @@
 .vscode
 bin/*
 .nanobot/*
+workflows/*
 nanobot
 releases/*
 examples/customer/tools/travel2.sqlite

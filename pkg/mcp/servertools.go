@@ -100,7 +100,7 @@ func NewServerTool[In, Out any](name, description string, handler func(ctx conte
 	if err != nil {
 		panic(err)
 	}
-	data, err := json.Marshal(inSchema)
+	inputData, err := json.Marshal(inSchema)
 	if err != nil {
 		panic(err)
 	}
@@ -109,7 +109,7 @@ func NewServerTool[In, Out any](name, description string, handler func(ctx conte
 		tool: Tool{
 			Name:        name,
 			Description: description,
-			InputSchema: data,
+			InputSchema: inputData,
 		},
 		f: handler,
 	}

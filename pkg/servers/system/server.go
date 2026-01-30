@@ -159,7 +159,68 @@ The path parameter is relative to the working directory if not specified as abso
 		// TodoRead tool
 		mcp.NewServerTool("todoRead", `Use this tool to read your todo list`, s.todoRead),
 		// TodoWrite tool
-		mcp.NewServerTool("todoWrite", `Use this tool to create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.`, s.todoWrite),
+		mcp.NewServerTool("todoWrite", `Use this tool to create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.
+It also helps the user understand the progress of the task and overall progress of their requests.
+
+## When to Use This Tool
+Use this tool proactively in these scenarios:
+
+1. Complex multi-step tasks - When a task requires 3 or more distinct steps or actions
+2. Non-trivial and complex tasks - Tasks that require careful planning or multiple operations
+3. User explicitly requests todo list - When the user directly asks you to use the todo list
+4. User provides multiple tasks - When users provide a list of things to be done (numbered or comma-separated)
+5. After receiving new instructions - Immediately capture user requirements as todos
+6. When you start working on a task - Mark it as in_progress BEFORE beginning work. Ideally you should only have one todo as in_progress at a time
+7. After completing a task - Mark it as completed and add any new follow-up tasks discovered during implementation
+
+## When NOT to Use This Tool
+
+Skip using this tool when:
+1. There is only a single, straightforward task
+2. The task is trivial and tracking it provides no organizational benefit
+3. The task can be completed in less than 3 trivial steps
+4. The task is purely conversational or informational
+
+NOTE that you should not use this tool if there is only one trivial task to do. In this case you are better off just doing the task directly.
+
+## Task States and Management
+
+1. **Task States**: Use these states to track progress:
+   - pending: Task not yet started
+   - in_progress: Currently working on (limit to ONE task at a time)
+   - completed: Task finished successfully
+
+   **IMPORTANT**: Task descriptions must have two forms:
+   - content: The imperative form describing what needs to be done (e.g., "Run tests", "Build the project")
+   - activeForm: The present continuous form shown during execution (e.g., "Running tests", "Building the project")
+
+2. **Task Management**:
+   - Update task status in real-time as you work
+   - Mark tasks complete IMMEDIATELY after finishing (don't batch completions)
+   - Exactly ONE task must be in_progress at any time (not less, not more)
+   - Complete current tasks before starting new ones
+   - Remove tasks that are no longer relevant from the list entirely
+
+3. **Task Completion Requirements**:
+   - ONLY mark a task as completed when you have FULLY accomplished it
+   - If you encounter errors, blockers, or cannot finish, keep the task as in_progress
+   - When blocked, create a new task describing what needs to be resolved
+   - Never mark a task as completed if:
+     - Tests are failing
+     - Implementation is partial
+     - You encountered unresolved errors
+     - You couldn't find necessary files or dependencies
+
+4. **Task Breakdown**:
+   - Create specific, actionable items
+   - Break complex tasks into smaller, manageable steps
+   - Use clear, descriptive task names
+   - Always provide both forms:
+     - content: "Fix authentication bug"
+     - activeForm: "Fixing authentication bug"
+
+When in doubt, use this tool. Being proactive with task management demonstrates attentiveness and ensures you complete all requirements successfully.
+`, s.todoWrite),
 		// WebFetch tool
 		mcp.NewServerTool("webFetch", `
 - Fetches content from a specified URL and returns it in the requested format
@@ -655,7 +716,7 @@ func (s *Server) grep(ctx context.Context, params GrepParams) (string, error) {
 	}
 
 	// Apply offset and limit
-	offset := 0
+	var offset int
 	if params.Offset != nil {
 		offset = *params.Offset
 	}
@@ -699,15 +760,18 @@ func (s *Server) grep(ctx context.Context, params GrepParams) (string, error) {
 	return strings.TrimSpace(result.String()), nil
 }
 
-// TodoWrite tool
 type TodoItem struct {
 	Content    string `json:"content"`
 	Status     string `json:"status"`
 	ActiveForm string `json:"activeForm"`
 }
 
+type Todos struct {
+	Todos []TodoItem `json:"todos"`
+}
+
 // TodoRead tool
-func (s *Server) todoRead(ctx context.Context, _ struct{}) ([]TodoItem, error) {
+func (s *Server) todoRead(ctx context.Context, _ any) (Todos, error) {
 	// Get session ID
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
 
@@ -717,22 +781,22 @@ func (s *Server) todoRead(ctx context.Context, _ struct{}) ([]TodoItem, error) {
 	// Check if file exists
 	if _, err := os.Stat(todoPath); os.IsNotExist(err) {
 		// Return empty list if file doesn't exist
-		return []TodoItem{}, nil
+		return Todos{}, nil
 	}
 
 	// Read file
 	data, err := os.ReadFile(todoPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read todo file: %w", err)
+		return Todos{}, fmt.Errorf("failed to read todo file: %w", err)
 	}
 
 	// Unmarshal JSON
 	var todos []TodoItem
 	if err := json.Unmarshal(data, &todos); err != nil {
-		return nil, fmt.Errorf("failed to parse todo file: %w", err)
+		return Todos{}, fmt.Errorf("failed to parse todo file: %w", err)
 	}
 
-	return todos, nil
+	return Todos{Todos: todos}, nil
 }
 
 // TodoWrite tool
@@ -742,7 +806,7 @@ type TodoWriteParams struct {
 
 func (s *Server) todoWrite(ctx context.Context, params TodoWriteParams) (string, error) {
 	// Validate only one in_progress task
-	inProgressCount := 0
+	var inProgressCount int
 	for _, todo := range params.Todos {
 		if todo.Status == "in_progress" {
 			inProgressCount++
