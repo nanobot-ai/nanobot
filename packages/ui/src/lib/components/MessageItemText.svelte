@@ -18,7 +18,8 @@
 		{
 			'mb-3': role === 'assistant',
 			'p-4': role === 'assistant',
-			'bg-base-200': role === 'user'
+			'bg-base-200': role === 'user',
+			'whitespace-pre-wrap': role === 'user'
 		}
 	]}
 >
