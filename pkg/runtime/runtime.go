@@ -44,6 +44,7 @@ type Options struct {
 	TokenExchangeClientID     string
 	TokenExchangeClientSecret string
 	AuditLogCollector         *auditlogs.Collector
+	ConfigDir                 string
 }
 
 func (o Options) Merge(other Options) (result Options) {
@@ -58,6 +59,7 @@ func (o Options) Merge(other Options) (result Options) {
 	result.TokenExchangeClientID = complete.Last(o.TokenExchangeClientID, other.TokenExchangeClientID)
 	result.TokenExchangeClientSecret = complete.Last(o.TokenExchangeClientSecret, other.TokenExchangeClientSecret)
 	result.AuditLogCollector = complete.Last(o.AuditLogCollector, other.AuditLogCollector)
+	result.ConfigDir = complete.Last(o.ConfigDir, other.ConfigDir)
 	return
 }
 
@@ -105,7 +107,7 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 	})
 
 	registry.AddServer("nanobot.system", func(string) mcp.MessageHandler {
-		return system.NewServer()
+		return system.NewServer(opt.ConfigDir)
 	})
 
 	if opt.DSN != "" {

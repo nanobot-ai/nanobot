@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -59,8 +60,10 @@ func parseFrontmatter(content string) (map[string]string, error) {
 }
 
 func (s *Server) listSkills(ctx context.Context, _ struct{}) (*SkillList, error) {
-	var result []Skill
+	// Use a map to dedupe by name, with user skills taking precedence
+	skillMap := make(map[string]Skill)
 
+	// First, load built-in skills from embedded FS
 	err := fs.WalkDir(skills.Skills, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -84,16 +87,56 @@ func (s *Server) listSkills(ctx context.Context, _ struct{}) (*SkillList, error)
 			return nil
 		}
 
-		result = append(result, Skill{
+		skillMap[frontmatter["name"]] = Skill{
 			Name:        frontmatter["name"],
 			Description: frontmatter["description"],
-		})
+		}
 
 		return nil
 	})
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Then, load user skills from config directory (if it exists)
+	// User skills override built-in skills with the same name
+	if s.configDir != "" {
+		userSkillsDir := filepath.Join(s.configDir, "skills")
+		entries, err := os.ReadDir(userSkillsDir)
+		if err == nil {
+			// Directory exists, read skills from it
+			for _, entry := range entries {
+				if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
+					continue
+				}
+
+				content, err := os.ReadFile(filepath.Join(userSkillsDir, entry.Name()))
+				if err != nil {
+					// Skip files we can't read
+					continue
+				}
+
+				frontmatter, err := parseFrontmatter(string(content))
+				if err != nil {
+					// Skip files without valid frontmatter
+					continue
+				}
+
+				// User skills override built-in skills
+				skillMap[frontmatter["name"]] = Skill{
+					Name:        frontmatter["name"],
+					Description: frontmatter["description"],
+				}
+			}
+		}
+		// If directory doesn't exist or can't be read, silently continue
+	}
+
+	// Convert map to slice
+	result := make([]Skill, 0, len(skillMap))
+	for _, skill := range skillMap {
+		result = append(result, skill)
 	}
 
 	return &SkillList{
@@ -112,7 +155,17 @@ func (s *Server) getSkill(ctx context.Context, params GetSkillParams) (string, e
 		skillName = skillName + ".md"
 	}
 
-	// Read the skill file
+	// First, try to read from user skills directory (if configured)
+	if s.configDir != "" {
+		userSkillPath := filepath.Join(s.configDir, "skills", skillName)
+		content, err := os.ReadFile(userSkillPath)
+		if err == nil {
+			return string(content), nil
+		}
+		// If file doesn't exist or can't be read, fall through to embedded skills
+	}
+
+	// Fall back to embedded skills
 	content, err := fs.ReadFile(skills.Skills, skillName)
 	if err != nil {
 		return "", mcp.ErrRPCInvalidParams.WithMessage("skill '%s' not found", params.Name)
