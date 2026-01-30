@@ -245,25 +245,29 @@ func TestLoadFromDirectory_MissingServer_Error(t *testing.T) {
 }
 
 func TestHasMarkdownFiles(t *testing.T) {
-	// Directory with .md files
+	// Directory with agents/ subdirectory containing .md files
 	hasMd, err := hasMarkdownFiles("testdata/directory-simple")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	if !hasMd {
-		t.Error("expected directory-simple to have .md files")
+		t.Error("expected directory-simple to have .md files in agents/")
 	}
 
-	// Directory that doesn't exist
-	_, err = hasMarkdownFiles("testdata/nonexistent")
-	if err == nil {
-		t.Error("expected error for non-existent directory")
+	// Directory that doesn't exist - should return false without error
+	// since it simply means no agents/ subdirectory exists
+	hasMd, err = hasMarkdownFiles("testdata/nonexistent")
+	if err != nil {
+		t.Fatalf("unexpected error for non-existent directory: %v", err)
+	}
+	if hasMd {
+		t.Error("expected non-existent directory to not have .md files")
 	}
 }
 
 func TestParseMarkdownAgent_IDFromFilename(t *testing.T) {
-	agentID, agent, err := parseMarkdownAgent("testdata/directory-simple/main.md")
+	agentID, agent, err := parseMarkdownAgent("testdata/directory-simple/agents/main.md")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -279,7 +283,7 @@ func TestParseMarkdownAgent_IDFromFilename(t *testing.T) {
 }
 
 func TestParseMarkdownAgent_AllFields(t *testing.T) {
-	agentID, agent, err := parseMarkdownAgent("testdata/directory-simple/main.md")
+	agentID, agent, err := parseMarkdownAgent("testdata/directory-simple/agents/main.md")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -433,7 +437,7 @@ func TestLoadFromDirectory_DefaultSubagent_Error(t *testing.T) {
 }
 
 func TestParseMarkdownAgent_DefaultField(t *testing.T) {
-	agentID, agent, err := parseMarkdownAgent("testdata/directory-default-single/agent.md")
+	agentID, agent, err := parseMarkdownAgent("testdata/directory-default-single/agents/agent.md")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -452,7 +456,7 @@ func TestParseMarkdownAgent_DefaultField(t *testing.T) {
 }
 
 func TestParseMarkdownAgent_NoDefaultField(t *testing.T) {
-	agentID, agent, err := parseMarkdownAgent("testdata/directory-simple/main.md")
+	agentID, agent, err := parseMarkdownAgent("testdata/directory-simple/agents/main.md")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -691,7 +695,7 @@ func TestLoadFromDirectory_ModeInvalid_Error(t *testing.T) {
 }
 
 func TestParseMarkdownAgent_ModeField(t *testing.T) {
-	agentID, agent, err := parseMarkdownAgent("testdata/directory-mode-chat/agent.md")
+	agentID, agent, err := parseMarkdownAgent("testdata/directory-mode-chat/agents/agent.md")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -710,7 +714,7 @@ func TestParseMarkdownAgent_ModeField(t *testing.T) {
 }
 
 func TestParseMarkdownAgent_NoModeField(t *testing.T) {
-	agentID, agent, err := parseMarkdownAgent("testdata/directory-simple/main.md")
+	agentID, agent, err := parseMarkdownAgent("testdata/directory-simple/agents/main.md")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

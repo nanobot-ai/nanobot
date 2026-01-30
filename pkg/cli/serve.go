@@ -51,14 +51,14 @@ func (r *Run) Customize(cmd *cobra.Command) {
 	cmd.Long = `Run the nanobot using the specified configuration.
 
 If a configuration is not specified with the --config, the nanobot.yaml in the .nanobot/ directory
-will be used if it exists. Otherwise, the markdown files in the .nanobot/ directory
+will be used if it exists. Otherwise, the markdown files in the .nanobot/agents/ subdirectory
 will be used as the configuration.
 
 To change the configuration location, use the --config flag. The same rules apply:
 - If --config is a file, then it will be used as the nanobot.yaml file.
 - If --config is a directory, then:
 	- If a nanobot.yaml file is found at the specified location, it will be used.
-	- If no nanobot.yaml file is found, the markdown files in the specified directory will be used.
+	- If no nanobot.yaml file is found, the markdown files in the agents/ subdirectory will be used.
 
 The configuration location can also be a URL, in which case the contents will be treated as a nanobot.yaml file.
 
@@ -67,7 +67,7 @@ only supports YAML configuration files (i.e., nanobot.yaml) and not a directory 
 `
 
 	cmd.Example = `
-  # Run the nanobot.yaml, if found, otherwise the markdown files in the .nanobot/ directory
+  # Run the nanobot.yaml, if found, otherwise the markdown files in the .nanobot/agents/ directory
   nanobot run
 
   # Run with the nanobot.yaml or agent markdown files in the GitHub repo github.com/example/nanobot
