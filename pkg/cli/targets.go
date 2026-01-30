@@ -23,13 +23,13 @@ func NewTargets(n *Nanobot) *Targets {
 
 func (t *Targets) Customize(cmd *cobra.Command) {
 	cmd.Hidden = true
-	cmd.Use = "targets [flags] NANOBOT"
+	cmd.Use = "targets [flags]"
 	cmd.Short = "List the available tools, agents, flows that can be called using \"nanobot call\"."
 	cmd.Aliases = []string{"target", "t"}
-	cmd.Args = cobra.ExactArgs(1)
+	cmd.Args = cobra.NoArgs
 	cmd.Example = `
   # List the tools from nanobot.yaml in the current directory
-  nanobot run .
+  nanobot targets -c ./nanobot.yaml
 `
 }
 
@@ -40,7 +40,7 @@ func (t *Targets) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	c, err := t.n.ReadConfig(cmd.Context(), args[0], !t.n.ExcludeBuiltInAgents)
+	c, err := t.n.ReadConfig(cmd.Context(), t.n.ConfigPath, !t.n.ExcludeBuiltInAgents)
 	if err != nil {
 		return err
 	}

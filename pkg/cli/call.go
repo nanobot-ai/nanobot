@@ -22,24 +22,24 @@ func NewCall(n *Nanobot) *Call {
 
 func (e *Call) Customize(cmd *cobra.Command) {
 	cmd.Hidden = true
-	cmd.Use = "call [flags] NANOBOT_CONFIG TARGET_NAME [INPUT...]"
+	cmd.Use = "call [flags] TARGET_NAME [INPUT...]"
 	cmd.Short = "Call a single tool, agent, or flow in the nanobot. Use \"nanobot targets\" to list available targets."
 	cmd.Example = `
   # Run a tool, passing in a JSON object as input. Tools expect a JSON object as input.
-  nanobot call . server1/tool1 '{"arg1": "value1", "arg2": "value2"}'
+  nanobot call server1/tool1 '{"arg1": "value1", "arg2": "value2"}'
 
   # Run a tool, passing in the same input as above, but using a friendly format.
-  nanobot call . server1/tool1 --arg1=value1 --arg2 value2
+  nanobot call server1/tool1 --arg1=value1 --arg2 value2
 
-  # Run an agent, passing in a string as input. If the input is JSON it will be based as is.
-  nanobot call . agent1 "What is the weather like today?"
+  # Run an agent from the current directory, passing in a string as input. If the input is JSON it will be based as is.
+  nanobot call -c . agent1 "What is the weather like today?"
 `
-	cmd.Args = cobra.MinimumNArgs(2)
+	cmd.Args = cobra.MinimumNArgs(1)
 	cmd.Flags().SetInterspersed(false)
 }
 
 func (e *Call) Run(cmd *cobra.Command, args []string) error {
-	cfg, err := e.n.ReadConfig(cmd.Context(), args[0], !e.n.ExcludeBuiltInAgents)
+	cfg, err := e.n.ReadConfig(cmd.Context(), e.n.ConfigPath, !e.n.ExcludeBuiltInAgents)
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func (e *Call) Run(cmd *cobra.Command, args []string) error {
 
 	ctx := runtime.WithTempSession(cmd.Context(), cfg)
 
-	result, err := runtime.CallFromCLI(ctx, args[1], args[2:]...)
+	result, err := runtime.CallFromCLI(ctx, args[0], args[1:]...)
 	if err != nil {
 		return err
 	}
