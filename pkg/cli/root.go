@@ -61,6 +61,7 @@ type Nanobot struct {
 	MaxConcurrency          int               `usage:"The maximum number of concurrent tasks in a parallel loop" default:"10" hidden:"true"`
 	Chdir                   string            `usage:"Change directory to this path before running the nanobot" default:"." short:"C"`
 	State                   string            `usage:"Path to the state file" default:"./nanobot.db"`
+	ConfigPath              string            `usage:"Path to nanobot configuration file or directory" default:".nanobot/" name:"config" short:"c"`
 	ExcludeBuiltInAgents    bool              `usage:"Exclude built-in agents from the configuration"`
 
 	env map[string]string

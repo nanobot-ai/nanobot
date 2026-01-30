@@ -22,7 +22,6 @@ import (
 
 type Run struct {
 	Auth
-	ConfigPath                   string            `usage:"Path to nanobot configuration file or directory" default:".nanobot/" name:"config" short:"c"`
 	ListenAddress                string            `usage:"Address to listen on" default:"localhost:8080" short:"a"`
 	DisableUI                    bool              `usage:"Disable the UI"`
 	ForceFetchToolList           bool              `usage:"Always fetch tools when listing instead of using session cache"`
@@ -136,7 +135,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		if profiles != "" {
 			optCopy.Profiles = append(optCopy.Profiles, strings.Split(profiles, ",")...)
 		}
-		cfg, err := r.n.ReadConfig(cmd.Context(), r.ConfigPath, !r.n.ExcludeBuiltInAgents, optCopy)
+		cfg, err := r.n.ReadConfig(cmd.Context(), r.n.ConfigPath, !r.n.ExcludeBuiltInAgents, optCopy)
 		if err != nil {
 			return types.Config{}, err
 		}
@@ -155,7 +154,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 
 	once, err := cfgFactory(cmd.Context(), "")
 	if err != nil {
-		return fmt.Errorf("failed to read config from %q: %w", r.ConfigPath, err)
+		return fmt.Errorf("failed to read config from %q: %w", r.n.ConfigPath, err)
 	}
 
 	cfg, _ := json.MarshalIndent(once, "", "  ")
