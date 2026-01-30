@@ -256,11 +256,11 @@ Create a report for manual review: {{analyze_issue}}
 
 Step outputs should end with a status marker to indicate completion state:
 
-| Status | Meaning |
-|--------|---------|
-| `STATUS: COMPLETE` | Task fully accomplished, all items processed |
-| `STATUS: PARTIAL` | Some items processed but not all (explain what's missing) |
-| `STATUS: BLOCKED` | Cannot complete due to missing information or access (explain blocker) |
+| Status             | Meaning                                                                |
+|--------------------|------------------------------------------------------------------------|
+| `STATUS: COMPLETE` | Task fully accomplished, all items processed                           |
+| `STATUS: PARTIAL`  | Some items processed but not all (explain what's missing)              |
+| `STATUS: BLOCKED`  | Cannot complete due to missing information or access (explain blocker) |
 
 This helps the executor track progress and enables better error handling and reporting in execution summaries.
 
