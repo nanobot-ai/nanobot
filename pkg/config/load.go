@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -32,8 +33,12 @@ func Load(ctx context.Context, path string, includeDefaultAgents bool, profiles 
 	}
 
 	cfg, cwd, err = loadResource(ctx, configResource, profiles...)
-	if err != nil || !includeDefaultAgents {
-		return cfg, cwd, err
+	if err != nil {
+		if !includeDefaultAgents || !errors.Is(err, NoConfigFoundErr) || path != ".nanobot/" {
+			return cfg, cwd, err
+		}
+	} else if !includeDefaultAgents {
+		return cfg, cwd, nil
 	}
 
 	// Load built-in agents from embedded markdown files
@@ -42,6 +47,9 @@ func Load(ctx context.Context, path string, includeDefaultAgents bool, profiles 
 		return nil, "", fmt.Errorf("failed to read WORKFLOW_SCHEMA.md: %w", err)
 	}
 
+	if cfg == nil {
+		cfg = new(types.Config)
+	}
 	if err := loadBuiltinAgents(cfg, string(schemaContent)); err != nil {
 		return nil, "", err
 	}

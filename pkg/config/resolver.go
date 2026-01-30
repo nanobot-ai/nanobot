@@ -25,6 +25,8 @@ type resource struct {
 }
 
 var (
+	NoConfigFoundErr = fmt.Errorf("no configuration found")
+
 	httpCache map[string]struct {
 		data []byte
 		last time.Time
@@ -220,7 +222,7 @@ func (r *resource) read(ctx context.Context) ([]byte, error) {
 			return loadFromDirectory(r.url)
 		}
 
-		return nil, fmt.Errorf("%s does not exist", r.url)
+		return nil, fmt.Errorf("%w at %s", NoConfigFoundErr, r.url)
 	}
 
 	if r.resourceType == "git" {
