@@ -6,12 +6,6 @@ import (
 )
 
 var UI = types.Config{
-	Hooks: []mcp.HookMapping{
-		{
-			Name:    "session",
-			Targets: []string{"nanobot.capabilities/init_session"},
-		},
-	},
 	Agents: map[string]types.Agent{
 		"nanobot.summary": {
 			HookAgent: types.HookAgent{
@@ -26,11 +20,11 @@ var UI = types.Config{
 		},
 	},
 	Publish: types.Publish{
-		MCPServers: []string{"nanobot.meta", "nanobot.resources"},
+		MCPServers: []string{"nanobot.meta", "nanobot.workflows", "nanobot.system/todoRead"},
 	},
 	MCPServers: map[string]mcp.Server{
-		"nanobot.meta":         {},
-		"nanobot.resources":    {},
-		"nanobot.capabilities": {},
+		"nanobot.meta":      {},
+		"nanobot.workflows": {},
+		"nanobot.system":    {},
 	},
 }

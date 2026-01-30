@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/agents"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -15,11 +14,9 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
 	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
-	"github.com/nanobot-ai/nanobot/pkg/servers/capabilities"
 	"github.com/nanobot-ai/nanobot/pkg/servers/meta"
-	"github.com/nanobot-ai/nanobot/pkg/servers/resources"
 	"github.com/nanobot-ai/nanobot/pkg/servers/system"
-	"github.com/nanobot-ai/nanobot/pkg/servers/workspace"
+	"github.com/nanobot-ai/nanobot/pkg/servers/workflows"
 	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
 	"github.com/nanobot-ai/nanobot/pkg/tools"
@@ -110,39 +107,9 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 		return system.NewServer(opt.ConfigDir)
 	})
 
-	if opt.DSN != "" {
-		var (
-			once  = &sync.Once{}
-			store *resources.Store
-		)
-		// Get session store for resources server
-		sessionStore, ok := opt.TokenStorage.(*session.Store)
-		if !ok {
-			panic(fmt.Errorf("token storage is not a session store"))
-		}
-		registry.AddServer("nanobot.resources", func(string) mcp.MessageHandler {
-			once.Do(func() {
-				var err error
-				store, err = resources.NewStoreFromDSN(opt.DSN)
-				if err != nil {
-					panic(fmt.Errorf("failed to create resources store: %w", err))
-				}
-			})
-			return resources.NewServer(store, r.Service, sessionStore)
-		})
-
-		workspaceStore, err := workspace.NewStoreFromDSN(opt.DSN)
-		if err != nil {
-			panic(fmt.Errorf("failed to create workspace store: %w", err))
-		}
-
-		registry.AddServer("nanobot.workspace", func(string) mcp.MessageHandler {
-			return workspace.NewServer(workspaceStore, sessionStore, r.Service)
-		})
-		registry.AddServer("nanobot.capabilities", func(string) mcp.MessageHandler {
-			return capabilities.NewServer(workspaceStore, r.Service)
-		})
-	}
+	registry.AddServer("nanobot.workflows", func(string) mcp.MessageHandler {
+		return workflows.NewServer()
+	})
 
 	return r, nil
 }
