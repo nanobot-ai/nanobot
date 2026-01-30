@@ -11,7 +11,7 @@ func uriToRegexp(template string) (*regexp.Regexp, error) {
 	var result strings.Builder
 	result.WriteByte('^')
 
-	i := 0
+	var i int
 	for i < len(template) {
 		if template[i] == '{' {
 			// Find the end of the template variable
