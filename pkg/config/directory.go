@@ -12,10 +12,13 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// hasMarkdownFiles checks if a directory contains any .md files (non-hidden)
+// hasMarkdownFiles checks if the agents/ subdirectory contains any .md files (non-hidden)
 func hasMarkdownFiles(dirPath string) (bool, error) {
-	entries, err := os.ReadDir(dirPath)
+	entries, err := os.ReadDir(filepath.Join(dirPath, "agents"))
 	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
 		return false, err
 	}
 
@@ -79,11 +82,12 @@ func parseMarkdownAgent(filePath string) (string, frontMatterAgent, error) {
 	return agentID, parsed, nil
 }
 
-// loadAgentsFromMarkdown scans a directory for .md files and parses them as agent definitions
+// loadAgentsFromMarkdown scans the agents/ subdirectory for .md files and parses them as agent definitions
 func loadAgentsFromMarkdown(config *types.Config, dirPath string) error {
-	entries, err := os.ReadDir(dirPath)
+	agentsDir := filepath.Join(dirPath, "agents")
+	entries, err := os.ReadDir(agentsDir)
 	if err != nil {
-		return fmt.Errorf("error reading directory %s: %w", dirPath, err)
+		return fmt.Errorf("error reading directory %s: %w", agentsDir, err)
 	}
 
 	var explicitDefaultAgent string
@@ -106,7 +110,7 @@ func loadAgentsFromMarkdown(config *types.Config, dirPath string) error {
 			continue
 		}
 
-		filePath := filepath.Join(dirPath, name)
+		filePath := filepath.Join(agentsDir, name)
 		agentID, agent, err := parseMarkdownAgent(filePath)
 		if err != nil {
 			return err
@@ -135,7 +139,7 @@ func loadAgentsFromMarkdown(config *types.Config, dirPath string) error {
 	}
 
 	if len(config.Agents) == 0 {
-		return fmt.Errorf("no agent .md files found in directory: %s", dirPath)
+		return fmt.Errorf("no agent .md files found in directory: %s", agentsDir)
 	}
 
 	// Auto-set default agent to first non-subagent lexicographically if no explicit default
@@ -155,7 +159,7 @@ func loadAgentsFromMarkdown(config *types.Config, dirPath string) error {
 	}
 
 	if explicitDefaultAgent == "" {
-		return fmt.Errorf("no valid default agent could be determined from directory: %s", dirPath)
+		return fmt.Errorf("no valid default agent could be determined from directory: %s", agentsDir)
 	}
 
 	// Ensure the explicitDefaultAgent is the first in the entrypoint list

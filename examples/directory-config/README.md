@@ -6,15 +6,16 @@ This directory demonstrates the directory-based configuration format for nanobot
 
 ```
 directory-config/
-├── main.md              # Main agent (default entrypoint)
-├── helper.md            # Additional helper agent
-├── mcp-servers.yaml      # MCP server definitions
+├── agents/              # Agent definitions directory
+│   ├── main.md          # Main agent (default entrypoint)
+│   └── helper.md        # Additional helper agent
+├── mcp-servers.yaml     # MCP server definitions
 └── README.md            # This file
 ```
 
 ## Agent Files (.md)
 
-Each `.md` file defines one agent with YAML front-matter:
+Agent `.md` files are placed in the `agents/` subdirectory. Each file defines one agent with YAML front-matter:
 
 ### Front-Matter Fields
 
@@ -62,4 +63,4 @@ nanobot run ./examples/directory-config/
 
 ## Entrypoint Behavior
 
-If a `main.md` file exists, it will automatically be set as the default published entrypoint agent. In this example, the Shopping Assistant is the main agent.
+If a `main.md` file exists in the `agents/` directory, it will automatically be set as the default published entrypoint agent. In this example, the Shopping Assistant is the main agent.
