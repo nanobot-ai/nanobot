@@ -141,6 +141,11 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		}
 
 		if r.EntrypointAgent != "" {
+			// If the provided entrypoint isn't in the config, return an error
+			if _, ok := cfg.Agents[r.EntrypointAgent]; !ok {
+				return types.Config{}, fmt.Errorf("entrypoint agent %q not found in configuration", r.EntrypointAgent)
+			}
+
 			// Ensure the entrypoint agent is the first agent in the entrypoint list
 			idx := slices.Index(cfg.Publish.Entrypoint, r.EntrypointAgent)
 			if idx > 0 {
