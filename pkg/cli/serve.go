@@ -128,6 +128,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		TokenExchangeEndpoint:     r.Auth.OAuthTokenURL,
 		TokenExchangeClientID:     r.Auth.OAuthClientID,
 		TokenExchangeClientSecret: r.Auth.OAuthClientSecret,
+		ConfigDir:                 r.n.ConfigPath,
 	}
 
 	cfgFactory := types.ConfigFactory(func(ctx context.Context, profiles string) (types.Config, error) {

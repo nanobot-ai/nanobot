@@ -46,11 +46,12 @@ var allowedTools = map[string][]string{
 }
 
 type Server struct {
-	tools mcp.ServerTools
+	configDir string
+	tools     mcp.ServerTools
 }
 
-func NewServer() *Server {
-	s := &Server{}
+func NewServer(configDir string) *Server {
+	s := &Server{configDir: configDir}
 
 	s.tools = mcp.NewServerTools(
 		// Config tool to setup system tools based on permissions

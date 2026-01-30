@@ -2,39 +2,161 @@ package system
 
 import (
 	"context"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
+// testdataDir returns the absolute path to the testdata directory
+func testdataDir(t *testing.T, subdir string) string {
+	t.Helper()
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("failed to get caller info")
+	}
+	return filepath.Join(filepath.Dir(filename), "testdata", subdir)
+}
+
 func TestListSkills(t *testing.T) {
-	server := NewServer()
+	server := NewServer("")
 	ctx := context.Background()
 
 	result, err := server.listSkills(ctx, struct{}{})
-	require.NoError(t, err)
-	require.NotNil(t, result)
+	if err != nil {
+		t.Fatalf("listSkills() failed: %v", err)
+	}
+	if result == nil {
+		t.Fatal("listSkills() returned nil result")
+	}
 
 	// We should have at least the 3 skills we know about
-	assert.GreaterOrEqual(t, len(result.Skills), 3)
+	if len(result.Skills) < 3 {
+		t.Errorf("expected at least 3 skills, got %d", len(result.Skills))
+	}
 
 	// Verify the skills have names and descriptions
 	skillNames := make(map[string]bool)
 	for _, skill := range result.Skills {
-		assert.NotEmpty(t, skill.Name, "skill name should not be empty")
-		assert.NotEmpty(t, skill.Description, "skill description should not be empty")
+		if skill.Name == "" {
+			t.Error("skill name should not be empty")
+		}
+		if skill.Description == "" {
+			t.Error("skill description should not be empty")
+		}
 		skillNames[skill.Name] = true
 	}
 
 	// Check for expected skills
-	assert.True(t, skillNames["python-scripts"], "should have python-scripts skill")
-	assert.True(t, skillNames["learn"], "should have learn skill")
-	assert.True(t, skillNames["mcp-curl"], "should have mcp-curl skill")
+	expectedSkills := []string{"python-scripts", "learn", "mcp-curl"}
+	for _, expected := range expectedSkills {
+		if !skillNames[expected] {
+			t.Errorf("should have %s skill", expected)
+		}
+	}
+}
+
+func TestListSkillsWithUserSkills(t *testing.T) {
+	server := NewServer(testdataDir(t, "with-user-skills"))
+	ctx := context.Background()
+
+	result, err := server.listSkills(ctx, struct{}{})
+	if err != nil {
+		t.Fatalf("listSkills() failed: %v", err)
+	}
+	if result == nil {
+		t.Fatal("listSkills() returned nil result")
+	}
+
+	// Verify user skill is included
+	skillNames := make(map[string]bool)
+	for _, skill := range result.Skills {
+		skillNames[skill.Name] = true
+	}
+
+	// Check user skills are present
+	if !skillNames["user-skill"] {
+		t.Error("should have user-skill")
+	}
+	if !skillNames["my-custom-skill"] {
+		t.Error("should have my-custom-skill")
+	}
+	// Built-in skills should still be there
+	if !skillNames["python-scripts"] {
+		t.Error("should have python-scripts skill")
+	}
+}
+
+func TestListSkillsUserOverridesBuiltin(t *testing.T) {
+	server := NewServer(testdataDir(t, "with-override"))
+	ctx := context.Background()
+
+	result, err := server.listSkills(ctx, struct{}{})
+	if err != nil {
+		t.Fatalf("listSkills() failed: %v", err)
+	}
+	if result == nil {
+		t.Fatal("listSkills() returned nil result")
+	}
+
+	// Find the learn skill and verify it has the overridden description
+	var learnSkill *Skill
+	for _, skill := range result.Skills {
+		if skill.Name == "learn" {
+			learnSkill = &skill
+			break
+		}
+	}
+
+	if learnSkill == nil {
+		t.Fatal("learn skill should exist")
+	}
+	expectedDesc := "My custom learn skill that overrides the built-in"
+	if learnSkill.Description != expectedDesc {
+		t.Errorf("learn skill description = %q, want %q", learnSkill.Description, expectedDesc)
+	}
+}
+
+func TestListSkillsMissingDirectory(t *testing.T) {
+	// Use a non-existent directory - should not error
+	server := NewServer("/non/existent/directory")
+	ctx := context.Background()
+
+	result, err := server.listSkills(ctx, struct{}{})
+	if err != nil {
+		t.Fatalf("listSkills() should not error on missing directory: %v", err)
+	}
+	if result == nil {
+		t.Fatal("listSkills() returned nil result")
+	}
+
+	// Should still have built-in skills
+	if len(result.Skills) < 3 {
+		t.Errorf("should have at least 3 built-in skills, got %d", len(result.Skills))
+	}
+}
+
+func TestListSkillsEmptyDirectory(t *testing.T) {
+	// Use a directory with an empty skills subdirectory
+	server := NewServer(testdataDir(t, "empty-skills"))
+	ctx := context.Background()
+
+	result, err := server.listSkills(ctx, struct{}{})
+	if err != nil {
+		t.Fatalf("listSkills() failed: %v", err)
+	}
+	if result == nil {
+		t.Fatal("listSkills() returned nil result")
+	}
+
+	// Should still have built-in skills
+	if len(result.Skills) < 3 {
+		t.Errorf("should have at least 3 built-in skills, got %d", len(result.Skills))
+	}
 }
 
 func TestGetSkill(t *testing.T) {
-	server := NewServer()
+	server := NewServer("")
 	ctx := context.Background()
 
 	tests := []struct {
@@ -84,17 +206,75 @@ func TestGetSkill(t *testing.T) {
 			content, err := server.getSkill(ctx, GetSkillParams{Name: tt.skillName})
 
 			if tt.expectError {
-				assert.Error(t, err)
+				if err == nil {
+					t.Error("expected error but got none")
+				}
 			} else {
-				require.NoError(t, err)
-				assert.NotEmpty(t, content)
-				if tt.shouldContain != "" {
-					assert.Contains(t, content, tt.shouldContain)
+				if err != nil {
+					t.Fatalf("getSkill() failed: %v", err)
+				}
+				if content == "" {
+					t.Error("expected non-empty content")
+				}
+				if tt.shouldContain != "" && !strings.Contains(content, tt.shouldContain) {
+					t.Errorf("content should contain %q", tt.shouldContain)
 				}
 				// Verify it starts with frontmatter
-				assert.True(t, len(content) > 0 && content[0:3] == "---", "content should start with frontmatter")
+				if len(content) < 3 || content[0:3] != "---" {
+					t.Error("content should start with frontmatter")
+				}
 			}
 		})
+	}
+}
+
+func TestGetSkillUserSkill(t *testing.T) {
+	server := NewServer(testdataDir(t, "with-user-skills"))
+	ctx := context.Background()
+
+	content, err := server.getSkill(ctx, GetSkillParams{Name: "my-custom-skill"})
+	if err != nil {
+		t.Fatalf("getSkill() failed: %v", err)
+	}
+	if !strings.Contains(content, "name: my-custom-skill") {
+		t.Error("content should contain 'name: my-custom-skill'")
+	}
+	if !strings.Contains(content, "Custom content here.") {
+		t.Error("content should contain 'Custom content here.'")
+	}
+}
+
+func TestGetSkillUserOverridesBuiltin(t *testing.T) {
+	server := NewServer(testdataDir(t, "with-override"))
+	ctx := context.Background()
+
+	content, err := server.getSkill(ctx, GetSkillParams{Name: "learn"})
+	if err != nil {
+		t.Fatalf("getSkill() failed: %v", err)
+	}
+	if !strings.Contains(content, "My custom learn skill that overrides the built-in") {
+		t.Error("content should contain overridden description")
+	}
+	if !strings.Contains(content, "This overrides the built-in learn skill.") {
+		t.Error("content should contain overridden content")
+	}
+}
+
+func TestGetSkillFallsBackToBuiltin(t *testing.T) {
+	// Use the with-user-skills directory which doesn't have a learn.md file
+	server := NewServer(testdataDir(t, "with-user-skills"))
+	ctx := context.Background()
+
+	content, err := server.getSkill(ctx, GetSkillParams{Name: "learn"})
+	if err != nil {
+		t.Fatalf("getSkill() failed: %v", err)
+	}
+	// Should get the built-in learn skill
+	if !strings.Contains(content, "name: learn") {
+		t.Error("content should contain 'name: learn'")
+	}
+	if !strings.Contains(content, "Review workflow execution results") {
+		t.Error("content should contain built-in learn skill content")
 	}
 }
 
@@ -154,10 +334,21 @@ description: test`,
 			result, err := parseFrontmatter(tt.content)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				if err == nil {
+					t.Error("expected error but got none")
+				}
 			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
+				if err != nil {
+					t.Fatalf("parseFrontmatter() failed: %v", err)
+				}
+				if len(result) != len(tt.expected) {
+					t.Errorf("got %d fields, want %d", len(result), len(tt.expected))
+				}
+				for k, v := range tt.expected {
+					if result[k] != v {
+						t.Errorf("field %q = %q, want %q", k, result[k], v)
+					}
+				}
 			}
 		})
 	}
