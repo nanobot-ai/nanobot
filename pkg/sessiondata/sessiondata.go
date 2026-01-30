@@ -279,11 +279,24 @@ func (d *Data) UnsubscribeFromResources(ctx context.Context, uris ...string) err
 		subs    resourceSubscriptions
 	)
 	session.Get(types.ResourceSubscriptionsSessionKey, &subs)
-	if subs == nil {
-		subs = resourceSubscriptions{}
-	}
 	for _, uri := range uris {
-		delete(subs, uri)
+		if _, ok := subs[uri]; ok {
+			target, resourceName, err := d.MatchPublishedResource(ctx, uri)
+			if err != nil {
+				return fmt.Errorf("failed to read resource %s: %v", uri, err)
+			}
+
+			c, err := d.runtime.GetClient(ctx, target)
+			if err != nil {
+				return fmt.Errorf("failed to get client for server %s: %w", target, err)
+			}
+
+			if _, err = c.UnsubscribeResource(ctx, resourceName); err != nil {
+				return fmt.Errorf("failed to subscribe to resource %s on server %s: %w", resourceName, target, err)
+			}
+
+			delete(subs, uri)
+		}
 	}
 
 	session.Set(types.ResourceSubscriptionsSessionKey, subs)
@@ -301,7 +314,23 @@ func (d *Data) SubscribeToResources(ctx context.Context, uris ...string) error {
 	}
 
 	for _, uri := range uris {
-		subs[uri] = struct{}{}
+		if _, ok := subs[uri]; !ok {
+			target, resourceName, err := d.MatchPublishedResource(ctx, uri)
+			if err != nil {
+				return fmt.Errorf("failed to read resource %s: %v", uri, err)
+			}
+
+			c, err := d.runtime.GetClient(ctx, target)
+			if err != nil {
+				return fmt.Errorf("failed to get client for server %s: %w", target, err)
+			}
+
+			if _, err = c.SubscribeResource(ctx, resourceName); err != nil {
+				return fmt.Errorf("failed to subscribe to resource %s on server %s: %w", resourceName, target, err)
+			}
+
+			subs[uri] = struct{}{}
+		}
 	}
 
 	session.Set(types.ResourceSubscriptionsSessionKey, subs)

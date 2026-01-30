@@ -369,7 +369,7 @@ func (s *Server) read(ctx context.Context, params ReadParams) (string, error) {
 	defer file.Close()
 
 	// Determine offset and limit
-	offset := 0
+	var offset int
 	if params.Offset != nil {
 		offset = *params.Offset
 	}
@@ -379,10 +379,12 @@ func (s *Server) read(ctx context.Context, params ReadParams) (string, error) {
 		limit = *params.Limit
 	}
 
-	var result strings.Builder
+	var (
+		result    strings.Builder
+		linesRead int
+	)
 	scanner := bufio.NewScanner(file)
 	lineNum := 1
-	linesRead := 0
 
 	for scanner.Scan() {
 		// Skip lines before offset
@@ -676,7 +678,7 @@ func (s *Server) grep(ctx context.Context, params GrepParams) (string, error) {
 			matchData, _ := data["data"].(map[string]any)
 
 			if outputMode == "content" {
-				lineNum := 0
+				var lineNum int
 				if ln, ok := matchData["line_number"].(float64); ok {
 					lineNum = int(ln)
 				}

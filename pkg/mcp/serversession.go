@@ -80,11 +80,10 @@ func (s *ServerSession) SessionID() string {
 }
 
 func (s *ServerSession) ID() string {
-	id := s.session.ID()
-	if id == "" {
-		return s.wire.SessionID()
+	if id := s.session.ID(); id != "" {
+		return id
 	}
-	return id
+	return s.wire.SessionID()
 }
 
 var (
@@ -237,11 +236,4 @@ func (s *serverWire) stopReading() {
 
 	s.noReader = make(chan struct{})
 	close(s.noReader)
-}
-
-func (s *serverWire) isReading() bool {
-	s.readerLock.RLock()
-	defer s.readerLock.RUnlock()
-
-	return s.noReader != nil
 }

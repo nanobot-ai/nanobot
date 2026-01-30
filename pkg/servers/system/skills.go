@@ -97,7 +97,6 @@ func (s *Server) listSkills(ctx context.Context, _ struct{}) (*SkillList, error)
 
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}

@@ -60,6 +60,7 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 		return
 	case "notifications/initialized":
 		// nothing to do
+		return
 	case "tools/list":
 		mcp.Invoke(ctx, msg, s.tools.List)
 		return
@@ -68,6 +69,12 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 		return
 	case "resources/read":
 		mcp.Invoke(ctx, msg, s.resourcesRead)
+		return
+	case "resources/subscribe":
+		msg.Reply(ctx, &mcp.SubscribeResult{})
+		return
+	case "resources/unsubscribe":
+		msg.Reply(ctx, &mcp.UnsubscribeResult{})
 		return
 	}
 
