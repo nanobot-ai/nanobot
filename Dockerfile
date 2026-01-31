@@ -3,6 +3,9 @@
 # Build stage
 FROM golang:1.25-alpine AS builder
 
+# Install Node.js and pnpm for UI build
+RUN apk add --no-cache nodejs npm && npm install -g pnpm
+
 WORKDIR /build
 
 # Copy go mod files first for better caching
@@ -12,22 +15,31 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the binary
-RUN CGO_ENABLED=0 go build -o nanobot .
+# Build UI and binary
+RUN CI=true CGO_ENABLED=0 go generate ./... && go build -o nanobot .
 
 # Final stage
 FROM cgr.dev/chainguard/wolfi-base:latest AS runtime
 
-# Create non-root user
-RUN adduser -D -s /bin/sh nanobot
+# Install bash
+RUN apk add --no-cache bash
 
-# Create data directory and set ownership
-RUN mkdir -p /data && chown nanobot:nanobot /data
+# Create non-root user with home directory
+RUN adduser -D -h /home/nanobot -s /bin/bash nanobot
+
+# Create data and config directories with proper ownership
+RUN mkdir -p /data /home/nanobot/.nanobot && \
+    chown -R nanobot:nanobot /data /home/nanobot
 
 USER nanobot
+WORKDIR /home/nanobot
 
 # Set common env vars
+ENV HOME=/home/nanobot
 ENV NANOBOT_STATE=/data/nanobot.db
+ENV NANOBOT_RUN_LISTEN_ADDRESS=0.0.0.0:8080
+
+EXPOSE 8080
 
 # Define volume for persistent data
 VOLUME ["/data"]
