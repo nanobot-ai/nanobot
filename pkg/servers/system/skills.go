@@ -16,6 +16,7 @@ import (
 // Skill represents a skill with its metadata
 type Skill struct {
 	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
 	Description string `json:"description"`
 }
 
@@ -87,8 +88,10 @@ func (s *Server) listSkills(ctx context.Context, _ struct{}) (*SkillList, error)
 			return nil
 		}
 
-		skillMap[frontmatter["name"]] = Skill{
-			Name:        frontmatter["name"],
+		name := strings.TrimSuffix(filepath.Base(path), ".md")
+		skillMap[name] = Skill{
+			Name:        name,
+			DisplayName: frontmatter["name"],
 			Description: frontmatter["description"],
 		}
 
@@ -124,8 +127,10 @@ func (s *Server) listSkills(ctx context.Context, _ struct{}) (*SkillList, error)
 				}
 
 				// User skills override built-in skills
-				skillMap[frontmatter["name"]] = Skill{
-					Name:        frontmatter["name"],
+				name := strings.TrimSuffix(entry.Name(), ".md")
+				skillMap[name] = Skill{
+					Name:        name,
+					DisplayName: frontmatter["name"],
 					Description: frontmatter["description"],
 				}
 			}

@@ -35,11 +35,14 @@ func TestListSkills(t *testing.T) {
 		t.Errorf("expected at least 3 skills, got %d", len(result.Skills))
 	}
 
-	// Verify the skills have names and descriptions
+	// Verify the skills have names, display names, and descriptions
 	skillNames := make(map[string]bool)
 	for _, skill := range result.Skills {
 		if skill.Name == "" {
 			t.Error("skill name should not be empty")
+		}
+		if skill.DisplayName == "" {
+			t.Error("skill display name should not be empty")
 		}
 		if skill.Description == "" {
 			t.Error("skill description should not be empty")
@@ -69,20 +72,26 @@ func TestListSkillsWithUserSkills(t *testing.T) {
 	}
 
 	// Verify user skill is included
-	skillNames := make(map[string]bool)
+	skillsByName := make(map[string]Skill)
 	for _, skill := range result.Skills {
-		skillNames[skill.Name] = true
+		skillsByName[skill.Name] = skill
 	}
 
-	// Check user skills are present
-	if !skillNames["user-skill"] {
+	// Check user skills are present with correct display names
+	if skill, ok := skillsByName["user-skill"]; !ok {
 		t.Error("should have user-skill")
+	} else if skill.DisplayName != "User-Defined Skill" {
+		t.Errorf("user-skill display name = %q, want %q", skill.DisplayName, "User-Defined Skill")
 	}
-	if !skillNames["my-custom-skill"] {
+
+	if skill, ok := skillsByName["my-custom-skill"]; !ok {
 		t.Error("should have my-custom-skill")
+	} else if skill.DisplayName != "Custom Skill" {
+		t.Errorf("my-custom-skill display name = %q, want %q", skill.DisplayName, "Custom Skill")
 	}
+
 	// Built-in skills should still be there
-	if !skillNames["python-scripts"] {
+	if _, ok := skillsByName["python-scripts"]; !ok {
 		t.Error("should have python-scripts skill")
 	}
 }
@@ -99,7 +108,7 @@ func TestListSkillsUserOverridesBuiltin(t *testing.T) {
 		t.Fatal("listSkills() returned nil result")
 	}
 
-	// Find the learn skill and verify it has the overridden description
+	// Find the learn skill and verify it has the overridden display name and description
 	var learnSkill *Skill
 	for _, skill := range result.Skills {
 		if skill.Name == "learn" {
@@ -111,6 +120,12 @@ func TestListSkillsUserOverridesBuiltin(t *testing.T) {
 	if learnSkill == nil {
 		t.Fatal("learn skill should exist")
 	}
+
+	expectedDisplayName := "Lessons Learned"
+	if learnSkill.DisplayName != expectedDisplayName {
+		t.Errorf("learn skill display name = %q, want %q", learnSkill.DisplayName, expectedDisplayName)
+	}
+
 	expectedDesc := "My custom learn skill that overrides the built-in"
 	if learnSkill.Description != expectedDesc {
 		t.Errorf("learn skill description = %q, want %q", learnSkill.Description, expectedDesc)
@@ -236,8 +251,8 @@ func TestGetSkillUserSkill(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getSkill() failed: %v", err)
 	}
-	if !strings.Contains(content, "name: my-custom-skill") {
-		t.Error("content should contain 'name: my-custom-skill'")
+	if !strings.Contains(content, "name: Custom Skill") {
+		t.Error("content should contain 'name: Custom Skill'")
 	}
 	if !strings.Contains(content, "Custom content here.") {
 		t.Error("content should contain 'Custom content here.'")
@@ -251,6 +266,9 @@ func TestGetSkillUserOverridesBuiltin(t *testing.T) {
 	content, err := server.getSkill(ctx, GetSkillParams{Name: "learn"})
 	if err != nil {
 		t.Fatalf("getSkill() failed: %v", err)
+	}
+	if !strings.Contains(content, "name: Lessons Learned") {
+		t.Error("content should contain 'name: Lessons Learned'")
 	}
 	if !strings.Contains(content, "My custom learn skill that overrides the built-in") {
 		t.Error("content should contain overridden description")

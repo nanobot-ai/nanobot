@@ -1,5 +1,5 @@
 ---
-name: learn
+name: Lessons Learned
 description: My custom learn skill that overrides the built-in
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: user-skill
+name: User-Defined Skill
 description: A user-defined skill
 ---
 

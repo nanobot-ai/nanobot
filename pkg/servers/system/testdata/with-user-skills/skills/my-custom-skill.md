@@ -1,5 +1,5 @@
 ---
-name: my-custom-skill
+name: Custom Skill
 description: A custom skill
 ---
 
