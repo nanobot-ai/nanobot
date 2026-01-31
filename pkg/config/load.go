@@ -34,7 +34,7 @@ func Load(ctx context.Context, path string, includeDefaultAgents bool, profiles 
 
 	cfg, cwd, err = loadResource(ctx, configResource, profiles...)
 	if err != nil {
-		if !includeDefaultAgents || !errors.Is(err, NoConfigFoundErr) || path != ".nanobot/" {
+		if !includeDefaultAgents || !errors.Is(err, NoConfigFoundErr) && !errors.Is(err, fs.ErrNotExist) || path != ".nanobot/" {
 			return cfg, cwd, err
 		}
 	} else if !includeDefaultAgents {
