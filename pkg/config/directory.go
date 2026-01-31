@@ -87,6 +87,9 @@ func loadAgentsFromMarkdown(config *types.Config, dirPath string) error {
 	agentsDir := filepath.Join(dirPath, "agents")
 	entries, err := os.ReadDir(agentsDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return fmt.Errorf("error reading directory %s: %w", agentsDir, err)
 	}
 
