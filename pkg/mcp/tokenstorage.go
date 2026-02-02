@@ -17,6 +17,7 @@ const localTokenFileName = "tokens.json"
 type TokenStorage interface {
 	GetTokenConfig(context.Context, string) (*oauth2.Config, *oauth2.Token, error)
 	SetTokenConfig(context.Context, string, *oauth2.Config, *oauth2.Token) error
+	DeleteTokenConfig(ctx context.Context, url string, clientID string) error
 }
 
 func NewDefaultLocalStorage() TokenStorage {
@@ -59,6 +60,22 @@ func (l *localTokenStorage) SetTokenConfig(_ context.Context, url string, config
 		Token:  token,
 	}
 
+	return l.writeFile(m)
+}
+
+func (l *localTokenStorage) readFile() (map[string]localData, error) {
+	data, err := os.ReadFile(filepath.Join(l.dir, localTokenFileName))
+	if errors.Is(err, os.ErrNotExist) {
+		return make(map[string]localData), nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to read token file: %w", err)
+	}
+
+	var m map[string]localData
+	return m, json.Unmarshal(data, &m)
+}
+
+func (l *localTokenStorage) writeFile(m map[string]localData) error {
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal token data: %w", err)
@@ -75,14 +92,17 @@ func (l *localTokenStorage) SetTokenConfig(_ context.Context, url string, config
 	return nil
 }
 
-func (l *localTokenStorage) readFile() (map[string]localData, error) {
-	data, err := os.ReadFile(filepath.Join(l.dir, localTokenFileName))
-	if errors.Is(err, os.ErrNotExist) {
-		return make(map[string]localData), nil
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to read token file: %w", err)
+func (l *localTokenStorage) DeleteTokenConfig(_ context.Context, url string, clientID string) error {
+	m, err := l.readFile()
+	if err != nil {
+		return err
 	}
 
-	var m map[string]localData
-	return m, json.Unmarshal(data, &m)
+	data, exists := m[url]
+	if !exists || data.Config == nil || data.Config.ClientID != clientID {
+		return nil
+	}
+
+	delete(m, url)
+	return l.writeFile(m)
 }

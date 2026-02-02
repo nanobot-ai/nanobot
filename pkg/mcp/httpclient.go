@@ -269,6 +269,16 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID st
 	if resp.StatusCode == http.StatusUnauthorized {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
+
+		// Delete stored token if present, so a fresh OAuth flow can be triggered
+		if s.oauthHandler.tokenStorage != nil {
+			if conf, _, getErr := s.oauthHandler.tokenStorage.GetTokenConfig(s.ctx, s.baseURL); getErr == nil && conf != nil {
+				if deleteErr := s.oauthHandler.tokenStorage.DeleteTokenConfig(s.ctx, s.baseURL, conf.ClientID); deleteErr != nil {
+					log.Errorf(s.ctx, "failed to delete token for invalid client %s: %v", conf.ClientID, deleteErr)
+				}
+			}
+		}
+
 		return AuthRequiredErr{
 			ProtectedResourceValue: resp.Header.Get("WWW-Authenticate"),
 			Err:                    fmt.Errorf("failed to connect to SSE server: %s: %s", resp.Status, body),
@@ -468,6 +478,16 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		streamingErrorMessage, _ := io.ReadAll(resp.Body)
+
+		// Delete stored token if present, so a fresh OAuth flow can be triggered
+		if s.oauthHandler.tokenStorage != nil {
+			if conf, _, getErr := s.oauthHandler.tokenStorage.GetTokenConfig(s.ctx, s.baseURL); getErr == nil && conf != nil {
+				if deleteErr := s.oauthHandler.tokenStorage.DeleteTokenConfig(s.ctx, s.baseURL, conf.ClientID); deleteErr != nil {
+					log.Errorf(s.ctx, "failed to delete token for invalid client %s: %v", conf.ClientID, deleteErr)
+				}
+			}
+		}
+
 		return AuthRequiredErr{
 			ProtectedResourceValue: resp.Header.Get("WWW-Authenticate"),
 			Err:                    fmt.Errorf("failed to initialize HTTP Streaming client: %s: %s", resp.Status, streamingErrorMessage),
@@ -559,6 +579,16 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 			// Reset the HTTP client to the default and try again. Using the default client will give us the unauthenticated
 			// error that we need to continue the process.
 
+			// If the error indicates an invalid client (e.g., dynamically registered client was revoked),
+			// delete the stored token so that a fresh OAuth flow can be triggered.
+			if isInvalidClientError(err) && s.oauthHandler.tokenStorage != nil {
+				if conf, _, getErr := s.oauthHandler.tokenStorage.GetTokenConfig(s.ctx, s.baseURL); getErr == nil && conf != nil {
+					if deleteErr := s.oauthHandler.tokenStorage.DeleteTokenConfig(s.ctx, s.baseURL, conf.ClientID); deleteErr != nil {
+						log.Errorf(s.ctx, "failed to delete token for invalid client %s: %v", conf.ClientID, deleteErr)
+					}
+				}
+			}
+
 			s.clientLock.Lock()
 			s.httpClient = http.DefaultClient
 			s.clientLock.Unlock()
@@ -644,6 +674,16 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		streamingErrorMessage, _ := io.ReadAll(resp.Body)
+
+		// Delete stored token if present, so a fresh OAuth flow can be triggered
+		if s.oauthHandler.tokenStorage != nil {
+			if conf, _, getErr := s.oauthHandler.tokenStorage.GetTokenConfig(s.ctx, s.baseURL); getErr == nil && conf != nil {
+				if deleteErr := s.oauthHandler.tokenStorage.DeleteTokenConfig(s.ctx, s.baseURL, conf.ClientID); deleteErr != nil {
+					log.Errorf(s.ctx, "failed to delete token for invalid client %s: %v", conf.ClientID, deleteErr)
+				}
+			}
+		}
+
 		return AuthRequiredErr{
 			ProtectedResourceValue: resp.Header.Get("WWW-Authenticate"),
 			Err:                    fmt.Errorf("failed to send message: %s: %s", resp.Status, streamingErrorMessage),
