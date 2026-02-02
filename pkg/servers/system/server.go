@@ -51,15 +51,17 @@ type subscription struct {
 
 type Server struct {
 	configDir     string
+	workdir       string
 	tools         mcp.ServerTools
 	mu            sync.RWMutex
 	subscriptions map[string]*subscription // sessionID -> subscription
 	sessions      map[string]*mcp.Session  // sessionID -> session (all initialized sessions)
 }
 
-func NewServer(configDir string) *Server {
+func NewServer(configDir, workdir string) *Server {
 	s := &Server{
 		configDir:     configDir,
+		workdir:       workdir,
 		subscriptions: make(map[string]*subscription),
 		sessions:      make(map[string]*mcp.Session),
 	}
@@ -260,6 +262,16 @@ func (s *Server) Close() error {
 	return nil
 }
 
+func (s *Server) getWorkdir() string {
+	if s.workdir != "" {
+		return s.workdir
+	}
+	if wd, err := os.Getwd(); err == nil {
+		return wd
+	}
+	return "."
+}
+
 func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	switch msg.Method {
 	case "initialize":
@@ -332,15 +344,10 @@ func (s *Server) bash(ctx context.Context, params BashParams) (string, error) {
 		timeout = max(time.Duration(*params.Timeout)*time.Millisecond, maxBashTimeout)
 	}
 
-	// Determine working directory
-	workdir := "."
+	// Determine working directory - use param if provided, otherwise use server's workdir
+	workdir := s.getWorkdir()
 	if params.Workdir != nil {
 		workdir = *params.Workdir
-	} else {
-		cwd, err := os.Getwd()
-		if err == nil {
-			workdir = cwd
-		}
 	}
 
 	// Create context with timeout
@@ -537,11 +544,8 @@ func (s *Server) glob(ctx context.Context, params GlobParams) (string, error) {
 		searchPath = *params.Path
 	}
 
-	// Determine working directory
-	workdir, err := os.Getwd()
-	if err != nil {
-		workdir = "."
-	}
+	// Use explicit workdir if set, otherwise fall back to os.Getwd()
+	workdir := s.getWorkdir()
 
 	// Build ripgrep command
 	args := []string{"--files", "--glob", params.Pattern}
@@ -656,11 +660,8 @@ func (s *Server) grep(ctx context.Context, params GrepParams) (string, error) {
 		args = append(args, *params.Path)
 	}
 
-	// Determine working directory
-	workdir, err := os.Getwd()
-	if err != nil {
-		workdir = "."
-	}
+	// Use explicit workdir if set, otherwise fall back to os.Getwd()
+	workdir := s.getWorkdir()
 
 	cmd := exec.CommandContext(ctx, "rg", args...)
 	cmd.Dir = workdir

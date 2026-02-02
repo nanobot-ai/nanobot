@@ -19,7 +19,7 @@ func testdataDir(t *testing.T, subdir string) string {
 }
 
 func TestListSkills(t *testing.T) {
-	server := NewServer("")
+	server := NewServer("", "")
 	ctx := context.Background()
 
 	result, err := server.listSkills(ctx, struct{}{})
@@ -60,7 +60,7 @@ func TestListSkills(t *testing.T) {
 }
 
 func TestListSkillsWithUserSkills(t *testing.T) {
-	server := NewServer(testdataDir(t, "with-user-skills"))
+	server := NewServer(testdataDir(t, "with-user-skills"), "")
 	ctx := context.Background()
 
 	result, err := server.listSkills(ctx, struct{}{})
@@ -97,7 +97,7 @@ func TestListSkillsWithUserSkills(t *testing.T) {
 }
 
 func TestListSkillsUserOverridesBuiltin(t *testing.T) {
-	server := NewServer(testdataDir(t, "with-override"))
+	server := NewServer(testdataDir(t, "with-override"), "")
 	ctx := context.Background()
 
 	result, err := server.listSkills(ctx, struct{}{})
@@ -134,7 +134,7 @@ func TestListSkillsUserOverridesBuiltin(t *testing.T) {
 
 func TestListSkillsMissingDirectory(t *testing.T) {
 	// Use a non-existent directory - should not error
-	server := NewServer("/non/existent/directory")
+	server := NewServer("/non/existent/directory", "")
 	ctx := context.Background()
 
 	result, err := server.listSkills(ctx, struct{}{})
@@ -153,7 +153,7 @@ func TestListSkillsMissingDirectory(t *testing.T) {
 
 func TestListSkillsEmptyDirectory(t *testing.T) {
 	// Use a directory with an empty skills subdirectory
-	server := NewServer(testdataDir(t, "empty-skills"))
+	server := NewServer(testdataDir(t, "empty-skills"), "")
 	ctx := context.Background()
 
 	result, err := server.listSkills(ctx, struct{}{})
@@ -171,7 +171,7 @@ func TestListSkillsEmptyDirectory(t *testing.T) {
 }
 
 func TestGetSkill(t *testing.T) {
-	server := NewServer("")
+	server := NewServer("", "")
 	ctx := context.Background()
 
 	tests := []struct {
@@ -244,7 +244,7 @@ func TestGetSkill(t *testing.T) {
 }
 
 func TestGetSkillUserSkill(t *testing.T) {
-	server := NewServer(testdataDir(t, "with-user-skills"))
+	server := NewServer(testdataDir(t, "with-user-skills"), "")
 	ctx := context.Background()
 
 	content, err := server.getSkill(ctx, GetSkillParams{Name: "my-custom-skill"})
@@ -260,7 +260,7 @@ func TestGetSkillUserSkill(t *testing.T) {
 }
 
 func TestGetSkillUserOverridesBuiltin(t *testing.T) {
-	server := NewServer(testdataDir(t, "with-override"))
+	server := NewServer(testdataDir(t, "with-override"), "")
 	ctx := context.Background()
 
 	content, err := server.getSkill(ctx, GetSkillParams{Name: "learn"})
@@ -280,7 +280,7 @@ func TestGetSkillUserOverridesBuiltin(t *testing.T) {
 
 func TestGetSkillFallsBackToBuiltin(t *testing.T) {
 	// Use the with-user-skills directory which doesn't have a learn.md file
-	server := NewServer(testdataDir(t, "with-user-skills"))
+	server := NewServer(testdataDir(t, "with-user-skills"), "")
 	ctx := context.Background()
 
 	content, err := server.getSkill(ctx, GetSkillParams{Name: "learn"})
