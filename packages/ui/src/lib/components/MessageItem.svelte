@@ -7,14 +7,16 @@
 	import MessageItemResource from './MessageItemResource.svelte';
 	import MessageItemReasoning from './MessageItemReasoning.svelte';
 	import MessageItemTool from './MessageItemTool.svelte';
+	import MessageItemWorkflowFile from './MessageItemWorkflowFile.svelte';
 
 	interface Props {
 		item: ChatMessageItem;
 		role: 'user' | 'assistant';
 		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
+		onFileOpen?: (filename: string) => void;
 	}
 
-	let { item, role, onSend }: Props = $props();
+	let { item, role, onSend, onFileOpen }: Props = $props();
 </script>
 
 {#if item.type === 'text'}
@@ -30,5 +32,9 @@
 {:else if item.type === 'reasoning'}
 	<MessageItemReasoning {item} />
 {:else if item.type === 'tool'}
-	<MessageItemTool {item} {onSend} />
+	{#if item.name === 'write'}
+		<MessageItemWorkflowFile {item} {onFileOpen} />
+	{:else}
+		<MessageItemTool {item} {onSend} />
+	{/if}
 {/if}

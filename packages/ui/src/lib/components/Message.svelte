@@ -7,9 +7,10 @@
 		message: ChatMessage;
 		timestamp?: Date;
 		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
+		onFileOpen?: (filename: string) => void;
 	}
 
-	let { message, timestamp, onSend }: Props = $props();
+	let { message, timestamp, onSend, onFileOpen }: Props = $props();
 
 	const displayTime = $derived(
 		timestamp || (message.created ? new Date(message.created) : new Date())
@@ -65,7 +66,7 @@
 			<!-- Render all message items -->
 			{#if message.items && message.items.length > 0}
 				{#each message.items as item (item.id)}
-					<MessageItem {item} role={message.role} {onSend} />
+					<MessageItem {item} role={message.role} {onSend} {onFileOpen} />
 				{/each}
 			{:else}
 				<!-- Fallback for messages without items -->

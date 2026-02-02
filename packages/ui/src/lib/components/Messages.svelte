@@ -6,11 +6,12 @@
 	interface Props {
 		messages: ChatMessage[];
 		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
+		onFileOpen?: (filename: string) => void;
 		isLoading?: boolean;
 		agent?: Agent;
 	}
 
-	let { messages, onSend, isLoading = false, agent }: Props = $props();
+	let { messages, onFileOpen, onSend, isLoading = false, agent }: Props = $props();
 	let messageGroups = $derived.by(() => {
 		return messages.reduce((acc, message) => {
 			if (message.role === 'user' || acc.length === 0) {
@@ -58,7 +59,7 @@
 				data-message-id={messageGroup[0]?.id}
 			>
 				{#each messageGroup as message, i (`${messageGroup[0]?.id}-${i}`)}
-					<Message {message} {onSend} />
+					<Message {message} {onSend} {onFileOpen} />
 				{/each}
 				{#if isLast}
 					{#if showLoadingIndicator}

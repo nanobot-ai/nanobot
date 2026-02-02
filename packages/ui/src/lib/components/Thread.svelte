@@ -34,6 +34,7 @@ interface Props {
 		file: File,
 		opts?: { controller?: AbortController },
 	) => Promise<Attachment>;
+	onFileOpen?: (filename: string) => void;
 	cancelUpload?: (fileId: string) => void;
 	uploadingFiles?: UploadingFile[];
 	uploadedFiles?: UploadedFile[];
@@ -51,6 +52,7 @@ let {
 	resources,
 	onSendMessage,
 	onFileUpload,
+	onFileOpen,
 	cancelUpload,
 	uploadingFiles,
 	uploadedFiles,
@@ -135,7 +137,7 @@ function scrollToBottom() {
 				</div>
 			{/if}
 
-			<Messages {messages} onSend={onSendMessage} {isLoading} {agent} />
+			<Messages {messages} onSend={onSendMessage} {isLoading} {agent} {onFileOpen} />
 		</div>
 	</div>
 

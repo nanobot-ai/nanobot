@@ -1,7 +1,6 @@
 <script lang="ts">
 	import '$lib/../app.css';
 	import { page } from '$app/state';
-	import Thread from '$lib/components/Thread.svelte';
 	import { ChatService } from '$lib/chat.svelte';
 	import { onDestroy } from 'svelte';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
