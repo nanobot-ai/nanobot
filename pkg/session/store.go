@@ -169,5 +169,14 @@ func (s *Store) SetTokenConfig(ctx context.Context, url string, oauth2Config *oa
 		return s.db.WithContext(ctx).Create(&token).Error
 	}
 	return s.db.WithContext(ctx).Save(&token).Error
+}
 
+func (s *Store) DeleteTokenConfig(ctx context.Context, url string) error {
+	var accountID string
+	session := mcp.SessionFromContext(ctx)
+	if !session.Get(types.AccountIDSessionKey, &accountID) {
+		return nil
+	}
+
+	return s.db.WithContext(ctx).Where("account_id = ? AND url = ?", accountID, url).Delete(&Token{}).Error
 }

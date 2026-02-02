@@ -524,6 +524,11 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 	// Check for an authentication-required error and put the user through the OAuth process.
 	var oauthErr AuthRequiredErr
 	if errors.As(err, &oauthErr) {
+		// If there is an existing token, it doesn't work, so delete it.
+		if err := s.oauthHandler.tokenStorage.DeleteTokenConfig(ctx, s.baseURL); err != nil {
+			return fmt.Errorf("failed to delete token config: %w", err)
+		}
+
 		httpClient, err := s.oauthHandler.oauthClient(s.ctx, s, s.baseURL, oauthErr.ProtectedResourceValue)
 		if err != nil || httpClient == nil {
 			streamError := fmt.Errorf("failed to initialize HTTP Streaming client: %w", oauthErr)
