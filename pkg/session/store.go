@@ -171,28 +171,12 @@ func (s *Store) SetTokenConfig(ctx context.Context, url string, oauth2Config *oa
 	return s.db.WithContext(ctx).Save(&token).Error
 }
 
-func (s *Store) DeleteTokenConfig(ctx context.Context, url string, clientID string) error {
+func (s *Store) DeleteTokenConfig(ctx context.Context, url string) error {
 	var accountID string
 	session := mcp.SessionFromContext(ctx)
 	if !session.Get(types.AccountIDSessionKey, &accountID) {
 		return nil
 	}
 
-	var token Token
-	if err := s.db.WithContext(ctx).Where("account_id = ? AND url = ?", accountID, url).First(&token).Error; err != nil {
-		return nil // Token not found, nothing to delete
-	}
-
-	var tokenData struct {
-		Config *oauth2.Config `json:"config,omitempty"`
-	}
-	if err := json.Unmarshal([]byte(token.Data), &tokenData); err != nil {
-		return nil
-	}
-
-	if tokenData.Config == nil || tokenData.Config.ClientID != clientID {
-		return nil
-	}
-
-	return s.db.WithContext(ctx).Delete(&token).Error
+	return s.db.WithContext(ctx).Where("account_id = ? AND url = ?", accountID, url).Delete(&Token{}).Error
 }

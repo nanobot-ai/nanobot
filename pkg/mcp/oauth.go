@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,18 +22,6 @@ var (
 	resourceMetadataRegex = regexp.MustCompile(`resource_metadata="([^"]*)"`)
 	scopeRegex            = regexp.MustCompile(`scope="([^"]*)"`)
 )
-
-// isInvalidClientError checks if an error indicates that the OAuth client credentials are invalid.
-// This can happen when a dynamically registered client has been revoked by the authorization server.
-func isInvalidClientError(err error) bool {
-	var retrieveErr *oauth2.RetrieveError
-	if errors.As(err, &retrieveErr) {
-		return retrieveErr.ErrorCode == "invalid_client"
-	}
-	// Fallback for non-standard OAuth servers that may not use oauth2.RetrieveError
-	errMsg := err.Error()
-	return strings.Contains(errMsg, "invalid_client")
-}
 
 type oauth struct {
 	redirectURL, clientName string
@@ -702,13 +689,6 @@ func newTokenSource(ctx context.Context, tokenStorage TokenStorage, connectURL s
 func (ts *tokenSource) Token() (*oauth2.Token, error) {
 	tok, err := ts.tokenSource.Token()
 	if err != nil {
-		// If the error indicates an invalid client (e.g., dynamically registered client was revoked),
-		// delete the stored token so that a fresh OAuth flow can be triggered.
-		if isInvalidClientError(err) && ts.tokenStorage != nil {
-			if deleteErr := ts.tokenStorage.DeleteTokenConfig(ts.ctx, ts.connectURL, ts.conf.ClientID); deleteErr != nil {
-				log.Errorf(ts.ctx, "failed to delete token for invalid client %s: %v", ts.conf.ClientID, deleteErr)
-			}
-		}
 		return nil, err
 	}
 

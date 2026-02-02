@@ -17,7 +17,7 @@ const localTokenFileName = "tokens.json"
 type TokenStorage interface {
 	GetTokenConfig(context.Context, string) (*oauth2.Config, *oauth2.Token, error)
 	SetTokenConfig(context.Context, string, *oauth2.Config, *oauth2.Token) error
-	DeleteTokenConfig(ctx context.Context, url string, clientID string) error
+	DeleteTokenConfig(context.Context, string) error
 }
 
 func NewDefaultLocalStorage() TokenStorage {
@@ -92,15 +92,10 @@ func (l *localTokenStorage) writeFile(m map[string]localData) error {
 	return nil
 }
 
-func (l *localTokenStorage) DeleteTokenConfig(_ context.Context, url string, clientID string) error {
+func (l *localTokenStorage) DeleteTokenConfig(_ context.Context, url string) error {
 	m, err := l.readFile()
 	if err != nil {
 		return err
-	}
-
-	data, exists := m[url]
-	if !exists || data.Config == nil || data.Config.ClientID != clientID {
-		return nil
 	}
 
 	delete(m, url)
