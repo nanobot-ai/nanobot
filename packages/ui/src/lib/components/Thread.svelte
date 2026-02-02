@@ -18,6 +18,7 @@ import type {
 import MessageInput from "./MessageInput.svelte";
 import Messages from "./Messages.svelte";
 	import { getSidebarContext } from "$lib/context/sidebar.svelte";
+	import { parseToolFilePath } from "$lib/utils";
 
 interface Props {
 	messages: ChatMessage[];
@@ -128,7 +129,7 @@ $effect(() => {
 
 					// Defer side effects to avoid issues during render
 					queueMicrotask(() => {
-						onFileOpen?.(args.file_path);
+						onFileOpen?.(parseToolFilePath(toolCall));
 					});
 				}
 			} catch {

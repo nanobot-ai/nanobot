@@ -104,14 +104,15 @@
             };
         });
     
-        $effect(() => {
-            if (value !== prevValue) {
-                if (!focused && crepe && isCrepeReady) {
-                    setValue(value);
-                }
-                prevValue = value;
-            }
-        });
+    $effect(() => {
+        // Always read these to ensure they're tracked as dependencies
+        const canUpdate = !focused && crepe && isCrepeReady;
+        
+        if (value !== prevValue && canUpdate) {
+            setValue(value);
+            prevValue = value;
+        }
+    });
     
         function setValue(newValue: string) {
             if (crepe) {

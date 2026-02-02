@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ChatMessageItemToolCall } from '$lib/types';
+	import { parseToolFilePath } from '$lib/utils';
 	import { FileIcon, FolderIcon } from '@lucide/svelte';
 	interface Props {
 		item: ChatMessageItemToolCall;
@@ -8,15 +9,8 @@
 
 	let { item, onFileOpen }: Props = $props();
 
-
-    function parseName(argumentsJson: string) {
-        const parsed = JSON.parse(argumentsJson);
-        const filePath = parsed.file_path;
-        return filePath ? filePath.split('/').pop().split('.').shift() : null;
-    }
-
     const pending = $derived(item.hasMore);
-    const name = $derived(item.arguments ? parseName(item.arguments): item.name);
+    const name = $derived(item.arguments ? parseToolFilePath(item): item.name);
 </script>
 
 <div class="rounded-field text mt-3 mb-2 w-full border border-base-200 dark:border-base-300 bg-base-100 shadow-xs p-3">

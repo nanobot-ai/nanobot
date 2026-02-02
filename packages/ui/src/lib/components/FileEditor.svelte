@@ -2,8 +2,7 @@
 	import type { ChatService } from '$lib/chat.svelte';
 	import type { ResourceContents } from '$lib/types';
 	import { X } from '@lucide/svelte';
-	import { linear } from 'svelte/easing';
-	import { slide } from 'svelte/transition';
+	import { fly } from 'svelte/transition';
 	import MarkdownEditor from './MarkdownEditor.svelte';
 
 	interface Props {
@@ -45,7 +44,8 @@
 			});
 
 		// Subscribe to live updates
-		const cleanup = chat.watchResource(filename, (updatedResource) => {
+		const cleanup = chat.watchResource(match.uri, (updatedResource) => {
+			console.debug('[FileEditor] Resource updated:', match.uri);
 			resource = updatedResource;
 		});
 
@@ -58,10 +58,11 @@
 	let mimeType = $derived(resource?.mimeType ?? 'text/plain');
 </script>
 
-<div
-	class="min-w-[500px] h-dvh bg-base-200 flex flex-col"
-	in:slide={{ axis: 'x', easing: linear, duration: 50 }}
->
+<div class="min-w-[500px] h-dvh overflow-hidden">
+	<div
+		class="w-full h-full bg-base-200 flex flex-col"
+		in:fly={{ x: 100, duration: 300 }}
+	>
     <div class="flex gap-2 items-center px-4 py-2 border-b border-base-300">
         <div class="flex grow items-center justify-between">
             <span class="text-sm font-medium truncate">{filename}</span>
@@ -99,5 +100,6 @@
 		{:else}
 			<div class="text-base-content/60 italic">The contents of this file are empty.</div>
 		{/if}
+	</div>
 	</div>
 </div>
