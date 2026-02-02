@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
@@ -39,19 +40,31 @@ var allowedTools = map[string][]string{
 	"edit":           []string{"edit"},
 	"glob":           []string{"glob"},
 	"grep":           []string{"grep"},
-	"todoRead":       []string{"todoRead"},
 	"todoWrite":      []string{"todoWrite"},
 	"webFetch":       []string{"webFetch"},
 	"builtin-skills": []string{"listSkills", "getSkill"},
 }
 
+// subscription holds the session reference and subscribed URIs for that session
+type subscription struct {
+	session *mcp.Session
+	uris    map[string]struct{}
+}
+
 type Server struct {
-	configDir string
-	tools     mcp.ServerTools
+	configDir     string
+	tools         mcp.ServerTools
+	mu            sync.RWMutex
+	subscriptions map[string]*subscription // sessionID -> subscription
+	sessions      map[string]*mcp.Session  // sessionID -> session (all initialized sessions)
 }
 
 func NewServer(configDir string) *Server {
-	s := &Server{configDir: configDir}
+	s := &Server{
+		configDir:     configDir,
+		subscriptions: make(map[string]*subscription),
+		sessions:      make(map[string]*mcp.Session),
+	}
 
 	s.tools = mcp.NewServerTools(
 		// Config tool to setup system tools based on permissions
@@ -156,8 +169,6 @@ File paths should be relative to the working directory, but can be absolute if a
   - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `+"`struct \\{[\\s\\S]*?field`"+`, use `+"`multiline: true`"+`
 
 The path parameter is relative to the working directory if not specified as absolute.`, s.grep),
-		// TodoRead tool
-		mcp.NewServerTool("todoRead", `Use this tool to read your todo list`, s.todoRead),
 		// TodoWrite tool
 		mcp.NewServerTool("todoWrite", `Use this tool to create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.
 It also helps the user understand the progress of the task and overall progress of their requests.
@@ -245,6 +256,12 @@ Usage notes:
 	return s
 }
 
+// Close cleans up resources
+func (s *Server) Close() error {
+	// No cleanup needed - sessions are cleaned up via context.AfterFunc
+	return nil
+}
+
 func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	switch msg.Method {
 	case "initialize":
@@ -255,16 +272,41 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 		mcp.Invoke(ctx, msg, s.tools.List)
 	case "tools/call":
 		mcp.Invoke(ctx, msg, s.tools.Call)
+	case "resources/list":
+		mcp.Invoke(ctx, msg, s.resourcesList)
+	case "resources/read":
+		mcp.Invoke(ctx, msg, s.resourcesRead)
+	case "resources/subscribe":
+		mcp.Invoke(ctx, msg, s.resourcesSubscribe)
+	case "resources/unsubscribe":
+		mcp.Invoke(ctx, msg, s.resourcesUnsubscribe)
 	default:
 		msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage("%v", msg.Method))
 	}
 }
 
-func (s *Server) initialize(ctx context.Context, _ mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
+func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
+	// Track this session for sending list_changed notifications
+	s.mu.Lock()
+	sessionID := msg.Session.ID()
+	s.sessions[sessionID] = msg.Session
+	s.mu.Unlock()
+
+	// Clean up session when it ends
+	context.AfterFunc(msg.Session.Context(), func() {
+		s.mu.Lock()
+		delete(s.sessions, sessionID)
+		s.mu.Unlock()
+	})
+
 	return &mcp.InitializeResult{
 		ProtocolVersion: params.ProtocolVersion,
 		Capabilities: mcp.ServerCapabilities{
 			Tools: &mcp.ToolsServerCapability{},
+			Resources: &mcp.ResourcesServerCapability{
+				Subscribe:   true,
+				ListChanged: true,
+			},
 		},
 		ServerInfo: mcp.ServerInfo{
 			Name:    version.Name,
@@ -760,88 +802,6 @@ func (s *Server) grep(ctx context.Context, params GrepParams) (string, error) {
 	}
 
 	return strings.TrimSpace(result.String()), nil
-}
-
-type TodoItem struct {
-	Content    string `json:"content"`
-	Status     string `json:"status"`
-	ActiveForm string `json:"activeForm"`
-}
-
-type Todos struct {
-	Todos []TodoItem `json:"todos"`
-}
-
-// TodoRead tool
-func (s *Server) todoRead(ctx context.Context, _ any) (Todos, error) {
-	// Get session ID
-	sessionID, _ := types.GetSessionAndAccountID(ctx)
-
-	// Read from .nanobot/<sessionId>/status/todo.json
-	todoPath := filepath.Join(".nanobot", sessionID, "status", "todo.json")
-
-	// Check if file exists
-	if _, err := os.Stat(todoPath); os.IsNotExist(err) {
-		// Return empty list if file doesn't exist
-		return Todos{}, nil
-	}
-
-	// Read file
-	data, err := os.ReadFile(todoPath)
-	if err != nil {
-		return Todos{}, fmt.Errorf("failed to read todo file: %w", err)
-	}
-
-	// Unmarshal JSON
-	var todos []TodoItem
-	if err := json.Unmarshal(data, &todos); err != nil {
-		return Todos{}, fmt.Errorf("failed to parse todo file: %w", err)
-	}
-
-	return Todos{Todos: todos}, nil
-}
-
-// TodoWrite tool
-type TodoWriteParams struct {
-	Todos []TodoItem `json:"todos"`
-}
-
-func (s *Server) todoWrite(ctx context.Context, params TodoWriteParams) (string, error) {
-	// Validate only one in_progress task
-	var inProgressCount int
-	for _, todo := range params.Todos {
-		if todo.Status == "in_progress" {
-			inProgressCount++
-		}
-	}
-
-	if inProgressCount > 1 {
-		return "", mcp.ErrRPCInvalidParams.WithMessage("only one task can be in_progress at a time")
-	}
-
-	// Get session ID
-	sessionID, _ := types.GetSessionAndAccountID(ctx)
-
-	// Write to .nanobot/<sessionId>/status/todo.json
-	todoPath := filepath.Join(".nanobot", sessionID, "status", "todo.json")
-
-	// Create directories
-	if err := os.MkdirAll(filepath.Dir(todoPath), 0755); err != nil {
-		return "", fmt.Errorf("failed to create todo directory: %w", err)
-	}
-
-	// Marshal JSON
-	todoJSON, err := json.MarshalIndent(params.Todos, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal todos: %w", err)
-	}
-
-	// Write file
-	if err := os.WriteFile(todoPath, todoJSON, 0644); err != nil {
-		return "", fmt.Errorf("failed to write todo file: %w", err)
-	}
-
-	return fmt.Sprintf("Todo list updated:\n\n%s", string(todoJSON)), nil
 }
 
 // WebFetch tool
