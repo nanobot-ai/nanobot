@@ -34,15 +34,15 @@ const (
 )
 
 var allowedTools = map[string][]string{
-	"bash":           []string{"bash"},
-	"read":           []string{"read"},
-	"write":          []string{"write", "edit"},
-	"edit":           []string{"edit"},
-	"glob":           []string{"glob"},
-	"grep":           []string{"grep"},
-	"todoWrite":      []string{"todoWrite"},
-	"webFetch":       []string{"webFetch"},
-	"builtin-skills": []string{"listSkills", "getSkill"},
+	"bash":           {"bash"},
+	"read":           {"read"},
+	"write":          {"write", "edit"},
+	"edit":           {"edit"},
+	"glob":           {"glob"},
+	"grep":           {"grep"},
+	"todoWrite":      {"todoWrite"},
+	"webFetch":       {"webFetch"},
+	"builtin-skills": {"listSkills", "getSkill"},
 }
 
 // subscription holds the session reference and subscribed URIs for that session
