@@ -15,6 +15,7 @@
         return filePath ? filePath.split('/').pop().split('.').shift() : null;
     }
 
+    const pending = $derived(item.hasMore);
     const name = $derived(item.arguments ? parseName(item.arguments): item.name);
 </script>
 
@@ -23,7 +24,11 @@
         <div class="flex items-center gap-2">
             <FileIcon class="size-4" />
             
-            <span class="text-sm">{name}</span>
+            {#if pending}
+                <span class="text-sm animate-pulse">...</span>
+            {:else}
+                <span class="text-sm">{name}</span>
+            {/if}
         </div>
         <button class="btn btn-sm tooltip" data-tip="Open" onclick={() => onFileOpen?.(name)}>
             <FolderIcon class="size-4" />

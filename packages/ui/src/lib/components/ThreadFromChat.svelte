@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { ChatService } from "$lib/chat.svelte";
 import Thread from "$lib/components/Thread.svelte";
+	import { getSidebarContext } from "$lib/context/sidebar.svelte";
 	import FileEditor from "./FileEditor.svelte";
 
 interface Props {
@@ -12,6 +13,7 @@ let { chat }: Props = $props();
 let selectedFile = $state('');
 let drawerInput = $state<HTMLInputElement | null>(null);
 
+const sidebar = getSidebarContext();
 </script>
 
 {#key chat.chatId}
@@ -27,6 +29,7 @@ let drawerInput = $state<HTMLInputElement | null>(null);
 		onSendMessage={chat.sendMessage}
 		onFileUpload={chat.uploadFile}
 		onFileOpen={(filename) => {
+			sidebar?.collapse();
 			drawerInput?.click();
 			selectedFile = filename;
 		}}
@@ -39,5 +42,8 @@ let drawerInput = $state<HTMLInputElement | null>(null);
 {/key}
 
 {#if selectedFile}
-	<FileEditor filename={selectedFile} {chat} onClose={() => selectedFile = ''}/>
+	<FileEditor filename={selectedFile} {chat} onClose={() => {
+		selectedFile = '';
+		sidebar?.expand();
+	}}/>
 {/if}
