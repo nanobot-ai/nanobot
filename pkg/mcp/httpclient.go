@@ -269,7 +269,6 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID st
 	if resp.StatusCode == http.StatusUnauthorized {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-
 		return AuthRequiredErr{
 			ProtectedResourceValue: resp.Header.Get("WWW-Authenticate"),
 			Err:                    fmt.Errorf("failed to connect to SSE server: %s: %s", resp.Status, body),
@@ -469,7 +468,6 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		streamingErrorMessage, _ := io.ReadAll(resp.Body)
-
 		return AuthRequiredErr{
 			ProtectedResourceValue: resp.Header.Get("WWW-Authenticate"),
 			Err:                    fmt.Errorf("failed to initialize HTTP Streaming client: %s: %s", resp.Status, streamingErrorMessage),
@@ -565,6 +563,7 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 			// If we do find an error that starts with "oauth2:" then there was an issue with the oauth2 HTTP client.
 			// Reset the HTTP client to the default and try again. Using the default client will give us the unauthenticated
 			// error that we need to continue the process.
+
 			s.clientLock.Lock()
 			s.httpClient = http.DefaultClient
 			s.clientLock.Unlock()
@@ -650,7 +649,6 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		streamingErrorMessage, _ := io.ReadAll(resp.Body)
-
 		return AuthRequiredErr{
 			ProtectedResourceValue: resp.Header.Get("WWW-Authenticate"),
 			Err:                    fmt.Errorf("failed to send message: %s: %s", resp.Status, streamingErrorMessage),
