@@ -3,6 +3,7 @@ package workflows
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,6 +32,7 @@ type Server struct {
 	mu            sync.RWMutex
 	watcher       *fsnotify.Watcher
 	subscriptions map[string]*subscription // sessionID -> subscription
+	sessions      map[string]*mcp.Session  // sessionID -> session (all initialized sessions)
 	watcherCtx    context.Context
 	watcherCancel context.CancelFunc
 	watcherOnce   sync.Once
@@ -39,6 +41,7 @@ type Server struct {
 func NewServer() *Server {
 	return &Server{
 		subscriptions: make(map[string]*subscription),
+		sessions:      make(map[string]*mcp.Session),
 	}
 }
 
@@ -75,12 +78,31 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	}
 }
 
-func (s *Server) initialize(ctx context.Context, _ mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
+func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
+	// Track this session for sending list_changed notifications
+	sessionID, _ := types.GetSessionAndAccountID(ctx)
+	s.mu.Lock()
+	s.sessions[sessionID] = msg.Session
+	s.mu.Unlock()
+
+	// Clean up session when it ends
+	context.AfterFunc(msg.Session.Context(), func() {
+		s.mu.Lock()
+		delete(s.sessions, sessionID)
+		s.mu.Unlock()
+	})
+
+	// Start watcher when first session initializes
+	if err := s.ensureWatcher(); err != nil {
+		log.Errorf(ctx, "failed to start file watcher: %v", err)
+	}
+
 	return &mcp.InitializeResult{
 		ProtocolVersion: params.ProtocolVersion,
 		Capabilities: mcp.ServerCapabilities{
 			Resources: &mcp.ResourcesServerCapability{
-				Subscribe: true,
+				Subscribe:   true,
+				ListChanged: true,
 			},
 		},
 		ServerInfo: mcp.ServerInfo{
@@ -328,24 +350,31 @@ func (s *Server) watchLoop() {
 				return
 			}
 
-			// Only process write and remove events for .md files
+			// Only process write, create, remove, and rename events for .md files
 			if filepath.Ext(event.Name) != ".md" {
 				continue
 			}
 
-			if event.Op&(fsnotify.Write|fsnotify.Remove|fsnotify.Rename) == 0 {
+			if !event.Op.Has(fsnotify.Write | fsnotify.Create | fsnotify.Remove | fsnotify.Rename) {
 				continue
 			}
 
 			// Record the event for debouncing
 			debounceMu.Lock()
 			debounce[event.Name] = time.Now()
-			isRemove := event.Op&(fsnotify.Remove|fsnotify.Rename) != 0
+			isRemove := event.Op.Has(fsnotify.Remove | fsnotify.Rename)
+			isCreate := event.Op.Has(fsnotify.Create)
 			debounceMu.Unlock()
 
 			// If it's a remove event, handle it immediately (no more writes expected)
 			if isRemove {
-				s.handleFileChange(event.Name, true)
+				s.handleFileChange(event.Name, true, true)
+				debounceMu.Lock()
+				delete(debounce, event.Name)
+				debounceMu.Unlock()
+			} else if isCreate {
+				// Handle create events immediately
+				s.handleFileChange(event.Name, false, true)
 				debounceMu.Lock()
 				delete(debounce, event.Name)
 				debounceMu.Unlock()
@@ -365,7 +394,8 @@ func (s *Server) watchLoop() {
 				if now.Sub(eventTime) >= debounceTimeout {
 					delete(debounce, filename)
 					// Process in goroutine to avoid blocking
-					go s.handleFileChange(filename, false)
+					// Write events don't change the list
+					go s.handleFileChange(filename, false, false)
 				}
 			}
 			debounceMu.Unlock()
@@ -374,45 +404,54 @@ func (s *Server) watchLoop() {
 }
 
 // handleFileChange sends notifications to all subscribed sessions for the changed file
-func (s *Server) handleFileChange(filename string, isDelete bool) {
+// and sends list_changed notifications to all sessions if the list changed (create/delete)
+func (s *Server) handleFileChange(filename string, isDelete bool, listChanged bool) {
 	// Convert filename to workflow URI
 	basename := filepath.Base(filename)
 	workflowName := strings.TrimSuffix(basename, ".md")
 	uri := fmt.Sprintf("workflow:///%s", workflowName)
 
-	s.mu.RLock()
-	// Copy the sessions that need notification
-	var (
-		sessionsToNotify      []*mcp.Session
-		sessionsToUnsubscribe []string
-	)
-	for sessionID, sub := range s.subscriptions {
-		if _, ok := sub.uris[uri]; ok {
-			sessionsToNotify = append(sessionsToNotify, sub.session)
-			if isDelete {
-				sessionsToUnsubscribe = append(sessionsToUnsubscribe, sessionID)
-			}
-		}
-	}
-	s.mu.RUnlock()
-
-	// Send notifications
-	for _, session := range sessionsToNotify {
-		s.sendResourceUpdatedNotification(session, uri)
-	}
-
-	// Auto-unsubscribe deleted resources
-	if isDelete && len(sessionsToUnsubscribe) > 0 {
-		s.mu.Lock()
-		for _, sessionID := range sessionsToUnsubscribe {
-			if sub, ok := s.subscriptions[sessionID]; ok {
-				delete(sub.uris, uri)
-				if len(sub.uris) == 0 {
-					delete(s.subscriptions, sessionID)
+	// Only send updated notifications for write/delete events, not create
+	if !listChanged || isDelete {
+		s.mu.RLock()
+		// Copy the sessions that need notification
+		var (
+			sessionsToNotify      []*mcp.Session
+			sessionsToUnsubscribe []string
+		)
+		for sessionID, sub := range s.subscriptions {
+			if _, ok := sub.uris[uri]; ok {
+				sessionsToNotify = append(sessionsToNotify, sub.session)
+				if isDelete {
+					sessionsToUnsubscribe = append(sessionsToUnsubscribe, sessionID)
 				}
 			}
 		}
-		s.mu.Unlock()
+		s.mu.RUnlock()
+
+		// Send notifications
+		for _, session := range sessionsToNotify {
+			s.sendResourceUpdatedNotification(session, uri)
+		}
+
+		// Auto-unsubscribe deleted resources
+		if isDelete && len(sessionsToUnsubscribe) > 0 {
+			s.mu.Lock()
+			for _, sessionID := range sessionsToUnsubscribe {
+				if sub, ok := s.subscriptions[sessionID]; ok {
+					delete(sub.uris, uri)
+					if len(sub.uris) == 0 {
+						delete(s.subscriptions, sessionID)
+					}
+				}
+			}
+			s.mu.Unlock()
+		}
+	}
+
+	// Send list_changed notification to all sessions if the list changed
+	if listChanged {
+		s.sendListChangedNotification()
 	}
 }
 
@@ -439,5 +478,28 @@ func (s *Server) sendResourceUpdatedNotification(session *mcp.Session, uri strin
 
 	if err := session.Send(s.watcherCtx, notification); err != nil {
 		log.Errorf(s.watcherCtx, "failed to send resource updated notification: %v", err)
+	}
+}
+
+// sendListChangedNotification sends a notifications/resources/list_changed message to all sessions
+func (s *Server) sendListChangedNotification() {
+	notification := mcp.Message{
+		JSONRPC: "2.0",
+		Method:  "notifications/resources/list_changed",
+	}
+
+	// Get all sessions
+	s.mu.RLock()
+	sessions := make([]*mcp.Session, 0, len(s.sessions))
+	for _, session := range s.sessions {
+		sessions = append(sessions, session)
+	}
+	s.mu.RUnlock()
+
+	// Send to all sessions
+	for _, session := range sessions {
+		if err := session.Send(s.watcherCtx, notification); err != nil && !errors.Is(err, mcp.ErrNoReader) {
+			log.Errorf(s.watcherCtx, "failed to send list_changed notification: %v", err)
+		}
 	}
 }

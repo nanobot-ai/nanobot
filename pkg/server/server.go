@@ -406,7 +406,8 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 			Logging:      &struct{}{},
 			Prompts:      &mcp.PromptsServerCapability{},
 			Resources: &mcp.ResourcesServerCapability{
-				Subscribe: true,
+				Subscribe:   true,
+				ListChanged: true,
 			},
 			Tools: &mcp.ToolsServerCapability{},
 		},
