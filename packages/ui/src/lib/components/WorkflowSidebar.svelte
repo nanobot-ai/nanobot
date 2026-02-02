@@ -15,52 +15,61 @@
     let progress = $state<ResourceContents | null>(null);
     let todo = $state<ResourceContents | null>(null);
 
+    let hasProgressResource = $derived(chat.resources.some((r) => r.uri === progressUri));
+    let hasTodoResource = $derived(chat.resources.some((r) => r.uri === todoUri));
+
     $effect(() => {
-        Promise.all([
-            chat.readResource(progressUri),
-            chat.readResource(todoUri)
-        ]).then(([progressResult, todoResult]) => {
-            if (progressResult.contents?.length) {
-                progress = progressResult.contents[0];
-            }
-            if (todoResult.contents?.length) {
-                todo = todoResult.contents[0];
-            }
-        });
+        if (!chat.chatId) return;
+        if (hasProgressResource) {
+            chat.readResource(progressUri).then((result) => {
+                progress = result.contents?.[0] ?? null;
+            });
+        }
+        if (hasTodoResource) {
+            chat.readResource(todoUri).then((result) => {
+                todo = result.contents?.[0] ?? null;
+            });
+        }
 
 		// Subscribe to live updates
-		const progressCleanup = chat.watchResource(progressUri, (updatedResource) => {
+		const progressCleanup = hasProgressResource ? chat.watchResource(progressUri, (updatedResource) => {
 			console.debug('[WorkflowSidebar] Resource updated:', {progressUri, updatedResource});
 			progress = updatedResource;
-		});
+		}) : null;
 
-		const todoCleanup = chat.watchResource(todoUri, (updatedResource) => {
+		const todoCleanup = hasTodoResource ? chat.watchResource(todoUri, (updatedResource) => {
 			console.debug('[WorkflowSidebar] Resource updated:', {todoUri, updatedResource});
 			todo = updatedResource;
-		});
+		}) : null;
 
 		// Cleanup subscription when component unmounts or filename changes
 		return () => {
-            progressCleanup();
-            todoCleanup();
+            progressCleanup?.();
+            todoCleanup?.();
         };
+    })
+
+    $effect(() => {
+        console.log({ chat });
     })
 
 </script>
 
-<div class="max-w-[300px] h-dvh overflow-hidden" in:fade={{ duration: 150 }}>
-    <div class="w-full h-full bg-base-100 flex flex-col">
-        <div class="flex-1 overflow-auto p-4 pt-0">
-            <div class="flex flex-col gap-2">
-                <h2 class="text-lg font-bold">Progress</h2>
-                <p class="text-sm text-base-content/60">{progress?.text ?? 'No progress found'}</p>
+{#if chat.chatId}
+    <div class="max-w-[300px] h-dvh overflow-hidden" in:fade={{ duration: 150 }}>
+        <div class="w-full h-full bg-base-100 flex flex-col">
+            <div class="flex-1 overflow-auto p-4 pt-0">
+                <div class="flex flex-col gap-2">
+                    <h2 class="text-lg font-bold">Progress</h2>
+                    <p class="text-sm text-base-content/60">{progress?.text ?? 'No progress found'}</p>
+                </div>
             </div>
-        </div>
-        <div class="flex-1 overflow-auto p-4 pt-0">
-            <div class="flex flex-col gap-2">
-                <h2 class="text-lg font-bold">TODO</h2>
-                <p class="text-sm text-base-content/60">{todo?.text ?? 'No TODOs found'}</p>
+            <div class="flex-1 overflow-auto p-4 pt-0">
+                <div class="flex flex-col gap-2">
+                    <h2 class="text-lg font-bold">TODO</h2>
+                    <p class="text-sm text-base-content/60">{todo?.text ?? 'No TODOs found'}</p>
+                </div>
             </div>
         </div>
     </div>
-</div>
+{/if}
