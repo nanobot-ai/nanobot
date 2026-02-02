@@ -634,7 +634,7 @@ definitions:
             enum: ["allow", "deny"]
             description: |
               Permission to execute bash commands using the Bash tool.
-          builtin-skills:
+          skills:
             type: string
             enum: ["allow", "deny"]
             description: |

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"os"
 	"os/exec"
@@ -18,7 +17,6 @@ import (
 
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 	"golang.org/x/net/html"
 )
@@ -33,16 +31,16 @@ const (
 	maxLineLength      = 2000
 )
 
-var allowedTools = map[string][]string{
-	"bash":           {"bash"},
-	"read":           {"read"},
-	"write":          {"write", "edit"},
-	"edit":           {"edit"},
-	"glob":           {"glob"},
-	"grep":           {"grep"},
-	"todoWrite":      {"todoWrite"},
-	"webFetch":       {"webFetch"},
-	"builtin-skills": {"listSkills", "getSkill"},
+var allowedPermsToTools = map[string][]string{
+	"bash":      {"bash"},
+	"read":      {"read"},
+	"write":     {"write", "edit"},
+	"edit":      {"edit"},
+	"glob":      {"glob"},
+	"grep":      {"grep"},
+	"todoWrite": {"todoWrite"},
+	"webFetch":  {"webFetch"},
+	"skills":    {"getSkill"},
 }
 
 // subscription holds the session reference and subscribed URIs for that session
@@ -313,23 +311,6 @@ func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.Ini
 			Version: version.Get().String(),
 		},
 	}, nil
-}
-
-func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (types.AgentConfigHook, error) {
-	if agent := params.Agent; agent != nil {
-		for _, perm := range agent.Permissions.Allowed(maps.Keys(allowedTools)) {
-			for _, tool := range allowedTools[perm] {
-				agent.MCPServers = append(agent.MCPServers, "nanobot.system/"+tool)
-			}
-		}
-
-		if params.MCPServers == nil {
-			params.MCPServers = make(map[string]types.AgentConfigHookMCPServer, 1)
-		}
-		params.MCPServers["nanobot.system"] = types.AgentConfigHookMCPServer{}
-	}
-
-	return params, nil
 }
 
 // Bash tool
