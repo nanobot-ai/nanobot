@@ -29,10 +29,11 @@ type Auth struct {
 	EncryptionKey        string   `usage:"Encryption key for storing sensitive data"`
 	APIKeyAuthWebhookURL string   `usage:"URL for API key authentication webhook"`
 	MCPServerID          string   `usage:"ID of the MCP server to validate API keys for"`
+	EnableTrustedHeaders bool     `usage:"Use trusted headers for user authentication when OAuth is not configured"`
 }
 
 func Wrap(ctx context.Context, env map[string]string, auth Auth, dsn, healthzPath string, next http.Handler) (http.Handler, error) {
-	if auth.OAuthClientID == "" {
+	if auth.OAuthClientID == "" && !auth.EnableTrustedHeaders {
 		return next, nil
 	}
 
