@@ -113,6 +113,23 @@ func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.Ini
 	}, nil
 }
 
+// parseWorkflowURI extracts the workflow name from a workflow:///name URI
+func (s *Server) parseWorkflowURI(uri string) (string, error) {
+	if !strings.HasPrefix(uri, "workflow:///") {
+		return "", mcp.ErrRPCInvalidParams.WithMessage("invalid workflow URI format, expected workflow:///name")
+	}
+
+	workflowName := strings.TrimPrefix(uri, "workflow:///")
+	if workflowName == "" {
+		return "", mcp.ErrRPCInvalidParams.WithMessage("workflow name is required")
+	}
+
+	// Remove .md extension if present (we'll add it back when needed)
+	workflowName = strings.TrimSuffix(workflowName, ".md")
+
+	return workflowName, nil
+}
+
 // parseWorkflowDescription extracts description from workflow markdown content.
 // Looks for: # Workflow: <name>\n\n<description paragraph>
 func parseWorkflowDescription(content string) string {
@@ -154,7 +171,10 @@ func parseWorkflowDescription(content string) string {
 	return strings.Join(desc, " ")
 }
 
-func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
+func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
+	sessionID, _ := types.GetSessionAndAccountID(ctx)
+	s.addSubscription(msg.Session, sessionID, "")
+
 	workflowsPath := filepath.Join(".", workflowsDir)
 
 	entries, err := os.ReadDir(workflowsPath)
@@ -216,23 +236,6 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 	}, nil
 }
 
-// parseWorkflowURI extracts the workflow name from a workflow:///name URI
-func (s *Server) parseWorkflowURI(uri string) (string, error) {
-	if !strings.HasPrefix(uri, "workflow:///") {
-		return "", mcp.ErrRPCInvalidParams.WithMessage("invalid workflow URI format, expected workflow:///name")
-	}
-
-	workflowName := strings.TrimPrefix(uri, "workflow:///")
-	if workflowName == "" {
-		return "", mcp.ErrRPCInvalidParams.WithMessage("workflow name is required")
-	}
-
-	// Remove .md extension if present (we'll add it back when needed)
-	workflowName = strings.TrimSuffix(workflowName, ".md")
-
-	return workflowName, nil
-}
-
 func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, request mcp.SubscribeRequest) (*mcp.SubscribeResult, error) {
 	workflowName, err := s.parseWorkflowURI(request.URI)
 	if err != nil {
@@ -253,34 +256,45 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
 
 	// Add subscription
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	sub, ok := s.subscriptions[sessionID]
-	if !ok {
-		sub = &subscription{
-			session: msg.Session,
-			uris:    make(map[string]struct{}),
-		}
-		s.subscriptions[sessionID] = sub
-
-		context.AfterFunc(msg.Session.Context(), func() {
-			// Clean up subscriptions when session ends
-			s.mu.Lock()
-			delete(s.subscriptions, sessionID)
-			s.mu.Unlock()
-		})
-	}
-	sub.uris[request.URI] = struct{}{}
-
+	s.addSubscription(msg.Session, sessionID, request.URI)
 	return &mcp.SubscribeResult{}, nil
 }
 
-func (s *Server) resourcesUnsubscribe(ctx context.Context, msg mcp.Message, request mcp.UnsubscribeRequest) (*mcp.UnsubscribeResult, error) {
+func (s *Server) addSubscription(session *mcp.Session, id, uri string) {
+	if session == nil || id == "" {
+		return
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	sessionID := msg.Session.ID()
+	sub, ok := s.subscriptions[id]
+	if !ok {
+		sub = &subscription{
+			session: session,
+			uris:    make(map[string]struct{}),
+		}
+		s.subscriptions[id] = sub
+
+		context.AfterFunc(session.Context(), func() {
+			// Clean up subscriptions when session ends
+			s.mu.Lock()
+			delete(s.subscriptions, id)
+			s.mu.Unlock()
+		})
+	}
+
+	if uri != "" {
+		sub.uris[uri] = struct{}{}
+	}
+}
+
+func (s *Server) resourcesUnsubscribe(ctx context.Context, msg mcp.Message, request mcp.UnsubscribeRequest) (*mcp.UnsubscribeResult, error) {
+	sessionID, _ := types.GetSessionAndAccountID(ctx)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	sub, ok := s.subscriptions[sessionID]
 	if !ok {
 		// No subscriptions for this session, nothing to do
@@ -288,11 +302,6 @@ func (s *Server) resourcesUnsubscribe(ctx context.Context, msg mcp.Message, requ
 	}
 
 	delete(sub.uris, request.URI)
-
-	// Clean up empty subscription entries
-	if len(sub.uris) == 0 {
-		delete(s.subscriptions, sessionID)
-	}
 
 	return &mcp.UnsubscribeResult{}, nil
 }
@@ -441,9 +450,6 @@ func (s *Server) handleFileChange(filename string, isDelete bool, listChanged bo
 			for _, sessionID := range sessionsToUnsubscribe {
 				if sub, ok := s.subscriptions[sessionID]; ok {
 					delete(sub.uris, uri)
-					if len(sub.uris) == 0 {
-						delete(s.subscriptions, sessionID)
-					}
 				}
 			}
 			s.mu.Unlock()
