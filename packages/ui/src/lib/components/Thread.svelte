@@ -161,7 +161,7 @@ function scrollToBottom() {
 	class:pt-14={sidebar?.isCollapsed}
 >
 	<!-- Messages area - full height scrollable with bottom padding for floating input -->
-	<div class="w-full overflow-y-auto" bind:this={messagesContainer} onscroll={handleScroll}>
+	<div class="w-full overflow-y-auto px-4" bind:this={messagesContainer} onscroll={handleScroll}>
 		<div class="mx-auto max-w-4xl">
 			<!-- Prompts section - show when prompts available and no messages -->
 			{#if prompts && prompts.length > 0}

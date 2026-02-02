@@ -58,10 +58,9 @@
 	let mimeType = $derived(resource?.mimeType ?? 'text/plain');
 </script>
 
-<div class="min-w-[500px] h-dvh overflow-hidden">
+<div class="min-w-[500px] h-dvh overflow-hidden" in:fly={{ x: 100, duration: 300 }}>
 	<div
 		class="w-full h-full bg-base-200 flex flex-col"
-		in:fly={{ x: 100, duration: 300 }}
 	>
     <div class="flex gap-2 items-center px-4 py-2 border-b border-base-300">
         <div class="flex grow items-center justify-between">

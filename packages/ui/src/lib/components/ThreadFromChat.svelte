@@ -3,6 +3,7 @@ import type { ChatService } from "$lib/chat.svelte";
 import Thread from "$lib/components/Thread.svelte";
 	import { getSidebarContext } from "$lib/context/sidebar.svelte";
 	import FileEditor from "./FileEditor.svelte";
+	import WorkflowSidebar from "./WorkflowSidebar.svelte";
 
 interface Props {
 	chat: ChatService;
@@ -14,6 +15,9 @@ let selectedFile = $state('');
 let drawerInput = $state<HTMLInputElement | null>(null);
 
 const sidebar = getSidebarContext();
+$effect(() => {
+	console.log({ agent: chat.agent });
+})
 </script>
 
 {#key chat.chatId}
@@ -46,4 +50,6 @@ const sidebar = getSidebarContext();
 		selectedFile = '';
 		sidebar?.expand();
 	}}/>
+{:else if chat.agent.id === 'planner' || chat.agent.id === 'executor'}
+	<WorkflowSidebar {chat} />
 {/if}
