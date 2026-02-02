@@ -619,11 +619,6 @@ definitions:
             enum: ["allow", "deny"]
             description: |
               Permission to search file contents using the Grep tool.
-          todoRead:
-            type: string
-            enum: ["allow", "deny"]
-            description: |
-              Permission to read todo items using the TodoRead tool.
           todoWrite:
             type: string
             enum: ["allow", "deny"]
