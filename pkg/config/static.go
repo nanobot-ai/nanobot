@@ -20,7 +20,8 @@ var UI = types.Config{
 		},
 	},
 	Publish: types.Publish{
-		MCPServers: []string{"nanobot.meta", "nanobot.workflows", "nanobot.system/todoRead"},
+		MCPServers: []string{"nanobot.meta", "nanobot.workflows"},
+		Resources:  []string{"nanobot.system"},
 	},
 	MCPServers: map[string]mcp.Server{
 		"nanobot.meta":      {},
