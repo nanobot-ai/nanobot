@@ -94,12 +94,17 @@ When working on the UI, Nanobot automatically forwards requests to the developme
 
 - **Built-in MCP Servers (`pkg/servers/`)** - Nanobot includes several built-in MCP servers:
   - `agent/` - Exposes individual agents as MCP servers with chat capabilities
-  - `capabilities/` - Session initialization and capability management (workspace setup)
   - `meta/` - Metadata and introspection tools (list_chats, update_chat, list_agents)
-  - `resources/` - Database-backed resource management (create_resource, delete_resource) with automatic mimetype detection
-  - `workspace/` - Workspace and session management (create/update/delete workspaces, session reading)
+  - `system/` - System-level features including skills, todos, and various system tools (bash, glob, grep, etc.)
+    - Skills - User-defined and built-in skills that agents can learn and use
+    - Todos - Task management with subscriptions and list_changed notifications
+  - `workflows/` - Workflow management server that exposes workflows as prompts from markdown files
 
-- **Configuration (`pkg/config/`)** - YAML-based configuration loading and validation. Supports profiles, extends (inheritance), and environment variables. See `pkg/config/schema.yaml` for the complete schema.
+- **Configuration (`pkg/config/`)** - YAML-based configuration loading and validation. Supports profiles, extends (inheritance), and environment variables. See `pkg/config/schema.yaml` for the complete schema. Default configuration location is `~/.nanobot/` (or `.nanobot/` in the project directory).
+
+- **Skills System (`pkg/servers/system/skills.go`)** - Built-in and user-defined skills that agents can learn and use. Skills are markdown files that define reusable capabilities. User skills can be defined in `~/.nanobot/skills/` or `.nanobot/skills/` and override built-in skills.
+
+- **Workflows (`pkg/servers/workflows/`)** - Workflow management server that loads workflow definitions from markdown files in a `workflows/` directory. Workflows are exposed as MCP prompts and support list_changed notifications for subscriptions.
 
 **Key Architectural Patterns:**
 
@@ -134,6 +139,20 @@ When working on the UI, Nanobot automatically forwards requests to the developme
 
 ## Configuration
 
+### Configuration Locations
+
+Nanobot uses `.nanobot/` as the default configuration directory (either in `~/.nanobot/` or in the project directory). The directory structure is:
+
+```
+.nanobot/
+├── agents/              # Agent definitions (*.md files with YAML frontmatter)
+├── skills/              # User-defined skills (overrides built-in skills)
+├── workflows/           # Workflow definitions (*.md files)
+└── mcp-servers.yaml     # MCP server configurations
+```
+
+### Configuration Format
+
 Configuration is YAML-based. Key top-level sections:
 
 - `agents` - Define agents with their models, tools, instructions, and behaviors
@@ -144,6 +163,7 @@ Configuration is YAML-based. Key top-level sections:
 - `auth` - Authentication configuration (OAuth, remote headers)
 - `profiles` - Configuration profiles for different environments
 - `extends` - Inherit from other configuration files
+- `skills` - Agent skill permissions and configuration
 
 Example minimal configuration:
 
@@ -158,6 +178,8 @@ mcpServers:
   my-mcp-server:
     url: https://example.com/mcp
 ```
+
+Note: When using directory-based configuration, MCP servers are defined in `mcp-servers.yaml` or `mcp-servers.json` (not `mcpServers.*`).
 
 ## Important Go Packages
 
@@ -211,11 +233,16 @@ Go tests follow standard Go conventions:
 Nanobot supports both MCP standard and MCP-UI extensions:
 - Standard MCP: tools, prompts, resources, sampling
 - MCP-UI: Elicitations (user input prompts), progress notifications, structured UI elements
+- Subscriptions: Resource and prompt subscriptions with `list_changed` notifications for dynamic updates
 
 When implementing MCP features, refer to:
 - MCP types in `pkg/mcp/types.go`
 - Message handling in `pkg/mcp/message.go`
 - Protocol reference at `https://modelcontextprotocol.io`
+
+**Resource Subscriptions:** MCP servers can send `notifications/resources/list_changed` to notify clients when resource lists change. Nanobot's workflows and todo servers support this for dynamic updates.
+
+**OAuth Token Management:** Nanobot automatically deletes stored OAuth tokens when they become invalid, requiring re-authentication.
 
 ## Code Style
 
