@@ -100,9 +100,9 @@ When working on the UI, Nanobot automatically forwards requests to the developme
     - Todos - Task management with subscriptions and list_changed notifications
   - `workflows/` - Workflow management server that exposes workflows as prompts from markdown files
 
-- **Configuration (`pkg/config/`)** - YAML-based configuration loading and validation. Supports profiles, extends (inheritance), and environment variables. See `pkg/config/schema.yaml` for the complete schema. Default configuration location is `~/.nanobot/` (or `.nanobot/` in the project directory).
+- **Configuration (`pkg/config/`)** - YAML-based configuration loading and validation. Supports profiles, extends (inheritance), and environment variables. See `pkg/config/schema.yaml` for the complete schema. By default, configuration is loaded from a `.nanobot/` directory in the current working directory.
 
-- **Skills System (`pkg/servers/system/skills.go`)** - Built-in and user-defined skills that agents can learn and use. Skills are markdown files that define reusable capabilities. User skills can be defined in `~/.nanobot/skills/` or `.nanobot/skills/` and override built-in skills.
+- **Skills System (`pkg/servers/system/skills.go`)** - Built-in and user-defined skills that agents can learn and use. Skills are markdown files that define reusable capabilities. User skills are loaded from a `skills/` subdirectory under the active configuration directory (for example, `.nanobot/skills/` in the current project) and override built-in skills.
 
 - **Workflows (`pkg/servers/workflows/`)** - Workflow management server that loads workflow definitions from markdown files in a `workflows/` directory. Workflows are exposed as MCP prompts and support list_changed notifications for subscriptions.
 
