@@ -97,7 +97,7 @@ When working on the UI, Nanobot automatically forwards requests to the developme
   - `meta/` - Metadata and introspection tools (list_chats, update_chat, list_agents)
   - `system/` - System-level features including skills, todos, and various system tools (bash, glob, grep, etc.)
     - Skills - User-defined and built-in skills that agents can learn and use
-    - Todos - Task management with subscriptions and list_changed notifications
+    - Todos - Task management with subscriptions and resource updated notifications
   - `workflows/` - Workflow management server that exposes workflows as prompts from markdown files
 
 - **Configuration (`pkg/config/`)** - YAML-based configuration loading and validation. Supports profiles, extends (inheritance), and environment variables. See `pkg/config/schema.yaml` for the complete schema. By default, configuration is loaded from a `.nanobot/` directory in the current working directory.
