@@ -21,8 +21,22 @@ RUN CI=true CGO_ENABLED=0 go generate ./... && go build -o nanobot .
 # Final stage
 FROM cgr.dev/chainguard/wolfi-base:latest AS runtime
 
-# Install bash
-RUN apk add --no-cache bash
+# Install bash, git, common utilities, and uv
+RUN apk update && apk add --no-cache \
+    bash \
+    git \
+    curl \
+    wget \
+    jq \
+    gzip \
+    xz \
+    coreutils \
+    findutils \
+    grep \
+    sed \
+    gawk \
+    ripgrep \
+    uv
 
 # Create non-root user with home directory
 RUN adduser -D -h /home/nanobot -s /bin/bash nanobot
