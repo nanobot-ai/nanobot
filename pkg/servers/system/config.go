@@ -5,6 +5,7 @@ import (
 	"maps"
 	"strings"
 
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -48,6 +49,29 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 			params.MCPServers = make(map[string]types.AgentConfigHookMCPServer, 1)
 		}
 		params.MCPServers["nanobot.system"] = types.AgentConfigHookMCPServer{}
+
+		// Configure MCP search server if environment variables are set
+		session := mcp.SessionFromContext(ctx)
+		if session != nil {
+			envMap := session.GetEnvMap()
+			if searchURL := envMap["MCP_SERVER_SEARCH_URL"]; searchURL != "" {
+				mcpServer := types.AgentConfigHookMCPServer{
+					URL: searchURL,
+				}
+
+				// Add authentication header if API key is provided
+				if apiKey := envMap["MCP_SERVER_SEARCH_API_KEY"]; apiKey != "" {
+					mcpServer.Headers = map[string]string{
+						"Authorization": "Bearer " + apiKey,
+					}
+				}
+
+				params.MCPServers["mcp-server-search"] = mcpServer
+
+				// Also add to the agent's MCP server list so tools get fetched
+				agent.MCPServers = append(agent.MCPServers, "mcp-server-search")
+			}
+		}
 	}
 
 	return params, nil

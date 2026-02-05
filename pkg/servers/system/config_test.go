@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -321,5 +322,108 @@ func TestConfigAddsToolsForPermissions(t *testing.T) {
 		if !found {
 			t.Errorf("expected tool '%s' to be added to MCPServers", tool)
 		}
+	}
+}
+
+func TestConfigHook_MCPServerSearch(t *testing.T) {
+	s := NewServer("")
+
+	tests := []struct {
+		name           string
+		envMap         map[string]string
+		wantServerName string
+		wantURL        string
+		wantAuth       string
+		shouldExist    bool
+	}{
+		{
+			name: "with both URL and API key",
+			envMap: map[string]string{
+				"MCP_SERVER_SEARCH_URL":     "https://search.example.com/mcp",
+				"MCP_SERVER_SEARCH_API_KEY": "test-key-123",
+			},
+			wantServerName: "mcp-server-search",
+			wantURL:        "https://search.example.com/mcp",
+			wantAuth:       "Bearer test-key-123",
+			shouldExist:    true,
+		},
+		{
+			name: "with URL but no API key",
+			envMap: map[string]string{
+				"MCP_SERVER_SEARCH_URL": "https://search.example.com/mcp",
+			},
+			wantServerName: "mcp-server-search",
+			wantURL:        "https://search.example.com/mcp",
+			wantAuth:       "",
+			shouldExist:    true,
+		},
+		{
+			name:           "without environment variables",
+			envMap:         map[string]string{},
+			wantServerName: "mcp-server-search",
+			shouldExist:    false,
+		},
+		{
+			name: "with empty URL",
+			envMap: map[string]string{
+				"MCP_SERVER_SEARCH_URL":     "",
+				"MCP_SERVER_SEARCH_API_KEY": "test-key-123",
+			},
+			wantServerName: "mcp-server-search",
+			shouldExist:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create context with session and environment
+			ctx := context.Background()
+			session := mcp.NewEmptySession(ctx)
+			session.Set(mcp.SessionEnvMapKey, tt.envMap)
+			ctx = mcp.WithSession(ctx, session)
+
+			// Prepare input params
+			params := types.AgentConfigHook{
+				Agent: &types.HookAgent{
+					Name: "Test Agent",
+				},
+			}
+
+			// Call config hook
+			result, err := s.config(ctx, params)
+			if err != nil {
+				t.Fatalf("config() error = %v", err)
+			}
+
+			// Check if MCP server was added
+			server, exists := result.MCPServers[tt.wantServerName]
+
+			if exists != tt.shouldExist {
+				t.Errorf("MCPServers[%q] exists = %v, want %v", tt.wantServerName, exists, tt.shouldExist)
+			}
+
+			if !tt.shouldExist {
+				return
+			}
+
+			// Verify URL
+			if server.URL != tt.wantURL {
+				t.Errorf("MCPServers[%q].URL = %q, want %q", tt.wantServerName, server.URL, tt.wantURL)
+			}
+
+			// Verify auth header
+			if tt.wantAuth != "" {
+				authHeader, ok := server.Headers["Authorization"]
+				if !ok {
+					t.Errorf("MCPServers[%q].Headers[Authorization] not found", tt.wantServerName)
+				} else if authHeader != tt.wantAuth {
+					t.Errorf("MCPServers[%q].Headers[Authorization] = %q, want %q", tt.wantServerName, authHeader, tt.wantAuth)
+				}
+			} else {
+				if _, ok := server.Headers["Authorization"]; ok {
+					t.Errorf("MCPServers[%q].Headers[Authorization] should not be present", tt.wantServerName)
+				}
+			}
+		})
 	}
 }
