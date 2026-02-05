@@ -44,6 +44,13 @@ export interface ChatMessageItemToolCall extends ChatMessageItemBase {
 	arguments?: string;
 	callID?: string;
 	name?: string;
+	_meta?: {
+		ui?: {
+			resourceUri?: string;
+			visibility?: Array<'model' | 'app'>;
+		};
+		[key: string]: unknown;
+	};
 	output?: {
 		isError?: boolean;
 		content?: ToolOutputItem[];

@@ -31,6 +31,9 @@
 		}
 	});
 
+	// NOTE: The onUiAction function is a property used by mcp-ui to redirect events sent from the UI snippet
+	// back to the host (nanobot). Nanobot is then responsible for calling the MCP server and returning the response
+
 	async function onUIAction(e: UIActionResult) {
 		console.log('UI Action', e);
 		switch (e.type) {

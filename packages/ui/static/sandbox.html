@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>MCP Apps Sandbox</title>
+  <style>
+    html, body { margin: 0; height: 100vh; width: 100vw; }
+    iframe { width: 100%; height: 100%; border: none; }
+  </style>
+</head>
+<body>
+  <script type="module">
+    if (window.self === window.top) throw new Error("Must be in iframe");
+
+    const HOST_ORIGIN = new URL(document.referrer).origin;
+
+    // Security check: verify sandbox isolation
+    try { window.top.location.href; throw new Error("Not isolated"); }
+    catch (e) { if (e.message === "Not isolated") throw e; }
+
+    const inner = document.createElement("iframe");
+    inner.sandbox = "allow-scripts allow-same-origin allow-forms";
+    document.body.appendChild(inner);
+
+    window.addEventListener("message", (event) => {
+      if (event.source === window.parent && event.origin === HOST_ORIGIN) {
+        if (event.data?.method === "ui/notifications/sandbox-resource-ready") {
+          const { html, sandbox, permissions } = event.data.params || {};
+          if (sandbox) inner.sandbox = sandbox;
+          if (html) {
+            const doc = inner.contentDocument;
+            doc.open(); doc.write(html); doc.close();
+          }
+        } else {
+          inner.contentWindow?.postMessage(event.data, "*");
+        }
+      } else if (event.source === inner.contentWindow) {
+        window.parent.postMessage(event.data, HOST_ORIGIN);
+      }
+    });
+
+    window.parent.postMessage({
+      jsonrpc: "2.0",
+      method: "ui/notifications/sandbox-proxy-ready",
+      params: {}
+    }, HOST_ORIGIN);
+  </script>
+</body>
+</html>

@@ -4,6 +4,7 @@
 	import type { Attachment, ChatResult, ChatMessageItemToolCall, ToolOutputItem } from '$lib/types';
 	import '@mcp-ui/client/ui-resource-renderer.wc.js';
 	import MessageItemUI from '$lib/components/MessageItemUI.svelte';
+	import McpAppView from '$lib/components/McpAppView.svelte';
 	import { isUIResource } from '@mcp-ui/client';
 
 	interface Props {
@@ -12,10 +13,14 @@
 	}
 
 	let { item, onSend }: Props = $props();
+
+	// Detect MCP Apps tool (has _meta.ui.resourceUri)
+	let isMcpApp = $derived(!!item._meta?.ui?.resourceUri);
+
 	let singleUIResource = $derived(
 		item.output?.content &&
 			item.output?.content?.filter((i) => {
-				return isUIResource(i) && !i.resource?._meta?.['ai.nanobo.meta/workspace'];
+				return isUIResource(i) && !i.resource?._meta?.['ai.nanobot.meta/workspace'];
 			}).length === 1
 	);
 
@@ -171,10 +176,15 @@
 	</div>
 </div>
 
+<!-- Render MCP App UI if tool has resourceUri -->
+{#if isMcpApp}
+	<McpAppView {item} />
+{/if}
+
 <div class="flex w-full flex-wrap items-start justify-start gap-2 p-2">
 	{#if item.output && item.output.content}
 		{#each item.output.content as contentItem, i (i)}
-			{#if contentItem.type === 'resource' && contentItem.resource && isUIResource(contentItem) && !contentItem.resource._meta?.['ai.nanobot.meta/workspace']}
+			{#if contentItem.type === 'resource' && contentItem.resource && isUIResource(contentItem) && !contentItem.resource._meta?.['ai.nanobot.meta/workspace'] && !isMcpApp}
 				<MessageItemUI
 					item={contentItem}
 					{onSend}

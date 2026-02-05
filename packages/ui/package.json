@@ -5,6 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "pnpm i && vite dev",
+		"dev:sandbox": "npx serve static -l 8081 --cors",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
@@ -45,7 +46,7 @@
 	},
 	"dependencies": {
 		"@lucide/svelte": "^0.540.0",
-		"@mcp-ui/client": "^5.9.0",
+		"@mcp-ui/client": "^6.0.0",
 		"daisyui": "^5.1.10",
 		"highlight.js": "^11.11.1",
 		"marked": "^16.4.2",
