@@ -25,7 +25,7 @@ func createPermissions(t *testing.T, perms map[string]string) *types.AgentPermis
 }
 
 func TestConfigSkillsPermissionAppendsInstructions(t *testing.T) {
-	server := NewServer("")
+	server := NewServer("", "")
 	ctx := context.Background()
 
 	agent := &types.HookAgent{
@@ -71,7 +71,7 @@ func TestConfigSkillsPermissionAppendsInstructions(t *testing.T) {
 }
 
 func TestConfigSkillsPermissionIncludesSkillDetails(t *testing.T) {
-	server := NewServer("")
+	server := NewServer("", "")
 	ctx := context.Background()
 
 	agent := &types.HookAgent{
@@ -114,7 +114,7 @@ func TestConfigSkillsPermissionIncludesSkillDetails(t *testing.T) {
 }
 
 func TestConfigNoSkillsPermission(t *testing.T) {
-	server := NewServer("")
+	server := NewServer("", "")
 	ctx := context.Background()
 
 	originalInstructions := "You are a helpful assistant."
@@ -154,7 +154,7 @@ func TestConfigNoSkillsPermission(t *testing.T) {
 }
 
 func TestConfigSkillsPermissionDenied(t *testing.T) {
-	server := NewServer("")
+	server := NewServer("", "")
 	ctx := context.Background()
 
 	originalInstructions := "You are a helpful assistant."
@@ -193,7 +193,7 @@ func TestConfigSkillsPermissionDenied(t *testing.T) {
 
 func TestConfigWithUserSkills(t *testing.T) {
 	// Use test data directory with user skills
-	server := NewServer(testdataDir(t, "with-user-skills"))
+	server := NewServer(testdataDir(t, "with-user-skills"), "")
 	ctx := context.Background()
 
 	agent := &types.HookAgent{
@@ -232,7 +232,7 @@ func TestConfigWithUserSkills(t *testing.T) {
 }
 
 func TestConfigEmptyInstructions(t *testing.T) {
-	server := NewServer("")
+	server := NewServer("", "")
 	ctx := context.Background()
 
 	agent := &types.HookAgent{
@@ -266,7 +266,7 @@ func TestConfigEmptyInstructions(t *testing.T) {
 }
 
 func TestConfigNilAgent(t *testing.T) {
-	server := NewServer("")
+	server := NewServer("", "")
 	ctx := context.Background()
 
 	result, err := server.config(ctx, types.AgentConfigHook{
@@ -284,7 +284,7 @@ func TestConfigNilAgent(t *testing.T) {
 }
 
 func TestConfigAddsToolsForPermissions(t *testing.T) {
-	server := NewServer("")
+	server := NewServer("", "")
 	ctx := context.Background()
 
 	agent := &types.HookAgent{

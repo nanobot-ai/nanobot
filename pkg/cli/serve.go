@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -110,7 +111,67 @@ func (r *Run) getRoots() ([]mcp.Root, error) {
 	return roots, nil
 }
 
+// cloneGitHubRepoIfConfigured checks for GITHUB_CLONE_URL environment variable
+// and clones the repository to the current working directory if present.
+// After cloning, it changes to the cloned directory.
+// This is useful for CI/CD environments where the repo needs to be cloned before running.
+func cloneGitHubRepoIfConfigured() error {
+	cloneURL := os.Getenv("GITHUB_CLONE_URL")
+	if cloneURL == "" {
+		return nil
+	}
+
+	repo := os.Getenv("GITHUB_REPO")
+	if repo == "" {
+		return fmt.Errorf("GITHUB_CLONE_URL is set but GITHUB_REPO is not")
+	}
+
+	// Extract repo name for the directory (the part after the /)
+	parts := strings.Split(repo, "/")
+	if len(parts) != 2 {
+		return fmt.Errorf("GITHUB_REPO must be in the format owner/repo, got: %s", repo)
+	}
+	repoName := parts[1]
+
+	wd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	targetDir := filepath.Join(wd, repoName)
+
+	// Check if directory already exists
+	if _, err := os.Stat(targetDir); err == nil {
+		printer.Prefix("clone", fmt.Sprintf("Directory %s already exists, skipping clone", targetDir))
+	} else {
+		printer.Prefix("clone", fmt.Sprintf("Cloning %s to %s", repo, targetDir))
+
+		gitCmd := exec.Command("git", "clone", "--depth=1", cloneURL, targetDir)
+		gitCmd.Stdout = os.Stdout
+		gitCmd.Stderr = os.Stderr
+
+		if err := gitCmd.Run(); err != nil {
+			return fmt.Errorf("failed to clone repository: %w", err)
+		}
+
+		printer.Prefix("clone", "Clone completed successfully")
+	}
+
+	// Change to the cloned directory
+	if err := os.Chdir(targetDir); err != nil {
+		return fmt.Errorf("failed to change to cloned directory: %w", err)
+	}
+	printer.Prefix("clone", fmt.Sprintf("Changed working directory to %s", targetDir))
+
+	return nil
+}
+
 func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
+	// Clone GitHub repo if environment variables are configured
+	if err := cloneGitHubRepoIfConfigured(); err != nil {
+		return fmt.Errorf("failed to clone GitHub repository: %w", err)
+	}
+
 	if (r.TrustedIssuer != "") != (len(r.TrustedAudiences) != 0) {
 		return fmt.Errorf("trusted issuer and audience must be set together")
 	}
@@ -118,6 +179,12 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 	roots, err := r.getRoots()
 	if err != nil {
 		return err
+	}
+
+	// Get current working directory (may have been changed by cloneGitHubRepoIfConfigured)
+	workdir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
 	callbackHandler := mcp.NewCallbackServer(confirm.New())
@@ -129,6 +196,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		TokenExchangeClientID:     r.Auth.OAuthClientID,
 		TokenExchangeClientSecret: r.Auth.OAuthClientSecret,
 		ConfigDir:                 r.n.ConfigPath,
+		Workdir:                   workdir,
 	}
 
 	cfgFactory := types.ConfigFactory(func(ctx context.Context, profiles string) (types.Config, error) {
