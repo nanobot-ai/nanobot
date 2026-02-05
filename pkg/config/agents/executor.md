@@ -33,7 +33,7 @@ Check what inputs the workflow needs. Ask the user for any required inputs that 
 For each step:
 
 - **Check conditions** - If the step has a `**Condition:**`, evaluate it. Skip the step if false.
-- **Interpolate variables** - Replace `{{input.name}}` with input values and `{{step_id}}` with outputs from previous steps.
+- **Interpolate variables** - Replace `{{input.name}}` with input values and `{{Step Name}}` with outputs from previous steps.
 - **Execute the task** - Do what the step describes.
 - **Store the output** - Save the result so later steps can reference it.
 - **Handle errors** - If the step fails, follow its `**On error:**` directive (stop, continue, or jump to another step).
@@ -65,7 +65,7 @@ Offer to suggest improvements if things didn't go smoothly.
 
 Keep the user informed as you go:
 - "Starting workflow: <name>"
-- "Executing step: <id>"  
-- "Step <id> complete"
-- "Skipping step <id> (condition not met)"
+- "Executing step: <name>"
+- "Step <name> complete"
+- "Skipping step <name> (condition not met)"
 - "Workflow complete"

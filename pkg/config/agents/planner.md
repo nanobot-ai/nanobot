@@ -41,7 +41,7 @@ After getting answers:
 
 ## Writing Good Workflows
 
-**Use descriptive step IDs** - `fetch_issues` not `step1`. These are used to reference outputs in later steps.
+**Use descriptive step names** - `Fetch Issues` not `step1` or `fetch_issues`. Use human-friendly title case names. These are used to reference outputs in later steps as `{{Fetch Issues}}`.
 
 **Be specific in task descriptions** - Give enough detail that the executor knows exactly what to do and what format to return.
 
