@@ -1,5 +1,5 @@
 ---
-name: MCP Explorer
+name: General Chat
 description: Helps users discover MCP servers and tools to solve problems
 model: claude-opus-4-5
 temperature: 0.3
