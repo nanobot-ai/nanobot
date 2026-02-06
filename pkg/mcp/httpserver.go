@@ -433,7 +433,9 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	session, err := NewServerSession(h.ctx, h.MessageHandler)
+	session, err := NewServerSession(h.ctx, h.MessageHandler, ServerSessionOptions{
+		DefaultAgent: req.Header.Get("X-Nanobot-Default-Agent"),
+	})
 	if err != nil {
 		http.Error(rw, fmt.Sprintf(`{"http_error": "Failed to create session: %v"}`, err), http.StatusInternalServerError)
 		return

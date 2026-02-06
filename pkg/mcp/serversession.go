@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
@@ -14,14 +15,25 @@ var (
 	_ Wire = (*ServerSession)(nil)
 )
 
-func NewServerSession(ctx context.Context, handler MessageHandler) (*ServerSession, error) {
+type ServerSessionOptions struct {
+	DefaultAgent string
+}
+
+func (s ServerSessionOptions) Merge(other ServerSessionOptions) ServerSessionOptions {
+	s.DefaultAgent = complete.Last(s.DefaultAgent, other.DefaultAgent)
+	return s
+}
+
+func NewServerSession(ctx context.Context, handler MessageHandler, opts ...ServerSessionOptions) (*ServerSession, error) {
 	return NewExistingServerSession(ctx,
 		SessionState{
 			ID: uuid.String(),
-		}, handler)
+		}, handler, opts...)
 }
 
-func NewExistingServerSession(ctx context.Context, state SessionState, handler MessageHandler) (*ServerSession, error) {
+func NewExistingServerSession(ctx context.Context, state SessionState, handler MessageHandler, opts ...ServerSessionOptions) (*ServerSession, error) {
+	opt := complete.Complete(opts...)
+
 	s := &serverWire{
 		read:      make(chan Message),
 		noReader:  make(chan struct{}),
@@ -36,6 +48,12 @@ func NewExistingServerSession(ctx context.Context, state SessionState, handler M
 	for k, v := range state.Attributes {
 		session.Set(k, v)
 	}
+
+	// Set the current agent if specified in options
+	if opt.DefaultAgent != "" {
+		session.Set("defaultAgent", SavedString(opt.DefaultAgent))
+	}
+
 	return &ServerSession{
 		session: session,
 		wire:    s,
