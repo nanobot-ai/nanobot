@@ -272,10 +272,10 @@ func TestFileFilter(t *testing.T) {
 		// Root directory
 		{name: "root directory", path: ".", isDir: true, expected: true},
 
-		// Hidden directories should be excluded
+		// Specifically excluded hidden directories
 		{name: "hidden directory .git", path: ".git", isDir: true, expected: false},
 		{name: "hidden directory .nanobot", path: ".nanobot", isDir: true, expected: false},
-		{name: "hidden directory .hidden", path: ".hidden", isDir: true, expected: false},
+		{name: "hidden directory .hidden", path: ".hidden", isDir: true, expected: true}, // Changed: now allowed
 
 		// Excluded directories
 		{name: "node_modules", path: "node_modules", isDir: true, expected: false},
@@ -298,10 +298,11 @@ func TestFileFilter(t *testing.T) {
 		{name: "normal file", path: "test.txt", isDir: false, expected: true},
 		{name: "file in subdir", path: "src/main.go", isDir: false, expected: true},
 
-		// Hidden files excluded (starting with .)
-		{name: "dotfile .gitignore", path: ".gitignore", isDir: false, expected: false},
-		{name: "dotfile .env", path: ".env", isDir: false, expected: false},
-		{name: "dotfile in subdir", path: "src/.gitignore", isDir: false, expected: false},
+		// Hidden files now allowed (except specifically excluded ones)
+		{name: "dotfile .gitignore", path: ".gitignore", isDir: false, expected: true},         // Changed: now allowed
+		{name: "dotfile .env", path: ".env", isDir: false, expected: true},                     // Changed: now allowed
+		{name: "dotfile in subdir", path: "src/.gitignore", isDir: false, expected: true},      // Changed: now allowed
+		{name: "excluded dotfile .DS_Store", path: ".DS_Store", isDir: false, expected: false}, // New: specifically excluded
 
 		// Excluded files by name
 		{name: "excluded file nanobot.db", path: "nanobot.db", isDir: false, expected: false},
