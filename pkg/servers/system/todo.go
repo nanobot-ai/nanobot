@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
@@ -23,22 +22,21 @@ type TodoWriteParams struct {
 	Todos []TodoItem `json:"todos"`
 }
 
-func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
-	// Always return one resource (todo:///list) even if the file doesn't exist
-	return &mcp.ListResourcesResult{
-		Resources: []mcp.Resource{
-			{
-				URI:         "todo:///list",
-				Name:        "Todo List",
-				Description: "The current todo list for tracking tasks",
-				MimeType:    "application/json",
-			},
+// listTodoResources returns the todo list resource.
+func (s *Server) listTodoResources() []mcp.Resource {
+	return []mcp.Resource{
+		{
+			URI:         "todo:///list",
+			Name:        "Todo List",
+			Description: "The current todo list for tracking tasks",
+			MimeType:    "application/json",
 		},
-	}, nil
+	}
 }
 
-func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-	if request.URI != "todo:///list" {
+// readTodoResource reads the todo list resource.
+func (s *Server) readTodoResource(ctx context.Context, uri string) (*mcp.ReadResourceResult, error) {
+	if uri != "todo:///list" {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid todo URI, expected todo:///list")
 	}
 
@@ -65,7 +63,7 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 	return &mcp.ReadResourceResult{
 		Contents: []mcp.ResourceContent{
 			{
-				URI:      request.URI,
+				URI:      uri,
 				Name:     "Todo List",
 				MIMEType: "application/json",
 				Text:     &contentStr,
@@ -74,81 +72,13 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 	}, nil
 }
 
-func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, request mcp.SubscribeRequest) (*mcp.SubscribeResult, error) {
-	if request.URI != "todo:///list" {
-		return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid todo URI, expected todo:///list")
+// subscribeTodoResource subscribes to the todo list resource.
+func (s *Server) subscribeTodoResource(uri string) error {
+	if uri != "todo:///list" {
+		return mcp.ErrRPCInvalidParams.WithMessage("invalid todo URI, expected todo:///list")
 	}
-
-	// Add subscription
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	sessionID, _ := types.GetSessionAndAccountID(ctx)
-	sub, ok := s.subscriptions[sessionID]
-	if !ok {
-		sub = &subscription{
-			session: msg.Session,
-			uris:    make(map[string]struct{}),
-		}
-		s.subscriptions[sessionID] = sub
-
-		context.AfterFunc(msg.Session.Context(), func() {
-			// Clean up subscriptions when session ends
-			s.mu.Lock()
-			delete(s.subscriptions, sessionID)
-			s.mu.Unlock()
-		})
-	}
-	sub.uris[request.URI] = struct{}{}
-
-	return &mcp.SubscribeResult{}, nil
-}
-
-func (s *Server) resourcesUnsubscribe(ctx context.Context, msg mcp.Message, request mcp.UnsubscribeRequest) (*mcp.UnsubscribeResult, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	sessionID, _ := types.GetSessionAndAccountID(ctx)
-	sub, ok := s.subscriptions[sessionID]
-	if !ok {
-		// No subscriptions for this session, nothing to do
-		return &mcp.UnsubscribeResult{}, nil
-	}
-
-	delete(sub.uris, request.URI)
-
-	// Clean up empty subscription entries
-	if len(sub.uris) == 0 {
-		delete(s.subscriptions, sessionID)
-	}
-
-	return &mcp.UnsubscribeResult{}, nil
-}
-
-// sendResourceUpdatedNotification sends a notifications/resources/updated message
-func (s *Server) sendResourceUpdatedNotification(session *mcp.Session, uri string) {
-	notification := mcp.Message{
-		JSONRPC: "2.0",
-		Method:  "notifications/resources/updated",
-	}
-
-	// Create the params with the URI
-	params := struct {
-		URI string `json:"uri"`
-	}{
-		URI: uri,
-	}
-
-	paramsBytes, err := json.Marshal(params)
-	if err != nil {
-		log.Errorf(context.Background(), "failed to marshal notification params: %v", err)
-		return
-	}
-	notification.Params = paramsBytes
-
-	if err := session.Send(context.Background(), notification); err != nil {
-		log.Errorf(context.Background(), "failed to send resource updated notification: %v", err)
-	}
+	// Subscription is handled by the shared subscription manager
+	return nil
 }
 
 func (s *Server) todoWrite(ctx context.Context, params TodoWriteParams) (string, error) {
@@ -187,13 +117,7 @@ func (s *Server) todoWrite(ctx context.Context, params TodoWriteParams) (string,
 	}
 
 	// Send resource updated notification to subscribed sessions
-	s.mu.RLock()
-	sub := s.subscriptions[sessionID]
-	s.mu.RUnlock()
-
-	if sub != nil {
-		go s.sendResourceUpdatedNotification(sub.session, "todo:///list")
-	}
+	s.subscriptions.SendResourceUpdatedNotification("todo:///list")
 
 	return fmt.Sprintf("Todo list updated:\n\n%s", string(todoJSON)), nil
 }
