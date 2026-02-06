@@ -426,6 +426,19 @@ func (d *Data) ToolMapping(ctx context.Context, opts ...GetOption) (types.ToolMa
 		return nil, err
 	}
 
+	// Also include tools from entrypoint agents' MCP servers and tool refs
+	for _, e := range c.Publish.Entrypoint {
+		agent, ok := c.Agents[e]
+		if !ok {
+			continue
+		}
+		agentToolMappings, err := d.BuildToolMappings(ctx, slices.Concat(agent.MCPServers, agent.Tools))
+		if err != nil {
+			continue
+		}
+		maps.Copy(toolMappings, agentToolMappings)
+	}
+
 	toolMappings = schema.ValidateToolMappings(toolMappings)
 	session.Set(toolMappingKey, toolMappings)
 
@@ -639,6 +652,10 @@ func (d *Data) PublishedPromptMappings(ctx context.Context, opts ...GetOption) (
 
 	session.Set(promptMappingKey, promptMappings)
 	return promptMappings, nil
+}
+
+func (d *Data) BuildToolMappings(ctx context.Context, refs []string) (types.ToolMappings, error) {
+	return d.runtime.BuildToolMappings(ctx, refs)
 }
 
 func (d *Data) BuildPromptMappings(ctx context.Context, refs []string) (types.PromptMappings, error) {

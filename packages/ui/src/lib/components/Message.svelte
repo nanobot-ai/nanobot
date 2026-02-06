@@ -1,15 +1,26 @@
 <script lang="ts">
 	import MessageItem from './MessageItem.svelte';
-	import type { Attachment, ChatMessage, ChatResult } from '$lib/types';
+	import type { Attachment, ChatMessage, ChatResult, ResourceContents, Tool } from '$lib/types';
+	import type { CallToolResult } from "$lib/chat.svelte";
 	import MessageItemText from '$lib/components/MessageItemText.svelte';
 
 	interface Props {
 		message: ChatMessage;
+		tools?: Tool[];
 		timestamp?: Date;
 		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
+		onReadResource?: (
+			uri: string,
+			opts?: { abort?: AbortController }
+		) => Promise<{ contents: ResourceContents[] }>;
+		onToolCall?: (
+			toolName: string,
+			args: Record<string, unknown>,
+			opts?: { abort?: AbortController }
+		) => Promise<CallToolResult>;
 	}
 
-	let { message, timestamp, onSend }: Props = $props();
+	let { message, tools = [], timestamp, onSend, onReadResource, onToolCall }: Props = $props();
 
 	const displayTime = $derived(
 		timestamp || (message.created ? new Date(message.created) : new Date())
@@ -43,7 +54,7 @@
 				<div class="rounded-box bg-base-200 p-2">
 					{#if message.items && message.items.length > 0}
 						{#each message.items as item (item.id)}
-							<MessageItem {item} role={message.role} />
+							<MessageItem {item} role={message.role} {onSend} {onReadResource} {onToolCall} />
 						{/each}
 					{:else}
 						<!-- Fallback for messages without items -->
@@ -65,7 +76,7 @@
 			<!-- Render all message items -->
 			{#if message.items && message.items.length > 0}
 				{#each message.items as item (item.id)}
-					<MessageItem {item} role={message.role} {onSend} />
+					<MessageItem {item} {tools} role={message.role} {onSend} {onReadResource} {onToolCall} />
 				{/each}
 			{:else}
 				<!-- Fallback for messages without items -->

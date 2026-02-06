@@ -11,9 +11,12 @@ import type {
 	Elicitation as ElicitationType,
 	Prompt as PromptType,
 	Resource,
+	ResourceContents,
+	Tool,
 	UploadedFile,
 	UploadingFile,
 } from "$lib/types";
+import type { CallToolResult } from "$lib/chat.svelte";
 import MessageInput from "./MessageInput.svelte";
 import Messages from "./Messages.svelte";
 
@@ -21,6 +24,7 @@ interface Props {
 	messages: ChatMessage[];
 	prompts: PromptType[];
 	resources: Resource[];
+	tools?: Tool[];
 	elicitations?: ElicitationType[];
 	onElicitationResult?: (
 		elicitation: ElicitationType,
@@ -30,6 +34,15 @@ interface Props {
 		message: string,
 		attachments?: Attachment[],
 	) => Promise<ChatResult | void>;
+	onReadResource?: (
+		uri: string,
+		opts?: { abort?: AbortController }
+	) => Promise<{ contents: ResourceContents[] }>;
+	onToolCall?: (
+		toolName: string,
+		args: Record<string, unknown>,
+		opts?: { abort?: AbortController }
+	) => Promise<CallToolResult>;
 	onFileUpload?: (
 		file: File,
 		opts?: { controller?: AbortController },
@@ -49,7 +62,10 @@ let {
 	messages,
 	prompts,
 	resources,
+	tools = [],
 	onSendMessage,
+	onReadResource,
+	onToolCall,
 	onFileUpload,
 	cancelUpload,
 	uploadingFiles,
@@ -135,7 +151,7 @@ function scrollToBottom() {
 				</div>
 			{/if}
 
-			<Messages {messages} onSend={onSendMessage} {isLoading} {agent} />
+			<Messages {messages} {tools} onSend={onSendMessage} {onReadResource} {onToolCall} {isLoading} {agent} />
 		</div>
 	</div>
 

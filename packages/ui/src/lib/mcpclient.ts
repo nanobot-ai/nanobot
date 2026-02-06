@@ -155,7 +155,13 @@ export class SimpleClient {
 					method: 'initialize',
 					params: {
 						protocolVersion: '2024-11-05',
-						capabilities: {},
+						capabilities: {
+							extensions: {
+								'io.modelcontextprotocol/ui': {
+									mimeTypes: ['text/html;profile=mcp-app']
+								}
+							}
+						},
 						clientInfo: {
 							name: 'nanobot-ui',
 							version: '0.0.1'
