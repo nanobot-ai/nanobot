@@ -6,6 +6,7 @@ import type {
 	Agent,
 	Attachment,
 	ChatMessage,
+	ChatMessageItemToolCall,
 	ChatResult,
 	ElicitationResult,
 	Elicitation as ElicitationType,
@@ -16,6 +17,8 @@ import type {
 } from "$lib/types";
 import MessageInput from "./MessageInput.svelte";
 import Messages from "./Messages.svelte";
+	import { getSidebarContext } from "$lib/context/sidebar.svelte";
+	import { parseToolFilePath } from "$lib/utils";
 
 interface Props {
 	messages: ChatMessage[];
@@ -34,6 +37,7 @@ interface Props {
 		file: File,
 		opts?: { controller?: AbortController },
 	) => Promise<Attachment>;
+	onFileOpen?: (filename: string) => void;
 	cancelUpload?: (fileId: string) => void;
 	uploadingFiles?: UploadingFile[];
 	uploadedFiles?: UploadedFile[];
@@ -51,6 +55,7 @@ let {
 	resources,
 	onSendMessage,
 	onFileUpload,
+	onFileOpen,
 	cancelUpload,
 	uploadingFiles,
 	uploadedFiles,
@@ -68,6 +73,7 @@ let showScrollButton = $state(false);
 let previousLastMessageId = $state<string | null>(null);
 const hasMessages = $derived(messages && messages.length > 0);
 let selectedPrompt = $state<string | undefined>();
+const sidebar = getSidebarContext();
 
 // Watch for changes to the last message ID and scroll to bottom
 $effect(() => {
@@ -90,6 +96,49 @@ $effect(() => {
 	}
 });
 
+// Track processed tool call IDs to avoid re-triggering file open (non-reactive object)
+const processedWriteToolCalls: Record<string, boolean> = {};
+
+// Watch for "write" tool calls with file_path argument while loading
+$effect(() => {
+	if (!isLoading || !messages || messages.length === 0) return;
+
+	// Find all tool calls in the messages
+	for (const message of messages) {
+		if (message.role !== "assistant" || !message.items) continue;
+
+		for (const item of message.items) {
+			if (item.type !== "tool") continue;
+
+			const toolCall = item as ChatMessageItemToolCall;
+			if (toolCall.name !== "write" || !toolCall.arguments) continue;
+
+			// Wait until the tool call is complete (hasMore is false/undefined)
+			if (toolCall.hasMore) continue;
+
+			// Skip if we've already processed this tool call
+			const toolCallId = toolCall.callID || item.id;
+			if (processedWriteToolCalls[toolCallId]) continue;
+
+			// Parse arguments to get file_path
+			try {
+				const args = JSON.parse(toolCall.arguments);
+				if (args.file_path) {
+					// Mark as processed (mutate directly, not reactive)
+					processedWriteToolCalls[toolCallId] = true;
+
+					// Defer side effects to avoid issues during render
+					queueMicrotask(() => {
+						onFileOpen?.(parseToolFilePath(toolCall));
+					});
+				}
+			} catch {
+				// Ignore JSON parse errors
+			}
+		}
+	}
+});
+
 function handleScroll() {
 	if (!messagesContainer) return;
 
@@ -108,9 +157,11 @@ function scrollToBottom() {
 }
 </script>
 
-<div class="flex h-dvh w-full flex-col md:relative peer-[.workspace]:md:w-1/4">
+<div class="flex h-dvh w-full flex-col md:relative peer-[.workspace]:md:w-1/4 transition-transform"
+	class:pt-14={sidebar?.isCollapsed}
+>
 	<!-- Messages area - full height scrollable with bottom padding for floating input -->
-	<div class="w-full overflow-y-auto" bind:this={messagesContainer} onscroll={handleScroll}>
+	<div class="w-full overflow-y-auto px-4" bind:this={messagesContainer} onscroll={handleScroll}>
 		<div class="mx-auto max-w-4xl">
 			<!-- Prompts section - show when prompts available and no messages -->
 			{#if prompts && prompts.length > 0}
@@ -135,7 +186,7 @@ function scrollToBottom() {
 				</div>
 			{/if}
 
-			<Messages {messages} onSend={onSendMessage} {isLoading} {agent} />
+			<Messages {messages} onSend={onSendMessage} {isLoading} {agent} {onFileOpen} />
 		</div>
 	</div>
 

@@ -195,6 +195,18 @@ export class ChatAPI {
 		});
 	}
 
+	/**
+	 * Watch a resource for changes. Returns a cleanup function.
+	 */
+	watchResource(
+		uri: string,
+		callback: (resource: import('./types').ResourceContents) => void,
+		opts?: { sessionId?: string }
+	): () => void {
+		const client = this.#getClient(opts?.sessionId);
+		return client.watchResource(uri, callback);
+	}
+
 	async sendMessage(request: ChatRequest, toolName: string): Promise<ChatResult> {
 		await this.callMCPTool<CallToolResult>(toolName, {
 			payload: {
@@ -413,6 +425,7 @@ export class ChatService {
 		}
 
 		this.listResources().then((r) => {
+			console.log('Resources:', r);
 			if (r && r.resources) {
 				this.resources = r.resources;
 			}
@@ -665,6 +678,23 @@ export class ChatService {
 			sessionId: this.chatId,
 			abort: controller
 		});
+	};
+
+	/**
+	 * Read a resource by URI
+	 */
+	readResource = async (uri: string) => {
+		return await this.api.exchange('resources/read', { uri }, { sessionId: this.chatId }) as {
+			contents: import('./types').ResourceContents[];
+		};
+	};
+
+	/**
+	 * Watch a resource for changes. Returns a cleanup function.
+	 * The callback is called whenever the resource changes.
+	 */
+	watchResource = (uri: string, callback: (resource: import('./types').ResourceContents) => void): (() => void) => {
+		return this.api.watchResource(uri, callback, { sessionId: this.chatId });
 	};
 }
 

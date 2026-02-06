@@ -6,6 +6,8 @@
 	import { defaultChatApi } from '$lib/chat.svelte';
 	import { NotificationStore } from '$lib/stores/notifications.svelte';
 	import { setNotificationContext } from '$lib/context/notifications.svelte';
+	import { SidebarStore } from '$lib/stores/sidebar.svelte';
+	import { setSidebarContext } from '$lib/context/sidebar.svelte';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { Menu, X, SidebarOpen, SidebarClose, Sun, Moon, SquarePen } from '@lucide/svelte';
@@ -16,26 +18,18 @@
 
 	let threads = $state<Chat[]>([]);
 	let isLoading = $state(true);
-	let isSidebarCollapsed = $state(false);
-	let isMobileSidebarOpen = $state(false);
 	let currentTheme = $state('nanobotlight');
 	let currentLogoUrl = $state('/assets/nanobot.svg');
 	const root = resolve('/');
 	const newThread = resolve('/');
 	const notifications = new NotificationStore();
+	const sidebar = new SidebarStore();
 
-	// Set notification context for global access
+	// Set contexts for global access
 	setNotificationContext(notifications);
+	setSidebarContext(sidebar);
 
 	onMount(async () => {
-		// Load sidebar state from localStorage (desktop only)
-		if (browser && window.innerWidth >= 1024) {
-			const saved = localStorage.getItem('sidebar-collapsed');
-			if (saved !== null) {
-				isSidebarCollapsed = JSON.parse(saved);
-			}
-		}
-
 		// Load theme from localStorage or detect system preference
 		if (browser) {
 			const savedTheme = localStorage.getItem('theme');
@@ -62,21 +56,6 @@
 			});
 		}
 	})
-
-	function toggleDesktopSidebar() {
-		if (browser && window.innerWidth >= 1024) {
-			isSidebarCollapsed = !isSidebarCollapsed;
-			localStorage.setItem('sidebar-collapsed', JSON.stringify(isSidebarCollapsed));
-		}
-	}
-
-	function toggleMobileSidebar() {
-		isMobileSidebarOpen = !isMobileSidebarOpen;
-	}
-
-	function closeMobileSidebar() {
-		isMobileSidebarOpen = false;
-	}
 
 	async function handleRenameThread(threadId: string, newTitle: string) {
 		try {
@@ -124,14 +103,14 @@
 	<div
 		class="
 		bg-base-200 transition-all duration-300 ease-in-out
-		{isSidebarCollapsed ? 'hidden lg:block lg:w-0' : 'hidden lg:block lg:w-80'}
-		{isMobileSidebarOpen ? 'fixed inset-y-0 left-0 z-40 block! w-80' : 'lg:relative'}
+		{sidebar.isCollapsed ? 'hidden lg:block lg:w-0' : 'hidden lg:block lg:w-80'}
+		{sidebar.isMobileOpen ? 'fixed inset-y-0 left-0 z-40 block! w-80' : 'lg:relative'}
 	"
 	>
-		<div class="flex h-full flex-col {isSidebarCollapsed ? 'lg:overflow-hidden' : ''}">
+		<div class="flex h-full flex-col {sidebar.isCollapsed ? 'lg:overflow-hidden' : ''}">
 			<!-- Sidebar header -->
 			<div
-				class="flex h-15 items-center justify-between p-2 {!isSidebarCollapsed ? 'min-w-80' : ''}"
+				class="flex h-15 items-center justify-between p-2 {!sidebar.isCollapsed ? 'min-w-80' : ''}"
 			>
 				<a href={root} class="flex items-center gap-2 text-xl font-bold hover:opacity-80">
 					<img src={currentLogoUrl} alt="Nanobot" class="h-12" />
@@ -143,17 +122,17 @@
 					<button
 						onclick={() => {
 							if (window.innerWidth >= 1024) {
-								toggleDesktopSidebar();
+								sidebar.toggle();
 							} else {
-								closeMobileSidebar();
+								sidebar.closeMobile();
 							}
 						}}
 						class="btn p-1 btn-ghost btn-sm"
-						aria-label={isSidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
+						aria-label={sidebar.isCollapsed ? 'Open sidebar' : 'Close sidebar'}
 					>
 						<!-- Desktop collapsed state -->
 						<span class="hidden lg:inline">
-							{#if isSidebarCollapsed}
+							{#if sidebar.isCollapsed}
 								<SidebarOpen class="h-5 w-5" />
 							{:else}
 								<SidebarClose class="h-5 w-5" />
@@ -168,7 +147,7 @@
 			</div>
 
 			<!-- Threads and Workspaces list -->
-			<div class="flex-1 overflow-hidden {!isSidebarCollapsed ? 'min-w-80' : ''}">
+			<div class="flex-1 overflow-hidden {!sidebar.isCollapsed ? 'min-w-80' : ''}">
 				<div class="flex h-full flex-col">
 					<!-- Threads section (takes up ~40% of available space) -->
 					<div class='flex-shrink-0 overflow-y-auto'>
@@ -177,7 +156,7 @@
 							onRename={handleRenameThread}
 							onDelete={handleDeleteThread}
 							{isLoading}
-							onThreadClick={closeMobileSidebar}
+							onThreadClick={() => sidebar.closeMobile()}
 						/>
 					</div>
 				</div>
@@ -201,18 +180,18 @@
 	</div>
 
 	<!-- Mobile sidebar backdrop -->
-	{#if isMobileSidebarOpen}
+	{#if sidebar.isMobileOpen}
 		<div
 			class="fixed inset-0 z-30 bg-black/50 lg:hidden"
 			role="button"
 			tabindex="0"
-			onclick={closeMobileSidebar}
-			onkeydown={(e) => (e.key === 'Enter' || e.key === ' ' ? closeMobileSidebar() : null)}
+			onclick={() => sidebar.closeMobile()}
+			onkeydown={(e) => (e.key === 'Enter' || e.key === ' ' ? sidebar.closeMobile() : null)}
 		></div>
 	{/if}
 
 	<!-- Collapsed sidebar toggle (desktop only) -->
-	{#if isSidebarCollapsed}
+	{#if sidebar.isCollapsed}
 		<div class="absolute top-0 left-0 z-10 hidden h-15 items-center bg-transparent p-2 lg:flex">
 			<div class="flex items-center gap-2">
 				<a href={root} class="flex items-center gap-2 text-xl font-bold hover:opacity-80">
@@ -222,7 +201,7 @@
 					<SquarePen class="h-4 w-4" />
 				</a>
 				<button
-					onclick={toggleDesktopSidebar}
+					onclick={() => sidebar.toggle()}
 					class="btn p-1 btn-ghost btn-sm"
 					aria-label="Open sidebar"
 				>
@@ -233,7 +212,7 @@
 	{/if}
 
 	<!-- Mobile menu button -->
-	{#if !isMobileSidebarOpen}
+	{#if !sidebar.isMobileOpen}
 		<div class="absolute top-4 left-4 z-50 flex gap-2 lg:hidden">
 			<a
 				href={newThread}
@@ -243,7 +222,7 @@
 				<SquarePen class="h-5 w-5" />
 			</a>
 			<button
-				onclick={toggleMobileSidebar}
+				onclick={() => sidebar.toggleMobile()}
 				class="btn border border-base-300 bg-base-100/80 btn-ghost backdrop-blur-sm btn-sm"
 				aria-label="Open sidebar"
 			>
