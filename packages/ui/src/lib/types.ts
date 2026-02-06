@@ -174,6 +174,24 @@ export interface Resources {
 	resources: Resource[];
 }
 
+export interface Tool {
+	name: string;
+	title?: string;
+	description?: string;
+	inputSchema?: unknown;
+	outputSchema?: unknown;
+	_meta?: {
+		ui?: {
+			resourceUri?: string;
+		};
+		[key: string]: unknown;
+	};
+}
+
+export interface Tools {
+	tools: Tool[];
+}
+
 export interface ResourceContents {
 	uri: string;
 	mimeType?: string;

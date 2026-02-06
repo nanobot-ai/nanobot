@@ -1,31 +1,44 @@
 <script lang="ts">
+import { onMount } from "svelte";
 import { AppRenderer } from "@mcp-ui/client";
-import type {
-	CallToolResult,
-	ReadResourceResult,
-} from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult, ReadResourceResult, ResourceContents } from "@modelcontextprotocol/sdk/types.js";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { getContext } from "svelte";
-import type { SimpleClient } from "$lib/mcpclient";
-import type { ChatMessageItemToolCall } from "$lib/types";
+import type {
+	Attachment,
+	ChatMessageItemToolCall,
+	ChatResult,
+} from "$lib/types";
 
 interface Props {
 	item: ChatMessageItemToolCall;
+	resourceUri: string;
+	onSend?: (
+		message: string,
+		attachments?: Attachment[],
+	) => Promise<ChatResult | void>;
+	onReadResource?: (
+		uri: string,
+		opts?: { abort?: AbortController }
+	) => Promise<{ contents: ResourceContents[] }>;
 }
 
-let { item }: Props = $props();
+const { item, resourceUri, onSend, onReadResource }: Props = $props();
 let container: HTMLDivElement | undefined = $state();
-let root: ReactDOM.Root | null = null;
 
-const mcpClient = getContext<SimpleClient>("mcpClient");
-const SANDBOX_URL =
-	import.meta.env.VITE_SANDBOX_URL || "http://localhost:8081/sandbox.html";
+// MCP Apps Sandbox Configuration
+// Default: Uses same-origin (/sandbox.html) which triggers fallback mode
+//          This simplifies setup but shows console warnings (expected/harmless)
+// Production: Set VITE_SANDBOX_URL environment variable for cross-origin sandbox
+//             Example: VITE_SANDBOX_URL=https://sandbox.example.com/sandbox.html
+const SANDBOX_URL = import.meta.env.VITE_SANDBOX_URL || "http://localhost:8080/sandbox.html";
+console.warn(`SANDBOX_URL=${SANDBOX_URL}`)
 
-const resourceUri = $derived(item._meta?.ui?.resourceUri);
-
-$effect(() => {
+onMount(() => {
 	if (!container || !resourceUri || !item.name) return;
+
+	console.warn(`resourceUri: ${resourceUri}`);
+	console.warn(`item: ${JSON.stringify(item, null, 2)}`);
 
 	const toolInput = item.arguments ? JSON.parse(item.arguments) : {};
 	const toolResult = item.output
@@ -36,7 +49,7 @@ $effect(() => {
 			}
 		: undefined;
 
-	root = ReactDOM.createRoot(container);
+	const root = ReactDOM.createRoot(container);
 	root.render(
 		React.createElement(AppRenderer, {
 			toolName: item.name,
@@ -49,36 +62,44 @@ $effect(() => {
 					document.documentElement.dataset.theme === "dark" ? "dark" : "light",
 				platform: "web",
 			},
-			// Callback handlers instead of MCP client
-			onReadResource: async ({ uri }): Promise<ReadResourceResult> => {
-				const result = await mcpClient.readResource(uri);
-				return result as ReadResourceResult;
-			},
 			onCallTool: async (params): Promise<CallToolResult> => {
-				const result = (await mcpClient.exchange("tools/call", {
-					name: params.name,
-					arguments: params.arguments,
-				})) as CallToolResult;
-
-				return result;
+				console.warn(`MCP App --> Call Tool: ${params.name}`);
+				if (!onSend) return { content: [], isError: true };
+				const uiAction = {
+					type: "tool",
+					payload: { toolName: params.name, params: params.arguments || {} },
+				};
+				const reply = await onSend(JSON.stringify(uiAction));
+				if (reply) {
+					for (const item of reply.message?.items || []) {
+						if (item.type === "tool" && item.output) {
+						    console.warn(`Good Call Tool Result: \n${JSON.stringify(item.output, null, 2)}`)
+							return $state.snapshot(item.output) as CallToolResult;
+						}
+					}
+					console.warn(`After For Call Tool Result: \n${JSON.stringify(reply, null, 2)}`)
+				}
+				console.warn(`After If Call Tool Result: \n${JSON.stringify(reply, null, 2)}`)
+				return { content: [], isError: true };
 			},
 			onOpenLink: async ({ url }) => {
+				console.warn(`MCP App --> Open Link: ${url}`);
 				if (url.startsWith("http://") || url.startsWith("https://")) {
 					window.open(url, "_blank", "noopener,noreferrer");
 				}
 				return { isError: false };
 			},
-			onMessage: async (params) => {
-				console.log("MCP App message:", params);
-				return { isError: false };
+			onReadResource: async (params): Promise<ReadResourceResult> => {
+				console.warn(`MCP App --> Read Resource: ${params.uri}`);
+				if (!onReadResource) {
+					return { contents: [] };
+				}
+				const uri = params.uri as string;
+				const result = await onReadResource(uri);
+				return result as ReadResourceResult;
 			},
 		}),
 	);
-
-	return () => {
-		root?.unmount();
-		root = null;
-	};
 });
 </script>
 

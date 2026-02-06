@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Settings } from '@lucide/svelte';
 	import { renderMarkdown } from '$lib/markdown';
-	import type { Attachment, ChatResult, ChatMessageItemToolCall, ToolOutputItem } from '$lib/types';
+	import type { Attachment, ChatResult, ChatMessageItemToolCall, ResourceContents, Tool, ToolOutputItem } from '$lib/types';
 	import '@mcp-ui/client/ui-resource-renderer.wc.js';
 	import MessageItemUI from '$lib/components/MessageItemUI.svelte';
 	import McpAppView from '$lib/components/McpAppView.svelte';
@@ -9,13 +9,31 @@
 
 	interface Props {
 		item: ChatMessageItemToolCall;
+		tools?: Tool[];
 		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
+		onReadResource?: (
+			uri: string,
+			opts?: { abort?: AbortController }
+		) => Promise<{ contents: ResourceContents[] }>;
 	}
 
-	let { item, onSend }: Props = $props();
+	let { item, tools = [], onSend, onReadResource }: Props = $props();
 
-	// Detect MCP Apps tool (has _meta.ui.resourceUri)
-	let isMcpApp = $derived(!!item._meta?.ui?.resourceUri);
+	// Look up the tool definition to find its resourceUri for MCP App rendering.
+	// The _meta.ui.resourceUri lives on the tool *definition* (from tools/list),
+	// not on individual tool call items in the message stream.
+	const resourceUri = $derived.by(() => {
+		if (item.name && tools.length > 0) {
+			const toolDef = tools.find((t) => t.name === item.name);
+			if (toolDef?._meta?.ui?.resourceUri) {
+				return toolDef._meta.ui.resourceUri;
+			}
+		}
+		// Fallback: check item-level _meta (for backward compatibility)
+		return item._meta?.ui?.resourceUri;
+	});
+
+	const isMcpApp = $derived(!!resourceUri);
 
 	let singleUIResource = $derived(
 		item.output?.content &&
@@ -177,8 +195,8 @@
 </div>
 
 <!-- Render MCP App UI if tool has resourceUri -->
-{#if isMcpApp}
-	<McpAppView {item} />
+{#if isMcpApp && resourceUri}
+	<McpAppView {item} {resourceUri} {onSend} {onReadResource} />
 {/if}
 
 <div class="flex w-full flex-wrap items-start justify-start gap-2 p-2">

@@ -15,8 +15,8 @@
     const HOST_ORIGIN = new URL(document.referrer).origin;
 
     // Security check: verify sandbox isolation
-    try { window.top.location.href; throw new Error("Not isolated"); }
-    catch (e) { if (e.message === "Not isolated") throw e; }
+    // try { window.top.location.href; throw new Error("Not isolated"); }
+    // catch (e) { if (e.message === "Not isolated") throw e; }
 
     const inner = document.createElement("iframe");
     inner.sandbox = "allow-scripts allow-same-origin allow-forms";

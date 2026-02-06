@@ -280,7 +280,6 @@ func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListRes
 	}
 
 	for _, resource := range resources {
-		fmt.Printf("RESOURCE MAPPINGS: %s\n%v", s.agentName, resource.Target)
 		result.Resources = append(result.Resources, resource.Target)
 	}
 

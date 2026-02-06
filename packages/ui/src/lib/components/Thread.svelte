@@ -11,6 +11,8 @@ import type {
 	Elicitation as ElicitationType,
 	Prompt as PromptType,
 	Resource,
+	ResourceContents,
+	Tool,
 	UploadedFile,
 	UploadingFile,
 } from "$lib/types";
@@ -21,6 +23,7 @@ interface Props {
 	messages: ChatMessage[];
 	prompts: PromptType[];
 	resources: Resource[];
+	tools?: Tool[];
 	elicitations?: ElicitationType[];
 	onElicitationResult?: (
 		elicitation: ElicitationType,
@@ -30,6 +33,10 @@ interface Props {
 		message: string,
 		attachments?: Attachment[],
 	) => Promise<ChatResult | void>;
+	onReadResource?: (
+		uri: string,
+		opts?: { abort?: AbortController }
+	) => Promise<{ contents: ResourceContents[] }>;
 	onFileUpload?: (
 		file: File,
 		opts?: { controller?: AbortController },
@@ -49,7 +56,9 @@ let {
 	messages,
 	prompts,
 	resources,
+	tools = [],
 	onSendMessage,
+	onReadResource,
 	onFileUpload,
 	cancelUpload,
 	uploadingFiles,
@@ -135,7 +144,7 @@ function scrollToBottom() {
 				</div>
 			{/if}
 
-			<Messages {messages} onSend={onSendMessage} {isLoading} {agent} />
+			<Messages {messages} {tools} onSend={onSendMessage} {onReadResource} {isLoading} {agent} />
 		</div>
 	</div>
 
