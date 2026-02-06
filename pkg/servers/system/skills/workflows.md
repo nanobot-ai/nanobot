@@ -181,13 +181,15 @@ When the user asks you to run a workflow:
 
 1. Load the workflow from `workflows/<name>.md`.
 2. Use TodoWrite to create a todo for each workflow step before you begin. This is your execution plan — the user will follow along.
-3. Collect any required inputs from the user. If inputs are missing and have no defaults, ask for them.
-4. Execute each step in order:
+3. **Present the execution plan to the user.** After creating the todos, present a brief summary of what will be executed and ask the user to confirm before proceeding. For example: "I've planned the following steps: [list steps]. Does this look good to proceed?"
+4. **Wait for user approval.** Do not begin execution until the user confirms.
+5. Collect any required inputs from the user. If inputs are missing and have no defaults, ask for them.
+6. Execute each step in order:
     - Check conditions before running conditional steps.
     - Interpolate variables (`{{input.name}}` and `{{Step Name}}`).
     - Follow error handling directives.
     - Mark each todo complete/failed/skipped as you go.
-5. Provide running updates in normal chat messages as you work through each step. If errors occur, judgment calls are needed, or unexpected conditions arise, mention them in chat and add new todos as needed.
+7. Provide running updates in normal chat messages as you work through each step. If errors occur, judgment calls are needed, or unexpected conditions arise, mention them in chat and add new todos as needed.
 
 Complete tasks fully, follow requested formats exactly, and provide specific analysis rather than vague summaries.
 
