@@ -156,3 +156,74 @@ Agent instructions here.
 		t.Errorf("expected body 'Agent instructions here.', got: %s", body)
 	}
 }
+
+func TestParseFrontMatter_WithPermissions(t *testing.T) {
+	content := `---
+name: Test Agent
+permissions:
+  read: allow
+  write: deny
+  execute: allow
+---
+Test agent content.
+`
+	yaml, body, err := parseFrontMatter([]byte(content))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(yaml) == 0 {
+		t.Error("expected non-empty YAML")
+	}
+
+	// Verify permissions are in the YAML
+	if !strings.Contains(string(yaml), "permissions:") {
+		t.Error("expected YAML to contain 'permissions:'")
+	}
+
+	if !strings.Contains(string(yaml), "read: allow") {
+		t.Error("expected YAML to contain 'read: allow'")
+	}
+
+	if !strings.Contains(string(yaml), "write: deny") {
+		t.Error("expected YAML to contain 'write: deny'")
+	}
+
+	if body != "Test agent content." {
+		t.Errorf("expected body 'Test agent content.', got: %s", body)
+	}
+}
+
+func TestParseFrontMatter_WithWildcardPermission(t *testing.T) {
+	content := `---
+name: Agent with Wildcard
+permissions:
+  filesystem: allow
+  network: deny
+  "*": allow
+---
+Content here.
+`
+	yaml, body, err := parseFrontMatter([]byte(content))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(yaml) == 0 {
+		t.Error("expected non-empty YAML")
+	}
+
+	// Verify wildcard permission is preserved
+	yamlStr := string(yaml)
+	if !strings.Contains(yamlStr, "permissions:") {
+		t.Error("expected YAML to contain 'permissions:'")
+	}
+
+	if !strings.Contains(yamlStr, `"*": allow`) && !strings.Contains(yamlStr, `'*': allow`) && !strings.Contains(yamlStr, `*: allow`) {
+		t.Errorf("expected YAML to contain wildcard permission, got: %s", yamlStr)
+	}
+
+	if body != "Content here." {
+		t.Errorf("expected body 'Content here.', got: %s", body)
+	}
+}

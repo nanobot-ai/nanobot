@@ -12,6 +12,7 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -436,11 +437,7 @@ type AgentPermissions struct {
 // Allowed returns a list of the allowed permissions from the input.
 func (a *AgentPermissions) Allowed(from iter.Seq[string]) []string {
 	if a == nil || len(a.permissions) == 0 {
-		var result []string
-		for perm := range from {
-			result = append(result, perm)
-		}
-		return result
+		return slices.Collect(from)
 	}
 
 	var allowed []string
@@ -541,6 +538,56 @@ func (a AgentPermissions) MarshalJSON() ([]byte, error) {
 
 	buf.WriteString("}")
 	return []byte(buf.String()), nil
+}
+
+func (a *AgentPermissions) UnmarshalYAML(value *yaml.Node) error {
+	// YAML should be a mapping node
+	if value.Kind != yaml.MappingNode {
+		return fmt.Errorf("expected mapping node, got %v", value.Kind)
+	}
+
+	a.permissions = nil
+
+	// YAML mapping nodes have alternating key-value pairs in Content slice
+	// Keys are at even indices, values at odd indices
+	for i := 0; i < len(value.Content); i += 2 {
+		keyNode := value.Content[i]
+		valueNode := value.Content[i+1]
+
+		if keyNode.Kind != yaml.ScalarNode {
+			return fmt.Errorf("expected scalar key, got %v", keyNode.Kind)
+		}
+		if valueNode.Kind != yaml.ScalarNode {
+			return fmt.Errorf("expected scalar value, got %v", valueNode.Kind)
+		}
+
+		a.permissions = append(a.permissions, [2]string{keyNode.Value, valueNode.Value})
+	}
+
+	return nil
+}
+
+func (a AgentPermissions) MarshalYAML() (any, error) {
+	// Create a yaml.Node with mapping style
+	node := &yaml.Node{
+		Kind: yaml.MappingNode,
+	}
+
+	// Add key-value pairs in order
+	for _, pair := range a.permissions {
+		// Add key node
+		node.Content = append(node.Content, &yaml.Node{
+			Kind:  yaml.ScalarNode,
+			Value: pair[0],
+		})
+		// Add value node
+		node.Content = append(node.Content, &yaml.Node{
+			Kind:  yaml.ScalarNode,
+			Value: pair[1],
+		})
+	}
+
+	return node, nil
 }
 
 const mcpServerName = "MCP Server"

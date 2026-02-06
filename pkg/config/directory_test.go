@@ -2,6 +2,8 @@ package config
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -726,5 +728,204 @@ func TestParseMarkdownAgent_NoModeField(t *testing.T) {
 	// Mode should be empty string when not specified
 	if agent.Mode != "" {
 		t.Errorf("expected Mode field to be empty when not specified, got '%s'", agent.Mode)
+	}
+}
+
+// Tests for permissions field
+
+func TestLoadFromDirectory_WithPermissions(t *testing.T) {
+	data, err := loadFromDirectory("testdata/directory-permissions")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var config types.Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("error unmarshaling config: %v", err)
+	}
+
+	// Check agent loaded
+	if len(config.Agents) != 1 {
+		t.Errorf("expected 1 agent, got %d", len(config.Agents))
+	}
+
+	agent, exists := config.Agents["main"]
+	if !exists {
+		t.Fatal("expected 'main' agent to exist")
+	}
+
+	if agent.Name != "Agent with Permissions" {
+		t.Errorf("expected agent name 'Agent with Permissions', got '%s'", agent.Name)
+	}
+
+	// Check permissions were parsed correctly
+	if agent.Permissions == nil {
+		t.Fatal("expected permissions to be set")
+	}
+
+	// Test IsAllowed method to verify permissions were compiled correctly
+	if !agent.Permissions.IsAllowed("filesystem") {
+		t.Error("expected 'filesystem' permission to be allowed")
+	}
+
+	if agent.Permissions.IsAllowed("network") {
+		t.Error("expected 'network' permission to be denied")
+	}
+
+	// Wildcard should allow other permissions (due to "*": allow)
+	if !agent.Permissions.IsAllowed("unknown") {
+		t.Error("expected 'unknown' permission to be allowed due to wildcard")
+	}
+}
+
+func TestParseMarkdownAgent_WithPermissions(t *testing.T) {
+	agentID, agent, err := parseMarkdownAgent("testdata/directory-permissions/agents/main.md")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if agentID != "main" {
+		t.Errorf("expected agent ID 'main', got '%s'", agentID)
+	}
+
+	// Check permissions field
+	if agent.Permissions == nil {
+		t.Fatal("expected permissions to be set")
+	}
+
+	// Test permission compilation - order matters!
+	// filesystem: allow should be applied
+	if !agent.Permissions.IsAllowed("filesystem") {
+		t.Error("expected 'filesystem' permission to be allowed")
+	}
+
+	// network: deny should be applied
+	if agent.Permissions.IsAllowed("network") {
+		t.Error("expected 'network' permission to be denied")
+	}
+
+	// Last rule wins: "*": allow should allow unknown permissions
+	if !agent.Permissions.IsAllowed("unknown_permission") {
+		t.Error("expected 'unknown_permission' to be allowed due to wildcard rule")
+	}
+}
+
+func TestParseMarkdownAgent_PermissionsOrderPreserved(t *testing.T) {
+	// Create a temporary test file with specific permission order
+	tmpDir := t.TempDir()
+	agentsDir := filepath.Join(tmpDir, "agents")
+	if err := os.MkdirAll(agentsDir, 0755); err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	content := `---
+name: Order Test Agent
+permissions:
+  "*": deny
+  specific: allow
+---
+Testing permission order.
+`
+	testFile := filepath.Join(agentsDir, "test.md")
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	agentID, agent, err := parseMarkdownAgent(testFile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if agentID != "test" {
+		t.Errorf("expected agent ID 'test', got '%s'", agentID)
+	}
+
+	if agent.Permissions == nil {
+		t.Fatal("expected permissions to be set")
+	}
+
+	// Order matters: last matching rule wins
+	// "*": deny comes first, then "specific": allow
+	// So "specific" should be allowed (overrides wildcard)
+	if !agent.Permissions.IsAllowed("specific") {
+		t.Error("expected 'specific' permission to be allowed (should override earlier wildcard deny)")
+	}
+
+	// Other permissions should be denied by the wildcard
+	if agent.Permissions.IsAllowed("other") {
+		t.Error("expected 'other' permission to be denied by wildcard")
+	}
+}
+
+func TestParseMarkdownAgent_ComplexPermissions(t *testing.T) {
+	// Create a temporary test file with complex permissions
+	tmpDir := t.TempDir()
+	agentsDir := filepath.Join(tmpDir, "agents")
+	if err := os.MkdirAll(agentsDir, 0755); err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	content := `---
+name: Complex Permissions Agent
+permissions:
+  read: allow
+  write: deny
+  "*": allow
+  delete: deny
+---
+Complex permissions test.
+`
+	testFile := filepath.Join(agentsDir, "complex.md")
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	agentID, agent, err := parseMarkdownAgent(testFile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if agentID != "complex" {
+		t.Errorf("expected agent ID 'complex', got '%s'", agentID)
+	}
+
+	if agent.Permissions == nil {
+		t.Fatal("expected permissions to be set")
+	}
+
+	// Test permission evaluation (last matching rule wins)
+	if !agent.Permissions.IsAllowed("read") {
+		t.Error("expected 'read' permission to be allowed")
+	}
+
+	if agent.Permissions.IsAllowed("write") {
+		t.Error("expected 'write' permission to be denied")
+	}
+
+	// delete: deny comes after "*": allow, so it should be denied
+	if agent.Permissions.IsAllowed("delete") {
+		t.Error("expected 'delete' permission to be denied (overrides wildcard)")
+	}
+
+	// Permissions not explicitly mentioned should be allowed by wildcard
+	if !agent.Permissions.IsAllowed("execute") {
+		t.Error("expected 'execute' permission to be allowed by wildcard")
+	}
+}
+
+func TestParseMarkdownAgent_NoPermissions(t *testing.T) {
+	agentID, agent, err := parseMarkdownAgent("testdata/directory-simple/agents/main.md")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if agentID != "main" {
+		t.Errorf("expected agent ID 'main', got '%s'", agentID)
+	}
+
+	// Permissions should be nil when not specified
+	// According to AgentPermissions.IsAllowed, nil permissions allow everything
+	if agent.Permissions != nil {
+		t.Errorf("expected Permissions field to be nil when not specified, got %v", agent.Permissions)
 	}
 }
