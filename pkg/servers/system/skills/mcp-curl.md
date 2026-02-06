@@ -18,6 +18,22 @@ After initialization, also include:
 - `MCP-Session-Id: <session-id>` (from init response)
 - `MCP-Protocol-Version: 2025-11-25`
 
+## Authentication for Discovered Remote MCP Servers
+
+When connecting to a remote MCP server that you've discovered, use the `MCP_API_KEY` environment variable as the bearer token in the Authorization header:
+
+```bash
+# Set the API key for discovered remote MCP servers
+export MCP_API_KEY="your-api-key-here"
+
+# Use it in the Authorization header
+curl -X POST "$MCP_ENDPOINT" \
+  -H "Authorization: Bearer $MCP_API_KEY" \
+  ...
+```
+
+This convention ensures consistent authentication across discovered MCP servers.
+
 ## Session Lifecycle
 
 ### 1. Initialize
@@ -26,7 +42,7 @@ After initialization, also include:
 curl -i -X POST "$MCP_ENDPOINT" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -H "Authorization: Bearer $API_KEY" \
+  -H "Authorization: Bearer $MCP_API_KEY" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"curl-client","version":"1.0.0"}}}'
 ```
 
@@ -38,7 +54,7 @@ Save the `MCP-Session-Id` header from the response.
 curl -X POST "$MCP_ENDPOINT" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -H "Authorization: Bearer $API_KEY" \
+  -H "Authorization: Bearer $MCP_API_KEY" \
   -H "MCP-Session-Id: $SESSION_ID" \
   -H "MCP-Protocol-Version: 2025-11-25" \
   -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
@@ -50,7 +66,7 @@ curl -X POST "$MCP_ENDPOINT" \
 curl -s -X POST "$MCP_ENDPOINT" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -H "Authorization: Bearer $API_KEY" \
+  -H "Authorization: Bearer $MCP_API_KEY" \
   -H "MCP-Session-Id: $SESSION_ID" \
   -H "MCP-Protocol-Version: 2025-11-25" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | jq .
@@ -62,7 +78,7 @@ curl -s -X POST "$MCP_ENDPOINT" \
 curl -s -X POST "$MCP_ENDPOINT" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -H "Authorization: Bearer $API_KEY" \
+  -H "Authorization: Bearer $MCP_API_KEY" \
   -H "MCP-Session-Id: $SESSION_ID" \
   -H "MCP-Protocol-Version: 2025-11-25" \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"tool_name","arguments":{"key":"value"}}}' | jq .
@@ -72,7 +88,7 @@ curl -s -X POST "$MCP_ENDPOINT" \
 
 ```bash
 curl -X DELETE "$MCP_ENDPOINT" \
-  -H "Authorization: Bearer $API_KEY" \
+  -H "Authorization: Bearer $MCP_API_KEY" \
   -H "MCP-Session-Id: $SESSION_ID"
 ```
 
