@@ -2,6 +2,7 @@
 	import { Settings } from '@lucide/svelte';
 	import { renderMarkdown } from '$lib/markdown';
 	import type { Attachment, ChatResult, ChatMessageItemToolCall, ResourceContents, Tool, ToolOutputItem } from '$lib/types';
+	import type { CallToolResult } from "$lib/chat.svelte";
 	import '@mcp-ui/client/ui-resource-renderer.wc.js';
 	import MessageItemUI from '$lib/components/MessageItemUI.svelte';
 	import McpAppView from '$lib/components/McpAppView.svelte';
@@ -15,9 +16,14 @@
 			uri: string,
 			opts?: { abort?: AbortController }
 		) => Promise<{ contents: ResourceContents[] }>;
+		onToolCall?: (
+			toolName: string,
+			args: Record<string, unknown>,
+			opts?: { abort?: AbortController }
+		) => Promise<CallToolResult>;
 	}
 
-	let { item, tools = [], onSend, onReadResource }: Props = $props();
+	let { item, tools = [], onSend, onReadResource, onToolCall }: Props = $props();
 
 	// Look up the tool definition to find its resourceUri for MCP App rendering.
 	// The _meta.ui.resourceUri lives on the tool *definition* (from tools/list),
@@ -196,7 +202,7 @@
 
 <!-- Render MCP App UI if tool has resourceUri -->
 {#if isMcpApp && resourceUri}
-	<McpAppView {item} {resourceUri} {onSend} {onReadResource} />
+	<McpAppView {item} {resourceUri} {onSend} {onReadResource} {onToolCall} />
 {/if}
 
 <div class="flex w-full flex-wrap items-start justify-start gap-2 p-2">

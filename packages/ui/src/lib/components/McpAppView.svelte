@@ -21,9 +21,14 @@ interface Props {
 		uri: string,
 		opts?: { abort?: AbortController }
 	) => Promise<{ contents: ResourceContents[] }>;
+	onToolCall?: (
+		toolName: string,
+		args: Record<string, unknown>,
+		opts?: { abort?: AbortController }
+	) => Promise<CallToolResult>;
 }
 
-const { item, resourceUri, onSend, onReadResource }: Props = $props();
+const { item, resourceUri, onSend, onReadResource, onToolCall }: Props = $props();
 let container: HTMLDivElement | undefined = $state();
 
 // MCP Apps Sandbox Configuration
@@ -64,23 +69,27 @@ onMount(() => {
 			},
 			onCallTool: async (params): Promise<CallToolResult> => {
 				console.warn(`MCP App --> Call Tool: ${params.name}`);
-				if (!onSend) return { content: [], isError: true };
-				const uiAction = {
-					type: "tool",
-					payload: { toolName: params.name, params: params.arguments || {} },
-				};
-				const reply = await onSend(JSON.stringify(uiAction));
-				if (reply) {
-					for (const item of reply.message?.items || []) {
-						if (item.type === "tool" && item.output) {
-						    console.warn(`Good Call Tool Result: \n${JSON.stringify(item.output, null, 2)}`)
-							return $state.snapshot(item.output) as CallToolResult;
-						}
-					}
-					console.warn(`After For Call Tool Result: \n${JSON.stringify(reply, null, 2)}`)
+				if (!onToolCall) {
+					console.error('onToolCall callback not provided');
+					return { content: [], isError: true };
 				}
-				console.warn(`After If Call Tool Result: \n${JSON.stringify(reply, null, 2)}`)
-				return { content: [], isError: true };
+				try {
+					const result = await onToolCall(
+						params.name,
+						(params.arguments as Record<string, unknown>) || {}
+					);
+					console.warn(`Call Tool Result: \n${JSON.stringify(result, null, 2)}`);
+					return result
+				} catch (error) {
+					console.error(`Tool call failed:`, error);
+					return {
+						content: [{
+							type: 'text',
+							text: `Tool call failed: ${error instanceof Error ? error.message : String(error)}`
+						}],
+						isError: true
+					} as CallToolResult;
+				}
 			},
 			onOpenLink: async ({ url }) => {
 				console.warn(`MCP App --> Open Link: ${url}`);
@@ -98,6 +107,10 @@ onMount(() => {
 				const result = await onReadResource(uri);
 				return result as ReadResourceResult;
 			},
+			onError: (error) => {
+			  console.error(`MCP App --> Error: ${error}`);
+
+			}
 		}),
 	);
 });

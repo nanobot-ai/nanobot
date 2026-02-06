@@ -16,6 +16,7 @@ import type {
 	UploadedFile,
 	UploadingFile,
 } from "$lib/types";
+import type { CallToolResult } from "$lib/chat.svelte";
 import MessageInput from "./MessageInput.svelte";
 import Messages from "./Messages.svelte";
 
@@ -37,6 +38,11 @@ interface Props {
 		uri: string,
 		opts?: { abort?: AbortController }
 	) => Promise<{ contents: ResourceContents[] }>;
+	onToolCall?: (
+		toolName: string,
+		args: Record<string, unknown>,
+		opts?: { abort?: AbortController }
+	) => Promise<CallToolResult>;
 	onFileUpload?: (
 		file: File,
 		opts?: { controller?: AbortController },
@@ -59,6 +65,7 @@ let {
 	tools = [],
 	onSendMessage,
 	onReadResource,
+	onToolCall,
 	onFileUpload,
 	cancelUpload,
 	uploadingFiles,
@@ -144,7 +151,7 @@ function scrollToBottom() {
 				</div>
 			{/if}
 
-			<Messages {messages} {tools} onSend={onSendMessage} {onReadResource} {isLoading} {agent} />
+			<Messages {messages} {tools} onSend={onSendMessage} {onReadResource} {onToolCall} {isLoading} {agent} />
 		</div>
 	</div>
 

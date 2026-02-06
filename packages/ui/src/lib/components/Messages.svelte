@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Message from './Message.svelte';
 	import type { ChatMessage, ChatResult, Agent, Attachment, ResourceContents, Tool } from '$lib/types';
+	import type { CallToolResult } from "$lib/chat.svelte";
 	import AgentHeader from '$lib/components/AgentHeader.svelte';
 
 	interface Props {
@@ -11,11 +12,16 @@
 			uri: string,
 			opts?: { abort?: AbortController }
 		) => Promise<{ contents: ResourceContents[] }>;
+		onToolCall?: (
+			toolName: string,
+			args: Record<string, unknown>,
+			opts?: { abort?: AbortController }
+		) => Promise<CallToolResult>;
 		isLoading?: boolean;
 		agent?: Agent;
 	}
 
-	let { messages, tools = [], onSend, onReadResource, isLoading = false, agent }: Props = $props();
+	let { messages, tools = [], onSend, onReadResource, onToolCall, isLoading = false, agent }: Props = $props();
 	let messageGroups = $derived.by(() => {
 		return messages.reduce((acc, message) => {
 			if (message.role === 'user' || acc.length === 0) {
@@ -63,7 +69,7 @@
 				data-message-id={messageGroup[0]?.id}
 			>
 				{#each messageGroup as message, i (`${messageGroup[0]?.id}-${i}`)}
-					<Message {message} {tools} {onSend} {onReadResource} />
+					<Message {message} {tools} {onSend} {onReadResource} {onToolCall} />
 				{/each}
 				{#if isLast}
 					{#if showLoadingIndicator}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Attachment, ChatResult, ChatMessageItem, ResourceContents, Tool } from '$lib/types';
+	import type { CallToolResult } from "$lib/chat.svelte";
 	import MessageItemText from './MessageItemText.svelte';
 	import MessageItemImage from './MessageItemImage.svelte';
 	import MessageItemAudio from './MessageItemAudio.svelte';
@@ -17,9 +18,14 @@
 			uri: string,
 			opts?: { abort?: AbortController }
 		) => Promise<{ contents: ResourceContents[] }>;
+		onToolCall?: (
+			toolName: string,
+			args: Record<string, unknown>,
+			opts?: { abort?: AbortController }
+		) => Promise<CallToolResult>;
 	}
 
-	let { item, tools = [], role, onSend, onReadResource }: Props = $props();
+	let { item, tools = [], role, onSend, onReadResource, onToolCall }: Props = $props();
 </script>
 
 {#if item.type === 'text'}
@@ -35,5 +41,5 @@
 {:else if item.type === 'reasoning'}
 	<MessageItemReasoning {item} />
 {:else if item.type === 'tool'}
-	<MessageItemTool {item} {tools} {onSend} {onReadResource} />
+	<MessageItemTool {item} {tools} {onSend} {onReadResource} {onToolCall} />
 {/if}

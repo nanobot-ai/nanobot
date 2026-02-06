@@ -22,6 +22,7 @@ let { chat }: Props = $props();
 		onElicitationResult={chat.replyToElicitation}
 		onSendMessage={chat.sendMessage}
 		onReadResource={chat.readResource}
+		onToolCall={chat.onToolCall}
 		onFileUpload={chat.uploadFile}
 		cancelUpload={chat.cancelUpload}
 		uploadingFiles={chat.uploadingFiles}

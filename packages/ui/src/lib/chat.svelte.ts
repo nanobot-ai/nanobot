@@ -78,6 +78,7 @@ export class ChatAPI {
 			async?: boolean;
 			abort?: AbortController;
 			parseResponse?: (data: CallToolResult) => T;
+			raw?: boolean;
 		}
 	): Promise<T> {
 		// If sessionId is provided, create a new client instance with that session
@@ -105,7 +106,12 @@ export class ChatAPI {
 			}
 
 			// Handle structured content
-			if (result && typeof result === 'object' && 'structuredContent' in result) {
+			if (
+				opts?.raw !== true &&
+				result &&
+				typeof result === 'object' &&
+				'structuredContent' in result
+			) {
 				return (result as { structuredContent: T }).structuredContent;
 			}
 
@@ -704,6 +710,19 @@ export class ChatService {
 		return await this.api.readResource(uri, {
 			...opts,
 			sessionId: this.chatId
+		});
+	};
+
+	onToolCall = async <T>(
+		toolName: string,
+		args: Record<string, unknown>,
+		opts?: { abort?: AbortController }
+	): Promise<T> => {
+		return await this.api.callMCPTool<T>(toolName, {
+			payload: args,
+			sessionId: this.chatId,
+			abort: opts?.abort,
+			raw: true
 		});
 	};
 }
