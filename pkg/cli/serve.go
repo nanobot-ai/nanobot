@@ -163,7 +163,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		return fmt.Errorf("failed to read config from %q: %w", r.n.ConfigPath, err)
 	}
 
-	cfg, _ := json.MarshalIndent(once, "", "  ")
+	cfg, _ := json.MarshalIndent(once.Redacted(), "", "  ")
 	printer.Prefix("config", string(cfg))
 
 	var auditLogCollector *auditlogs.Collector
