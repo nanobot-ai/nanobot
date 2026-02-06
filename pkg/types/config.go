@@ -83,6 +83,34 @@ type Config struct {
 
 type ConfigFactory func(ctx context.Context, profiles string) (Config, error)
 
+func (c Config) Redacted() Config {
+	redacted := c
+
+	for i, env := range redacted.Env {
+		if env.Sensitive == nil || *env.Sensitive {
+			env.Default = fmt.Sprintf("%s...", env.Default[:min(10, len(env.Default)/2)])
+			redacted.Env[i] = env
+		}
+	}
+
+	for _, mcpServer := range redacted.MCPServers {
+		for key, val := range mcpServer.Env {
+			mcpServer.Env[key] = fmt.Sprintf("%s...", val[:min(10, len(val)/2)])
+		}
+
+		for key, val := range mcpServer.Headers {
+			mcpServer.Headers[key] = fmt.Sprintf("%s...", val[:min(10, len(val)/2)])
+		}
+
+	}
+
+	for key, val := range c.Profiles {
+		c.Profiles[key] = val.Redacted()
+	}
+
+	return redacted
+}
+
 func (c Config) Validate(allowLocal bool) error {
 	var (
 		errs      []error
