@@ -1,7 +1,7 @@
 ---
 name: Nanobot
 description: General-purpose agent for accomplishing tasks and automating work
-model: claude-opus-4-5
+model: claude-opus-4-6
 temperature: 0.3
 permissions:
   '*': allow

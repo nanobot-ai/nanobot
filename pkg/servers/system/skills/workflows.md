@@ -11,6 +11,15 @@ Workflows are Markdown files in `workflows/` that codify repeatable processes. E
 
 Workflows are for repeatable tasks. If it's a one-time thing, just execute it directly.
 
+## Tracking Progress
+
+Use TodoWrite during **both** workflow design and execution. The user sees your todo list — it's your primary way of keeping them informed.
+
+- **When designing:** Create todos for your design steps (gather requirements, identify inputs/edge cases, draft workflow, write file, present for review).
+- **When executing:** Create a todo for each workflow step and update status as you go. Add new todos if unexpected issues arise.
+
+Keep todo titles short and scannable. Update them as you progress — don't leave stale todos sitting around.
+
 ## Workflow Format
 
 Workflows are Markdown files with:
@@ -130,19 +139,55 @@ Deployment to {{input.environment}} complete.
 
 ## Designing Workflows
 
-When creating a workflow, ask clarifying questions to understand what it should accomplish, what inputs it needs, and how errors should be handled. Use descriptive step names in title case (e.g., "Fetch Issues" not "step1") - these become variables for later steps.
+When asked to create a workflow, DO NOT start writing it immediately. Follow this process:
+
+### Phase 1: Understand
+
+1. Use TodoWrite to create a plan for designing the workflow (e.g., "Gather requirements", "Identify inputs and edge cases", "Draft workflow", "Write to file", "Present for review").
+2. Ask clarifying questions before doing anything else. You need to understand:
+    - What the workflow should accomplish end-to-end
+    - What triggers it and what the expected outcome is
+    - What inputs/variables are needed
+    - What external services or tools are involved
+    - How errors should be handled (stop? retry? rollback?)
+    - How often this will run and in what contexts
+3. **Wait for answers. Do not proceed until you have enough information to design a good workflow.** Do not guess or assume — ask.
+
+### Phase 2: Draft & Save
+
+4. Once you understand the requirements, draft the workflow.
+5. Write it to `workflows/<name>.md`.
+6. Mark your design todos as complete.
+
+### Phase 3: Hand Off
+
+7. Present the workflow to the user with a brief summary of what each step does.
+8. Ask the user to review it. Offer to make changes.
+9. **Offer to execute the workflow — do NOT execute it automatically.** Say something like: "Want me to run this now, or would you like to make changes first?"
+
+**IMPORTANT:** Never skip Phase 1. Never jump straight to writing. Never auto-execute after designing.
+
+Use descriptive step names in title case (e.g., "Fetch Issues" not "step1") — these become variables for later steps.
 
 For deterministic operations (data transformation, calculations), consider having steps use Python scripts (see `python-scripts` skill). For external services (Slack, Jira, databases), consider MCP servers (see `mcp-curl` skill).
 
-Write workflows to `workflows/<name>.md`.
-
 ## Executing Workflows
 
-Load the workflow from `workflows/<name>.md`, collect any required inputs, then execute each step in order. Check conditions before running conditional steps, interpolate variables (`{{input.name}}` and `{{Step Name}}`), and follow error handling directives.
+Users may ask to run a workflow at any time — not just immediately after designing one. Workflows in `workflows/` are persistent, reusable artifacts. A user might say "run the code-review workflow" days or weeks after it was created. Treat execution as a standalone operation: load the file, collect inputs, and run it. Don't assume you have any prior context about the workflow beyond what's in the file itself.
 
-**IMPORTANT:** Use TodoWrite to track workflow execution. Create a todo for each step and update its status as you progress. Todos are displayed to the user, so this is how you keep them informed of what's happening.
+**IMPORTANT:** If the user asks you to *create* a workflow, do NOT auto-execute it after writing the file. Present it for review and offer to run it. But if the user asks you to *run* an existing workflow, go ahead — that's an explicit request.
 
-Provide running updates in normal chat messages as you work through each step. If errors occur, judgment calls are needed, or unexpected conditions arise, mention them in chat messages and add new todos as needed.
+When the user asks you to run a workflow:
+
+1. Load the workflow from `workflows/<name>.md`.
+2. Use TodoWrite to create a todo for each workflow step before you begin. This is your execution plan — the user will follow along.
+3. Collect any required inputs from the user. If inputs are missing and have no defaults, ask for them.
+4. Execute each step in order:
+    - Check conditions before running conditional steps.
+    - Interpolate variables (`{{input.name}}` and `{{Step Name}}`).
+    - Follow error handling directives.
+    - Mark each todo complete/failed/skipped as you go.
+5. Provide running updates in normal chat messages as you work through each step. If errors occur, judgment calls are needed, or unexpected conditions arise, mention them in chat and add new todos as needed.
 
 Complete tasks fully, follow requested formats exactly, and provide specific analysis rather than vague summaries.
 
@@ -153,8 +198,8 @@ After execution, write a brief summary to `workflows/.runs/` noting what succeed
 After executing a workflow, you can analyze the execution and propose improvements to the workflow file.
 
 **What to look for:**
-- Steps that needed retries or failed - unclear prompt? missing format spec?
-- Steps that produced poor output - missing context? too vague?
+- Steps that needed retries or failed — unclear prompt? missing format spec?
+- Steps that produced poor output — missing context? too vague?
 - Steps that should be split into smaller steps
 - Missing error handling for steps that failed
 - Hardcoded values that should be inputs
