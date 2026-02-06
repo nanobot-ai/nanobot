@@ -16,7 +16,10 @@ import (
 	"time"
 
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
+	"github.com/nanobot-ai/nanobot/pkg/fswatch"
+	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 	"golang.org/x/net/html"
 )
@@ -31,37 +34,19 @@ const (
 	maxLineLength      = 2000
 )
 
-var allowedPermsToTools = map[string][]string{
-	"bash":      {"bash"},
-	"read":      {"read"},
-	"write":     {"write", "edit"},
-	"edit":      {"edit"},
-	"glob":      {"glob"},
-	"grep":      {"grep"},
-	"todoWrite": {"todoWrite"},
-	"webFetch":  {"webFetch"},
-	"skills":    {"getSkill"},
-}
-
-// subscription holds the session reference and subscribed URIs for that session
-type subscription struct {
-	session *mcp.Session
-	uris    map[string]struct{}
-}
-
 type Server struct {
-	configDir     string
-	tools         mcp.ServerTools
-	mu            sync.RWMutex
-	subscriptions map[string]*subscription // sessionID -> subscription
-	sessions      map[string]*mcp.Session  // sessionID -> session (all initialized sessions)
+	configDir          string
+	tools              mcp.ServerTools
+	subscriptions      *fswatch.SubscriptionManager
+	fileWatcher        *fswatch.Watcher
+	fileWatcherOnce    sync.Once
+	fileWatcherInitErr error
 }
 
 func NewServer(configDir string) *Server {
 	s := &Server{
 		configDir:     configDir,
-		subscriptions: make(map[string]*subscription),
-		sessions:      make(map[string]*mcp.Session),
+		subscriptions: fswatch.NewSubscriptionManager(context.Background()),
 	}
 
 	s.tools = mcp.NewServerTools(
@@ -256,7 +241,9 @@ Usage notes:
 
 // Close cleans up resources
 func (s *Server) Close() error {
-	// No cleanup needed - sessions are cleaned up via context.AfterFunc
+	if s.fileWatcher != nil {
+		return s.fileWatcher.Close()
+	}
 	return nil
 }
 
@@ -284,18 +271,14 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 }
 
 func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
-	// Track this session for sending list_changed notifications
-	s.mu.Lock()
-	sessionID := msg.Session.ID()
-	s.sessions[sessionID] = msg.Session
-	s.mu.Unlock()
+	// Ensure watcher is running
+	if err := s.ensureFileWatcher(); err != nil {
+		return nil, mcp.ErrRPCInternal.WithMessage("failed to start file watcher: %v", err)
+	}
 
-	// Clean up session when it ends
-	context.AfterFunc(msg.Session.Context(), func() {
-		s.mu.Lock()
-		delete(s.sessions, sessionID)
-		s.mu.Unlock()
-	})
+	// Track this session for sending list_changed notifications
+	sessionID, _ := types.GetSessionAndAccountID(ctx)
+	s.subscriptions.AddSession(sessionID, msg.Session)
 
 	return &mcp.InitializeResult{
 		ProtocolVersion: params.ProtocolVersion,
@@ -311,6 +294,61 @@ func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.Ini
 			Version: version.Get().String(),
 		},
 	}, nil
+}
+
+// resourcesList returns all resources (todo + files).
+func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
+	resources := s.listTodoResources()
+
+	// Add file resources
+	fileResources, err := s.listFileResources()
+	if err != nil {
+		// Log but don't fail - still return todo resources
+		log.Errorf(ctx, "failed to list file resources: %v", err)
+	} else {
+		resources = append(resources, fileResources...)
+	}
+
+	return &mcp.ListResourcesResult{Resources: resources}, nil
+}
+
+// resourcesRead reads a resource by URI (delegates to todo or file handlers).
+func (s *Server) resourcesRead(ctx context.Context, msg mcp.Message, request mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	if strings.HasPrefix(request.URI, "todo:///") {
+		return s.readTodoResource(ctx, request.URI)
+	} else if strings.HasPrefix(request.URI, "file:///") {
+		return s.readFileResource(request.URI)
+	}
+	return nil, mcp.ErrRPCInvalidParams.WithMessage("unsupported resource URI: %s", request.URI)
+}
+
+// resourcesSubscribe subscribes to a resource by URI.
+func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, request mcp.SubscribeRequest) (*mcp.SubscribeResult, error) {
+	sessionID, _ := types.GetSessionAndAccountID(ctx)
+
+	// Delegate to specific handlers for validation
+	var err error
+	if strings.HasPrefix(request.URI, "todo:///") {
+		err = s.subscribeTodoResource(request.URI)
+	} else if strings.HasPrefix(request.URI, "file:///") {
+		err = s.subscribeFileResource(request.URI)
+	} else {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("unsupported resource URI: %s", request.URI)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Add subscription to manager
+	s.subscriptions.Subscribe(sessionID, msg.Session, request.URI)
+	return &mcp.SubscribeResult{}, nil
+}
+
+// resourcesUnsubscribe unsubscribes from a resource.
+func (s *Server) resourcesUnsubscribe(ctx context.Context, msg mcp.Message, request mcp.UnsubscribeRequest) (*mcp.UnsubscribeResult, error) {
+	sessionID, _ := types.GetSessionAndAccountID(ctx)
+	s.subscriptions.Unsubscribe(sessionID, request.URI)
+	return &mcp.UnsubscribeResult{}, nil
 }
 
 // Bash tool

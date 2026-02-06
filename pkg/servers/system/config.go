@@ -9,6 +9,18 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
+var allowedPermsToTools = map[string][]string{
+	"bash":      {"bash"},
+	"read":      {"read"},
+	"write":     {"write", "edit"},
+	"edit":      {"edit"},
+	"glob":      {"glob"},
+	"grep":      {"grep"},
+	"todoWrite": {"todoWrite"},
+	"webFetch":  {"webFetch"},
+	"skills":    {"getSkill"},
+}
+
 func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (types.AgentConfigHook, error) {
 	if agent := params.Agent; agent != nil {
 		for _, perm := range agent.Permissions.Allowed(maps.Keys(allowedPermsToTools)) {
