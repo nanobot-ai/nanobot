@@ -49,8 +49,11 @@ jobs:
           go-version: "1.25"
           cache: true
 
+      - name: Generate
+        run: go generate ./...
+
       - name: Build
-        run: make build
+        run: CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/nanobot-ai/nanobot/pkg/version.Tag=${{ github.sha }} -X github.com/nanobot-ai/nanobot/pkg/version.BaseImage=ghcr.io/nanobot-ai/nanobot:${{ github.sha }}" -o nanobot .
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -62,6 +65,7 @@ jobs:
           target: release
           tags: |
             ghcr.io/nanobot-ai/nanobot:main
+            ghcr.io/nanobot-ai/nanobot:${{ github.sha }}
           labels: |
             org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
             org.opencontainers.image.title=nanobot
