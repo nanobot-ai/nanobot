@@ -51,7 +51,7 @@ func TestListSkills(t *testing.T) {
 	}
 
 	// Check for expected skills
-	expectedSkills := []string{"python-scripts", "learn", "mcp-curl"}
+	expectedSkills := []string{"python-scripts", "workflows", "mcp-curl"}
 	for _, expected := range expectedSkills {
 		if !skillNames[expected] {
 			t.Errorf("should have %s skill", expected)
@@ -108,27 +108,27 @@ func TestListSkillsUserOverridesBuiltin(t *testing.T) {
 		t.Fatal("listSkills() returned nil result")
 	}
 
-	// Find the learn skill and verify it has the overridden display name and description
-	var learnSkill *Skill
+	// Find the workflows skill and verify it has the overridden display name and description
+	var workflowsSkill *Skill
 	for _, skill := range result.Skills {
-		if skill.Name == "learn" {
-			learnSkill = &skill
+		if skill.Name == "workflows" {
+			workflowsSkill = &skill
 			break
 		}
 	}
 
-	if learnSkill == nil {
-		t.Fatal("learn skill should exist")
+	if workflowsSkill == nil {
+		t.Fatal("workflows skill should exist")
 	}
 
-	expectedDisplayName := "Lessons Learned"
-	if learnSkill.DisplayName != expectedDisplayName {
-		t.Errorf("learn skill display name = %q, want %q", learnSkill.DisplayName, expectedDisplayName)
+	expectedDisplayName := "Custom Workflows"
+	if workflowsSkill.DisplayName != expectedDisplayName {
+		t.Errorf("workflows skill display name = %q, want %q", workflowsSkill.DisplayName, expectedDisplayName)
 	}
 
-	expectedDesc := "My custom learn skill that overrides the built-in"
-	if learnSkill.Description != expectedDesc {
-		t.Errorf("learn skill description = %q, want %q", learnSkill.Description, expectedDesc)
+	expectedDesc := "My custom workflows skill that overrides the built-in"
+	if workflowsSkill.Description != expectedDesc {
+		t.Errorf("workflows skill description = %q, want %q", workflowsSkill.Description, expectedDesc)
 	}
 }
 
@@ -193,10 +193,10 @@ func TestGetSkill(t *testing.T) {
 			shouldContain: "name: python-scripts",
 		},
 		{
-			name:          "get learn skill",
-			skillName:     "learn",
+			name:          "get workflows skill",
+			skillName:     "workflows",
 			expectError:   false,
-			shouldContain: "name: learn",
+			shouldContain: "name: workflows",
 		},
 		{
 			name:          "get mcp-curl skill",
@@ -263,36 +263,36 @@ func TestGetSkillUserOverridesBuiltin(t *testing.T) {
 	server := NewServer(testdataDir(t, "with-override"))
 	ctx := context.Background()
 
-	content, err := server.getSkill(ctx, GetSkillParams{Name: "learn"})
+	content, err := server.getSkill(ctx, GetSkillParams{Name: "workflows"})
 	if err != nil {
 		t.Fatalf("getSkill() failed: %v", err)
 	}
-	if !strings.Contains(content, "name: Lessons Learned") {
-		t.Error("content should contain 'name: Lessons Learned'")
+	if !strings.Contains(content, "name: Custom Workflows") {
+		t.Error("content should contain 'name: Custom Workflows'")
 	}
-	if !strings.Contains(content, "My custom learn skill that overrides the built-in") {
+	if !strings.Contains(content, "My custom workflows skill that overrides the built-in") {
 		t.Error("content should contain overridden description")
 	}
-	if !strings.Contains(content, "This overrides the built-in learn skill.") {
+	if !strings.Contains(content, "This overrides the built-in workflows skill.") {
 		t.Error("content should contain overridden content")
 	}
 }
 
 func TestGetSkillFallsBackToBuiltin(t *testing.T) {
-	// Use the with-user-skills directory which doesn't have a learn.md file
+	// Use the with-user-skills directory which doesn't have a workflows.md file
 	server := NewServer(testdataDir(t, "with-user-skills"))
 	ctx := context.Background()
 
-	content, err := server.getSkill(ctx, GetSkillParams{Name: "learn"})
+	content, err := server.getSkill(ctx, GetSkillParams{Name: "workflows"})
 	if err != nil {
 		t.Fatalf("getSkill() failed: %v", err)
 	}
-	// Should get the built-in learn skill
-	if !strings.Contains(content, "name: learn") {
-		t.Error("content should contain 'name: learn'")
+	// Should get the built-in workflows skill
+	if !strings.Contains(content, "name: workflows") {
+		t.Error("content should contain 'name: workflows'")
 	}
-	if !strings.Contains(content, "Review workflow execution results") {
-		t.Error("content should contain built-in learn skill content")
+	if !strings.Contains(content, "Workflows are for repeatable tasks") {
+		t.Error("content should contain built-in workflows skill content")
 	}
 }
 

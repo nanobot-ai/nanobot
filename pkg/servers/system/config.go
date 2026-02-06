@@ -28,8 +28,8 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 				if len(skillsList.Skills) > 0 {
 					var skillsPrompt strings.Builder
 					skillsPrompt.WriteString("\n\n## Available Skills\n\n")
-					skillsPrompt.WriteString("You have access to skills that provide detailed instructions for specific tasks. ")
-					skillsPrompt.WriteString("Call the `getSkill` tool with a skill name to load its instructions.\n\n")
+					skillsPrompt.WriteString("Skills provide detailed instructions for specific tasks. ")
+					skillsPrompt.WriteString("When your task fits one of the skills below, call getSkill('skill-name') to load its instructions.\n\n")
 
 					for _, skill := range skillsList.Skills {
 						skillsPrompt.WriteString("- **")

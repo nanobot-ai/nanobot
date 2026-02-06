@@ -41,16 +41,10 @@ func Load(ctx context.Context, path string, includeDefaultAgents bool, profiles 
 		return cfg, cwd, nil
 	}
 
-	// Load built-in agents from embedded markdown files
-	schemaContent, err := fs.ReadFile(agents.Builtin, "WORKFLOW_SCHEMA.md")
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to read WORKFLOW_SCHEMA.md: %w", err)
-	}
-
 	if cfg == nil {
 		cfg = new(types.Config)
 	}
-	if err := loadBuiltinAgents(cfg, string(schemaContent)); err != nil {
+	if err := loadBuiltinAgents(cfg); err != nil {
 		return nil, "", err
 	}
 
@@ -199,8 +193,8 @@ func Merge(base, overlay types.Config) (types.Config, error) {
 }
 
 // loadBuiltinAgents reads built-in agent definitions from the embedded filesystem
-// and adds them to the config. The workflowSchema is prepended to each agent's instructions.
-func loadBuiltinAgents(cfg *types.Config, workflowSchema string) error {
+// and adds them to the config.
+func loadBuiltinAgents(cfg *types.Config) error {
 	// Initialize agents map if nil
 	if cfg.Agents == nil {
 		cfg.Agents = make(map[string]types.Agent)
@@ -212,14 +206,9 @@ func loadBuiltinAgents(cfg *types.Config, workflowSchema string) error {
 		return fmt.Errorf("failed to read builtin agents directory: %w", err)
 	}
 
-	// Process each .md file (except WORKFLOW_SCHEMA.md)
+	// Process each .md file
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
-			continue
-		}
-
-		// Skip the workflow schema file itself
-		if entry.Name() == "WORKFLOW_SCHEMA.md" {
 			continue
 		}
 
@@ -251,11 +240,9 @@ func loadBuiltinAgents(cfg *types.Config, workflowSchema string) error {
 			}
 		}
 
-		// Prepend workflow schema to instructions, wrapped in XML-style tags
-		schemaPrefix := "<workflow_schema>\n" + workflowSchema + "\n</workflow_schema>\n\n"
-		instructions := schemaPrefix + body
+		// Use the body as instructions without any prefix
 		agentFromYAML.Instructions = types.DynamicInstructions{
-			Instructions: instructions,
+			Instructions: body,
 		}
 
 		// Create the agent
