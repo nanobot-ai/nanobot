@@ -50,7 +50,7 @@ jobs:
           cache: true
 
       - name: Build
-        run: main build
+        run: make build
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
