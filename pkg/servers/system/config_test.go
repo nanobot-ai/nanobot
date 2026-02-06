@@ -95,7 +95,7 @@ func TestConfigSkillsPermissionIncludesSkillDetails(t *testing.T) {
 	instructions := result.Agent.Instructions.Instructions
 
 	// Check for specific skills we know exist
-	expectedSkills := []string{"python-scripts", "learn", "mcp-curl"}
+	expectedSkills := []string{"python-scripts", "workflows", "mcp-curl"}
 	for _, skillName := range expectedSkills {
 		if !strings.Contains(instructions, skillName) {
 			t.Errorf("expected skill '%s' to be listed in instructions", skillName)

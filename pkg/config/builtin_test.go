@@ -14,15 +14,14 @@ func TestLoadBuiltinAgents(t *testing.T) {
 		Agents: make(map[string]types.Agent),
 	}
 
-	// Load builtin agents with a test schema
-	testSchema := "# Test Workflow Schema\n\nThis is a test schema."
-	err := loadBuiltinAgents(cfg, testSchema)
+	// Load builtin agents
+	err := loadBuiltinAgents(cfg)
 	if err != nil {
 		t.Fatalf("unexpected error loading builtin agents: %v", err)
 	}
 
-	// Verify that executor and planner agents were loaded
-	expectedAgents := []string{"executor", "planner"}
+	// Verify that nanobot agent was loaded
+	expectedAgents := []string{"nanobot"}
 
 	for _, agentName := range expectedAgents {
 		agent, exists := cfg.Agents[agentName]
@@ -31,16 +30,10 @@ func TestLoadBuiltinAgents(t *testing.T) {
 			continue
 		}
 
-		// Verify instructions contain the workflow schema wrapped in tags
+		// Verify instructions are present
 		instructions := agent.Instructions.Instructions
-		if !strings.Contains(instructions, "<workflow_schema>") {
-			t.Errorf("agent %q instructions should contain <workflow_schema> tag", agentName)
-		}
-		if !strings.Contains(instructions, "</workflow_schema>") {
-			t.Errorf("agent %q instructions should contain </workflow_schema> tag", agentName)
-		}
-		if !strings.Contains(instructions, testSchema) {
-			t.Errorf("agent %q instructions should contain the workflow schema", agentName)
+		if instructions == "" {
+			t.Errorf("agent %q should have instructions", agentName)
 		}
 
 		// Verify the original agent body is present (check for frontmatter values)
@@ -54,17 +47,16 @@ func TestLoadBuiltinAgents_ConflictError(t *testing.T) {
 	// Create a config with an existing agent that conflicts with builtin
 	cfg := &types.Config{
 		Agents: map[string]types.Agent{
-			"executor": {
+			"nanobot": {
 				HookAgent: types.HookAgent{
-					Name: "My Custom Executor",
+					Name: "My Custom Explorer",
 				},
 			},
 		},
 	}
 
 	// Try to load builtin agents - should error
-	testSchema := "# Test Schema"
-	err := loadBuiltinAgents(cfg, testSchema)
+	err := loadBuiltinAgents(cfg)
 	if err == nil {
 		t.Fatal("expected error when builtin agent conflicts with existing agent")
 	}
@@ -72,8 +64,8 @@ func TestLoadBuiltinAgents_ConflictError(t *testing.T) {
 	if !strings.Contains(err.Error(), "cannot override built-in agent") {
 		t.Errorf("expected error message about overriding builtin agent, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "executor") {
-		t.Errorf("expected error message to mention 'executor', got: %v", err)
+	if !strings.Contains(err.Error(), "nanobot") {
+		t.Errorf("expected error message to mention 'nanobot', got: %v", err)
 	}
 }
 
@@ -87,22 +79,19 @@ func TestLoad_WithBuiltinAgents(t *testing.T) {
 		t.Fatalf("unexpected error loading config with builtin agents: %v", err)
 	}
 
-	// Should have the main agent from testdata plus executor and planner
-	if len(cfg.Agents) < 3 {
-		t.Errorf("expected at least 3 agents (main + executor + planner), got %d", len(cfg.Agents))
+	// Should have the main agent from testdata plus nanobot
+	if len(cfg.Agents) < 2 {
+		t.Errorf("expected at least 2 agents (main + nanobot), got %d", len(cfg.Agents))
 	}
 
-	// Check that executor and planner exist
-	for _, agentName := range []string{"executor", "planner"} {
-		agent, exists := cfg.Agents[agentName]
-		if !exists {
-			t.Errorf("expected builtin agent %q to be loaded", agentName)
-			continue
-		}
-
-		// Verify workflow schema is in instructions
-		if !strings.Contains(agent.Instructions.Instructions, "<workflow_schema>") {
-			t.Errorf("builtin agent %q should have workflow schema in instructions", agentName)
+	// Check that nanobot exists
+	agent, exists := cfg.Agents["nanobot"]
+	if !exists {
+		t.Errorf("expected builtin agent 'nanobot' to be loaded")
+	} else {
+		// Verify instructions are present
+		if agent.Instructions.Instructions == "" {
+			t.Errorf("builtin agent 'nanobot' should have instructions")
 		}
 	}
 }
@@ -121,10 +110,8 @@ func TestLoad_WithoutBuiltinAgents(t *testing.T) {
 		t.Errorf("expected exactly 1 agent (main), got %d", len(cfg.Agents))
 	}
 
-	// Verify executor and planner do NOT exist
-	for _, agentName := range []string{"executor", "planner"} {
-		if _, exists := cfg.Agents[agentName]; exists {
-			t.Errorf("did not expect builtin agent %q when includeDefaultAgents=false", agentName)
-		}
+	// Verify nanobot does NOT exist
+	if _, exists := cfg.Agents["nanobot"]; exists {
+		t.Errorf("did not expect builtin agent 'nanobot' when includeDefaultAgents=false")
 	}
 }

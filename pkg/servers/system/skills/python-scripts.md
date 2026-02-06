@@ -1,6 +1,6 @@
 ---
 name: python-scripts
-description: Write and execute Python scripts using uv for workflow steps that need programmatic execution.
+description: Write and execute Python scripts using uv for programmatic tasks.
 ---
 
 Use Python when a step needs data transformation, API calls, calculations, or deterministic operations where code is more reliable than natural language.
