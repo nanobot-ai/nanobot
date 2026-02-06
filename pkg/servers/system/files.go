@@ -27,7 +27,6 @@ func init() {
 
 var (
 	// Common directories/patterns to exclude from watching
-	// NOTE: hidden directories (starting with .) are automatically excluded by fileFilter.
 	excludedDirs = map[string]struct{}{
 		"node_modules": {},
 		"vendor":       {},
@@ -35,11 +34,18 @@ var (
 		"dist":         {},
 		"build":        {},
 		"bin":          {},
+		".git":         {},
+		".svn":         {},
+		".jj":          {},
+		".vscode":      {},
+		".idea":        {},
+		".nanobot":     {},
 	}
 
 	excludedFiles = map[string]struct{}{
 		"nanobot.db":         {},
 		"nanobot.db-journal": {},
+		".DS_Store":          {},
 	}
 )
 
@@ -50,11 +56,6 @@ func fileFilter(relPath string, info os.FileInfo) bool {
 	}
 
 	basename := filepath.Base(relPath)
-
-	// Exclude hidden files and directories (starting with .)
-	if strings.HasPrefix(basename, ".") {
-		return false
-	}
 
 	// Check if basename is an excluded directory or file
 	if info.IsDir() {
@@ -73,11 +74,6 @@ func fileFilter(relPath string, info os.FileInfo) bool {
 	// Check all parts except the last (which we already checked above)
 	for i := 0; i < len(parts)-1; i++ {
 		part := parts[i]
-
-		// Exclude hidden directories (starting with .)
-		if strings.HasPrefix(part, ".") {
-			return false
-		}
 
 		// Exclude specific directories
 		if _, excluded := excludedDirs[part]; excluded {
