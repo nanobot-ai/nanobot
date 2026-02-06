@@ -343,6 +343,7 @@ func (a *Agents) handleUIAction(ctx context.Context, config types.Config, req ty
 	}
 
 	if uiAction.Tool != nil && uiAction.Tool.ToolName != "" {
+		// NOTE: This is where legacy mcp-ui tool calls from the ui components are generated
 		args := []byte("{}")
 		if len(uiAction.Tool.Params) > 0 {
 			args, err = json.Marshal(uiAction.Tool.Params)

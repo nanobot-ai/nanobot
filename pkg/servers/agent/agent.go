@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/nanobot-ai/nanobot/pkg/agents"
@@ -61,9 +62,9 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	case "notifications/initialized":
 		// nothing to do
 		return
-	case "tools/list":
-		mcp.Invoke(ctx, msg, s.tools.List)
-		return
+	// case "tools/list":
+	// 	mcp.Invoke(ctx, msg, s.tools.List)
+	// 	return
 	case "tools/call":
 		mcp.Invoke(ctx, msg, s.tools.Call)
 		return
@@ -85,6 +86,8 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	}
 
 	switch msg.Method {
+	case "tools/list":
+		mcp.Invoke(ctx, msg, s.toolsList)
 	case "resources/list":
 		mcp.Invoke(ctx, msg, s.resourcesList)
 	case "resources/templates/list":
@@ -277,6 +280,7 @@ func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListRes
 	}
 
 	for _, resource := range resources {
+		fmt.Printf("RESOURCE MAPPINGS: %s\n%v", s.agentName, resource.Target)
 		result.Resources = append(result.Resources, resource.Target)
 	}
 
@@ -293,6 +297,27 @@ func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListRes
 		Description: "The streaming content of the current or last chat exchange.",
 		MimeType:    types.ToolResultMimeType,
 	})
+	return result, nil
+}
+
+func (s *Server) toolsList(ctx context.Context, _ mcp.Message, _ mcp.ListToolsRequest) (*mcp.ListToolsResult, error) {
+	c := types.ConfigFromContext(ctx)
+	agent := c.Agents[s.agentName]
+	result := &mcp.ListToolsResult{}
+
+	toolMappings, err := s.data.BuildToolMappings(ctx, slices.Concat(agent.MCPServers, agent.Tools))
+	if err != nil {
+		return nil, err
+	}
+
+	for _, mapping := range toolMappings {
+		result.Tools = append(result.Tools, mapping.Target.Tool)
+	}
+
+	for _, key := range slices.Sorted(maps.Keys(s.tools)) {
+		result.Tools = append(result.Tools, s.tools[key].Definition())
+	}
+
 	return result, nil
 }
 
