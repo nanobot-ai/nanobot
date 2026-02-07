@@ -52,6 +52,82 @@ browser-use --browser remote open <url>        # Cloud browser (requires API key
 - **real**: Uses your Chrome with cookies, extensions, logged-in sessions
 - **remote**: Cloud-hosted browser with proxy support (requires BROWSER_USE_API_KEY)
 
+## Browser Viewing with VNC
+
+You can view and interact with the browser in real-time using VNC. This is **essential** for:
+
+- **Solving CAPTCHAs** - Many sites require human verification
+- **Debugging** - See exactly what the browser is doing
+- **User interaction** - Manual intervention when automation gets stuck
+
+### Starting the VNC Server
+
+Start the VNC server:
+
+```bash
+/usr/local/bin/start-vnc.sh
+```
+
+This starts:
+- X virtual framebuffer (Xvfb) on display :99
+- VNC server on port 5900
+- WebSocket proxy on port 6080 for web access
+
+### Accessing the Browser View
+
+**Web Browser:**
+```
+http://localhost:6080/vnc.html
+```
+
+**Nanobot UI:**
+
+The Nanobot UI includes a browser viewer component that embeds VNC access.
+
+### Using with browser-use
+
+**Always use `--headed` mode when you need VNC viewing:**
+
+```bash
+# WITHOUT VNC (headless, fast, but user can't see it)
+browser-use --browser chromium open https://example.com
+
+# WITH VNC (visible in VNC viewer, user can interact)
+browser-use --browser chromium --headed open https://example.com
+```
+
+The `--headed` flag makes the browser visible on the VNC display (:99).
+
+### CAPTCHA Solving Workflow
+
+**When a CAPTCHA is encountered:**
+
+1. **Detect the CAPTCHA** - Look for verification challenges, "I'm not a robot" checkboxes, or automation blocks
+2. **Inform the user immediately** - Tell them a CAPTCHA needs to be solved
+3. **Ensure VNC is running** - Verify the browser is running in `--headed` mode
+4. **Guide the user** - Tell them to open the VNC viewer (http://localhost:6080/vnc.html or via the UI component)
+5. **Wait for completion** - Pause automation until the user confirms they've solved the CAPTCHA
+6. **Continue** - Resume automation after manual intervention
+
+**Example:**
+```bash
+# You're automating a task and hit a CAPTCHA
+browser-use --browser chromium --headed open https://example.com
+browser-use state
+# → Detects CAPTCHA verification challenge
+
+# STOP and inform user:
+# "I've encountered a CAPTCHA that needs human verification.
+#  Please open the VNC viewer at http://localhost:6080/vnc.html
+#  and solve the CAPTCHA. Let me know when you're done."
+
+# Wait for user confirmation, then continue:
+browser-use state  # Verify CAPTCHA is solved
+browser-use click 5  # Continue with automation
+```
+
+**Important:** CAPTCHAs cannot be automated - they require human interaction. Always use `--headed` mode when you anticipate CAPTCHAs, and be prepared to pause and ask the user for help.
+
 ## Commands
 
 ### Navigation
@@ -365,12 +441,14 @@ browser-use state  # Already logged in!
 ## Tips
 
 1. **Always run `browser-use state` first** to see available elements and their indices
-2. **Use `--headed` for debugging** to see what the browser is doing
-3. **Sessions persist** - the browser stays open between commands
-4. **Use `--json` for parsing** output programmatically
-5. **Python variables persist** across `browser-use python` commands within a session
-6. **Real browser mode** preserves your login sessions and extensions
-7. **CLI aliases**: `bu`, `browser`, and `browseruse` all work identically to `browser-use`
+2. **Use `--headed` with VNC for debugging** to see what the browser is doing in the VNC viewer
+3. **Use `--headed` mode for CAPTCHA-prone sites** - you'll need VNC access to solve them
+4. **Sessions persist** - the browser stays open between commands
+5. **Use `--json` for parsing** output programmatically
+6. **Python variables persist** across `browser-use python` commands within a session
+7. **Real browser mode** preserves your login sessions and extensions
+8. **CLI aliases**: `bu`, `browser`, and `browseruse` all work identically to `browser-use`
+9. **When encountering CAPTCHAs** - stop automation, inform the user, and wait for them to solve it via VNC
 
 ## Troubleshooting
 
