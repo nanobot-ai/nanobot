@@ -19,27 +19,28 @@ COPY . .
 RUN CI=true CGO_ENABLED=0 go generate ./... && go build -o nanobot .
 
 # Final stage
-FROM cgr.dev/chainguard/wolfi-base:latest AS runtime
+FROM ubuntu:24.04 AS runtime
 
-# Install bash, git, common utilities, and uv
-RUN apk update && apk add --no-cache \
+# Install bash, git, common utilities
+RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     git \
     curl \
     wget \
     jq \
     gzip \
-    xz \
+    xz-utils \
     coreutils \
     findutils \
     grep \
     sed \
     gawk \
     ripgrep \
-    uv
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with home directory
-RUN adduser -D -h /home/nanobot -s /bin/bash nanobot
+RUN useradd -m -d /home/nanobot -s /bin/bash nanobot
 
 # Create data and config directories with proper ownership
 RUN mkdir -p /data /home/nanobot/.nanobot && \
@@ -50,6 +51,13 @@ WORKDIR /home/nanobot
 
 # Set common env vars
 ENV HOME=/home/nanobot
+
+# Install uv and browser-use as nanobot user
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    /home/nanobot/.local/bin/uv tool install browser-use
+
+# Add uv tools to PATH
+ENV PATH="/home/nanobot/.local/bin:$PATH"
 ENV NANOBOT_STATE=/data/nanobot.db
 ENV NANOBOT_RUN_LISTEN_ADDRESS=0.0.0.0:8080
 
