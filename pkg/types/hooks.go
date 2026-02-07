@@ -39,9 +39,12 @@ type HookAgent struct {
 	Temperature     *json.Number              `json:"temperature,omitempty"`
 	TopP            *json.Number              `json:"topP,omitempty"`
 	Truncation      string                    `json:"truncation,omitempty"`
-	MaxTokens       int                       `json:"maxTokens,omitempty"`
-	MimeTypes       []string                  `json:"mimeTypes,omitempty"`
-	Hooks           mcp.Hooks                 `json:"hooks,omitempty"`
+	MaxTokens              int                       `json:"maxTokens,omitempty"`
+	MimeTypes              []string                  `json:"mimeTypes,omitempty"`
+	Hooks                  mcp.Hooks                 `json:"hooks,omitempty"`
+	ToolOutputMaxLines     *int                      `json:"toolOutputMaxLines,omitempty"`
+	ToolOutputMaxBytes     *int                      `json:"toolOutputMaxBytes,omitempty"`
+	DisableToolTruncation  bool                      `json:"disableToolTruncation,omitempty"`
 
 	// Selection criteria fields
 

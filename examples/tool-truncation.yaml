@@ -1,0 +1,27 @@
+# Example configuration showing tool output truncation settings
+
+agents:
+  # Default truncation (2000 lines or 50KB)
+  default-agent:
+    name: Default Agent
+    model: gpt-4
+    mcpServers: some-server
+
+  # Custom truncation limits
+  custom-limits:
+    name: Custom Limits Agent
+    model: gpt-4
+    toolOutputMaxLines: 1000      # Truncate at 1000 lines
+    toolOutputMaxBytes: 25600     # Truncate at 25KB
+    mcpServers: some-server
+
+  # Disable truncation entirely
+  no-truncation:
+    name: No Truncation Agent
+    model: gpt-4
+    disableToolTruncation: true   # Never truncate tool outputs
+    mcpServers: some-server
+
+mcpServers:
+  some-server:
+    url: https://example.com/mcp

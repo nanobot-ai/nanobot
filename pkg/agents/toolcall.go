@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -12,6 +13,13 @@ import (
 )
 
 func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.Execution, opts []types.CompletionOptions) error {
+	// Get agent config for truncation settings
+	agentName := run.Request.GetAgent()
+	agent, ok := config.Agents[agentName]
+	if !ok {
+		return fmt.Errorf("agent %s not found in config", agentName)
+	}
+
 	for _, output := range run.Response.Output.Items {
 		functionCall := output.ToolCall
 
@@ -34,7 +42,7 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 			continue
 		}
 
-		callOutput, err := a.invoke(ctx, config, targetServer, tools.ToolCallInvocation{
+		callOutput, err := a.invoke(ctx, &agent, targetServer, tools.ToolCallInvocation{
 			MessageID: run.Response.Output.ID,
 			ItemID:    output.ID,
 			ToolCall:  *functionCall,
@@ -60,7 +68,7 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 	return nil
 }
 
-func (a *Agents) invoke(ctx context.Context, config types.Config, target types.TargetMapping[types.TargetTool], funcCall tools.ToolCallInvocation, opts []types.CompletionOptions) (*types.Message, error) {
+func (a *Agents) invoke(ctx context.Context, agent *types.Agent, target types.TargetMapping[types.TargetTool], funcCall tools.ToolCallInvocation, opts []types.CompletionOptions) (*types.Message, error) {
 	var (
 		data map[string]any
 	)
@@ -87,6 +95,28 @@ func (a *Agents) invoke(ctx context.Context, config types.Config, target types.T
 			IsError: true,
 		}
 	}
+
+	// Apply truncation if needed (unless disabled or this is an error)
+	if !response.IsError && !agent.DisableToolTruncation {
+		maxLines := DefaultMaxLines
+		maxBytes := DefaultMaxBytes
+
+		if agent.ToolOutputMaxLines != nil {
+			maxLines = *agent.ToolOutputMaxLines
+		}
+		if agent.ToolOutputMaxBytes != nil {
+			maxBytes = *agent.ToolOutputMaxBytes
+		}
+
+		truncResult, truncErr := truncateToolOutput(ctx, target.TargetName, response, maxLines, maxBytes)
+		if truncErr != nil {
+			// Log error but don't fail the tool call
+			fmt.Fprintf(os.Stderr, "Warning: failed to truncate tool output: %v\n", truncErr)
+		} else if truncResult != nil {
+			response.Content = truncResult.Content
+		}
+	}
+
 	return &types.Message{
 		Role: "user",
 		Items: []types.CompletionItem{
