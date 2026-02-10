@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -91,10 +90,14 @@ func (a *Agents) invoke(ctx context.Context, target types.TargetMapping[types.Ta
 
 	// Apply truncation to non-error responses
 	if !response.IsError {
-		truncResult, truncErr := truncateToolOutput(ctx, target.TargetName, response, DefaultMaxLines, DefaultMaxBytes)
+		truncResult, truncErr := truncateToolOutput(ctx, target.TargetName, response, DefaultMaxBytes)
 		if truncErr != nil {
-			// Log error but don't fail the tool call
-			fmt.Fprintf(os.Stderr, "Warning: failed to truncate tool output: %v\n", truncErr)
+			response.Content = []mcp.Content{
+				{
+					Type: "text",
+					Text: fmt.Sprintf("Error: tool output too large and truncation failed: %v", truncErr),
+				},
+			}
 		} else if truncResult != nil {
 			response.Content = truncResult.Content
 		}

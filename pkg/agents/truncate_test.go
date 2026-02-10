@@ -2,6 +2,7 @@ package agents
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -29,11 +30,8 @@ func TestTruncateToolOutput(t *testing.T) {
 		name                  string
 		toolName              string
 		content               []mcp.Content
-		maxLines              int
 		maxBytes              int
 		shouldTrunc           bool
-		expectRemoved         int
-		expectUnit            string
 		expectFirstType       string
 		expectPreviewNonEmpty bool
 	}{
@@ -43,21 +41,8 @@ func TestTruncateToolOutput(t *testing.T) {
 			content: []mcp.Content{
 				{Type: "text", Text: "line 1\nline 2\nline 3"},
 			},
-			maxLines:    10,
 			maxBytes:    1000,
 			shouldTrunc: false,
-		},
-		{
-			name:     "truncate by lines",
-			toolName: "test-tool",
-			content: []mcp.Content{
-				{Type: "text", Text: strings.Join(makeLines(100), "\n")},
-			},
-			maxLines:      50,
-			maxBytes:      1000000,
-			shouldTrunc:   true,
-			expectRemoved: 50,
-			expectUnit:    "lines",
 		},
 		{
 			name:     "truncate by bytes",
@@ -65,21 +50,18 @@ func TestTruncateToolOutput(t *testing.T) {
 			content: []mcp.Content{
 				{Type: "text", Text: strings.Repeat("a", 100000)},
 			},
-			maxLines:              10000,
 			maxBytes:              50000,
 			shouldTrunc:           true,
-			expectUnit:            "bytes",
 			expectPreviewNonEmpty: true,
 		},
 		{
-			name:     "preserve non-text content",
+			name:     "preserve non-text content when it fits",
 			toolName: "test-tool",
 			content: []mcp.Content{
-				{Type: "text", Text: strings.Join(makeLines(100), "\n")},
+				{Type: "text", Text: strings.Repeat("a", 100000)},
 				{Type: "image", Data: "base64data"},
 			},
-			maxLines:    50,
-			maxBytes:    1000000,
+			maxBytes:    50000,
 			shouldTrunc: true,
 		},
 		{
@@ -87,12 +69,32 @@ func TestTruncateToolOutput(t *testing.T) {
 			toolName: "test-tool",
 			content: []mcp.Content{
 				{Type: "image", Data: "base64data"},
-				{Type: "text", Text: strings.Join(makeLines(100), "\n")},
+				{Type: "text", Text: strings.Repeat("a", 100000)},
 			},
-			maxLines:        50,
-			maxBytes:        1000000,
+			maxBytes:        50000,
 			shouldTrunc:     true,
 			expectFirstType: "image",
+		},
+		{
+			name:     "interleaved content preserves order",
+			toolName: "test-tool",
+			content: []mcp.Content{
+				{Type: "text", Text: "hello"},
+				{Type: "image", Data: "imgdata"},
+				{Type: "text", Text: strings.Repeat("b", 100000)},
+			},
+			maxBytes:    50000,
+			shouldTrunc: true,
+		},
+		{
+			name:     "non-text content contributes to byte budget",
+			toolName: "test-tool",
+			content: []mcp.Content{
+				{Type: "image", Data: strings.Repeat("x", 40000)},
+				{Type: "text", Text: strings.Repeat("a", 20000)},
+			},
+			maxBytes:    50000,
+			shouldTrunc: true,
 		},
 	}
 
@@ -102,7 +104,7 @@ func TestTruncateToolOutput(t *testing.T) {
 				Content: tt.content,
 			}
 
-			result, err := truncateToolOutput(ctx, tt.toolName, response, tt.maxLines, tt.maxBytes)
+			result, err := truncateToolOutput(ctx, tt.toolName, response, tt.maxBytes)
 			if err != nil {
 				t.Fatalf("truncateToolOutput failed: %v", err)
 			}
@@ -121,44 +123,26 @@ func TestTruncateToolOutput(t *testing.T) {
 					t.Errorf("truncation file not created at %s", result.FilePath)
 				}
 
-				// Verify truncation message is in the content
-				foundTruncMsg := false
-				var truncationText string
+				// Verify a truncation/drop notice is in the content
+				foundNotice := false
 				for _, content := range result.Content {
-					if content.Type == "text" && strings.Contains(content.Text, "Output truncated") {
-						foundTruncMsg = true
-						truncationText = content.Text
-						if tt.expectUnit != "" && !strings.Contains(content.Text, tt.expectUnit) {
-							t.Errorf("expected unit %s in truncation message, got: %s", tt.expectUnit, content.Text)
-						}
+					if content.Type == "text" && (strings.Contains(content.Text, "Output truncated") || strings.Contains(content.Text, "dropped")) {
+						foundNotice = true
 					}
 				}
-				if !foundTruncMsg {
-					t.Error("truncation message not found in content")
+				if !foundNotice {
+					t.Error("truncation/drop notice not found in content")
 				}
 
 				if tt.expectPreviewNonEmpty {
-					preview := strings.Split(truncationText, "\n\n(Output truncated:")[0]
-					if strings.TrimSpace(preview) == "" {
+					// The truncated text content is separate from the notice
+					if len(result.Content) < 2 {
+						t.Fatal("expected at least 2 content items for preview check")
+					}
+					// First text item should have the preview content
+					if strings.TrimSpace(result.Content[0].Text) == "" {
 						t.Error("expected truncated preview to contain original content, got empty preview")
 					}
-				}
-
-				// Verify non-text content is preserved
-				originalNonText := 0
-				resultNonText := 0
-				for _, c := range tt.content {
-					if c.Type != "text" {
-						originalNonText++
-					}
-				}
-				for _, c := range result.Content {
-					if c.Type != "text" {
-						resultNonText++
-					}
-				}
-				if originalNonText != resultNonText {
-					t.Errorf("non-text content count mismatch: original=%d, result=%d", originalNonText, resultNonText)
 				}
 			}
 
@@ -168,6 +152,247 @@ func TestTruncateToolOutput(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestTruncateInterleavedOrder(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir, err := os.MkdirTemp("", "truncate-order-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	// [text, image, text] where total exceeds budget
+	response := &types.CallResult{
+		Content: []mcp.Content{
+			{Type: "text", Text: "first"},
+			{Type: "image", Data: "imgdata"},
+			{Type: "text", Text: strings.Repeat("z", 100000)},
+		},
+	}
+
+	result, err := truncateToolOutput(ctx, "order-tool", response, 50000)
+	if err != nil {
+		t.Fatalf("truncateToolOutput failed: %v", err)
+	}
+
+	if !result.Truncated {
+		t.Fatal("expected truncation")
+	}
+
+	// Verify ordering: first text, then image, then truncated text, then notice
+	if len(result.Content) < 4 {
+		t.Fatalf("expected at least 4 content items, got %d", len(result.Content))
+	}
+	if result.Content[0].Type != "text" || result.Content[0].Text != "first" {
+		t.Errorf("expected first item to be text 'first', got type=%s text=%q", result.Content[0].Type, result.Content[0].Text)
+	}
+	if result.Content[1].Type != "image" {
+		t.Errorf("expected second item to be image, got %s", result.Content[1].Type)
+	}
+	if result.Content[2].Type != "text" {
+		t.Errorf("expected third item to be truncated text, got %s", result.Content[2].Type)
+	}
+	if result.Content[3].Type != "text" || !strings.Contains(result.Content[3].Text, "Output truncated") {
+		t.Errorf("expected fourth item to be truncation notice, got type=%s text=%q", result.Content[3].Type, result.Content[3].Text)
+	}
+}
+
+func TestTruncateNonTextByteBudget(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir, err := os.MkdirTemp("", "truncate-budget-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	// Image takes most of the budget, text must be truncated
+	response := &types.CallResult{
+		Content: []mcp.Content{
+			{Type: "image", Data: strings.Repeat("x", 40000)},
+			{Type: "text", Text: strings.Repeat("a", 20000)},
+		},
+	}
+
+	result, err := truncateToolOutput(ctx, "budget-tool", response, 50000)
+	if err != nil {
+		t.Fatalf("truncateToolOutput failed: %v", err)
+	}
+
+	if !result.Truncated {
+		t.Fatal("expected truncation")
+	}
+
+	// Image should be kept (fits in budget), text should be truncated, then notice
+	if len(result.Content) != 3 {
+		t.Fatalf("expected 3 content items, got %d", len(result.Content))
+	}
+	if result.Content[0].Type != "image" {
+		t.Errorf("expected image first, got %s", result.Content[0].Type)
+	}
+	if result.Content[1].Type != "text" {
+		t.Errorf("expected text second, got %s", result.Content[1].Type)
+	}
+	// The text should be shorter than original 20000 bytes (budget remaining = 10000)
+	if len(result.Content[1].Text) >= 20000 {
+		t.Errorf("expected text to be truncated, got %d bytes", len(result.Content[1].Text))
+	}
+	if !strings.Contains(result.Content[2].Text, "Output truncated") {
+		t.Errorf("expected truncation notice, got %q", result.Content[2].Text)
+	}
+}
+
+func TestTruncateLargeNonTextDropped(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir, err := os.MkdirTemp("", "truncate-drop-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	// Image exceeds budget entirely, text is small
+	response := &types.CallResult{
+		Content: []mcp.Content{
+			{Type: "image", Data: strings.Repeat("x", 60000)},
+			{Type: "text", Text: "small text"},
+		},
+	}
+
+	result, err := truncateToolOutput(ctx, "drop-tool", response, 50000)
+	if err != nil {
+		t.Fatalf("truncateToolOutput failed: %v", err)
+	}
+
+	if !result.Truncated {
+		t.Fatal("expected truncation")
+	}
+
+	// Image should be dropped (doesn't fit), text should be kept, drop notice appended
+	for _, c := range result.Content {
+		if c.Type == "image" {
+			t.Error("expected large image to be dropped")
+		}
+	}
+
+	var droppedFilePath string
+	for _, c := range result.Content {
+		if strings.Contains(c.Text, "1 non-text content item(s) dropped") {
+			// Extract the file path from the notice
+			idx := strings.Index(c.Text, "saved to: ")
+			if idx >= 0 {
+				droppedFilePath = strings.TrimSuffix(strings.TrimSpace(c.Text[idx+len("saved to: "):]), ")")
+			}
+		}
+	}
+	if droppedFilePath == "" {
+		t.Fatal("expected drop notice with file path for removed non-text item")
+	}
+
+	// Verify the dropped content JSON file exists and contains the image
+	droppedData, err := os.ReadFile(droppedFilePath)
+	if err != nil {
+		t.Fatalf("failed to read dropped content file: %v", err)
+	}
+	var droppedContent []mcp.Content
+	if err := json.Unmarshal(droppedData, &droppedContent); err != nil {
+		t.Fatalf("failed to unmarshal dropped content: %v", err)
+	}
+	if len(droppedContent) != 1 {
+		t.Fatalf("expected 1 dropped item, got %d", len(droppedContent))
+	}
+	if droppedContent[0].Type != "image" {
+		t.Errorf("expected dropped item to be image, got %s", droppedContent[0].Type)
+	}
+}
+
+func TestTruncateTwoImagesExceedBudget(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir, err := os.MkdirTemp("", "truncate-two-img-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	origDir, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	// Two images that individually fit but together exceed budget
+	response := &types.CallResult{
+		Content: []mcp.Content{
+			{Type: "image", Data: strings.Repeat("a", 30000)},
+			{Type: "image", Data: strings.Repeat("b", 30000)},
+		},
+	}
+
+	result, err := truncateToolOutput(ctx, "two-img-tool", response, 50000)
+	if err != nil {
+		t.Fatalf("truncateToolOutput failed: %v", err)
+	}
+
+	if !result.Truncated {
+		t.Fatal("expected truncation")
+	}
+
+	// First image fits, second should be dropped
+	imageCount := 0
+	for _, c := range result.Content {
+		if c.Type == "image" {
+			imageCount++
+		}
+	}
+	if imageCount != 1 {
+		t.Errorf("expected 1 image kept, got %d", imageCount)
+	}
+
+	// Should have a drop notice with file path
+	var droppedFilePath string
+	for _, c := range result.Content {
+		if c.Type == "text" && strings.Contains(c.Text, "1 non-text content item(s) dropped") {
+			idx := strings.Index(c.Text, "saved to: ")
+			if idx >= 0 {
+				droppedFilePath = strings.TrimSuffix(strings.TrimSpace(c.Text[idx+len("saved to: "):]), ")")
+			}
+		}
+	}
+	if droppedFilePath == "" {
+		t.Fatal("expected drop notice with file path for second image")
+	}
+
+	// Verify the dropped content JSON file contains the second image
+	droppedData, err := os.ReadFile(droppedFilePath)
+	if err != nil {
+		t.Fatalf("failed to read dropped content file: %v", err)
+	}
+	var droppedContent []mcp.Content
+	if err := json.Unmarshal(droppedData, &droppedContent); err != nil {
+		t.Fatalf("failed to unmarshal dropped content: %v", err)
+	}
+	if len(droppedContent) != 1 {
+		t.Fatalf("expected 1 dropped item, got %d", len(droppedContent))
+	}
+	if droppedContent[0].Type != "image" {
+		t.Errorf("expected dropped item to be image, got %s", droppedContent[0].Type)
+	}
+	if droppedContent[0].Data != strings.Repeat("b", 30000) {
+		t.Error("expected dropped item to be the second image")
 	}
 }
 
@@ -195,12 +420,4 @@ func TestSanitizeFileName(t *testing.T) {
 			}
 		})
 	}
-}
-
-func makeLines(count int) []string {
-	lines := make([]string, count)
-	for i := 0; i < count; i++ {
-		lines[i] = "line " + string(rune('0'+i%10))
-	}
-	return lines
 }
