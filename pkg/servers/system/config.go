@@ -10,15 +10,16 @@ import (
 )
 
 var allowedPermsToTools = map[string][]string{
-	"bash":      {"bash"},
-	"read":      {"read"},
-	"write":     {"write", "edit"},
-	"edit":      {"edit"},
-	"glob":      {"glob"},
-	"grep":      {"grep"},
-	"todoWrite": {"todoWrite"},
-	"webFetch":  {"webFetch"},
-	"skills":    {"getSkill"},
+	"bash":       {"bash"},
+	"read":       {"read"},
+	"write":      {"write", "edit"},
+	"edit":       {"edit"},
+	"glob":       {"glob"},
+	"grep":       {"grep"},
+	"todoWrite":  {"todoWrite"},
+	"webFetch":   {"webFetch"},
+	"skills":     {"getSkill"},
+	"mcpServers": {"addMCPServer", "removeMCPServer"},
 }
 
 func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (types.AgentConfigHook, error) {
@@ -82,6 +83,19 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 
 				// Also add to the agent's MCP server list so tools get fetched
 				agent.MCPServers = append(agent.MCPServers, "mcp-server-search")
+			}
+
+			// Include dynamically added MCP servers from the session
+			rootSession := session.Root()
+			if rootSession == nil {
+				rootSession = session
+			}
+			var dynamicServers DynamicMCPServers
+			if rootSession.Get(DynamicMCPServersSessionKey, &dynamicServers) {
+				for name, server := range dynamicServers {
+					params.MCPServers[name] = server
+					agent.MCPServers = append(agent.MCPServers, name)
+				}
 			}
 		}
 	}
