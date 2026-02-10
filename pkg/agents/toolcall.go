@@ -13,13 +13,6 @@ import (
 )
 
 func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.Execution, opts []types.CompletionOptions) error {
-	// Get agent config for truncation settings
-	agentName := run.Request.GetAgent()
-	agent, ok := config.Agents[agentName]
-	if !ok {
-		return fmt.Errorf("agent %s not found in config", agentName)
-	}
-
 	for _, output := range run.Response.Output.Items {
 		functionCall := output.ToolCall
 
@@ -42,7 +35,7 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 			continue
 		}
 
-		callOutput, err := a.invoke(ctx, &agent, targetServer, tools.ToolCallInvocation{
+		callOutput, err := a.invoke(ctx, targetServer, tools.ToolCallInvocation{
 			MessageID: run.Response.Output.ID,
 			ItemID:    output.ID,
 			ToolCall:  *functionCall,
@@ -68,7 +61,7 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 	return nil
 }
 
-func (a *Agents) invoke(ctx context.Context, agent *types.Agent, target types.TargetMapping[types.TargetTool], funcCall tools.ToolCallInvocation, opts []types.CompletionOptions) (*types.Message, error) {
+func (a *Agents) invoke(ctx context.Context, target types.TargetMapping[types.TargetTool], funcCall tools.ToolCallInvocation, opts []types.CompletionOptions) (*types.Message, error) {
 	var (
 		data map[string]any
 	)
@@ -96,19 +89,9 @@ func (a *Agents) invoke(ctx context.Context, agent *types.Agent, target types.Ta
 		}
 	}
 
-	// Apply truncation if needed (unless disabled or this is an error)
-	if !response.IsError && !agent.DisableToolTruncation {
-		maxLines := DefaultMaxLines
-		maxBytes := DefaultMaxBytes
-
-		if agent.ToolOutputMaxLines != nil {
-			maxLines = *agent.ToolOutputMaxLines
-		}
-		if agent.ToolOutputMaxBytes != nil {
-			maxBytes = *agent.ToolOutputMaxBytes
-		}
-
-		truncResult, truncErr := truncateToolOutput(ctx, target.TargetName, response, maxLines, maxBytes)
+	// Apply truncation to non-error responses
+	if !response.IsError {
+		truncResult, truncErr := truncateToolOutput(ctx, target.TargetName, response, DefaultMaxLines, DefaultMaxBytes)
 		if truncErr != nil {
 			// Log error but don't fail the tool call
 			fmt.Fprintf(os.Stderr, "Warning: failed to truncate tool output: %v\n", truncErr)
