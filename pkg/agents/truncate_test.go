@@ -22,9 +22,18 @@ func TestTruncateToolOutput(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Change to temp dir for test
-	origDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(origDir)
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current working directory: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change to temp directory %q: %v", tmpDir, err)
+	}
+	defer func() {
+		if err := os.Chdir(origDir); err != nil {
+			t.Fatalf("failed to restore working directory to %q: %v", origDir, err)
+		}
+	}()
 
 	tests := []struct {
 		name                  string
