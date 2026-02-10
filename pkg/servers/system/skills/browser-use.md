@@ -54,21 +54,13 @@ browser-use --browser remote open <url>        # Cloud browser (requires API key
 
 ## Browser Viewing with VNC
 
-You can view and interact with the browser in real-time using VNC. This is **essential** for:
+The VNC server is automatically started and ready to use. You can view and interact with the browser in real-time using VNC. This is **essential** for:
 
 - **Solving CAPTCHAs** - Many sites require human verification
 - **Debugging** - See exactly what the browser is doing
 - **User interaction** - Manual intervention when automation gets stuck
 
-### Starting the VNC Server
-
-Start the VNC server:
-
-```bash
-/usr/local/bin/start-vnc.sh
-```
-
-This starts:
+The VNC server provides:
 - X virtual framebuffer (Xvfb) on display :99
 - VNC server on port 5900
 - WebSocket proxy on port 6080 for web access

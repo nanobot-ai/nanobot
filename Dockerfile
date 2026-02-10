@@ -37,6 +37,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gawk \
     ripgrep \
     ca-certificates \
+    xvfb \
+    x11vnc \
+    fluxbox \
+    websockify \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Playwright and browsers as root to shared location
@@ -48,6 +52,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && /opt/playwright-venv/bin/pip install playwright \
     && /opt/playwright-venv/bin/playwright install chromium --with-deps \
     && rm -rf /var/lib/apt/lists/*
+
+# Install noVNC for web-based VNC access
+RUN git clone --depth 1 https://github.com/novnc/noVNC.git /usr/share/novnc && \
+    ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html
+
+# Copy VNC startup scripts
+COPY scripts/start-vnc.sh /usr/local/bin/start-vnc.sh
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/start-vnc.sh /usr/local/bin/docker-entrypoint.sh
+
+# Set display for browser-use to use
+ENV DISPLAY=:99
 
 # Create non-root user with home directory
 RUN useradd -m -d /home/nanobot -s /bin/bash nanobot
@@ -72,11 +88,12 @@ ENV NANOBOT_STATE=/data/nanobot.db
 ENV NANOBOT_RUN_LISTEN_ADDRESS=0.0.0.0:8080
 
 EXPOSE 8080
+EXPOSE 6080
 
 # Define volume for persistent data
 VOLUME ["/data"]
 
-ENTRYPOINT ["/usr/local/bin/nanobot"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["run"]
 
 # Release image
