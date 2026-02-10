@@ -69,6 +69,14 @@ let previousLastMessageId = $state<string | null>(null);
 const hasMessages = $derived(messages && messages.length > 0);
 let selectedPrompt = $state<string | undefined>();
 
+// Split elicitations: question type renders inline, others render as modal
+const questionElicitation = $derived(
+	elicitations?.find((e) => e._meta?.["ai.nanobot.meta/question"]) ?? null,
+);
+const modalElicitation = $derived(
+	elicitations?.find((e) => !e._meta?.["ai.nanobot.meta/question"]) ?? null,
+);
+
 // Watch for changes to the last message ID and scroll to bottom
 $effect(() => {
 	if (!messagesContainer) return;
@@ -156,6 +164,17 @@ function scrollToBottom() {
 			</button>
 		{/if}
 		<div class="mx-auto w-full max-w-4xl">
+			{#if questionElicitation}
+				{#key questionElicitation.id}
+					<Elicitation
+						elicitation={questionElicitation}
+						open
+						onresult={(result) => {
+							onElicitationResult?.(questionElicitation, result);
+						}}
+					/>
+				{/key}
+			{/if}
 			<MessageInput
 				placeholder={`Type your message...${prompts && prompts.length > 0 ? ' or / for prompts' : ''}`}
 				onSend={onSendMessage}
@@ -175,13 +194,14 @@ function scrollToBottom() {
 		</div>
 	</div>
 
-	{#if elicitations && elicitations.length > 0}
-		{#key elicitations[0].id}
+	<!-- Modal elicitations (OAuth, generic form) -->
+	{#if modalElicitation}
+		{#key modalElicitation.id}
 			<Elicitation
-				elicitation={elicitations[0]}
+				elicitation={modalElicitation}
 				open
 				onresult={(result) => {
-					onElicitationResult?.(elicitations[0], result);
+					onElicitationResult?.(modalElicitation, result);
 				}}
 			/>
 		{/key}

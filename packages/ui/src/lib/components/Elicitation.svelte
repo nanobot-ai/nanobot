@@ -6,12 +6,38 @@
 	}
 
 	import type { Elicitation, ElicitationResult, PrimitiveSchemaDefinition } from '$lib/types';
-	import { Copy } from '@lucide/svelte';
+	import { Copy, ChevronLeft, ChevronRight, SkipForward, Pencil } from '@lucide/svelte';
+
+	const stepColors = [
+		{ bg: 'bg-primary', text: 'text-primary-content', ring: 'ring-primary/30' },
+		{ bg: 'bg-secondary', text: 'text-secondary-content', ring: 'ring-secondary/30' },
+		{ bg: 'bg-accent', text: 'text-accent-content', ring: 'ring-accent/30' },
+		{ bg: 'bg-info', text: 'text-info-content', ring: 'ring-info/30' }
+	];
 
 	let { elicitation, open = false, onresult }: Props = $props();
 
 	let formData = $state<{ [key: string]: string | number | boolean }>({});
 	let showCopiedTooltip = $state(false);
+
+	// Question-specific types
+	interface QuestionOptionData {
+		label: string;
+		description?: string;
+	}
+	interface QuestionData {
+		question: string;
+		header?: string;
+		multiple?: boolean;
+		options: QuestionOptionData[];
+	}
+
+	// Question-specific state
+	let currentStep = $state(0);
+	let reviewMode = $state(false);
+	let selectedOptions = $state<Map<number, Set<string>>>(new Map());
+	let customAnswers = $state<Map<number, string>>(new Map());
+	let showCustomInput = $state<Map<number, boolean>>(new Map());
 
 	// Initialize form data with defaults
 	$effect(() => {
@@ -32,6 +58,17 @@
 		}
 
 		formData = newFormData;
+	});
+
+	// Reset question state when elicitation changes
+	$effect(() => {
+		if (isQuestionElicitation()) {
+			currentStep = 0;
+			reviewMode = false;
+			selectedOptions = new Map();
+			customAnswers = new Map();
+			showCustomInput = new Map();
+		}
 	});
 
 	function handleAccept() {
@@ -98,9 +135,313 @@
 			showCopiedTooltip = false;
 		}, 2000);
 	}
+
+	// Question elicitation functions
+	function isQuestionElicitation(): boolean {
+		return Boolean(elicitation._meta?.['ai.nanobot.meta/question']);
+	}
+
+	const questions: QuestionData[] = $derived.by(() => {
+		const raw = elicitation._meta?.['ai.nanobot.meta/question'];
+		if (!raw) return [];
+		if (typeof raw === 'string') return JSON.parse(raw);
+		return raw as QuestionData[];
+	});
+
+	function toggleOption(qIndex: number, label: string) {
+		const current = new Set(selectedOptions.get(qIndex) ?? []);
+
+		if (questions[qIndex].multiple) {
+			if (current.has(label)) current.delete(label);
+			else current.add(label);
+		} else {
+			current.clear();
+			current.add(label);
+			showCustomInput = new Map(showCustomInput).set(qIndex, false);
+			customAnswers = new Map(customAnswers).set(qIndex, '');
+		}
+
+		selectedOptions = new Map(selectedOptions).set(qIndex, current);
+	}
+
+	function toggleCustomInput(qIndex: number) {
+		const current = showCustomInput.get(qIndex) ?? false;
+		showCustomInput = new Map(showCustomInput).set(qIndex, !current);
+		if (current) {
+			customAnswers = new Map(customAnswers).set(qIndex, '');
+		} else if (!questions[qIndex].multiple) {
+			selectedOptions = new Map(selectedOptions).set(qIndex, new Set());
+		}
+	}
+
+	function updateCustomAnswer(qIndex: number, value: string) {
+		customAnswers = new Map(customAnswers).set(qIndex, value);
+	}
+
+	function hasAnswer(qIndex: number): boolean {
+		const selected = selectedOptions.get(qIndex);
+		const custom = customAnswers.get(qIndex)?.trim();
+		return (selected !== undefined && selected.size > 0) || !!custom;
+	}
+
+	function getAnswerSummary(qIndex: number): string {
+		const selected = Array.from(selectedOptions.get(qIndex) ?? []);
+		const custom = customAnswers.get(qIndex)?.trim();
+		if (custom) selected.push(custom);
+		return selected.length > 0 ? selected.join(', ') : '(skipped)';
+	}
+
+	function goToStep(step: number) {
+		currentStep = step;
+		reviewMode = false;
+	}
+
+	function nextStep() {
+		if (currentStep < questions.length - 1) {
+			currentStep++;
+		} else {
+			if (questions.length > 1) {
+				reviewMode = true;
+			} else {
+				handleQuestionSubmit();
+			}
+		}
+	}
+
+	function prevStep() {
+		if (currentStep > 0) currentStep--;
+	}
+
+	function handleQuestionSubmit() {
+		const content: Record<string, string | number | boolean> = {};
+
+		for (let i = 0; i < questions.length; i++) {
+			const key = `q${i}`;
+			const selected = Array.from(selectedOptions.get(i) ?? []);
+			const custom = customAnswers.get(i)?.trim();
+			if (custom) selected.push(custom);
+			content[key] = JSON.stringify(selected);
+		}
+
+		onresult?.({ action: 'accept', content });
+	}
 </script>
 
-{#if open}
+{#if open && isQuestionElicitation()}
+	<!-- Inline question UI -->
+	{@const isSingle = questions.length === 1}
+
+	<div class="flex w-full items-start gap-3 px-1">
+		<div class="w-full rounded-box border border-base-300 p-4">
+			{#if !isSingle && !reviewMode}
+				<!-- Step indicators for multi-question -->
+				<div class="mb-4 flex flex-wrap items-center gap-1.5">
+					{#each questions as q, i}
+						{@const color = stepColors[i % stepColors.length]}
+						<button
+							type="button"
+							onclick={() => goToStep(i)}
+							class="flex items-center justify-center rounded-full px-3 py-1 text-xs font-bold whitespace-nowrap transition-colors
+								{i === currentStep
+								? `${color.bg} ${color.text}`
+								: hasAnswer(i)
+									? 'bg-success/20 text-success ring-1 ring-success/30'
+									: 'bg-base-200 text-base-content/40 hover:bg-base-300'}"
+						>
+							{q.header || q.question}
+						</button>
+					{/each}
+				</div>
+			{/if}
+
+			{#if reviewMode}
+				<!-- Review mode -->
+				<p class="mb-3 text-sm font-medium text-base-content/70">Review your answers</p>
+				<div class="space-y-1.5">
+					{#each questions as q, i}
+						<div class="flex items-start justify-between rounded-lg bg-base-200/60 px-3 py-2">
+							<div class="min-w-0 flex-1">
+								<div class="flex items-baseline gap-1.5">
+									<span class="text-xs font-bold text-base-content/40">{i + 1}.</span>
+									<span class="text-sm font-medium">{q.header || q.question}</span>
+								</div>
+								<p class="ml-4 text-sm {hasAnswer(i) ? 'text-base-content/70' : 'text-base-content/30 italic'}">
+									{getAnswerSummary(i)}
+								</p>
+							</div>
+							<button
+								type="button"
+								class="btn btn-ghost ml-2 btn-xs"
+								onclick={() => goToStep(i)}
+							>
+								<Pencil class="h-3 w-3" />
+							</button>
+						</div>
+					{/each}
+				</div>
+
+				<div class="mt-4 flex justify-end gap-2">
+					<button type="button" class="btn btn-ghost btn-sm" onclick={handleDecline}>Cancel</button>
+					<button type="button" class="btn btn-primary btn-sm" onclick={handleQuestionSubmit}>Submit</button>
+				</div>
+			{:else}
+				<!-- Active question -->
+				{@const q = questions[currentStep]}
+
+				{#if isSingle && q.header}
+					<div class="badge badge-neutral badge-sm mb-1">{q.header}</div>
+				{/if}
+				<p class="mb-2 text-sm font-medium">{q.question}</p>
+				{#if q.multiple}
+					<p class="mb-2 text-xs text-base-content/40">Select all that apply</p>
+				{/if}
+
+				<!-- Options -->
+				<div class="space-y-1.5">
+					{#each q.options as option (option.label)}
+						{@const isSelected = selectedOptions.get(currentStep)?.has(option.label) ?? false}
+						<button
+							type="button"
+							class="flex w-full cursor-pointer items-start gap-2.5 rounded-lg border p-2.5 text-left transition-colors
+								{isSelected
+								? 'border-primary bg-primary/10'
+								: 'border-base-300 hover:border-base-content/20'}"
+							onclick={() => toggleOption(currentStep, option.label)}
+						>
+							{#if q.multiple}
+								<input
+									type="checkbox"
+									class="checkbox checkbox-primary checkbox-sm mt-0.5"
+									checked={isSelected}
+									tabindex={-1}
+								/>
+							{:else}
+								<input
+									type="radio"
+									class="radio radio-primary radio-sm mt-0.5"
+									checked={isSelected}
+									tabindex={-1}
+								/>
+							{/if}
+							<div class="min-w-0 flex-1">
+								<span class="text-sm font-medium">{option.label}</span>
+								{#if option.description}
+									<p class="text-xs text-base-content/50">{option.description}</p>
+								{/if}
+							</div>
+						</button>
+					{/each}
+				</div>
+
+					<!-- Custom answer as styled option -->
+				{@const isCustomSelected = showCustomInput.get(currentStep) ?? false}
+				<div
+					role="button"
+					tabindex="0"
+					class="flex w-full cursor-pointer items-start gap-2.5 rounded-lg border p-2.5 text-left transition-colors
+						{isCustomSelected
+						? 'border-primary bg-primary/10'
+						: 'border-base-300 hover:border-base-content/20'}"
+					onclick={() => toggleCustomInput(currentStep)}
+					onkeydown={(e) => { if (e.key === 'Enter') toggleCustomInput(currentStep); }}
+				>
+					{#if q.multiple}
+						<input
+							type="checkbox"
+							class="checkbox checkbox-primary checkbox-sm mt-0.5"
+							checked={isCustomSelected}
+							tabindex={-1}
+						/>
+					{:else}
+						<input
+							type="radio"
+							class="radio radio-primary radio-sm mt-0.5"
+							checked={isCustomSelected}
+							tabindex={-1}
+						/>
+					{/if}
+					<div class="min-w-0 flex-1">
+						<span class="text-sm font-medium">Other (specify)</span>
+						{#if isCustomSelected}
+							<!-- svelte-ignore a11y_autofocus -->
+							<textarea
+								class="textarea textarea-bordered mt-1.5 w-full text-sm"
+								placeholder="Type your answer..."
+								rows={2}
+								autofocus
+								value={customAnswers.get(currentStep) ?? ''}
+								onclick={(e) => e.stopPropagation()}
+							oninput={(e) => updateCustomAnswer(currentStep, e.currentTarget.value)}
+							></textarea>
+						{/if}
+					</div>
+				</div>
+
+				<!-- Navigation -->
+				<div class="mt-3 flex items-center justify-between">
+					<button
+						type="button"
+						class="btn btn-ghost btn-xs text-base-content/40"
+						onclick={nextStep}
+					>
+						<SkipForward class="h-3 w-3" />
+						Skip
+					</button>
+					<div class="flex gap-1.5">
+						{#if !isSingle}
+							<button
+								type="button"
+								class="btn btn-ghost btn-sm"
+								disabled={currentStep === 0}
+								onclick={prevStep}
+							>
+								<ChevronLeft class="h-4 w-4" />
+								Back
+							</button>
+						{/if}
+						{#if isSingle}
+							<button
+								type="button"
+								class="btn btn-ghost btn-sm"
+								onclick={handleDecline}
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								class="btn btn-primary btn-sm"
+								disabled={!hasAnswer(currentStep)}
+								onclick={handleQuestionSubmit}
+							>
+								Submit
+							</button>
+						{:else if currentStep < questions.length - 1}
+							<button
+								type="button"
+								class="btn btn-primary btn-sm"
+								disabled={!hasAnswer(currentStep)}
+								onclick={nextStep}
+							>
+								Next
+								<ChevronRight class="h-4 w-4" />
+							</button>
+						{:else}
+							<button
+								type="button"
+								class="btn btn-primary btn-sm"
+								disabled={!hasAnswer(currentStep)}
+								onclick={() => (reviewMode = true)}
+							>
+								Review
+							</button>
+						{/if}
+					</div>
+				</div>
+			{/if}
+		</div>
+	</div>
+{:else if open}
+	<!-- Modal for OAuth and generic elicitations -->
 	<dialog class="modal-open modal">
 		<div class="modal-box w-full max-w-2xl">
 			<form method="dialog">

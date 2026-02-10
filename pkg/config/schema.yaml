@@ -639,6 +639,11 @@ definitions:
             enum: ["allow", "deny"]
             description: |
               Permission to read and use skills.
+          question:
+            type: string
+            enum: ["allow", "deny"]
+            description: |
+              Permission to ask the user questions using the Question tool.
           "*":
             type: string
             enum: ["allow", "deny"]

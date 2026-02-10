@@ -20,6 +20,7 @@ var allowedPermsToTools = map[string][]string{
 	"webFetch":   {"webFetch"},
 	"skills":     {"getSkill"},
 	"mcpServers": {"addMCPServer", "removeMCPServer"},
+	"question":   {"question"},
 }
 
 func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (types.AgentConfigHook, error) {
