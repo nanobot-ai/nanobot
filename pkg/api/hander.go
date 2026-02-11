@@ -80,8 +80,12 @@ func (s *server) setupContext(_ http.ResponseWriter, req *http.Request) (Context
 						Tools: &mcp.ToolsServerCapability{},
 					},
 				},
-				InitializeRequest: mcp.InitializeRequest{},
-				Attributes:        nil,
+				InitializeRequest: mcp.InitializeRequest{
+					Capabilities: mcp.ClientCapabilities{
+						Elicitation: &struct{}{},
+					},
+				},
+				Attributes: nil,
 			},
 		})
 		if err != nil {
