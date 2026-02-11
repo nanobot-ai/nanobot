@@ -5,7 +5,6 @@ import "strings"
 type Limits struct {
 	Context       int
 	OutputReserve int
-	Input         int
 }
 
 func ContextWindow(modelID string) int {
@@ -26,10 +25,6 @@ func InputCap(modelID string) int {
 	usable := limits.Context - limits.OutputReserve
 	if usable < 0 {
 		usable = 0
-	}
-
-	if limits.Input > 0 && limits.Input < usable {
-		usable = limits.Input
 	}
 
 	return usable
@@ -57,38 +52,10 @@ func normalize(modelID string) string {
 	return model
 }
 
-func anthropicLimits(model string) Limits {
-	limits := Limits{Context: 200_000, OutputReserve: 8_000}
-
-	switch {
-	case strings.Contains(model, "opus-4"):
-		limits.OutputReserve = 32_000
-	case strings.Contains(model, "sonnet-4") || strings.Contains(model, "haiku-4"):
-		limits.OutputReserve = 64_000
-	case strings.Contains(model, "opus"):
-		limits.OutputReserve = 4_096
-	}
-
-	return limits
+func anthropicLimits(_ string) Limits {
+	return Limits{Context: 200_000, OutputReserve: 5_000}
 }
 
-func gpt5Limits(model string) Limits {
-	switch {
-	case strings.Contains(model, "pro"):
-		return Limits{
-			Context:       400_000,
-			OutputReserve: 272_000,
-			Input:         272_000,
-		}
-	case strings.Contains(model, "chat"):
-		return Limits{
-			Context:       128_000,
-			OutputReserve: 16_384,
-		}
-	default:
-		return Limits{
-			Context:       272_000,
-			OutputReserve: 128_000,
-		}
-	}
+func gpt5Limits(_ string) Limits {
+	return Limits{Context: 272_000, OutputReserve: 5_000}
 }

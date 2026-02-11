@@ -25,8 +25,8 @@ func TestEvaluateAnthropicLimits(t *testing.T) {
 		status Status
 	}{
 		{"ok", state(1000), StatusOK},
-		{"needs", state(155000), StatusNeedsCompaction},
-		{"over", state(168000), StatusOverLimit},
+		{"needs", state(176000), StatusNeedsCompaction},
+		{"over", state(195000), StatusOverLimit},
 	}
 
 	for _, tc := range tests {
@@ -41,17 +41,9 @@ func TestEvaluateAnthropicLimits(t *testing.T) {
 
 func TestEvaluateGPT5Limits(t *testing.T) {
 	svc := NewService(Config{})
-	standard := func(tokens int) State {
+	state := func(tokens int) State {
 		return State{
 			Model: "gpt-5.0",
-			Messages: []types.Message{
-				makeTextMessage(tokens),
-			},
-		}
-	}
-	pro := func(tokens int) State {
-		return State{
-			Model: "gpt-5-pro",
 			Messages: []types.Message{
 				makeTextMessage(tokens),
 			},
@@ -63,12 +55,9 @@ func TestEvaluateGPT5Limits(t *testing.T) {
 		state  State
 		status Status
 	}{
-		{"standard-ok", standard(100000), StatusOK},
-		{"standard-needs", standard(140000), StatusNeedsCompaction},
-		{"standard-over", standard(144000), StatusOverLimit},
-		{"pro-ok", pro(100000), StatusOK},
-		{"pro-needs", pro(120000), StatusNeedsCompaction},
-		{"pro-over", pro(129000), StatusOverLimit},
+		{"ok", state(100000), StatusOK},
+		{"needs", state(241000), StatusNeedsCompaction},
+		{"over", state(267000), StatusOverLimit},
 	}
 
 	for _, tc := range tests {

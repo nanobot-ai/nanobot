@@ -615,9 +615,15 @@ func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execut
 			Messages:     modifiedRequest.Input,
 		}
 		guardResult := guard.Evaluate(guardState)
-		log.Infof(ctx, "context guard: status=%s model=%s estimatedTokens=%d usable=%d context=%d msgCount=%d",
-			guardResult.Status, modifiedRequest.Model, guardResult.Totals.InputTokens, guardResult.Limits.Usable,
-			guardResult.Limits.Context, len(modifiedRequest.Input))
+		if guardResult.Status == contextguard.StatusOK {
+			log.Debugf(ctx, "context guard: status=%s model=%s estimatedTokens=%d usable=%d context=%d msgCount=%d",
+				guardResult.Status, modifiedRequest.Model, guardResult.Totals.InputTokens, guardResult.Limits.Usable,
+				guardResult.Limits.Context, len(modifiedRequest.Input))
+		} else {
+			log.Infof(ctx, "context guard: status=%s model=%s estimatedTokens=%d usable=%d context=%d msgCount=%d",
+				guardResult.Status, modifiedRequest.Model, guardResult.Totals.InputTokens, guardResult.Limits.Usable,
+				guardResult.Limits.Context, len(modifiedRequest.Input))
+		}
 
 		switch guardResult.Status {
 		case contextguard.StatusNeedsCompaction, contextguard.StatusOverLimit:
