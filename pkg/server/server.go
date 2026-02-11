@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net/url"
@@ -83,6 +84,7 @@ func (s *Server) init() {
 		handle("resources/read", s.handleReadResource),
 		handle("resources/subscribe", s.handleResourcesSubscribe),
 		handle("resources/unsubscribe", s.handleResourcesUnsubscribe),
+		handle("notifications/cancelled", s.handleCancelled),
 	}
 }
 
@@ -437,7 +439,24 @@ func (s *Server) handleSetLogLevel(ctx context.Context, msg mcp.Message, payload
 	return msg.Reply(ctx, mcp.SetLogLevelResult{})
 }
 
+func (s *Server) handleCancelled(ctx context.Context, msg mcp.Message, payload mcp.CancelledNotification) error {
+	mcp.SessionFromContext(ctx).StopAllFromRequestID(payload.RequestID, new(payload.Reason))
+
+	// No response for notifications
+	return nil
+}
+
 func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
+	if msg.ID != nil {
+		ctx = mcp.WithRequestID(ctx, msg.ID)
+	}
+
+	msg.Session.Run(ctx, msg, func(ctx context.Context, m mcp.Message) {
+		s.onMessage(ctx, m)
+	})
+}
+
+func (s *Server) onMessage(ctx context.Context, msg mcp.Message) {
 	if err := s.data.Sync(ctx, s.config); err != nil {
 		msg.SendError(ctx, err)
 		return
@@ -448,7 +467,13 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	for _, h := range s.handlers {
 		ok, err := h(ctx, msg)
 		if err != nil {
-			msg.SendError(ctx, err)
+			// Check if the error was due to client-initiated cancellation
+			if cancelErr, ok := errors.AsType[*mcp.RequestCancelledError](context.Cause(mcp.UserContext(ctx))); ok {
+				// Send a proper cancellation error response
+				msg.SendError(ctx, mcp.ErrRPCRequestCancelled.WithMessage("%s", cancelErr.Reason))
+			} else {
+				msg.SendError(ctx, err)
+			}
 			return
 		} else if ok {
 			return

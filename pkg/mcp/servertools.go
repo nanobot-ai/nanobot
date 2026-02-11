@@ -14,6 +14,17 @@ import (
 
 type NoResponse *struct{}
 
+// HandleCancelled processes a "notifications/cancelled" message by cancelling the
+// corresponding in-flight request on the current session. Built-in MCP servers
+// should call this from their OnMessage switch to avoid returning a method-not-found error.
+func HandleCancelled(ctx context.Context, msg Message) {
+	var payload CancelledNotification
+	if len(msg.Params) > 0 {
+		_ = json.Unmarshal(msg.Params, &payload)
+	}
+	SessionFromContext(ctx).StopAllFromRequestID(payload.RequestID, new(payload.Reason))
+}
+
 // Invoke is a generic function to handle invoking a handler with a message and payload. R should really be a pointer
 // to a type, not the type itself. And a nil response will be treated as a call that does not have a response, like a
 // notification handler. In such situation a response signature like (*struct{}, error) is enough. A help type

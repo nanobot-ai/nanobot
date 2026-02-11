@@ -115,7 +115,7 @@ func (s SamplerOptions) Merge(other SamplerOptions) (result SamplerOptions) {
 	return
 }
 
-func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts ...SamplerOptions) (result *types.CallResult, _ error) {
+func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts ...SamplerOptions) (*types.CallResult, error) {
 	opt := complete.Complete(opts...)
 	config := types.ConfigFromContext(ctx)
 
@@ -224,14 +224,6 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 
 	if _, ok := config.Agents[request.Model]; ok {
 		resp.Agent = request.Model
-	}
-
-	result = &types.CallResult{
-		Model: resp.Model,
-	}
-
-	if _, ok := config.Agents[request.Model]; ok {
-		result.Agent = request.Model
 	}
 
 	return CompletionResponseToCallResult(resp, false, opt.Tools)

@@ -46,6 +46,8 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 		mcp.Invoke(ctx, msg, s.initialize)
 	case "notifications/initialized":
 		// nothing to do
+	case "notifications/cancelled":
+		mcp.HandleCancelled(ctx, msg)
 	case "resources/list":
 		mcp.Invoke(ctx, msg, s.resourcesList)
 	case "resources/read":

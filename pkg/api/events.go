@@ -216,7 +216,7 @@ func Events(rw http.ResponseWriter, req *http.Request) error {
 	_, _ = subClient.SubscribeResource(req.Context(), types.ProgressURI)
 
 	rw.Header().Set("Content-Type", "text/event-stream")
-	rw.WriteHeader(200)
+	rw.WriteHeader(http.StatusOK)
 	if _, f := rw.(http.Flusher); f {
 		rw.(http.Flusher).Flush()
 	}

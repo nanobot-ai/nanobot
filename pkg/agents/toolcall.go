@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -11,15 +12,11 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.Execution, opts []types.CompletionOptions) error {
+func (a *Agents) toolCalls(ctx context.Context, run *types.Execution, opts []types.CompletionOptions) error {
 	for _, output := range run.Response.Output.Items {
 		functionCall := output.ToolCall
 
-		if functionCall == nil {
-			continue
-		}
-
-		if run.ToolOutputs[functionCall.CallID].Done {
+		if functionCall == nil || run.ToolOutputs[functionCall.CallID].Done {
 			continue
 		}
 
@@ -34,13 +31,45 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 			continue
 		}
 
-		callOutput, err := a.invoke(ctx, config, targetServer, tools.ToolCallInvocation{
+		callOutput, err := a.invoke(ctx, targetServer, tools.ToolCallInvocation{
 			MessageID: run.Response.Output.ID,
 			ItemID:    output.ID,
 			ToolCall:  *functionCall,
 		}, opts)
-		if err != nil {
-			return fmt.Errorf("failed to invoke tool %s on MCP server %s: %w", functionCall.Name, targetServer.MCPServer, err)
+		cancelCause := context.Cause(mcp.UserContext(ctx))
+		if err != nil || cancelCause != nil {
+			// Check if this was a client-initiated cancellation
+			cancelErr, ok := errors.AsType[*mcp.RequestCancelledError](cancelCause)
+			if !ok || cancelErr == nil {
+				return fmt.Errorf("failed to invoke tool %s on MCP server %s: %w", functionCall.Name, targetServer.MCPServer, err)
+			}
+			// Preserve what we have and stop processing further tool calls
+			run.Done = true
+
+			if callOutput == nil ||
+				len(callOutput.Items) == 0 ||
+				callOutput.Items[0].ToolCallResult == nil ||
+				len(callOutput.Items[0].ToolCallResult.Output.Content) == 0 {
+				callOutput = &types.Message{
+					Role: "user",
+					Items: []types.CompletionItem{
+						{
+							ID: output.ID,
+							ToolCallResult: &types.ToolCallResult{
+								CallID: functionCall.CallID,
+								Output: types.CallResult{
+									Content: []mcp.Content{
+										{
+											Type: "text",
+											Text: cancelErr.Error(),
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			}
 		}
 
 		if run.ToolOutputs == nil {
@@ -60,10 +89,8 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 	return nil
 }
 
-func (a *Agents) invoke(ctx context.Context, config types.Config, target types.TargetMapping[types.TargetTool], funcCall tools.ToolCallInvocation, opts []types.CompletionOptions) (*types.Message, error) {
-	var (
-		data map[string]any
-	)
+func (a *Agents) invoke(ctx context.Context, target types.TargetMapping[types.TargetTool], funcCall tools.ToolCallInvocation, opts []types.CompletionOptions) (*types.Message, error) {
+	var data map[string]any
 
 	if funcCall.ToolCall.Arguments != "" {
 		data = make(map[string]any)

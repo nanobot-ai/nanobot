@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -9,7 +10,9 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/llm/completions"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
 	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
 
 var _ types.Completer = (*Client)(nil)
@@ -42,12 +45,40 @@ type Client struct {
 	anthropic      *anthropic.Client
 }
 
-func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts ...types.CompletionOptions) (ret *types.CompletionResponse, _ error) {
+func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts ...types.CompletionOptions) (ret *types.CompletionResponse, err error) {
 	defer func() {
+		if errors.Is(err, context.Canceled) {
+			if cancelErr, ok := errors.AsType[*mcp.RequestCancelledError](context.Cause(mcp.UserContext(ctx))); ok && cancelErr != nil {
+				err = nil
+				ret = &types.CompletionResponse{
+					Output: types.Message{
+						ID:   uuid.String(),
+						Role: "assistant",
+						Items: []types.CompletionItem{
+							{
+								Content: &mcp.Content{
+									Type: "text",
+									Text: strings.ToUpper(cancelErr.Error()),
+								},
+							},
+						},
+					},
+				}
+
+				if opt := complete.Complete(opts...); opt.ProgressToken != nil {
+					progress.Send(ctx, &types.CompletionProgress{
+						MessageID: ret.Output.ID,
+						Role:      "assistant",
+						Item:      ret.Output.Items[0],
+					}, opt.ProgressToken)
+				}
+			}
+		}
 		if ret != nil && ret.Agent == "" {
 			ret.Agent = req.Agent
 		}
 	}()
+
 	if req.Model == "default" || req.Model == "" {
 		req.Model = c.defaultModel
 	}

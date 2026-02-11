@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -68,15 +69,14 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 }
 
 func (c *Client) complete(ctx context.Context, agentName string, req Request, opts ...types.CompletionOptions) (*Response, error) {
-	var (
-		opt = complete.Complete(opts...)
-	)
+	opt := complete.Complete(opts...)
 
 	req.Stream = true
 
 	data, _ := json.Marshal(req)
 	log.Messages(ctx, "anthropic-api", true, data)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/messages", bytes.NewBuffer(data))
+
+	httpReq, err := http.NewRequestWithContext(mcp.UserContext(ctx), http.MethodPost, c.BaseURL+"/messages", bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +89,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 		return nil, err
 	}
 	defer httpResp.Body.Close()
+
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
 		return nil, fmt.Errorf("failed to get response from Anthropic API: %s %q", httpResp.Status, string(body))
@@ -195,7 +196,41 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 	}
 
 	if err := lines.Err(); err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		// Check if this was a client-initiated cancellation
+		if cancelErr, ok := errors.AsType[*mcp.RequestCancelledError](context.Cause(mcp.UserContext(ctx))); ok && cancelErr != nil {
+			// Append the cancellation error as if the assistant sent it
+			contentIndex := len(resp.Content) - 1
+			if contentIndex < 0 {
+				resp.Content = append(resp.Content, Content{
+					Type: "text",
+					Text: new(string),
+				})
+				contentIndex = 0
+			}
+
+			errorText := "\n\n" + strings.ToUpper(cancelErr.Error())
+			if resp.Content[contentIndex].Text != nil {
+				*resp.Content[contentIndex].Text += errorText
+			} else {
+				resp.Content[contentIndex].Text = &errorText
+			}
+
+			// Send progress notification with the error text
+			progress.Send(ctx, &types.CompletionProgress{
+				Model:     resp.Model,
+				Agent:     agentName,
+				MessageID: resp.ID,
+				Item: types.CompletionItem{
+					ID:      fmt.Sprintf("%s-%d", resp.ID, contentIndex),
+					Partial: true,
+					Content: &mcp.Content{
+						Type: "text",
+						Text: errorText,
+					},
+				},
+			}, opt.ProgressToken)
+			return &resp, nil
+		}
 	}
 
 	respData, err := json.Marshal(resp)

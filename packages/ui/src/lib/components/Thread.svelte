@@ -42,9 +42,10 @@ interface Props {
 	agents?: Agent[];
 	selectedAgentId?: string;
 	onAgentChange?: (agentId: string) => void;
+	onCancel?: () => void;
 }
 
-let {
+const {
 	// Do not use _chat variable anywhere except these assignments
 	messages,
 	prompts,
@@ -61,6 +62,7 @@ let {
 	selectedAgentId = "",
 	onAgentChange,
 	isLoading,
+	onCancel,
 }: Props = $props();
 
 let messagesContainer: HTMLElement;
@@ -171,6 +173,7 @@ function scrollToBottom() {
 				{cancelUpload}
 				{uploadingFiles}
 				{uploadedFiles}
+				{onCancel}
 			/>
 		</div>
 	</div>

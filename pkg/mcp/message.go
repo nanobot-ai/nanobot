@@ -163,12 +163,13 @@ type JSONRPCError interface {
 }
 
 var (
-	ErrRPCUnknown        = NewRPCError(-32001, "JSON RPC unknown error")
-	ErrRPCParse          = NewRPCError(-32700, "JSON RPC parse error")
-	ErrRPCInvalidRequest = NewRPCError(-32600, "JSON RPC invalid request")
-	ErrRPCMethodNotFound = NewRPCError(-32601, "JSON RPC method not found")
-	ErrRPCInvalidParams  = NewRPCError(-32602, "JSON RPC invalid params")
-	ErrRPCInternal       = NewRPCError(-32603, "JSON RPC internal error")
+	ErrRPCUnknown          = NewRPCError(-32001, "JSON RPC unknown error")
+	ErrRPCParse            = NewRPCError(-32700, "JSON RPC parse error")
+	ErrRPCInvalidRequest   = NewRPCError(-32600, "JSON RPC invalid request")
+	ErrRPCMethodNotFound   = NewRPCError(-32601, "JSON RPC method not found")
+	ErrRPCInvalidParams    = NewRPCError(-32602, "JSON RPC invalid params")
+	ErrRPCInternal         = NewRPCError(-32603, "JSON RPC internal error")
+	ErrRPCRequestCancelled = NewRPCError(-32800, "Request cancelled")
 )
 
 type RPCError struct {
@@ -223,4 +224,15 @@ func (e *RPCError) Error() string {
 
 func (e *RPCError) Unwrap() error {
 	return e.err
+}
+
+type RequestCancelledError struct {
+	Reason string
+}
+
+func (e *RequestCancelledError) Error() string {
+	if e.Reason != "" {
+		return "request cancelled by client: " + e.Reason
+	}
+	return "request cancelled by client"
 }

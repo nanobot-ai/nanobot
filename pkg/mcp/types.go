@@ -71,8 +71,7 @@ type InitializeRequest struct {
 	Meta            map[string]any     `json:"_meta,omitzero"`
 }
 
-type PingResult struct {
-}
+type PingResult struct{}
 
 type ElicitResult struct {
 	// Action must be one of "accept", "decline", "cancel"
@@ -139,8 +138,7 @@ type ToolChoice struct {
 	Mode string `json:"mode"`
 }
 
-type ListRootsRequest struct {
-}
+type ListRootsRequest struct{}
 
 type ListRootsResult struct {
 	Roots []Root `json:"roots"`
@@ -347,8 +345,7 @@ type CallToolRequest struct {
 
 var EmptyObjectSchema = json.RawMessage(`{"type": "object", "properties": {}, "additionalProperties": false, "required": []}`)
 
-type ListToolsRequest struct {
-}
+type ListToolsRequest struct{}
 
 type ListToolsResult struct {
 	Tools []Tool `json:"tools"`
@@ -403,8 +400,7 @@ func (r ResourceContent) ToDataURI() string {
 	return "data:" + r.MIMEType + ";base64,"
 }
 
-type ListResourceTemplatesRequest struct {
-}
+type ListResourceTemplatesRequest struct{}
 
 type ListResourceTemplatesResult struct {
 	ResourceTemplates []ResourceTemplate `json:"resourceTemplates"`
@@ -414,15 +410,13 @@ type SubscribeRequest struct {
 	URI string `json:"uri"`
 }
 
-type SubscribeResult struct {
-}
+type SubscribeResult struct{}
 
 type UnsubscribeRequest struct {
 	URI string `json:"uri"`
 }
 
-type UnsubscribeResult struct {
-}
+type UnsubscribeResult struct{}
 
 type ResourceTemplate struct {
 	URITemplate string       `json:"uriTemplate"`
@@ -432,8 +426,7 @@ type ResourceTemplate struct {
 	Annotations *Annotations `json:"annotations,omitempty"`
 }
 
-type ListResourcesRequest struct {
-}
+type ListResourcesRequest struct{}
 
 type ListResourcesResult struct {
 	Resources []Resource `json:"resources"`
@@ -457,8 +450,7 @@ type Annotations struct {
 	LastModified time.Time   `json:"lastModified,omitzero"`
 }
 
-type ListPromptsRequest struct {
-}
+type ListPromptsRequest struct{}
 
 type ListPromptsResult struct {
 	Prompts []Prompt `json:"prompts"`
@@ -476,8 +468,7 @@ type PromptArgument struct {
 	Required    bool   `json:"required,omitempty"`
 }
 
-type Notification struct {
-}
+type Notification struct{}
 
 type NotificationProgressRequest struct {
 	ProgressToken any            `json:"progressToken"`
@@ -491,11 +482,17 @@ type SetLogLevelRequest struct {
 	Level string `json:"level"`
 }
 
-type SetLogLevelResult struct {
-}
+type SetLogLevelResult struct{}
 
 type SessionMessageHook struct {
 	Accept  bool     `json:"accept"`
 	Message *Message `json:"message"`
 	Reason  string   `json:"reason"`
 }
+
+type CancelledNotification struct {
+	RequestID any    `json:"requestId"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+type CancelledNotificationResult struct{}

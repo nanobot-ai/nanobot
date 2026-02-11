@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Paperclip, Send } from "@lucide/svelte";
+import { Paperclip, Send, Square } from "@lucide/svelte";
 import MessageAttachments from "$lib/components/MessageAttachments.svelte";
 import MessageResources from "$lib/components/MessageResources.svelte";
 import type MessageSlashPromptsType from "$lib/components/MessageSlashPrompts.svelte";
@@ -37,12 +37,14 @@ interface Props {
 	agents?: Agent[];
 	selectedAgentId?: string;
 	onAgentChange?: (agentId: string) => void;
+	onCancel?: () => void;
 }
 
-let {
+const {
 	onSend,
 	onFileUpload,
 	onPrompt,
+	onCancel,
 	placeholder = "Type a message...",
 	disabled = false,
 	uploadingFiles = [],
@@ -252,14 +254,17 @@ $effect(() => {
 						{messages}
 					/>
 
-					<!-- Submit button -->
+					<!-- Submit/Stop button -->
 					<button
-						type="submit"
+						type={disabled && onCancel ? "button" : "submit"}
+						onclick={disabled && onCancel ? onCancel : undefined}
 						class="btn h-9 w-9 rounded-full p-0 btn-sm btn-primary"
-						disabled={disabled || isUploading || !message.trim()}
-						aria-label="Send message"
+						disabled={disabled && onCancel ? false : disabled || isUploading || !message.trim()}
+						aria-label={disabled && onCancel ? "Stop generating" : "Send message"}
 					>
-						{#if disabled && !isUploading}
+						{#if disabled && onCancel}
+							<Square class="h-4 w-4" />
+						{:else if disabled && !isUploading}
 							<span class="loading loading-xs loading-spinner"></span>
 						{:else}
 							<Send class="h-4 w-4" />
