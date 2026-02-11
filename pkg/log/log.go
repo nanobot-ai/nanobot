@@ -18,11 +18,25 @@ var (
 	EnableProgress    = slices.Contains(debugs, "progress")
 	EnableUI          = slices.Contains(debugs, "ui")
 	DebugLog          = slices.Contains(debugs, "log")
+	disableWireLogs   = parseBool(os.Getenv("NANOBOT_DISABLE_WIRE_LOGS"))
 	Base64Replace     = regexp.MustCompile(`((;base64,|")[a-zA-Z0-9+/=]{60})[a-zA-Z0-9+/=]+"`)
 	Base64Replacement = []byte(`$1..."`)
 )
 
+func parseBool(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 func Messages(_ context.Context, server string, out bool, data []byte) {
+	if disableWireLogs {
+		return
+	}
+
 	if !EnableUI && server == "nanobot.ui" {
 		return
 	}

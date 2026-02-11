@@ -1,12 +1,14 @@
 package agents
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
@@ -55,6 +57,8 @@ func (a *Agents) truncateToolResult(callID string, result *types.CallResult) *ty
 			"previewBytes":      toolOutputPreviewLimit,
 		},
 	}
+
+	log.Infof(context.Background(), "tool output truncated: call=%s originalBytes=%d previewBytes=%d archive=%s", callID, fullSize, toolOutputPreviewLimit, displayPath)
 
 	return &preview
 }

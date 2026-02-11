@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 )
 
 func TestGuardAfterToolTriggersCompaction(t *testing.T) {
+	ctx := context.Background()
 	agents := &Agents{}
 	config := types.Config{}
 
@@ -29,7 +31,7 @@ func TestGuardAfterToolTriggersCompaction(t *testing.T) {
 		},
 	}
 
-	if !agents.guardAfterTool(config, run) {
+	if !agents.guardAfterTool(ctx, config, run) {
 		t.Fatalf("expected guard to request compaction")
 	}
 
@@ -50,7 +52,7 @@ func TestGuardAfterToolTriggersCompaction(t *testing.T) {
 		},
 	}
 
-	if agents.guardAfterTool(config, runSmall) {
+	if agents.guardAfterTool(ctx, config, runSmall) {
 		t.Fatalf("expected guard to allow continuation for small outputs")
 	}
 }

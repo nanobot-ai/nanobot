@@ -9,6 +9,7 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/contextguard"
+	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/tools"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -55,7 +56,7 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 			Done:   true,
 		}
 
-		if a.guardAfterTool(config, run) {
+		if a.guardAfterTool(ctx, config, run) {
 			run.PendingCompaction = true
 			break
 		}
@@ -111,7 +112,7 @@ func (a *Agents) invoke(ctx context.Context, config types.Config, target types.T
 	}, nil
 }
 
-func (a *Agents) guardAfterTool(config types.Config, run *types.Execution) bool {
+func (a *Agents) guardAfterTool(ctx context.Context, config types.Config, run *types.Execution) bool {
 	if run == nil || run.Response == nil || run.PopulatedRequest == nil {
 		return false
 	}
@@ -138,11 +139,13 @@ func (a *Agents) guardAfterTool(config types.Config, run *types.Execution) bool 
 	result := guard.Evaluate(contextguard.State{
 		Model:        model,
 		SystemPrompt: run.PopulatedRequest.SystemPrompt,
+		Tools:        run.PopulatedRequest.Tools,
 		Messages:     messages,
 	})
 
 	switch result.Status {
 	case contextguard.StatusNeedsCompaction, contextguard.StatusOverLimit:
+		log.Infof(ctx, "context guard triggered after tool: status=%s model=%s inputTokens=%d usable=%d", result.Status, model, result.Totals.InputTokens, result.Limits.Usable)
 		return true
 	default:
 		return false

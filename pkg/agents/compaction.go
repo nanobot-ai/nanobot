@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
@@ -40,8 +41,24 @@ func (a *Agents) runCompaction(ctx context.Context, config types.Config, prev *t
 		return false, nil
 	}
 
-	older := req.Input[:len(req.Input)-retain]
-	recent := req.Input[len(req.Input)-retain:]
+	totalMessages := len(req.Input)
+	runModel := ""
+	if run != nil && run.PopulatedRequest != nil {
+		runModel = run.PopulatedRequest.Model
+	}
+	if runModel == "" {
+		runModel = req.Model
+	}
+
+	log.Infof(ctx, "starting compaction: model=%s totalMessages=%d retainRecent=%d", runModel, totalMessages, retain)
+
+	splitIdx := len(req.Input) - retain
+	// Adjust split forward to avoid orphaning tool results whose tool calls
+	// would end up in the summarized older portion.
+	splitIdx = adjustSplitForToolPairs(req.Input, splitIdx)
+
+	older := req.Input[:splitIdx]
+	recent := req.Input[splitIdx:]
 
 	if len(older) == 0 {
 		return false, nil
@@ -104,13 +121,13 @@ func (a *Agents) runCompaction(ctx context.Context, config types.Config, prev *t
 	summaryMessage := types.Message{
 		ID:      "summary-" + uuid.String(),
 		Created: &now,
-		Role:    "system",
+		Role:    "user",
 		Items: []types.CompletionItem{
 			{
 				ID: "summary-item-" + uuid.String(),
 				Content: &mcp.Content{
 					Type: "text",
-					Text: summaryText,
+					Text: "[Previous conversation summary]\n\n" + summaryText,
 				},
 			},
 		},
@@ -131,6 +148,8 @@ func (a *Agents) runCompaction(ctx context.Context, config types.Config, prev *t
 	if summaryResp.Usage != nil {
 		run.Usage = types.MergeUsage(run.Usage, *summaryResp.Usage)
 	}
+
+	log.Infof(ctx, "compaction complete: model=%s summarizedMessages=%d retainedRecent=%d", runModel, len(older), len(recent))
 
 	return true, nil
 }
@@ -235,6 +254,48 @@ func flattenContent(content mcp.Content) string {
 		parts = append(parts, fmt.Sprintf("(tool-use-id %s)", content.ToolUseID))
 	}
 	return strings.Join(parts, " ")
+}
+
+// adjustSplitForToolPairs moves the split index forward so that tool result
+// messages are not separated from their corresponding tool call messages.
+// It collects all tool call IDs present in messages[splitIdx:] and, if any
+// message at the start of that range has tool results referencing calls not
+// in the retained set, it moves the boundary forward past those messages.
+func adjustSplitForToolPairs(messages []types.Message, splitIdx int) int {
+	if splitIdx >= len(messages) {
+		return splitIdx
+	}
+
+	// Collect tool call IDs present in the recent window.
+	toolCallIDs := map[string]bool{}
+	for _, msg := range messages[splitIdx:] {
+		for _, item := range msg.Items {
+			if item.ToolCall != nil && item.ToolCall.CallID != "" {
+				toolCallIDs[item.ToolCall.CallID] = true
+			}
+		}
+	}
+
+	// Walk forward from splitIdx: if a message has tool results referencing
+	// calls not in the recent window, move it into the older (summarized) set.
+	for splitIdx < len(messages)-1 {
+		msg := messages[splitIdx]
+		hasOrphan := false
+		for _, item := range msg.Items {
+			if item.ToolCallResult != nil && item.ToolCallResult.CallID != "" {
+				if !toolCallIDs[item.ToolCallResult.CallID] {
+					hasOrphan = true
+					break
+				}
+			}
+		}
+		if !hasOrphan {
+			break
+		}
+		splitIdx++
+	}
+
+	return splitIdx
 }
 
 func truncateText(text string) string {

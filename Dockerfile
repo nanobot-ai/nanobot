@@ -16,7 +16,8 @@ RUN go mod download
 COPY . .
 
 # Build UI and binary
-RUN CI=true CGO_ENABLED=0 go generate ./... && go build -o nanobot .
+RUN CI=true CGO_ENABLED=0 go generate ./...
+RUN CGO_ENABLED=0 go build -o nanobot .
 
 # Final stage
 FROM cgr.dev/chainguard/wolfi-base:latest AS runtime

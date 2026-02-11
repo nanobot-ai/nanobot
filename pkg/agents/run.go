@@ -12,6 +12,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/contextguard"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
+	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/schema"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
@@ -610,13 +611,17 @@ func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execut
 		guardState := contextguard.State{
 			Model:        modifiedRequest.Model,
 			SystemPrompt: modifiedRequest.SystemPrompt,
+			Tools:        modifiedRequest.Tools,
 			Messages:     modifiedRequest.Input,
 		}
 		guardResult := guard.Evaluate(guardState)
+		log.Infof(ctx, "context guard: status=%s model=%s estimatedTokens=%d usable=%d context=%d msgCount=%d",
+			guardResult.Status, modifiedRequest.Model, guardResult.Totals.InputTokens, guardResult.Limits.Usable,
+			guardResult.Limits.Context, len(modifiedRequest.Input))
 
 		switch guardResult.Status {
 		case contextguard.StatusNeedsCompaction, contextguard.StatusOverLimit:
-			if !config.Compaction.Enabled {
+			if !config.Compaction.IsEnabled() {
 				return fmt.Errorf("model %s conversation requires compaction but it is disabled", modifiedRequest.Model)
 			}
 			changed, err := a.runCompaction(ctx, config, prev, run, &modifiedRequest)

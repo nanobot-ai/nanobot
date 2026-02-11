@@ -84,7 +84,7 @@ type Config struct {
 }
 
 type CompactionConfig struct {
-	Enabled        bool    `json:"enabled,omitempty"`
+	Enabled        *bool   `json:"enabled,omitempty"`
 	Agent          string  `json:"agent,omitempty"`
 	RecentMessages int     `json:"recentMessages,omitempty"`
 	GuardThreshold float64 `json:"guardThreshold,omitempty"`
@@ -111,6 +111,13 @@ func (c CompactionConfig) RecentCount() int {
 
 func (c CompactionConfig) EffectiveGuardThreshold() float64 {
 	return c.GuardThreshold
+}
+
+func (c CompactionConfig) IsEnabled() bool {
+	if c.Enabled == nil {
+		return true
+	}
+	return *c.Enabled
 }
 
 type ConfigFactory func(ctx context.Context, profiles string) (Config, error)
@@ -168,7 +175,7 @@ func (c Config) Validate(allowLocal bool) error {
 		}
 	}
 
-	if c.Compaction.Enabled {
+	if c.Compaction.IsEnabled() {
 		if c.Compaction.RecentMessages < 0 {
 			errs = append(errs, fmt.Errorf("compaction.recentMessages must be non-negative"))
 		}

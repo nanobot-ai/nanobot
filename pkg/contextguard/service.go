@@ -47,6 +47,7 @@ type Service struct {
 type State struct {
 	Model        string
 	SystemPrompt string
+	Tools        []types.ToolUseDefinition
 	Messages     []types.Message
 }
 
@@ -93,6 +94,10 @@ func estimateTotals(state State) Totals {
 	totalChars := utf8.RuneCountInString(state.SystemPrompt)
 	toolChars := 0
 
+	for _, tool := range state.Tools {
+		totalChars += toolDefinitionChars(tool)
+	}
+
 	for _, msg := range state.Messages {
 		msgChars, msgToolChars := messageChars(msg)
 		totalChars += msgChars
@@ -104,6 +109,15 @@ func estimateTotals(state State) Totals {
 		ToolTokens:  toTokens(toolChars),
 		Estimated:   true,
 	}
+}
+
+func toolDefinitionChars(tool types.ToolUseDefinition) int {
+	chars := utf8.RuneCountInString(tool.Name)
+	chars += utf8.RuneCountInString(tool.Description)
+	if len(tool.Parameters) > 0 {
+		chars += utf8.RuneCountInString(string(tool.Parameters))
+	}
+	return chars
 }
 
 func messageChars(msg types.Message) (total, tool int) {
