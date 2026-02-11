@@ -8,15 +8,15 @@ type Limits struct {
 }
 
 func ContextWindow(modelID string) int {
-	return lookup(normalize(modelID)).Context
+	return lookup(Normalize(modelID)).Context
 }
 
 func ReservedOutput(modelID string) int {
-	return lookup(normalize(modelID)).OutputReserve
+	return lookup(Normalize(modelID)).OutputReserve
 }
 
 func InputCap(modelID string) int {
-	model := normalize(modelID)
+	model := Normalize(modelID)
 	limits := lookup(model)
 	if limits.Context == 0 {
 		return 0
@@ -41,7 +41,7 @@ func lookup(model string) Limits {
 	}
 }
 
-func normalize(modelID string) string {
+func Normalize(modelID string) string {
 	model := strings.ToLower(strings.TrimSpace(modelID))
 	if idx := strings.LastIndex(model, "/"); idx >= 0 {
 		model = model[idx+1:]

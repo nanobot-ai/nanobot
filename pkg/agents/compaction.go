@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/nanobot-ai/nanobot/pkg/contextguard"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -14,8 +15,6 @@ import (
 
 const (
 	compactionSummaryPrefix = "## Compacted Context\n"
-
-	clearedContentPlaceholder = "[content cleared during context compaction]"
 
 	transcriptContentLimit = 4_000
 )
@@ -53,6 +52,25 @@ func (a *Agents) runCompaction(ctx context.Context, config types.Config, prev *t
 	}
 
 	splitIdx := len(req.Input) - retain
+	// Adjust split forward so tool results aren't separated from their calls.
+	splitIdx = adjustSplitForToolPairs(req.Input, splitIdx)
+
+	// If the recent window alone would still exceed the context limit,
+	// reduce retain until it fits (keeping at least 1 message).
+	guard := contextguard.NewService(contextguard.Config{WarnThreshold: config.Compaction.EffectiveGuardThreshold(), UseTiktoken: true})
+	for splitIdx < len(req.Input)-1 {
+		result := guard.Evaluate(contextguard.State{
+			Model:        runModel,
+			SystemPrompt: req.SystemPrompt,
+			Tools:        req.Tools,
+			Messages:     req.Input[splitIdx:],
+		})
+		if result.Status != contextguard.StatusOverLimit {
+			break
+		}
+		splitIdx++
+	}
+
 	older := req.Input[:splitIdx]
 	recent := req.Input[splitIdx:]
 
@@ -60,7 +78,7 @@ func (a *Agents) runCompaction(ctx context.Context, config types.Config, prev *t
 		return false, nil
 	}
 
-	// Render the older messages into a transcript BEFORE clearing their content.
+	// Render the older messages into a transcript before they are dropped.
 	olderTranscript := renderMessages(older)
 	if strings.TrimSpace(olderTranscript) == "" {
 		return false, nil
@@ -121,14 +139,7 @@ func (a *Agents) runCompaction(ctx context.Context, config types.Config, prev *t
 		summaryText = "(compaction summary unavailable)"
 	}
 
-	// Step 1: Clear content from older messages in-place. This preserves the
-	// message structure (roles, tool call/result pairing) while reclaiming tokens.
-	for i := range older {
-		older[i] = clearMessageContent(older[i])
-	}
-
-	// Step 2: Insert a summary message between the cleared older messages and
-	// the recent messages so the model has context about what was cleared.
+	// Drop older messages entirely and replace with a summary.
 	summaryMessage := types.Message{
 		ID:   "compaction-summary-" + uuid.String(),
 		Role: "user",
@@ -137,75 +148,136 @@ func (a *Agents) runCompaction(ctx context.Context, config types.Config, prev *t
 				ID: uuid.String(),
 				Content: &mcp.Content{
 					Type: "text",
-					Text: "## Compacted Context\nThe conversation history above has been compacted to manage context length. " +
-						"Earlier messages have had their content cleared. Here is a summary of what happened:\n\n" +
+					Text: compactionSummaryPrefix +
+						"The earlier portion of this conversation has been summarized to manage context length. " +
+						"Here is what happened:\n\n" +
 						summaryText,
 				},
 			},
 		},
 	}
 
-	// Rebuild: summary + cleared older + recent.
-	// The summary goes first to avoid breaking tool call/result pairing
-	// at the older/recent boundary.
-	newInput := make([]types.Message, 0, 1+len(older)+len(recent))
+	// Rebuild: summary + recent only.
+	newInput := make([]types.Message, 0, 1+len(recent))
 	newInput = append(newInput, summaryMessage)
-	newInput = append(newInput, older...)
 	newInput = append(newInput, recent...)
+
+	// Strip tool_result items whose corresponding tool_call was in the
+	// dropped older messages. adjustSplitForToolPairs handles most cases
+	// but cannot remove the very last message, so orphans can survive.
+	newInput = stripOrphanedToolItems(newInput)
+
 	req.Input = newInput
 
 	// Propagate changes to the execution state.
 	if run.PopulatedRequest != nil {
 		run.PopulatedRequest.Input = req.Input
 	}
-	if prev != nil && prev.PopulatedRequest != nil {
-		prev.PopulatedRequest.Input = req.Input
+	if prev != nil {
+		if prev.PopulatedRequest != nil {
+			prev.PopulatedRequest.Input = req.Input
+		}
 		prev.ToolOutputs = nil
+		// Clear the previous response so populateRequest does not re-add
+		// assistant messages with orphaned tool_use blocks.
+		if prev.Response != nil {
+			prev.Response.InternalMessages = nil
+			prev.Response.Output = types.Message{}
+		}
 	}
 
 	if summaryResp.Usage != nil {
 		run.Usage = types.MergeUsage(run.Usage, *summaryResp.Usage)
 	}
 
-	log.Infof(ctx, "compaction complete: model=%s clearedMessages=%d retainedRecent=%d",
+	log.Infof(ctx, "compaction complete: model=%s droppedMessages=%d retainedRecent=%d",
 		runModel, len(older), len(recent))
 
 	return true, nil
 }
 
-// clearMessageContent replaces the content of a message with short placeholders
-// while preserving the message structure (role, IDs, tool call/result pairing).
-func clearMessageContent(msg types.Message) types.Message {
-	newItems := make([]types.CompletionItem, len(msg.Items))
-	for i, item := range msg.Items {
-		newItems[i] = clearItemContent(item)
+// adjustSplitForToolPairs moves the split index forward so that tool result
+// messages in the recent portion are not orphaned from their tool calls.
+// If a message at the start of recent has tool results whose corresponding
+// tool calls would be in the older (dropped) portion, it moves that message
+// into the older set.
+func adjustSplitForToolPairs(messages []types.Message, splitIdx int) int {
+	if splitIdx >= len(messages) {
+		return splitIdx
 	}
-	msg.Items = newItems
-	return msg
+
+	// Collect tool call IDs present in the recent window.
+	toolCallIDs := map[string]bool{}
+	for _, msg := range messages[splitIdx:] {
+		for _, item := range msg.Items {
+			if item.ToolCall != nil && item.ToolCall.CallID != "" {
+				toolCallIDs[item.ToolCall.CallID] = true
+			}
+		}
+	}
+
+	// Walk forward from splitIdx: if a message has tool results referencing
+	// calls not in the recent window, move it into the older (dropped) set.
+	for splitIdx < len(messages)-1 {
+		msg := messages[splitIdx]
+		hasOrphan := false
+		for _, item := range msg.Items {
+			if item.ToolCallResult != nil && item.ToolCallResult.CallID != "" {
+				if !toolCallIDs[item.ToolCallResult.CallID] {
+					hasOrphan = true
+					break
+				}
+			}
+		}
+		if !hasOrphan {
+			break
+		}
+		splitIdx++
+	}
+
+	return splitIdx
 }
 
-func clearItemContent(item types.CompletionItem) types.CompletionItem {
-	if item.Content != nil {
-		item.Content = &mcp.Content{
-			Type: "text",
-			Text: clearedContentPlaceholder,
+// stripOrphanedToolItems removes ToolCallResult items that reference
+// ToolCall IDs not present anywhere in messages, and ToolCall items without
+// a matching ToolCallResult. Messages that become empty after stripping are
+// removed entirely.
+func stripOrphanedToolItems(messages []types.Message) []types.Message {
+	callIDs := map[string]bool{}
+	resultIDs := map[string]bool{}
+	for _, msg := range messages {
+		for _, item := range msg.Items {
+			if item.ToolCall != nil && item.ToolCall.CallID != "" {
+				callIDs[item.ToolCall.CallID] = true
+			}
+			if item.ToolCallResult != nil && item.ToolCallResult.CallID != "" {
+				resultIDs[item.ToolCallResult.CallID] = true
+			}
 		}
 	}
-	if item.ToolCallResult != nil {
-		item.ToolCallResult = &types.ToolCallResult{
-			CallID: item.ToolCallResult.CallID,
-			Output: types.CallResult{
-				Content: []mcp.Content{
-					{Type: "text", Text: clearedContentPlaceholder},
-				},
-			},
+
+	var result []types.Message
+	for _, msg := range messages {
+		var kept []types.CompletionItem
+		for _, item := range msg.Items {
+			if item.ToolCallResult != nil && item.ToolCallResult.CallID != "" {
+				if !callIDs[item.ToolCallResult.CallID] {
+					continue
+				}
+			}
+			if item.ToolCall != nil && item.ToolCall.CallID != "" {
+				if !resultIDs[item.ToolCall.CallID] {
+					continue
+				}
+			}
+			kept = append(kept, item)
+		}
+		if len(kept) > 0 {
+			msg.Items = kept
+			result = append(result, msg)
 		}
 	}
-	if item.Reasoning != nil {
-		item.Reasoning = nil
-	}
-	// Keep ToolCall as-is — it's small (just name + args) and needed for pairing.
-	return item
+	return result
 }
 
 // extractCompactionSummary finds the most recent compaction summary message

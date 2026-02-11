@@ -7,6 +7,7 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/modelcaps"
+	"github.com/nanobot-ai/nanobot/pkg/tokencount"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -38,6 +39,7 @@ type Result struct {
 
 type Config struct {
 	WarnThreshold float64
+	UseTiktoken   bool
 }
 
 type Service struct {
@@ -58,7 +60,10 @@ func NewService(cfg Config) Service {
 	if threshold == 0 {
 		threshold = defaultWarnThreshold
 	}
-	return Service{config: Config{WarnThreshold: threshold}}
+	return Service{config: Config{
+		WarnThreshold: threshold,
+		UseTiktoken:   cfg.UseTiktoken,
+	}}
 }
 
 func (s Service) Evaluate(state State) Result {
@@ -68,7 +73,12 @@ func (s Service) Evaluate(state State) Result {
 		Usable:   modelcaps.InputCap(state.Model),
 	}
 
-	totals := estimateTotals(state)
+	var totals Totals
+	if s.config.UseTiktoken {
+		totals = estimateTotalsTiktoken(state)
+	} else {
+		totals = estimateTotals(state)
+	}
 
 	status := StatusOK
 	if limits.Usable > 0 {
@@ -109,6 +119,119 @@ func estimateTotals(state State) Totals {
 		ToolTokens:  toTokens(toolChars),
 		Estimated:   true,
 	}
+}
+
+func estimateTotalsTiktoken(state State) Totals {
+	var texts []string
+
+	if state.SystemPrompt != "" {
+		texts = append(texts, state.SystemPrompt)
+	}
+
+	for _, tool := range state.Tools {
+		texts = append(texts, toolDefinitionText(tool))
+	}
+
+	toolTexts, toolBinaryChars := collectMessageTexts(state.Messages, true)
+	allTexts, allBinaryChars := collectMessageTexts(state.Messages, false)
+
+	texts = append(texts, allTexts...)
+
+	inputTokens := tokencount.CountForModel(state.Model, texts...) + toTokens(allBinaryChars)
+	toolTokens := tokencount.CountForModel(state.Model, toolTexts...) + toTokens(toolBinaryChars)
+
+	return Totals{
+		InputTokens: inputTokens,
+		ToolTokens:  toolTokens,
+		Estimated:   true,
+	}
+}
+
+func toolDefinitionText(tool types.ToolUseDefinition) string {
+	text := tool.Name + " " + tool.Description
+	if len(tool.Parameters) > 0 {
+		text += " " + string(tool.Parameters)
+	}
+	return text
+}
+
+// collectMessageTexts extracts text content from messages, returning the
+// collected text strings and a count of binary (base64) chars that should
+// be estimated with chars/4 rather than tokenized.
+// If toolOnly is true, only tool call result content is included.
+func collectMessageTexts(messages []types.Message, toolOnly bool) ([]string, int) {
+	var texts []string
+	binaryChars := 0
+	for _, msg := range messages {
+		for _, item := range msg.Items {
+			if item.Content != nil && !toolOnly {
+				t, b := contentTexts(*item.Content)
+				texts = append(texts, t...)
+				binaryChars += b
+			}
+			if item.ToolCall != nil && !toolOnly {
+				texts = append(texts, item.ToolCall.Arguments)
+			}
+			if item.ToolCallResult != nil {
+				t, b := callResultTexts(item.ToolCallResult.Output)
+				texts = append(texts, t...)
+				binaryChars += b
+			}
+			if item.Reasoning != nil && !toolOnly {
+				for _, summary := range item.Reasoning.Summary {
+					texts = append(texts, summary.Text)
+				}
+			}
+		}
+	}
+	return texts, binaryChars
+}
+
+func callResultTexts(result types.CallResult) ([]string, int) {
+	var texts []string
+	binaryChars := 0
+	for _, content := range result.Content {
+		t, b := contentTexts(content)
+		texts = append(texts, t...)
+		binaryChars += b
+	}
+	return texts, binaryChars
+}
+
+func contentTexts(content mcp.Content) ([]string, int) {
+	var texts []string
+	binaryChars := 0
+
+	if content.Text != "" {
+		texts = append(texts, content.Text)
+	}
+
+	if content.Resource != nil {
+		if content.Resource.Text != "" {
+			texts = append(texts, content.Resource.Text)
+		}
+		if content.Resource.Blob != "" {
+			binaryChars += approxBase64Chars(content.Resource.Blob)
+		}
+	}
+
+	if content.Data != "" {
+		binaryChars += approxBase64Chars(content.Data)
+	}
+
+	for _, child := range content.Content {
+		t, b := contentTexts(child)
+		texts = append(texts, t...)
+		binaryChars += b
+	}
+
+	if len(content.StructuredContent) > 0 {
+		if data, err := json.Marshal(content.StructuredContent); err == nil {
+			texts = append(texts, string(data))
+		}
+	}
+
+	return texts, binaryChars
 }
 
 func toolDefinitionChars(tool types.ToolUseDefinition) int {

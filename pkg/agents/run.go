@@ -36,7 +36,7 @@ func New(completer types.Completer, registry *tools.Service) *Agents {
 	return &Agents{
 		completer: completer,
 		registry:  registry,
-		guard:     contextguard.NewService(contextguard.Config{}),
+		guard:     contextguard.NewService(contextguard.Config{UseTiktoken: true}),
 	}
 }
 
@@ -607,7 +607,7 @@ func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execut
 			return nil
 		}
 
-		guard := contextguard.NewService(contextguard.Config{WarnThreshold: config.Compaction.EffectiveGuardThreshold()})
+		guard := contextguard.NewService(contextguard.Config{WarnThreshold: config.Compaction.EffectiveGuardThreshold(), UseTiktoken: true})
 		guardState := contextguard.State{
 			Model:        modifiedRequest.Model,
 			SystemPrompt: modifiedRequest.SystemPrompt,
@@ -615,14 +615,13 @@ func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execut
 			Messages:     modifiedRequest.Input,
 		}
 		guardResult := guard.Evaluate(guardState)
-		if guardResult.Status == contextguard.StatusOK {
-			log.Debugf(ctx, "context guard: status=%s model=%s estimatedTokens=%d usable=%d context=%d msgCount=%d",
-				guardResult.Status, modifiedRequest.Model, guardResult.Totals.InputTokens, guardResult.Limits.Usable,
-				guardResult.Limits.Context, len(modifiedRequest.Input))
-		} else {
-			log.Infof(ctx, "context guard: status=%s model=%s estimatedTokens=%d usable=%d context=%d msgCount=%d",
-				guardResult.Status, modifiedRequest.Model, guardResult.Totals.InputTokens, guardResult.Limits.Usable,
-				guardResult.Limits.Context, len(modifiedRequest.Input))
+		log.Infof(ctx, "context guard: status=%s model=%s estimatedTokens=%d usable=%d context=%d msgCount=%d toolCount=%d",
+			guardResult.Status, modifiedRequest.Model, guardResult.Totals.InputTokens, guardResult.Limits.Usable,
+			guardResult.Limits.Context, len(modifiedRequest.Input), len(modifiedRequest.Tools))
+
+		if run.PendingCompaction && guardResult.Status == contextguard.StatusOK {
+			log.Infof(ctx, "context guard: overriding status to needs_compaction due to PendingCompaction flag")
+			guardResult.Status = contextguard.StatusNeedsCompaction
 		}
 
 		switch guardResult.Status {
@@ -630,18 +629,22 @@ func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execut
 			if !config.Compaction.IsEnabled() {
 				return fmt.Errorf("model %s conversation requires compaction but it is disabled", modifiedRequest.Model)
 			}
+			log.Infof(ctx, "running compaction: status=%s msgCount=%d", guardResult.Status, len(modifiedRequest.Input))
 			changed, err := a.runCompaction(ctx, config, prev, run, &modifiedRequest)
 			if err != nil {
 				return err
 			}
 			if !changed {
-				return fmt.Errorf("model %s conversation exceeds limits and no history could be compacted", modifiedRequest.Model)
+				log.Infof(ctx, "compaction returned no changes, proceeding to completion")
+				run.PendingCompaction = false
+			} else {
+				log.Infof(ctx, "compaction applied, re-running guard with %d messages", len(modifiedRequest.Input))
+				run.PendingCompaction = false
+				// History updated, rebuild the request and re-run guard.
+				continue
 			}
-			run.PendingCompaction = false
-			// History updated, rebuild the request and re-run guard.
-			continue
 		case contextguard.StatusOK:
-			// continue to completion
+			log.Infof(ctx, "context guard: proceeding to completion")
 		}
 
 		resp, err = a.completer.Complete(ctx, modifiedRequest, opts...)

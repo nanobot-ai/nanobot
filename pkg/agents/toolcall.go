@@ -135,7 +135,7 @@ func (a *Agents) guardAfterTool(ctx context.Context, config types.Config, run *t
 		}
 	}
 
-	guard := contextguard.NewService(contextguard.Config{WarnThreshold: config.Compaction.EffectiveGuardThreshold()})
+	guard := contextguard.NewService(contextguard.Config{WarnThreshold: config.Compaction.EffectiveGuardThreshold(), UseTiktoken: true})
 	result := guard.Evaluate(contextguard.State{
 		Model:        model,
 		SystemPrompt: run.PopulatedRequest.SystemPrompt,
@@ -145,9 +145,12 @@ func (a *Agents) guardAfterTool(ctx context.Context, config types.Config, run *t
 
 	switch result.Status {
 	case contextguard.StatusNeedsCompaction, contextguard.StatusOverLimit:
-		log.Infof(ctx, "context guard triggered after tool: status=%s model=%s inputTokens=%d usable=%d", result.Status, model, result.Totals.InputTokens, result.Limits.Usable)
+		log.Infof(ctx, "guard after tool: status=%s model=%s estimatedTokens=%d usable=%d msgCount=%d",
+			result.Status, model, result.Totals.InputTokens, result.Limits.Usable, len(messages))
 		return true
 	default:
+		log.Infof(ctx, "guard after tool: status=%s model=%s estimatedTokens=%d usable=%d msgCount=%d",
+			result.Status, model, result.Totals.InputTokens, result.Limits.Usable, len(messages))
 		return false
 	}
 }
