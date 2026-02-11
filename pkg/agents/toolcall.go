@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
+	"github.com/nanobot-ai/nanobot/pkg/contextguard"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/tools"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -51,6 +54,11 @@ func (a *Agents) toolCalls(ctx context.Context, config types.Config, run *types.
 			Output: *callOutput,
 			Done:   true,
 		}
+
+		if a.guardAfterTool(config, run) {
+			run.PendingCompaction = true
+			break
+		}
 	}
 
 	if len(run.ToolOutputs) == 0 {
@@ -87,6 +95,9 @@ func (a *Agents) invoke(ctx context.Context, config types.Config, target types.T
 			IsError: true,
 		}
 	}
+	if response != nil {
+		response = a.truncateToolResult(funcCall.ToolCall.CallID, response)
+	}
 	return &types.Message{
 		Role: "user",
 		Items: []types.CompletionItem{
@@ -98,4 +109,42 @@ func (a *Agents) invoke(ctx context.Context, config types.Config, target types.T
 			},
 		},
 	}, nil
+}
+
+func (a *Agents) guardAfterTool(config types.Config, run *types.Execution) bool {
+	if run == nil || run.Response == nil || run.PopulatedRequest == nil {
+		return false
+	}
+
+	model := run.Response.Model
+	if model == "" {
+		model = run.PopulatedRequest.Model
+	}
+
+	messages := make([]types.Message, 0, len(run.PopulatedRequest.Input)+1+len(run.ToolOutputs))
+	messages = append(messages, run.PopulatedRequest.Input...)
+	messages = append(messages, run.Response.Output)
+
+	if len(run.ToolOutputs) > 0 {
+		for _, callID := range slices.Sorted(maps.Keys(run.ToolOutputs)) {
+			toolCall := run.ToolOutputs[callID]
+			if toolCall.Done {
+				messages = append(messages, toolCall.Output)
+			}
+		}
+	}
+
+	guard := contextguard.NewService(contextguard.Config{WarnThreshold: config.Compaction.EffectiveGuardThreshold()})
+	result := guard.Evaluate(contextguard.State{
+		Model:        model,
+		SystemPrompt: run.PopulatedRequest.SystemPrompt,
+		Messages:     messages,
+	})
+
+	switch result.Status {
+	case contextguard.StatusNeedsCompaction, contextguard.StatusOverLimit:
+		return true
+	default:
+		return false
+	}
 }

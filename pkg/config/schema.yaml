@@ -736,6 +736,31 @@ properties:
     description: |
       A map of hooks that will be executed at various stages of the Nanobot lifecycle.
       This is useful for customizing the behavior of the Nanobot at the global level.
+  compaction:
+    type: object
+    description: |
+      Settings that control automatic conversation summarization when the session approaches model limits.
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        description: |
+          Enables or disables auto-compaction for this workspace. When disabled, Nanobot will never trigger the summarizer automatically.
+      agent:
+        type: string
+        description: |
+          The agent name to use when running the compaction summarizer. Defaults to `nanobot.compact` if unspecified.
+      recentMessages:
+        type: integer
+        minimum: 0
+        description: |
+          The number of most recent user/assistant messages to retain verbatim after compaction. Older history will be replaced with the summary.
+      guardThreshold:
+        type: number
+        minimum: 0
+        maximum: 1
+        description: |
+          Optional override for the token usage threshold (0-1) that triggers compaction before hitting the hard model limit.
   agents:
     type: object
     description: |

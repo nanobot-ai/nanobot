@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -51,6 +52,10 @@ func toResponse(resp *Response, created time.Time) (*types.CompletionResponse, e
 				},
 			})
 		}
+	}
+
+	if usage := anthropicUsage(resp, result.Output.Items); usage != nil {
+		result.Usage = usage
 	}
 
 	return result, nil
@@ -202,4 +207,52 @@ func contentToContent(content []mcp.Content) (result []Content) {
 		}
 	}
 	return
+}
+
+func anthropicUsage(resp *Response, items []types.CompletionItem) *types.TokenUsage {
+	if resp == nil {
+		return nil
+	}
+
+	usage := types.TokenUsage{}
+	if resp.Usage != nil {
+		if resp.Usage.InputTokens != nil {
+			usage.InputTokens = *resp.Usage.InputTokens
+		}
+		if resp.Usage.OutputTokens != nil {
+			usage.OutputTokens = *resp.Usage.OutputTokens
+		}
+		if resp.Usage.CacheReadInputTokens != nil {
+			usage.CacheReadTokens = *resp.Usage.CacheReadInputTokens
+		}
+	}
+
+	if usage.OutputTokens == 0 {
+		if estimated := estimateTokens(items); estimated > 0 {
+			usage.OutputTokens = estimated
+			usage.Estimated = true
+		}
+	}
+
+	if resp.Usage == nil {
+		usage.Estimated = usage.HasData()
+	}
+
+	if usage.HasData() {
+		return &usage
+	}
+	return nil
+}
+
+func estimateTokens(items []types.CompletionItem) int {
+	charCount := 0
+	for _, item := range items {
+		if item.Content != nil && item.Content.Text != "" {
+			charCount += utf8.RuneCountInString(item.Content.Text)
+		}
+	}
+	if charCount == 0 {
+		return 0
+	}
+	return (charCount + 3) / 4
 }
