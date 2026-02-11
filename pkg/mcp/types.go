@@ -81,8 +81,11 @@ type ElicitResult struct {
 }
 
 type ElicitRequest struct {
+	Mode            string          `json:"mode,omitempty"`
 	Message         string          `json:"message,omitempty"`
 	RequestedSchema PrimitiveSchema `json:"requestedSchema,omitzero"`
+	URL             string          `json:"url,omitempty"`
+	ElicitationID   string          `json:"elicitationId,omitempty"`
 	Meta            json.RawMessage `json:"_meta,omitzero"`
 }
 
