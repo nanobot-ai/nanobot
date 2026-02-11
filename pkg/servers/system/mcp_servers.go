@@ -59,14 +59,12 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 		rootSession = session
 	}
 
-	// Look up the header source server in the config to copy headers
-	config := types.ConfigFromContext(ctx)
+	// Use MCP_API_KEY from the environment as the Bearer token for dynamic servers
 	var headers map[string]string
 
-	if sourceServer, ok := config.MCPServers["mcp-server-search"]; ok && len(sourceServer.Headers) > 0 {
-		headers = make(map[string]string, len(sourceServer.Headers))
-		for k, v := range sourceServer.Headers {
-			headers[k] = v
+	if apiKey := session.GetEnvMap()["MCP_API_KEY"]; apiKey != "" {
+		headers = map[string]string{
+			"Authorization": "Bearer " + apiKey,
 		}
 	}
 
