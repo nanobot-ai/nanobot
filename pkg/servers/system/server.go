@@ -238,6 +238,15 @@ Usage notes:
 3. Get decisions on implementation choices as you work
 4. Offer choices to the user about what direction to take.
 
+Parameters:
+- questions (required, array, min 1): Array of question objects, each with:
+  - question (required, string): The full question text to display to the user
+  - header (required, string): Short label (e.g. "Language", "Framework") used to identify the question in responses
+  - multiple (optional, bool, default false): Set to true to allow the user to select more than one option
+  - options (required, array, min 1): Available choices, each with:
+    - label (required, string): Display text for the option
+    - description (optional, string): Explanation of what this option means
+
 Usage notes:
 - A "Type your own answer" option is always added automatically; don't include "Other" or catch-all options
 - Answers are returned as arrays of labels; set multiple: true to allow selecting more than one

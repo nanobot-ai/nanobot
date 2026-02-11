@@ -7,6 +7,7 @@
 
 	import type { Elicitation, ElicitationResult, PrimitiveSchemaDefinition } from '$lib/types';
 	import { Copy, ChevronLeft, ChevronRight, SkipForward, Pencil } from '@lucide/svelte';
+	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 
 	const stepColors = [
 		{ bg: 'bg-primary', text: 'text-primary-content', ring: 'ring-primary/30' },
@@ -35,9 +36,9 @@
 	// Question-specific state
 	let currentStep = $state(0);
 	let reviewMode = $state(false);
-	let selectedOptions = $state<Map<number, Set<string>>>(new Map());
-	let customAnswers = $state<Map<number, string>>(new Map());
-	let showCustomInput = $state<Map<number, boolean>>(new Map());
+	let selectedOptions = new SvelteMap<number, SvelteSet<string>>();
+	let customAnswers = new SvelteMap<number, string>();
+	let showCustomInput = new SvelteMap<number, boolean>();
 
 	// Initialize form data with defaults
 	$effect(() => {
@@ -65,9 +66,9 @@
 		if (isQuestionElicitation()) {
 			currentStep = 0;
 			reviewMode = false;
-			selectedOptions = new Map();
-			customAnswers = new Map();
-			showCustomInput = new Map();
+			selectedOptions.clear();
+			customAnswers.clear();
+			showCustomInput.clear();
 		}
 	});
 
@@ -144,12 +145,29 @@
 	const questions: QuestionData[] = $derived.by(() => {
 		const raw = elicitation._meta?.['ai.nanobot.meta/question'];
 		if (!raw) return [];
-		if (typeof raw === 'string') return JSON.parse(raw);
-		return raw as QuestionData[];
+
+		if (typeof raw === 'string') {
+			try {
+				const parsed = JSON.parse(raw);
+				if (Array.isArray(parsed)) return parsed as QuestionData[];
+				if (parsed && typeof parsed === 'object') return [parsed as QuestionData];
+				return [];
+			} catch {
+				return [];
+			}
+		}
+
+		if (Array.isArray(raw)) return raw as QuestionData[];
+		if (raw && typeof raw === 'object') return [raw as QuestionData];
+		return [];
 	});
 
 	function toggleOption(qIndex: number, label: string) {
-		const current = new Set(selectedOptions.get(qIndex) ?? []);
+		let current = selectedOptions.get(qIndex);
+		if (!current) {
+			current = new SvelteSet();
+			selectedOptions.set(qIndex, current);
+		}
 
 		if (questions[qIndex].multiple) {
 			if (current.has(label)) current.delete(label);
@@ -157,25 +175,23 @@
 		} else {
 			current.clear();
 			current.add(label);
-			showCustomInput = new Map(showCustomInput).set(qIndex, false);
-			customAnswers = new Map(customAnswers).set(qIndex, '');
+			showCustomInput.set(qIndex, false);
+			customAnswers.set(qIndex, '');
 		}
-
-		selectedOptions = new Map(selectedOptions).set(qIndex, current);
 	}
 
 	function toggleCustomInput(qIndex: number) {
 		const current = showCustomInput.get(qIndex) ?? false;
-		showCustomInput = new Map(showCustomInput).set(qIndex, !current);
+		showCustomInput.set(qIndex, !current);
 		if (current) {
-			customAnswers = new Map(customAnswers).set(qIndex, '');
+			customAnswers.set(qIndex, '');
 		} else if (!questions[qIndex].multiple) {
-			selectedOptions = new Map(selectedOptions).set(qIndex, new Set());
+			selectedOptions.set(qIndex, new SvelteSet());
 		}
 	}
 
 	function updateCustomAnswer(qIndex: number, value: string) {
-		customAnswers = new Map(customAnswers).set(qIndex, value);
+		customAnswers.set(qIndex, value);
 	}
 
 	function hasAnswer(qIndex: number): boolean {

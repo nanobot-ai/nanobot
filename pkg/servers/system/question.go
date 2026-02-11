@@ -49,12 +49,9 @@ func (s *Server) question(ctx context.Context, params QuestionParams) (string, e
 	}
 
 	// Get root session for sending elicitation to the UI
-	session := mcp.SessionFromContext(ctx)
+	session := mcp.SessionFromContext(ctx).Root()
 	if session == nil {
 		return "", fmt.Errorf("no session found in context")
-	}
-	for session.Parent != nil {
-		session = session.Parent
 	}
 
 	// Build _meta with questions data
