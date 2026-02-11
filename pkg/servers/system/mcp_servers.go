@@ -93,10 +93,6 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 		"message": fmt.Sprintf("Successfully added MCP server '%s'. The server's tools will be available in the next agent turn.", params.Name),
 	}
 
-	if headers != nil {
-		result["headersInherited"] = true
-	}
-
 	return result, nil
 }
 
