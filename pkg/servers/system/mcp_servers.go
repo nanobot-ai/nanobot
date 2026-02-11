@@ -30,9 +30,8 @@ func (d *DynamicMCPServers) Deserialize(data any) (any, error) {
 
 // AddMCPServerParams are the parameters for the addMCPServer tool
 type AddMCPServerParams struct {
-	URL          string `json:"url"`
-	Name         string `json:"name"`
-	HeaderSource string `json:"headerSource,omitempty"`
+	URL  string `json:"url"`
+	Name string `json:"name"`
 }
 
 // RemoveMCPServerParams are the parameters for the removeMCPServer tool
@@ -60,17 +59,11 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 		rootSession = session
 	}
 
-	// Determine header source (default to mcp-server-search)
-	headerSource := params.HeaderSource
-	if headerSource == "" {
-		headerSource = "mcp-server-search"
-	}
-
 	// Look up the header source server in the config to copy headers
 	config := types.ConfigFromContext(ctx)
 	var headers map[string]string
 
-	if sourceServer, ok := config.MCPServers[headerSource]; ok && len(sourceServer.Headers) > 0 {
+	if sourceServer, ok := config.MCPServers["mcp-server-search"]; ok && len(sourceServer.Headers) > 0 {
 		headers = make(map[string]string, len(sourceServer.Headers))
 		for k, v := range sourceServer.Headers {
 			headers[k] = v
@@ -104,7 +97,6 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 
 	if headers != nil {
 		result["headersInherited"] = true
-		result["headerSource"] = headerSource
 	}
 
 	return result, nil
