@@ -159,9 +159,10 @@ func TestTruncateToolOutput(t *testing.T) {
 
 				if tt.expectPreviewNonEmpty {
 					if len(result.Content) < 2 {
-						t.Fatal("expected at least 2 content items for preview check")
+						t.Fatal("expected at least 2 content items (notice + preview)")
 					}
-					if strings.TrimSpace(result.Content[0].Text) == "" {
+					// Index 0 is the truncation notice, index 1 is the first original content item
+					if strings.TrimSpace(result.Content[1].Text) == "" {
 						t.Error("expected truncated preview to contain original content, got empty preview")
 					}
 				}
@@ -172,8 +173,9 @@ func TestTruncateToolOutput(t *testing.T) {
 			}
 
 			if tt.expectFirstType != "" && result.Truncated {
-				if len(result.Content) == 0 || result.Content[0].Type != tt.expectFirstType {
-					t.Errorf("expected first content type %s, got %v", tt.expectFirstType, result.Content)
+				// Index 0 is the truncation notice, index 1 is the first original content item
+				if len(result.Content) < 2 || result.Content[1].Type != tt.expectFirstType {
+					t.Errorf("expected first content type after notice to be %s, got %v", tt.expectFirstType, result.Content)
 				}
 			}
 		})
@@ -201,21 +203,21 @@ func TestTruncateInterleavedOrder(t *testing.T) {
 		t.Fatal("expected truncation")
 	}
 
-	// Verify ordering: first text, then image, then truncated text, then notice
+	// Verify ordering: notice first, then text, image, truncated text
 	if len(result.Content) < 4 {
 		t.Fatalf("expected at least 4 content items, got %d", len(result.Content))
 	}
-	if result.Content[0].Type != "text" || result.Content[0].Text != "first" {
-		t.Errorf("expected first item to be text 'first', got type=%s text=%q", result.Content[0].Type, result.Content[0].Text)
+	if result.Content[0].Type != "text" || !strings.Contains(result.Content[0].Text, "Tool output truncated") {
+		t.Errorf("expected first item to be truncation notice, got type=%s text=%q", result.Content[0].Type, result.Content[0].Text)
 	}
-	if result.Content[1].Type != "image" {
-		t.Errorf("expected second item to be image, got %s", result.Content[1].Type)
+	if result.Content[1].Type != "text" || result.Content[1].Text != "first" {
+		t.Errorf("expected second item to be text 'first', got type=%s text=%q", result.Content[1].Type, result.Content[1].Text)
 	}
-	if result.Content[2].Type != "text" {
-		t.Errorf("expected third item to be truncated text, got %s", result.Content[2].Type)
+	if result.Content[2].Type != "image" {
+		t.Errorf("expected third item to be image, got %s", result.Content[2].Type)
 	}
-	if result.Content[3].Type != "text" || !strings.Contains(result.Content[3].Text, "Tool output truncated") {
-		t.Errorf("expected fourth item to be truncation notice, got type=%s text=%q", result.Content[3].Type, result.Content[3].Text)
+	if result.Content[3].Type != "text" {
+		t.Errorf("expected fourth item to be truncated text, got %s", result.Content[3].Type)
 	}
 }
 
@@ -239,21 +241,21 @@ func TestTruncateNonTextByteBudget(t *testing.T) {
 		t.Fatal("expected truncation")
 	}
 
-	// Image kept (fits), text truncated, then notice
+	// Notice first, then image kept (fits), then text truncated
 	if len(result.Content) != 3 {
 		t.Fatalf("expected 3 content items, got %d", len(result.Content))
 	}
-	if result.Content[0].Type != "image" {
-		t.Errorf("expected image first, got %s", result.Content[0].Type)
+	if !strings.Contains(result.Content[0].Text, "Tool output truncated") {
+		t.Errorf("expected truncation notice first, got %q", result.Content[0].Text)
 	}
-	if result.Content[1].Type != "text" {
-		t.Errorf("expected text second, got %s", result.Content[1].Type)
+	if result.Content[1].Type != "image" {
+		t.Errorf("expected image second, got %s", result.Content[1].Type)
 	}
-	if len(result.Content[1].Text) >= 20000 {
-		t.Errorf("expected text to be truncated, got %d bytes", len(result.Content[1].Text))
+	if result.Content[2].Type != "text" {
+		t.Errorf("expected text third, got %s", result.Content[2].Type)
 	}
-	if !strings.Contains(result.Content[2].Text, "Tool output truncated") {
-		t.Errorf("expected truncation notice, got %q", result.Content[2].Text)
+	if len(result.Content[2].Text) >= 20000 {
+		t.Errorf("expected text to be truncated, got %d bytes", len(result.Content[2].Text))
 	}
 }
 

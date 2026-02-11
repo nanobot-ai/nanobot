@@ -87,7 +87,12 @@ func truncateToolOutput(ctx context.Context, toolName, callID string, response *
 
 	// Walk content items in original order with a remaining byte budget
 	remaining := maxBytes
-	result := make([]mcp.Content, 0, len(response.Content))
+	result := []mcp.Content{
+		{
+			Type: "text",
+			Text: fmt.Sprintf("(Tool output truncated because it is too large. Full output saved to: %s)\n\n", filePath),
+		},
+	}
 
 	for _, c := range response.Content {
 		size := contentByteSize(c)
@@ -114,11 +119,6 @@ func truncateToolOutput(ctx context.Context, toolName, callID string, response *
 		// Stop processing further items after text truncation
 		break
 	}
-
-	result = append(result, mcp.Content{
-		Type: "text",
-		Text: fmt.Sprintf("\n\n(Tool output truncated because it is too large. Full output saved to: %s)", filePath),
-	})
 
 	return TruncationResult{
 		Content:   result,
