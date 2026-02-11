@@ -88,19 +88,18 @@ func (a *Agents) invoke(ctx context.Context, config types.Config, target types.T
 		}
 	}
 
-	// Apply truncation to non-error responses
-	if !response.IsError {
-		truncResult, truncErr := truncateToolOutput(ctx, target.TargetName, funcCall.ToolCall.CallID, response, DefaultMaxBytes)
-		if truncErr != nil {
-			response.Content = []mcp.Content{
-				{
-					Type: "text",
-					Text: fmt.Sprintf("Error: tool output too large and truncation failed: %v", truncErr),
-				},
-			}
-		} else if truncResult.Truncated {
-			response.Content = truncResult.Content
+	// Apply truncation to prevent context overflow
+	truncResult, truncErr := truncateToolOutput(ctx, target.TargetName, funcCall.ToolCall.CallID, response, DefaultMaxBytes)
+	if truncErr != nil {
+		response.Content = []mcp.Content{
+			{
+				Type: "text",
+				Text: fmt.Sprintf("Error: tool output too large and truncation failed: %v", truncErr),
+			},
 		}
+		response.IsError = true
+	} else if truncResult.Truncated {
+		response.Content = truncResult.Content
 	}
 
 	return &types.Message{

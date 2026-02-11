@@ -11,17 +11,13 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func TestTruncateToolOutput(t *testing.T) {
-	ctx := context.Background()
-
-	// Create a temporary directory for testing
+// setupTruncateTestDir creates a temp directory and changes to it, returning a cleanup function.
+func setupTruncateTestDir(t *testing.T) {
+	t.Helper()
 	tmpDir, err := os.MkdirTemp("", "truncate-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
-
-	// Change to temp dir for test
 	origDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("failed to get current working directory: %v", err)
@@ -29,11 +25,17 @@ func TestTruncateToolOutput(t *testing.T) {
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("failed to change to temp directory %q: %v", tmpDir, err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if err := os.Chdir(origDir); err != nil {
 			t.Fatalf("failed to restore working directory to %q: %v", origDir, err)
 		}
-	}()
+		os.RemoveAll(tmpDir)
+	})
+}
+
+func TestTruncateToolOutput(t *testing.T) {
+	ctx := context.Background()
+	setupTruncateTestDir(t)
 
 	tests := []struct {
 		name                  string
@@ -180,16 +182,7 @@ func TestTruncateToolOutput(t *testing.T) {
 
 func TestTruncateInterleavedOrder(t *testing.T) {
 	ctx := context.Background()
-
-	tmpDir, err := os.MkdirTemp("", "truncate-order-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	origDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(origDir)
+	setupTruncateTestDir(t)
 
 	response := &types.CallResult{
 		Content: []mcp.Content{
@@ -228,16 +221,7 @@ func TestTruncateInterleavedOrder(t *testing.T) {
 
 func TestTruncateNonTextByteBudget(t *testing.T) {
 	ctx := context.Background()
-
-	tmpDir, err := os.MkdirTemp("", "truncate-budget-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	origDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(origDir)
+	setupTruncateTestDir(t)
 
 	response := &types.CallResult{
 		Content: []mcp.Content{
@@ -275,16 +259,7 @@ func TestTruncateNonTextByteBudget(t *testing.T) {
 
 func TestTruncateLargeNonTextDropped(t *testing.T) {
 	ctx := context.Background()
-
-	tmpDir, err := os.MkdirTemp("", "truncate-drop-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	origDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(origDir)
+	setupTruncateTestDir(t)
 
 	response := &types.CallResult{
 		Content: []mcp.Content{
@@ -338,16 +313,7 @@ func TestTruncateLargeNonTextDropped(t *testing.T) {
 
 func TestTruncateTwoImagesExceedBudget(t *testing.T) {
 	ctx := context.Background()
-
-	tmpDir, err := os.MkdirTemp("", "truncate-two-img-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	origDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(origDir)
+	setupTruncateTestDir(t)
 
 	response := &types.CallResult{
 		Content: []mcp.Content{
@@ -403,16 +369,7 @@ func TestTruncateTwoImagesExceedBudget(t *testing.T) {
 
 func TestTruncateCallIDInFilename(t *testing.T) {
 	ctx := context.Background()
-
-	tmpDir, err := os.MkdirTemp("", "truncate-callid-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	origDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(origDir)
+	setupTruncateTestDir(t)
 
 	response := &types.CallResult{
 		Content: []mcp.Content{
@@ -436,6 +393,110 @@ func TestTruncateCallIDInFilename(t *testing.T) {
 	}
 }
 
+func TestTruncateEmbeddedResource(t *testing.T) {
+	ctx := context.Background()
+	setupTruncateTestDir(t)
+
+	response := &types.CallResult{
+		Content: []mcp.Content{
+			{
+				Type: "resource",
+				Resource: &mcp.EmbeddedResource{
+					URI:      "file:///large.txt",
+					MIMEType: "text/plain",
+					Text:     strings.Repeat("r", 60000),
+				},
+			},
+			{Type: "text", Text: "small text"},
+		},
+	}
+
+	result, err := truncateToolOutput(ctx, "resource-tool", "call-res", response, 50000)
+	if err != nil {
+		t.Fatalf("truncateToolOutput failed: %v", err)
+	}
+
+	if !result.Truncated {
+		t.Fatal("expected truncation")
+	}
+
+	// Large resource dropped, text kept
+	for _, c := range result.Content {
+		if c.Type == "resource" {
+			t.Error("expected large resource to be dropped")
+		}
+	}
+
+	foundNotice := false
+	for _, c := range result.Content {
+		if strings.Contains(c.Text, "Tool output truncated") {
+			foundNotice = true
+		}
+	}
+	if !foundNotice {
+		t.Fatal("expected truncation notice")
+	}
+}
+
+func TestContentByteSize(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  mcp.Content
+		expected int
+	}{
+		{
+			name:     "text content",
+			content:  mcp.Content{Type: "text", Text: "hello"},
+			expected: 5,
+		},
+		{
+			name:     "image content",
+			content:  mcp.Content{Type: "image", Data: "base64data"},
+			expected: 10,
+		},
+		{
+			name:     "audio content",
+			content:  mcp.Content{Type: "audio", Data: "audiodata"},
+			expected: 9,
+		},
+		{
+			name: "resource with text",
+			content: mcp.Content{
+				Type:     "resource",
+				Resource: &mcp.EmbeddedResource{Text: "resource text"},
+			},
+			expected: 13,
+		},
+		{
+			name: "resource with blob",
+			content: mcp.Content{
+				Type:     "resource",
+				Resource: &mcp.EmbeddedResource{Blob: "blobdata"},
+			},
+			expected: 8,
+		},
+		{
+			name:     "resource with nil resource",
+			content:  mcp.Content{Type: "resource"},
+			expected: 0,
+		},
+		{
+			name:     "resource_link",
+			content:  mcp.Content{Type: "resource_link", URI: "file:///test"},
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			size := contentByteSize(tt.content)
+			if size != tt.expected {
+				t.Errorf("expected %d, got %d", tt.expected, size)
+			}
+		})
+	}
+}
+
 func TestSanitizeFileName(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -450,6 +511,9 @@ func TestSanitizeFileName(t *testing.T) {
 		{"with\"quote", "with_quote"},
 		{"with<greater>", "with_greater_"},
 		{"with|pipe", "with_pipe"},
+		{"with.dot", "with_dot"},
+		{"..", "__"},
+		{"../../../etc", "_________etc"},
 	}
 
 	for _, tt := range tests {

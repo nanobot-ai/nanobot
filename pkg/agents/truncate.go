@@ -25,6 +25,22 @@ type TruncationResult struct {
 	FilePath  string
 }
 
+// contentByteSize returns the byte size of a content item's payload.
+func contentByteSize(c mcp.Content) int {
+	switch c.Type {
+	case "text":
+		return len(c.Text)
+	case "resource":
+		if c.Resource != nil {
+			return len(c.Resource.Text) + len(c.Resource.Blob)
+		}
+		return 0
+	default:
+		// image, audio, and other types use the Data field
+		return len(c.Data)
+	}
+}
+
 // truncateToolOutput checks if a tool output needs truncation and truncates it if necessary.
 // It saves the full original content as JSON to disk and returns truncated content.
 func truncateToolOutput(ctx context.Context, toolName, callID string, response *types.CallResult, maxBytes int) (TruncationResult, error) {
@@ -35,11 +51,7 @@ func truncateToolOutput(ctx context.Context, toolName, callID string, response *
 	// Calculate total size across all content items
 	totalBytes := 0
 	for _, c := range response.Content {
-		if c.Type == "text" {
-			totalBytes += len(c.Text)
-		} else {
-			totalBytes += len(c.Data)
-		}
+		totalBytes += contentByteSize(c)
 	}
 
 	// No truncation needed
@@ -54,9 +66,10 @@ func truncateToolOutput(ctx context.Context, toolName, callID string, response *
 	}
 
 	timestamp := time.Now().Format("20060102-150405")
+	safeSessionID := sanitizeFileName(sessionID)
 	safeToolName := sanitizeFileName(toolName)
 	safeCallID := sanitizeFileName(callID)
-	outputDir := filepath.Join(".nanobot", sessionID, "truncated-tool-outputs")
+	outputDir := filepath.Join(".nanobot", safeSessionID, "truncated-tool-outputs")
 
 	if err := os.MkdirAll(outputDir, 0700); err != nil {
 		return TruncationResult{}, fmt.Errorf("failed to create tool output directory: %w", err)
@@ -77,19 +90,21 @@ func truncateToolOutput(ctx context.Context, toolName, callID string, response *
 	result := make([]mcp.Content, 0, len(response.Content))
 
 	for _, c := range response.Content {
+		size := contentByteSize(c)
+
 		if c.Type != "text" {
 			// Non-text: keep if it fits entirely, otherwise drop
-			if len(c.Data) <= remaining {
+			if size <= remaining {
 				result = append(result, c)
-				remaining -= len(c.Data)
+				remaining -= size
 			}
 			continue
 		}
 
 		// Text item: keep if it fits entirely
-		if len(c.Text) <= remaining {
+		if size <= remaining {
 			result = append(result, c)
-			remaining -= len(c.Text)
+			remaining -= size
 			continue
 		}
 
@@ -137,6 +152,7 @@ func sanitizeFileName(name string) string {
 		"<", "_",
 		">", "_",
 		"|", "_",
+		".", "_",
 		" ", "-",
 	)
 	return replacer.Replace(name)
