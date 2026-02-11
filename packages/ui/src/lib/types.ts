@@ -284,7 +284,7 @@ export interface StringSchema {
 	description?: string;
 	minLength?: number;
 	maxLength?: number;
-	format?: 'email' | 'uri' | 'date' | 'date-time';
+	format?: 'email' | 'uri' | 'date' | 'date-time' | 'password';
 }
 
 export interface NumberSchema {

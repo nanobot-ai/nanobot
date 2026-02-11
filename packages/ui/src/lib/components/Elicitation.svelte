@@ -259,6 +259,16 @@
 										class="input-bordered input w-full"
 										required={isRequired(key)}
 									/>
+								{:else if schema.format === 'password'}
+									<input
+										id={key}
+										type="password"
+										bind:value={formData[key]}
+										class="input-bordered input w-full"
+										required={isRequired(key)}
+										minlength={schema.minLength}
+										maxlength={schema.maxLength}
+									/>
 								{:else}
 									<input
 										id={key}
