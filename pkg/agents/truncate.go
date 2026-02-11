@@ -26,8 +26,8 @@ type TruncationResult struct {
 }
 
 // truncateToolOutput checks if a tool output needs truncation and truncates it if necessary.
-// It saves the full output to disk and returns a message with the truncated content.
-func truncateToolOutput(ctx context.Context, toolName string, response *types.CallResult, maxBytes int) (*TruncationResult, error) {
+// It saves the full original content as JSON to disk and returns truncated content.
+func truncateToolOutput(ctx context.Context, toolName, callID string, response *types.CallResult, maxBytes int) (TruncationResult, error) {
 	if maxBytes <= 0 {
 		maxBytes = DefaultMaxBytes
 	}
@@ -42,22 +42,12 @@ func truncateToolOutput(ctx context.Context, toolName string, response *types.Ca
 		}
 	}
 
+	// No truncation needed
 	if totalBytes <= maxBytes {
-		return &TruncationResult{
-			Content:   response.Content,
-			Truncated: false,
-		}, nil
+		return TruncationResult{}, nil
 	}
 
-	// Collect full text for saving to disk
-	var fullText strings.Builder
-	for _, c := range response.Content {
-		if c.Type == "text" {
-			fullText.WriteString(c.Text)
-		}
-	}
-
-	// Save full output to disk
+	// Save full original content to disk as JSON
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
 	if sessionID == "" {
 		sessionID = "default"
@@ -65,24 +55,26 @@ func truncateToolOutput(ctx context.Context, toolName string, response *types.Ca
 
 	timestamp := time.Now().Format("20060102-150405")
 	safeToolName := sanitizeFileName(toolName)
-	outputDir := filepath.Join(".nanobot", sessionID, "tool-outputs")
+	safeCallID := sanitizeFileName(callID)
+	outputDir := filepath.Join(".nanobot", sessionID, "truncated-tool-outputs")
 
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create tool output directory: %w", err)
+	if err := os.MkdirAll(outputDir, 0700); err != nil {
+		return TruncationResult{}, fmt.Errorf("failed to create tool output directory: %w", err)
 	}
 
-	fileName := fmt.Sprintf("%s-%s-full-text.txt", timestamp, safeToolName)
-	filePath := filepath.Join(outputDir, fileName)
+	filePath := filepath.Join(outputDir, fmt.Sprintf("%s-%s-%s.json", timestamp, safeToolName, safeCallID))
 
-	if err := os.WriteFile(filePath, []byte(fullText.String()), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write full output to file: %w", err)
+	fullJSON, err := json.Marshal(response.Content)
+	if err != nil {
+		return TruncationResult{}, fmt.Errorf("failed to marshal full content: %w", err)
+	}
+	if err := os.WriteFile(filePath, fullJSON, 0600); err != nil {
+		return TruncationResult{}, fmt.Errorf("failed to write full output to file: %w", err)
 	}
 
 	// Walk content items in original order with a remaining byte budget
 	remaining := maxBytes
 	result := make([]mcp.Content, 0, len(response.Content))
-	var droppedItems []mcp.Content
-	textTruncated := false
 
 	for _, c := range response.Content {
 		if c.Type != "text" {
@@ -90,8 +82,6 @@ func truncateToolOutput(ctx context.Context, toolName string, response *types.Ca
 			if len(c.Data) <= remaining {
 				result = append(result, c)
 				remaining -= len(c.Data)
-			} else {
-				droppedItems = append(droppedItems, c)
 			}
 			continue
 		}
@@ -106,41 +96,16 @@ func truncateToolOutput(ctx context.Context, toolName string, response *types.Ca
 		// Partial text truncation: truncate on a clean UTF-8 boundary
 		truncated := truncateUTF8(c.Text, remaining)
 		result = append(result, mcp.Content{Type: "text", Text: truncated})
-		textTruncated = true
 		// Stop processing further items after text truncation
 		break
 	}
 
-	// Save dropped non-text items to disk
-	var droppedFilePath string
-	if len(droppedItems) > 0 {
-		droppedFileName := fmt.Sprintf("%s-%s-dropped-items.json", timestamp, safeToolName)
-		droppedFilePath = filepath.Join(outputDir, droppedFileName)
-		droppedJSON, err := json.Marshal(droppedItems)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal dropped content items: %w", err)
-		}
-		if err := os.WriteFile(droppedFilePath, droppedJSON, 0644); err != nil {
-			return nil, fmt.Errorf("failed to write dropped content to file: %w", err)
-		}
-	}
+	result = append(result, mcp.Content{
+		Type: "text",
+		Text: fmt.Sprintf("\n\n(Tool output truncated because it is too large. Full output saved to: %s)", filePath),
+	})
 
-	// Build truncation notice
-	var notice strings.Builder
-	if textTruncated {
-		fmt.Fprintf(&notice, "Output truncated. Full output saved to: %s", filePath)
-	}
-	if len(droppedItems) > 0 {
-		if notice.Len() > 0 {
-			notice.WriteString(". ")
-		}
-		fmt.Fprintf(&notice, "%d non-text content item(s) dropped due to size, saved to: %s", len(droppedItems), droppedFilePath)
-	}
-	if notice.Len() > 0 {
-		result = append(result, mcp.Content{Type: "text", Text: fmt.Sprintf("\n\n(%s)", notice.String())})
-	}
-
-	return &TruncationResult{
+	return TruncationResult{
 		Content:   result,
 		Truncated: true,
 		FilePath:  filePath,
