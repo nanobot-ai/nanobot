@@ -1,4 +1,4 @@
-package agents
+package tools
 
 import (
 	"context"
@@ -25,8 +25,8 @@ type TruncationResult struct {
 	FilePath  string
 }
 
-// contentByteSize returns the byte size of a content item's payload.
-func contentByteSize(c mcp.Content) int {
+// ContentByteSize returns the byte size of a content item's payload.
+func ContentByteSize(c mcp.Content) int {
 	switch c.Type {
 	case "text":
 		return len(c.Text)
@@ -41,9 +41,9 @@ func contentByteSize(c mcp.Content) int {
 	}
 }
 
-// truncateToolOutput checks if a tool output needs truncation and truncates it if necessary.
+// TruncateToolOutput checks if a tool output needs truncation and truncates it if necessary.
 // It saves the full original content as JSON to disk and returns truncated content.
-func truncateToolOutput(ctx context.Context, toolName, callID string, response *types.CallResult, maxBytes int) (TruncationResult, error) {
+func TruncateToolOutput(ctx context.Context, toolName, callID string, response *types.CallResult, maxBytes int) (TruncationResult, error) {
 	if maxBytes <= 0 {
 		maxBytes = DefaultMaxBytes
 	}
@@ -51,7 +51,7 @@ func truncateToolOutput(ctx context.Context, toolName, callID string, response *
 	// Calculate total size across all content items
 	totalBytes := 0
 	for _, c := range response.Content {
-		totalBytes += contentByteSize(c)
+		totalBytes += ContentByteSize(c)
 	}
 
 	// No truncation needed
@@ -66,9 +66,9 @@ func truncateToolOutput(ctx context.Context, toolName, callID string, response *
 	}
 
 	timestamp := time.Now().Format("20060102-150405")
-	safeSessionID := sanitizeFileName(sessionID)
-	safeToolName := sanitizeFileName(toolName)
-	safeCallID := sanitizeFileName(callID)
+	safeSessionID := SanitizeFileName(sessionID)
+	safeToolName := SanitizeFileName(toolName)
+	safeCallID := SanitizeFileName(callID)
 	outputDir := filepath.Join(".nanobot", safeSessionID, "truncated-tool-outputs")
 
 	if err := os.MkdirAll(outputDir, 0700); err != nil {
@@ -90,12 +90,12 @@ func truncateToolOutput(ctx context.Context, toolName, callID string, response *
 	result := []mcp.Content{
 		{
 			Type: "text",
-			Text: fmt.Sprintf("(Tool output truncated because it is too large. Full output saved to: %s)\n\n", filePath),
+			Text: fmt.Sprintf("Tool output truncated because it is too large. Full output saved to: %s\n\n", filePath),
 		},
 	}
 
 	for _, c := range response.Content {
-		size := contentByteSize(c)
+		size := ContentByteSize(c)
 
 		if c.Type != "text" {
 			// Non-text: keep if it fits entirely, otherwise drop
@@ -139,8 +139,8 @@ func truncateUTF8(s string, maxBytes int) string {
 	return s[:maxBytes]
 }
 
-// sanitizeFileName removes characters that aren't safe for filenames
-func sanitizeFileName(name string) string {
+// SanitizeFileName removes characters that aren't safe for filenames
+func SanitizeFileName(name string) string {
 	// Replace unsafe characters with underscores
 	replacer := strings.NewReplacer(
 		"/", "_",
