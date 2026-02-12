@@ -1,7 +1,8 @@
 <script lang="ts">
-import { ChevronDown } from "@lucide/svelte";
+import { ChevronDown, Monitor } from "@lucide/svelte";
 import Elicitation from "$lib/components/Elicitation.svelte";
 import Prompt from "$lib/components/Prompt.svelte";
+import BrowserViewer from "$lib/components/BrowserViewer.svelte";
 import type {
 	Agent,
 	Attachment,
@@ -68,6 +69,37 @@ let showScrollButton = $state(false);
 let previousLastMessageId = $state<string | null>(null);
 const hasMessages = $derived(messages && messages.length > 0);
 let selectedPrompt = $state<string | undefined>();
+let showBrowserViewer = $state(false);
+let browserViewerWidth = $state(50); // percentage
+let isResizing = $state(false);
+
+function startResize(e: MouseEvent) {
+	isResizing = true;
+	e.preventDefault();
+}
+
+function stopResize() {
+	isResizing = false;
+}
+
+function resize(e: MouseEvent) {
+	if (!isResizing) return;
+	const container = e.currentTarget as HTMLElement;
+	if (!container) return;
+
+	const rect = container.getBoundingClientRect();
+	const newWidth = ((rect.right - e.clientX) / rect.width) * 100;
+
+	// Constrain between 20% and 80%
+	browserViewerWidth = Math.max(20, Math.min(80, newWidth));
+}
+
+$effect(() => {
+	if (isResizing) {
+		window.addEventListener('mouseup', stopResize);
+		return () => window.removeEventListener('mouseup', stopResize);
+	}
+});
 
 // Watch for changes to the last message ID and scroll to bottom
 $effect(() => {
@@ -108,9 +140,23 @@ function scrollToBottom() {
 }
 </script>
 
-<div class="flex h-dvh w-full flex-col md:relative peer-[.workspace]:md:w-1/4">
-	<!-- Messages area - full height scrollable with bottom padding for floating input -->
-	<div class="w-full overflow-y-auto" bind:this={messagesContainer} onscroll={handleScroll}>
+<div class="flex h-dvh w-full flex-row md:relative peer-[.workspace]:md:w-1/4" onmousemove={resize}>
+	<!-- Chat area -->
+	<div class="flex flex-col" style="width: {showBrowserViewer ? `${100 - browserViewerWidth}%` : '100%'}">
+		<!-- Header with browser viewer toggle -->
+		<div class="flex items-center justify-end border-b border-base-300 bg-base-100 px-4 py-2">
+			<button
+				class="btn btn-ghost btn-sm"
+				onclick={() => (showBrowserViewer = !showBrowserViewer)}
+				title="Toggle browser view"
+			>
+				<Monitor size={16} />
+				Browser
+			</button>
+		</div>
+
+		<!-- Messages area - full height scrollable with bottom padding for floating input -->
+		<div class="w-full flex-1 overflow-y-auto" bind:this={messagesContainer} onscroll={handleScroll}>
 		<div class="mx-auto max-w-4xl">
 			<!-- Prompts section - show when prompts available and no messages -->
 			{#if prompts && prompts.length > 0}
@@ -139,42 +185,61 @@ function scrollToBottom() {
 		</div>
 	</div>
 
-	<!-- Message input - centered when no messages, bottom when messages exist -->
-	<div
-		class="absolute right-0 bottom-0 left-0 flex flex-col transition-all duration-500 ease-in-out {hasMessages
-			? 'bg-base-100/80 backdrop-blur-sm'
-			: 'md:-translate-y-1/2 [@media(min-height:900px)]:md:top-1/2 [@media(min-height:900px)]:md:bottom-auto'}"
-	>
-		<!-- Scroll to bottom button -->
-		{#if showScrollButton && hasMessages}
-			<button
-				class="btn mx-auto btn-circle border-base-300 bg-base-100 shadow-lg btn-md active:translate-y-0.5"
-				onclick={scrollToBottom}
-				aria-label="Scroll to bottom"
-			>
-				<ChevronDown class="size-5" />
-			</button>
-		{/if}
-		<div class="mx-auto w-full max-w-4xl">
-			<MessageInput
-				placeholder={`Type your message...${prompts && prompts.length > 0 ? ' or / for prompts' : ''}`}
-				onSend={onSendMessage}
-				{resources}
-				{messages}
-				{agents}
-				{selectedAgentId}
-				{onAgentChange}
-				onPrompt={(p) => (selectedPrompt = p)}
-				{onFileUpload}
-				disabled={isLoading}
-				{prompts}
-				{cancelUpload}
-				{uploadingFiles}
-				{uploadedFiles}
-			/>
+		<!-- Message input - centered when no messages, bottom when messages exist -->
+		<div
+			class="absolute right-0 bottom-0 left-0 flex flex-col transition-all duration-500 ease-in-out {hasMessages
+				? 'bg-base-100/80 backdrop-blur-sm'
+				: 'md:-translate-y-1/2 [@media(min-height:900px)]:md:top-1/2 [@media(min-height:900px)]:md:bottom-auto'}"
+		>
+			<!-- Scroll to bottom button -->
+			{#if showScrollButton && hasMessages}
+				<button
+					class="btn mx-auto btn-circle border-base-300 bg-base-100 shadow-lg btn-md active:translate-y-0.5"
+					onclick={scrollToBottom}
+					aria-label="Scroll to bottom"
+				>
+					<ChevronDown class="size-5" />
+				</button>
+			{/if}
+			<div class="mx-auto w-full max-w-4xl">
+				<MessageInput
+					placeholder={`Type your message...${prompts && prompts.length > 0 ? ' or / for prompts' : ''}`}
+					onSend={onSendMessage}
+					{resources}
+					{messages}
+					{agents}
+					{selectedAgentId}
+					{onAgentChange}
+					onPrompt={(p) => (selectedPrompt = p)}
+					{onFileUpload}
+					disabled={isLoading}
+					{prompts}
+					{cancelUpload}
+					{uploadingFiles}
+					{uploadedFiles}
+				/>
+			</div>
 		</div>
 	</div>
 
+	<!-- Resize handle -->
+	{#if showBrowserViewer}
+		<div
+			class="w-1 cursor-col-resize bg-base-300 hover:bg-primary transition-colors"
+			onmousedown={startResize}
+			role="separator"
+			aria-label="Resize browser viewer"
+		></div>
+	{/if}
+
+	<!-- Browser viewer pane -->
+	{#if showBrowserViewer}
+		<div class="flex flex-col" style="width: {browserViewerWidth}%">
+			<BrowserViewer bind:visible={showBrowserViewer} />
+		</div>
+	{/if}
+
+	<!-- Elicitations (appears over everything) -->
 	{#if elicitations && elicitations.length > 0}
 		{#key elicitations[0].id}
 			<Elicitation
