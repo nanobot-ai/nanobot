@@ -17,7 +17,7 @@
 	$effect(() => {
 		const newFormData: { [key: string]: string | number | boolean } = {};
 
-		for (const [key, schema] of Object.entries(elicitation.requestedSchema.properties)) {
+		for (const [key, schema] of Object.entries(elicitation.requestedSchema?.properties ?? {})) {
 			if (schema.type === 'boolean' && schema.default !== undefined) {
 				newFormData[key] = schema.default;
 			} else if (
@@ -54,7 +54,7 @@
 	}
 
 	function isRequired(key: string): boolean {
-		return elicitation.requestedSchema.required?.includes(key) ?? false;
+		return elicitation.requestedSchema?.required?.includes(key) ?? false;
 	}
 
 	function getFieldTitle(key: string, schema: PrimitiveSchemaDefinition): string {
@@ -62,7 +62,7 @@
 	}
 
 	function validateForm(): boolean {
-		if (!elicitation.requestedSchema.required) return true;
+		if (!elicitation.requestedSchema?.required) return true;
 
 		for (const requiredField of elicitation.requestedSchema.required) {
 			const value = formData[requiredField];
@@ -74,15 +74,14 @@
 	}
 
 	function isOAuthElicitation(): boolean {
-		return Boolean(elicitation._meta?.['ai.nanobot.meta/oauth-url']);
+		return (
+			elicitation.mode === 'url' ||
+			Boolean(elicitation._meta?.['ai.nanobot.meta/oauth-url'])
+		);
 	}
 
 	function getOAuthUrl(): string {
-		return elicitation._meta?.['ai.nanobot.meta/oauth-url'] as string;
-	}
-
-	function getServerName(): string {
-		return (elicitation._meta?.['ai.nanobot.meta/server-name'] as string) || 'MCP Server';
+		return elicitation.url || (elicitation._meta?.['ai.nanobot.meta/oauth-url'] as string);
 	}
 
 	function openOAuthLink() {
@@ -116,10 +115,7 @@
 				<h3 class="mb-4 text-lg font-bold">Authentication Required</h3>
 
 				<div class="mb-6">
-					<p class="mb-4 text-base-content/80">
-						The <strong>{getServerName()}</strong> server requires authentication to continue.
-					</p>
-					<p class="mb-4 text-base-content/80">Please click the link below to authenticate:</p>
+					<p class="mb-4 whitespace-pre-wrap text-base-content/80">{elicitation.message}</p>
 
 					<div class="group relative mb-4 rounded-lg bg-base-200 p-4">
 						<p class="pr-8 font-mono text-sm break-all text-base-content/90">{getOAuthUrl()}</p>
@@ -164,7 +160,7 @@
 						handleAccept();
 					}}
 				>
-					{#each Object.entries(elicitation.requestedSchema.properties) as [key, schema] (key)}
+					{#each Object.entries(elicitation.requestedSchema?.properties ?? {}) as [key, schema] (key)}
 						<div class="form-control">
 							<label class="label" for={key}>
 								<span class="label-text font-medium">
@@ -258,6 +254,16 @@
 										bind:value={formData[key]}
 										class="input-bordered input w-full"
 										required={isRequired(key)}
+									/>
+								{:else if schema.format === 'password'}
+									<input
+										id={key}
+										type="password"
+										bind:value={formData[key]}
+										class="input-bordered input w-full"
+										required={isRequired(key)}
+										minlength={schema.minLength}
+										maxlength={schema.maxLength}
 									/>
 								{:else}
 									<input

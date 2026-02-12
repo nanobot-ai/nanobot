@@ -234,6 +234,23 @@ Usage notes:
 		// Skills tools
 		mcp.NewServerTool("listSkills", "List all available skills with their names and descriptions", s.listSkills),
 		mcp.NewServerTool("getSkill", "Get the full content of a specific skill by name (with or without .md extension)", s.getSkill),
+		// Dynamic MCP server tools
+		mcp.NewServerTool("addMCPServer", `Dynamically adds an MCP server to the current session.
+
+The new server will be available immediately and its tools can be used in subsequent turns.
+The URL must match the host in the mcp-server-search URL. Server names must not contain '/' or use reserved names.
+
+Parameters:
+- url (required): The URL of the MCP server to add
+- name (required): A unique name for the server (used to reference it later)
+
+The server is session-scoped and will not persist after the session ends.`, s.addMCPServer),
+		mcp.NewServerTool("removeMCPServer", `Removes a dynamically added MCP server from the current session.
+
+Parameters:
+- name (required): The name of the dynamically added server to remove
+
+Only servers added via addMCPServer can be removed with this tool.`, s.removeMCPServer),
 	)
 
 	return s
