@@ -238,7 +238,7 @@ Usage notes:
 		mcp.NewServerTool("addMCPServer", `Dynamically adds an MCP server to the current session.
 
 The new server will be available immediately and its tools can be used in subsequent turns.
-Headers can be inherited from an existing MCP server (defaults to 'mcp-server-search' if available).
+The URL must match the host in the mcp-server-search URL. Server names must not contain '/' or use reserved names.
 
 Parameters:
 - url (required): The URL of the MCP server to add

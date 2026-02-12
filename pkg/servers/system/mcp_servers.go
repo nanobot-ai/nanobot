@@ -3,10 +3,17 @@ package system
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
+
+// reservedServerNames contains names that cannot be used for dynamic MCP servers
+var reservedServerNames = map[string]struct{}{
+	"nanobot.system": struct{},
+}
 
 // DynamicMCPServersSessionKey is the session key for storing dynamically added MCP servers
 const DynamicMCPServersSessionKey = "dynamicMCPServers"
@@ -47,10 +54,38 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("name is required")
 	}
 
+	// Validate server name
+	if strings.Contains(params.Name, "/") {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("server name must not contain '/'")
+	}
+	if _, exists := reservedServerNames[params.Name]; exists {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("server name '%s' is reserved", params.Name)
+	}
+
+	// Validate URL format
+	parsedURL, err := url.Parse(params.URL)
+	if err != nil {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid URL: %v", err)
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("URL must use http or https scheme")
+	}
+
 	// Get session
 	session := mcp.SessionFromContext(ctx)
 	if session == nil {
 		return nil, mcp.ErrRPCInternal.WithMessage("no session found")
+	}
+
+	// Validate that the URL hostname+port matches the MCP_SERVER_SEARCH_URL host (Obot host)
+	envMap := session.GetEnvMap()
+	if searchURL := envMap["MCP_SERVER_SEARCH_URL"]; searchURL != "" {
+		searchParsed, err := url.Parse(searchURL)
+		if err == nil {
+			if parsedURL.Host != searchParsed.Host {
+				return nil, mcp.ErrRPCInvalidParams.WithMessage("URL host %q does not match the allowed host %q", parsedURL.Host, searchParsed.Host)
+			}
+		}
 	}
 
 	// Get the root session for storing dynamic servers
@@ -115,20 +150,13 @@ func (s *Server) removeMCPServer(ctx context.Context, params RemoveMCPServerPara
 
 	// Get dynamic servers map from session
 	var dynamicServers DynamicMCPServers
-	if !rootSession.Get(DynamicMCPServersSessionKey, &dynamicServers) {
-		return nil, mcp.ErrRPCInvalidParams.WithMessage("no dynamic MCP servers found")
+	if rootSession.Get(DynamicMCPServersSessionKey, &dynamicServers) {
+		// Delete server from map (no-op if it doesn't exist)
+		delete(dynamicServers, params.Name)
+
+		// Save back to session
+		rootSession.Set(DynamicMCPServersSessionKey, dynamicServers)
 	}
-
-	// Check if server exists
-	if _, ok := dynamicServers[params.Name]; !ok {
-		return nil, mcp.ErrRPCInvalidParams.WithMessage("MCP server '%s' not found in dynamic servers", params.Name)
-	}
-
-	// Delete server from map
-	delete(dynamicServers, params.Name)
-
-	// Save back to session
-	rootSession.Set(DynamicMCPServersSessionKey, dynamicServers)
 
 	return map[string]any{
 		"success": true,
