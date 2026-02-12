@@ -70,6 +70,9 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("URL must use http or https scheme")
 	}
+	if parsedURL.Host == "" {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("URL must include a non-empty host")
+	}
 
 	// Get session
 	session := mcp.SessionFromContext(ctx)
@@ -79,15 +82,19 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 
 	// Validate that the URL hostname+port matches the MCP_SERVER_SEARCH_URL host (Obot host)
 	envMap := session.GetEnvMap()
-	if searchURL := envMap["MCP_SERVER_SEARCH_URL"]; searchURL != "" {
-		searchParsed, err := url.Parse(searchURL)
-		if err == nil {
-			if parsedURL.Host != searchParsed.Host {
-				return nil, mcp.ErrRPCInvalidParams.WithMessage("URL host %q does not match the allowed host %q", parsedURL.Host, searchParsed.Host)
-			}
-		}
+	searchURL, ok := envMap["MCP_SERVER_SEARCH_URL"]
+	if !ok || strings.TrimSpace(searchURL) == "" {
+		return nil, mcp.ErrRPCInternal.WithMessage("MCP_SERVER_SEARCH_URL is not configured")
 	}
 
+	searchParsed, err := url.Parse(searchURL)
+	if err != nil || searchParsed.Host == "" {
+		return nil, mcp.ErrRPCInternal.WithMessage("MCP_SERVER_SEARCH_URL is invalid: %v", err)
+	}
+
+	if parsedURL.Host != searchParsed.Host {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("URL host %q does not match the allowed host %q", parsedURL.Host, searchParsed.Host)
+	}
 	// Use MCP_API_KEY from the environment as the Bearer token for dynamic servers
 	var headers map[string]string
 
