@@ -12,7 +12,8 @@ import (
 
 // reservedServerNames contains names that cannot be used for dynamic MCP servers
 var reservedServerNames = map[string]struct{}{
-	"nanobot.system": {},
+	"nanobot.system":   {},
+	"mcp-server-search": {},
 }
 
 // DynamicMCPServersSessionKey is the session key for storing dynamically added MCP servers
