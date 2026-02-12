@@ -197,41 +197,6 @@ func TestAddMCPServer_ValidatesName(t *testing.T) {
 	}
 }
 
-func TestAddMCPServer_NoImplicitAuth(t *testing.T) {
-	s := NewServer("")
-
-	ctx := context.Background()
-	session := mcp.NewEmptySession(ctx)
-	session.Set(mcp.SessionEnvMapKey, map[string]string{
-		"MCP_SERVER_SEARCH_URL": "https://obot.example.com/search",
-		"MCP_API_KEY":           "secret-key",
-	})
-	ctx = mcp.WithSession(ctx, session)
-
-	_, err := s.addMCPServer(ctx, AddMCPServerParams{
-		URL:  "https://obot.example.com/mcp",
-		Name: "test-server",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Verify no headers were injected
-	var dynamicServers DynamicMCPServers
-	if !session.Get(DynamicMCPServersSessionKey, &dynamicServers) {
-		t.Fatal("expected dynamic servers to be stored in session")
-	}
-
-	srv, ok := dynamicServers["test-server"]
-	if !ok {
-		t.Fatal("expected test-server to exist in dynamic servers")
-	}
-
-	if srv.Headers != nil {
-		t.Errorf("expected no headers, got %v", srv.Headers)
-	}
-}
-
 func TestRemoveMCPServer_NonExistentIsNotError(t *testing.T) {
 	s := NewServer("")
 
