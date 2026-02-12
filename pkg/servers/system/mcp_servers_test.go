@@ -105,10 +105,10 @@ func TestAddMCPServer_ValidatesHostMatch(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:      "no search URL configured - allow any",
+			name:      "no search URL configured",
 			serverURL: "https://anything.example.com/mcp",
 			searchURL: "",
-			wantErr:   false,
+			wantErr:   true,
 		},
 	}
 
