@@ -8,6 +8,9 @@
 			"@tailwindcss/oxide",
 			"esbuild",
 			"node-pty"
+		],
+		"ignoredBuiltDependencies": [
+			"@modelcontextprotocol/ext-apps"
 		]
 	},
 	"scripts": {

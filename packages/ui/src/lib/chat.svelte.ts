@@ -15,8 +15,11 @@ import type {
 	Prompt,
 	Prompts,
 	Resource,
+	ResourceContents,
 	Resources,
+	Tool,
 	ToolOutputItem,
+	Tools,
 	UploadedFile,
 	UploadingFile
 } from './types';
@@ -75,6 +78,7 @@ export class ChatAPI {
 			async?: boolean;
 			abort?: AbortController;
 			parseResponse?: (data: CallToolResult) => T;
+			raw?: boolean;
 		}
 	): Promise<T> {
 		// If sessionId is provided, create a new client instance with that session
@@ -102,7 +106,12 @@ export class ChatAPI {
 			}
 
 			// Handle structured content
-			if (result && typeof result === 'object' && 'structuredContent' in result) {
+			if (
+				opts?.raw !== true &&
+				result &&
+				typeof result === 'object' &&
+				'structuredContent' in result
+			) {
 				return (result as { structuredContent: T }).structuredContent;
 			}
 
@@ -193,6 +202,14 @@ export class ChatAPI {
 				};
 			}
 		});
+	}
+
+	async readResource(
+		uri: string,
+		opts?: { abort?: AbortController; sessionId?: string }
+	): Promise<{ contents: ResourceContents[] }> {
+		const client = this.#getClient(opts?.sessionId);
+		return await client.readResource(uri, { abort: opts?.abort });
 	}
 
 	async sendMessage(request: ChatRequest, toolName: string): Promise<ChatResult> {
@@ -357,6 +374,7 @@ export class ChatService {
 	messages: ChatMessage[];
 	prompts: Prompt[];
 	resources: Resource[];
+	tools: Tool[];
 	agent: Agent;
 	agents: Agent[];
 	selectedAgentId: string;
@@ -379,6 +397,7 @@ export class ChatService {
 		this.elicitations = $state<Elicitation[]>([]);
 		this.prompts = $state<Prompt[]>([]);
 		this.resources = $state<Resource[]>([]);
+		this.tools = $state<Tool[]>([]);
 		this.chatId = $state('');
 		this.agent = $state<Agent>({ id: '' });
 		this.agents = $state<Agent[]>([]);
@@ -401,6 +420,7 @@ export class ChatService {
 		this.messages = [];
 		this.prompts = [];
 		this.resources = [];
+		this.tools = [];
 		this.elicitations = [];
 		this.history = undefined;
 		this.isLoading = false;
@@ -421,6 +441,12 @@ export class ChatService {
 		this.listPrompts().then((prompts) => {
 			if (prompts && prompts.prompts) {
 				this.prompts = prompts.prompts;
+			}
+		});
+
+		this.listTools().then((t) => {
+			if (t && t.tools) {
+				this.tools = t.tools;
 			}
 		});
 
@@ -474,6 +500,16 @@ export class ChatService {
 				sessionId: this.chatId
 			}
 		)) as Resources;
+	};
+
+	listTools = async () => {
+		return (await this.api.exchange(
+			'tools/list',
+			{},
+			{
+				sessionId: this.chatId
+			}
+		)) as Tools;
 	};
 
 	private subscribe(chatId: string) {
@@ -664,6 +700,29 @@ export class ChatService {
 			description: file.name,
 			sessionId: this.chatId,
 			abort: controller
+		});
+	};
+
+	readResource = async (
+		uri: string,
+		opts?: { abort?: AbortController }
+	): Promise<{ contents: ResourceContents[] }> => {
+		return await this.api.readResource(uri, {
+			...opts,
+			sessionId: this.chatId
+		});
+	};
+
+	onToolCall = async <T>(
+		toolName: string,
+		args: Record<string, unknown>,
+		opts?: { abort?: AbortController }
+	): Promise<T> => {
+		return await this.api.callMCPTool<T>(toolName, {
+			payload: args,
+			sessionId: this.chatId,
+			abort: opts?.abort,
+			raw: true
 		});
 	};
 }
