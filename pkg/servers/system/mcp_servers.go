@@ -10,11 +10,15 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-// reservedServerNames contains names that cannot be used for dynamic MCP servers
-var reservedServerNames = map[string]struct{}{
-	"nanobot.system":   {},
-	"mcp-server-search": {},
-}
+var (
+	// reservedServerNames contains names that cannot be used for dynamic MCP servers
+	reservedServerNames = map[string]struct{}{
+		"mcp-server-search": {},
+	}
+
+	// reservedServerNamePrefixes contains prefixes that cannot be used for dynamic MCP servers
+	reservedServerNamePrefixes = []string{"nanobot."}
+)
 
 // DynamicMCPServersSessionKey is the session key for storing dynamically added MCP servers
 const DynamicMCPServersSessionKey = "dynamicMCPServers"
@@ -61,6 +65,11 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 	}
 	if _, exists := reservedServerNames[params.Name]; exists {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("server name '%s' is reserved", params.Name)
+	}
+	for _, prefix := range reservedServerNamePrefixes {
+		if strings.HasPrefix(params.Name, prefix) {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("server name '%s' is reserved", params.Name)
+		}
 	}
 
 	// Validate URL format
