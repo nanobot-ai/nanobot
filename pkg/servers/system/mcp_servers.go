@@ -12,7 +12,7 @@ import (
 
 // reservedServerNames contains names that cannot be used for dynamic MCP servers
 var reservedServerNames = map[string]struct{}{
-	"nanobot.system": struct{},
+	"nanobot.system": {},
 }
 
 // DynamicMCPServersSessionKey is the session key for storing dynamically added MCP servers
@@ -88,12 +88,6 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 		}
 	}
 
-	// Get the root session for storing dynamic servers
-	rootSession := session.Root()
-	if rootSession == nil {
-		rootSession = session
-	}
-
 	// Use MCP_API_KEY from the environment as the Bearer token for dynamic servers
 	var headers map[string]string
 
@@ -111,7 +105,7 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 
 	// Get or create dynamic servers map from session
 	var dynamicServers DynamicMCPServers
-	if !rootSession.Get(DynamicMCPServersSessionKey, &dynamicServers) {
+	if !session.Get(DynamicMCPServersSessionKey, &dynamicServers) {
 		dynamicServers = make(DynamicMCPServers)
 	}
 
@@ -119,7 +113,7 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 	dynamicServers[params.Name] = newServer
 
 	// Save back to session
-	rootSession.Set(DynamicMCPServersSessionKey, dynamicServers)
+	session.Set(DynamicMCPServersSessionKey, dynamicServers)
 
 	result := map[string]any{
 		"success": true,
@@ -142,20 +136,14 @@ func (s *Server) removeMCPServer(ctx context.Context, params RemoveMCPServerPara
 		return nil, mcp.ErrRPCInternal.WithMessage("no session found")
 	}
 
-	// Get the root session for storing dynamic servers
-	rootSession := session.Root()
-	if rootSession == nil {
-		rootSession = session
-	}
-
 	// Get dynamic servers map from session
 	var dynamicServers DynamicMCPServers
-	if rootSession.Get(DynamicMCPServersSessionKey, &dynamicServers) {
+	if session.Get(DynamicMCPServersSessionKey, &dynamicServers) {
 		// Delete server from map (no-op if it doesn't exist)
 		delete(dynamicServers, params.Name)
 
 		// Save back to session
-		rootSession.Set(DynamicMCPServersSessionKey, dynamicServers)
+		session.Set(DynamicMCPServersSessionKey, dynamicServers)
 	}
 
 	return map[string]any{

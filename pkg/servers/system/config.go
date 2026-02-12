@@ -85,13 +85,8 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 				agent.MCPServers = append(agent.MCPServers, "mcp-server-search")
 			}
 
-			// Include dynamically added MCP servers from the session
-			rootSession := session.Root()
-			if rootSession == nil {
-				rootSession = session
-			}
 			var dynamicServers DynamicMCPServers
-			if rootSession.Get(DynamicMCPServersSessionKey, &dynamicServers) {
+			if session.Get(DynamicMCPServersSessionKey, &dynamicServers) {
 				for name, server := range dynamicServers {
 					// Skip dynamic servers that would overwrite existing MCP server definitions
 					if _, exists := params.MCPServers[name]; exists {
