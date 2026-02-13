@@ -10,6 +10,7 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -107,6 +108,32 @@ func printHistory(wl *sync.Mutex, rw http.ResponseWriter, req *http.Request, cli
 
 	if progressURI != "" {
 		if err := printProgressURI(wl, rw, req, client, progressURI, printedIDs); err != nil {
+			return err
+		}
+	}
+
+	if err := printPendingElicitation(wl, rw, req, client); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func printPendingElicitation(wl *sync.Mutex, rw http.ResponseWriter, req *http.Request, client *mcp.Client) error {
+	elicitContents, err := client.ReadResource(req.Context(), types.ElicitationURI)
+	if err != nil || elicitContents == nil {
+		return nil
+	}
+
+	for _, content := range elicitContents.Contents {
+		if content.MIMEType != types.ElicitationMimeType || content.Text == nil {
+			continue
+		}
+		var pending agent.PendingElicitation
+		if err := json.Unmarshal([]byte(*content.Text), &pending); err != nil {
+			continue
+		}
+		if err := writeEvent(wl, rw, pending.ID, "elicitation/create", string(pending.Params)); err != nil {
 			return err
 		}
 	}

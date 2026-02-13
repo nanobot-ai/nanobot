@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -84,7 +85,7 @@ func (s *Server) question(ctx context.Context, params QuestionParams) (string, e
 	}
 
 	var result mcp.ElicitResult
-	if err := session.Exchange(ctx, "elicitation/create", elicit, &result); err != nil {
+	if err := agent.ExchangeElicitation(ctx, session, elicit, &result); err != nil {
 		return "", fmt.Errorf("failed to send question elicitation: %w", err)
 	}
 
