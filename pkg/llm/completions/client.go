@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -75,7 +76,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 
 	data, _ := json.Marshal(req)
 	log.Messages(ctx, "completions-api", true, data)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/chat/completions", bytes.NewBuffer(data))
+	httpReq, err := http.NewRequestWithContext(mcp.UserContext(ctx), http.MethodPost, c.BaseURL+"/chat/completions", bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
@@ -260,6 +261,55 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 	}
 
 	if err := lines.Err(); err != nil {
+		// Check if this was a client-initiated cancellation
+		if cancelErr, ok := errors.AsType[*mcp.RequestCancelledError](context.Cause(mcp.UserContext(ctx))); ok && cancelErr != nil {
+			// Ensure response is initialized
+			if !initialized {
+				resp = Response{
+					Object:  "chat.completion",
+					Choices: []Choice{{Index: 0, Message: &Message{Role: "assistant"}}},
+				}
+			}
+
+			contentIndex := 0
+			errorText := "\n\n" + strings.ToUpper(cancelErr.Error())
+			if resp.Choices[contentIndex].Message.Content.Text != nil {
+				*resp.Choices[contentIndex].Message.Content.Text += errorText
+			} else {
+				resp.Choices[contentIndex].Message.Content.Text = &errorText
+			}
+
+			// Send progress notification with the error text
+			progress.Send(ctx, &types.CompletionProgress{
+				Model:     resp.Model,
+				Agent:     agentName,
+				MessageID: resp.ID,
+				Item: types.CompletionItem{
+					ID:      fmt.Sprintf("%s-%d", resp.ID, contentIndex),
+					Partial: true,
+					Content: &mcp.Content{
+						Type: "text",
+						Text: errorText,
+					},
+				},
+			}, opt.ProgressToken)
+
+			// Convert tool calls map to slice before returning
+			if len(toolCalls) > 0 {
+				resp.Choices[0].Message.ToolCalls = make([]ToolCall, len(toolCalls))
+				for i, toolCall := range toolCalls {
+					resp.Choices[0].Message.ToolCalls[i] = *toolCall
+				}
+			}
+
+			respData, err := json.Marshal(resp)
+			if err == nil {
+				log.Messages(ctx, "completions-api", false, respData)
+			}
+
+			return &resp, nil
+		}
+
 		return nil, fmt.Errorf("failed to read streaming response: %w", err)
 	}
 

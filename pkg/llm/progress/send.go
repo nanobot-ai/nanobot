@@ -8,7 +8,7 @@ import (
 )
 
 func Send(ctx context.Context, progress *types.CompletionProgress, progressToken any) {
-	if progressToken == "" || progressToken == nil {
+	if progressToken == nil || progressToken == "" {
 		return
 	}
 	session := mcp.SessionFromContext(ctx)

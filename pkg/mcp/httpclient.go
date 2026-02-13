@@ -522,8 +522,7 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 	// We need to check for various errors and handle them according the spec.
 
 	// Check for an authentication-required error and put the user through the OAuth process.
-	var oauthErr AuthRequiredErr
-	if errors.As(err, &oauthErr) {
+	if oauthErr, ok := errors.AsType[AuthRequiredErr](err); ok {
 		// If there is an existing token, it doesn't work, so delete it.
 		if err := s.oauthHandler.tokenStorage.DeleteTokenConfig(ctx, s.baseURL); err != nil {
 			return fmt.Errorf("failed to delete token config: %w", err)

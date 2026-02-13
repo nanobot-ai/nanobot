@@ -20,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: "1.26"
           cache: true
 
       - name: Set up pnpm
@@ -31,9 +31,9 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '25'
-          cache: 'pnpm'
-          cache-dependency-path: 'pnpm-lock.yaml'
+          node-version: "25"
+          cache: "pnpm"
+          cache-dependency-path: "pnpm-lock.yaml"
 
       - name: Run make validate
         run: make validate

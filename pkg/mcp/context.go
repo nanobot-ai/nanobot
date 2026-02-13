@@ -72,3 +72,27 @@ func MCPServerConfigFromContext(ctx context.Context) Server {
 	config, _ := ctx.Value(mcpServerConfigKey{}).(Server)
 	return config
 }
+
+type requestIDKey struct{}
+
+func WithRequestID(ctx context.Context, requestID any) context.Context {
+	return context.WithValue(ctx, requestIDKey{}, requestID)
+}
+
+func RequestIDFromContext(ctx context.Context) any {
+	return ctx.Value(requestIDKey{})
+}
+
+type userCtxKey struct{}
+
+func withUserCtx(ctx, userCtx context.Context) context.Context {
+	return context.WithValue(ctx, userCtxKey{}, userCtx)
+}
+
+func UserContext(ctx context.Context) context.Context {
+	userCtx, _ := ctx.Value(userCtxKey{}).(context.Context)
+	if userCtx == nil {
+		return ctx
+	}
+	return userCtx
+}

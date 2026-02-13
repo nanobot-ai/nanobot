@@ -697,6 +697,7 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 						},
 					}
 				}
+				// Use the session's context in case the original context was cancelled, as we want to ensure the progress update is sent.
 				_ = session.SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
 					ProgressToken: opt.ProgressToken,
 					Meta: map[string]any{
@@ -725,6 +726,10 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 		return nil, err
 	}
 
+	if targetType != "agent" {
+		// For tools, use the user context so that tool calls can be cancelled by the user.
+		ctx = mcp.UserContext(ctx)
+	}
 	mcpCallResult, err := c.Call(ctx, tool, args, mcp.CallOption{
 		ProgressToken: opt.ProgressToken,
 		Meta:          opt.Meta,

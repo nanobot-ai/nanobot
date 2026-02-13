@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Nanobot is a standalone MCP (Model Context Protocol) host that enables building agents with MCP and MCP-UI. Unlike built-in MCP hosts in applications like VSCode, Claude, or ChatGPT, Nanobot is designed to be an open-source, deployable solution that combines MCP servers with LLMs to create agent experiences through various interfaces (chat, voice, SMS, etc.). The project is written in Go (backend) and Svelte 5 + TypeScript (frontend UI).
 
 **Technology Stack:**
-- Backend: Go 1.25.0 with GORM (SQLite, MySQL, PostgreSQL), goja (JavaScript runtime for hooks)
+- Backend: Go 1.26.0 with GORM (SQLite, MySQL, PostgreSQL), goja (JavaScript runtime for hooks)
 - Frontend: Svelte 5, SvelteKit (static adapter), TypeScript, TailwindCSS 4, DaisyUI
 - Package Manager: pnpm (for frontend dependencies)
 

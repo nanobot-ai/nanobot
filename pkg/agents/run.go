@@ -367,13 +367,11 @@ func (a *Agents) handleUIAction(ctx context.Context, config types.Config, req ty
 			},
 		}
 
-		if opt.ProgressToken != nil {
-			progress.Send(ctx, &types.CompletionProgress{
-				MessageID: resp.Output.ID,
-				Role:      "assistant",
-				Item:      resp.Output.Items[0],
-			}, opt.ProgressToken)
-		}
+		progress.Send(ctx, &types.CompletionProgress{
+			MessageID: resp.Output.ID,
+			Role:      "assistant",
+			Item:      resp.Output.Items[0],
+		}, opt.ProgressToken)
 
 		return newReq, resp, nil
 	}
@@ -454,7 +452,7 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 			session.Set(previousExecutionKey, currentRun)
 		}
 
-		if err := a.toolCalls(ctx, config, currentRun, opts); err != nil {
+		if err := a.toolCalls(ctx, currentRun, opts); err != nil {
 			return nil, err
 		}
 

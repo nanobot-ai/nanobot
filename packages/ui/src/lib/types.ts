@@ -260,11 +260,8 @@ export interface PromptArgument extends BaseMetadata {
 
 export interface Elicitation {
 	id: string | number;
-	mode?: 'form' | 'url';
 	message: string;
-	url?: string;
-	elicitationId?: string;
-	requestedSchema?: {
+	requestedSchema: {
 		type: 'object';
 		properties: {
 			[key: string]: PrimitiveSchemaDefinition;
@@ -287,7 +284,7 @@ export interface StringSchema {
 	description?: string;
 	minLength?: number;
 	maxLength?: number;
-	format?: 'email' | 'uri' | 'date' | 'date-time' | 'password';
+	format?: 'email' | 'uri' | 'date' | 'date-time';
 }
 
 export interface NumberSchema {

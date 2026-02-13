@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -22,6 +23,11 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 		Model: modelName,
 	}
 
+	var (
+		accumulatedText string
+		accumulatedArgs string
+		outputs         []ResponseOutput
+	)
 	for lines.Scan() {
 		line := lines.Text()
 
@@ -44,7 +50,8 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 				progress.Model = event.Response.Model
 				progress.MessageID = event.Response.ID
 			case "response.output_item.added":
-				if event.Item.Type == "function_call" {
+				switch event.Item.Type {
+				case "function_call":
 					progress.Item = types.CompletionItem{
 						Partial: true,
 						HasMore: true,
@@ -54,7 +61,7 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 							Name:   event.Item.Name,
 						},
 					}
-				} else if event.Item.Type == "message" {
+				case "message":
 					progress.Item = types.CompletionItem{
 						Partial: true,
 						HasMore: true,
@@ -65,9 +72,36 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 					}
 				}
 			case "response.function_call_arguments.delta":
+				accumulatedArgs += event.Delta
 				progress.Item.ToolCall.Arguments = event.Delta
 				llmProgress.Send(ctx, &progress, progressToken)
 			case "response.output_item.done":
+				// Save completed output item
+				switch event.Item.Type {
+				case "function_call":
+					outputs = append(outputs, ResponseOutput{
+						FunctionCall: &FunctionCall{
+							ID:        event.Item.ID,
+							CallID:    event.Item.CallID,
+							Name:      event.Item.Name,
+							Arguments: accumulatedArgs,
+						},
+					})
+				case "message":
+					outputs = append(outputs, ResponseOutput{
+						Message: &Message{
+							ID:   event.Item.ID,
+							Role: event.Item.Role,
+							Content: []MessageContent{
+								{OutputText: &OutputText{Text: accumulatedText}},
+							},
+						},
+					})
+				}
+				accumulatedText = ""
+				accumulatedArgs = ""
+
+				// Send progress notification
 				if progress.Item.ID != "" {
 					progress.Item = types.CompletionItem{
 						Partial: true,
@@ -77,6 +111,7 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 				}
 				progress.Item = types.CompletionItem{}
 			case "response.output_text.delta":
+				accumulatedText += event.Delta
 				if progress.Item.Content != nil {
 					progress.Item.Content.Text = event.Delta
 					llmProgress.Send(ctx, &progress, progressToken)
@@ -92,5 +127,63 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 	}
 
 	err = lines.Err()
+	if err != nil {
+		// Check if this was a client-initiated cancellation
+		if cancelErr, ok := errors.AsType[*mcp.RequestCancelledError](context.Cause(mcp.UserContext(ctx))); ok {
+			// Append the cancellation error as if the assistant sent it
+			errorText := "\n\n" + strings.ToUpper(cancelErr.Error())
+			if progress.Item.Content == nil {
+				progress.Item.Content = &mcp.Content{
+					Type: "text",
+				}
+			}
+			progress.Item.Content.Text = errorText
+			progress.Item.HasMore = false
+
+			// Send progress notification with the error text
+			llmProgress.Send(ctx, &progress, progressToken)
+
+			// Construct Response from accumulated streaming data
+			response = Response{
+				Model:  progress.Model,
+				ID:     progress.MessageID,
+				Output: outputs,
+			}
+
+			// Append the error text as a message output (mirroring client.go cancellation handling)
+			outputIndex := len(response.Output) - 1
+			if outputIndex < 0 || response.Output[outputIndex].Message == nil {
+				response.Output = append(response.Output, ResponseOutput{
+					Message: &Message{
+						Role:    "assistant",
+						Content: []MessageContent{},
+					},
+				})
+				outputIndex = len(response.Output) - 1
+			}
+
+			contentIndex := len(response.Output[outputIndex].Message.Content) - 1
+			if contentIndex < 0 {
+				response.Output[outputIndex].Message.Content = append(response.Output[outputIndex].Message.Content, MessageContent{
+					OutputText: &OutputText{},
+				})
+				contentIndex = 0
+			}
+
+			if response.Output[outputIndex].Message.Content[contentIndex].OutputText != nil {
+				if response.Output[outputIndex].Message.Content[contentIndex].OutputText.Text != "" {
+					accumulatedText = response.Output[outputIndex].Message.Content[contentIndex].OutputText.Text
+				}
+				response.Output[outputIndex].Message.Content[contentIndex].OutputText.Text = accumulatedText + errorText
+			} else {
+				response.Output[outputIndex].Message.Content[contentIndex].OutputText = &OutputText{
+					Text: accumulatedText + errorText,
+				}
+			}
+
+			err = nil
+			seen = true
+		}
+	}
 	return
 }

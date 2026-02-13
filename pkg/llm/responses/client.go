@@ -11,6 +11,7 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/log"
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -72,7 +73,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 
 	data, _ := json.Marshal(req)
 	log.Messages(ctx, "responses-api", true, data)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/responses", bytes.NewBuffer(data))
+	httpReq, err := http.NewRequestWithContext(mcp.UserContext(ctx), http.MethodPost, c.BaseURL+"/responses", bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}

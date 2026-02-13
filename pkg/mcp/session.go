@@ -54,6 +54,17 @@ type Session struct {
 	filterID          int
 	sessionManager    SessionStore
 	hooks             Hooks
+
+	workerLock sync.Mutex
+	workers    map[any]context.CancelCauseFunc
+
+	requestIDToProgressTokenLock sync.RWMutex
+	requestIDToProgressToken     map[any]map[any]struct{}
+}
+
+type worker struct {
+	ctx    context.Context
+	cancel context.CancelCauseFunc
 }
 
 type filterRegistration struct {
@@ -77,27 +88,136 @@ func (s *Session) Context() context.Context {
 	return s.ctx
 }
 
-func (s *Session) Go(ctx context.Context, f func(ctx context.Context)) {
-	parentSession := s
-	for parentSession.Parent != nil {
-		parentSession = parentSession.Parent
-	}
+func (s *Session) Go(ctx context.Context, msg Message, f func(context.Context, Message)) {
+	s.run(ctx, true, msg, f)
+}
 
+func (s *Session) Run(ctx context.Context, msg Message, f func(context.Context, Message)) {
+	s.run(ctx, false, msg, f)
+}
+
+func (s *Session) run(ctx context.Context, allowConcurrent bool, msg Message, f func(context.Context, Message)) {
+	parentSession := s.Root()
 	sm := parentSession.sessionManager
 	id := parentSession.ID()
 
-	if sm != nil && id != "" {
+	if allowConcurrent && sm != nil && id != "" {
 		tempSession, ok, sessionErr := sm.Acquire(ctx, nil, id)
 		if sessionErr == nil && ok {
 			go func() {
 				defer sm.Release(tempSession)
-				f(WithSession(ctx, s))
+
+				parentSession.addRequestToProgressMapping(ctx, msg.ProgressToken())
+				ctx = parentSession.addWorker(ctx, msg.ProgressToken())
+
+				defer parentSession.removeProgressTokenMapping(ctx, msg.ProgressToken())
+				defer parentSession.removeWorker(msg.ProgressToken(), nil)
+
+				f(WithSession(ctx, s), msg)
 			}()
 			return
 		}
 	}
 
-	f(ctx)
+	msgID := msg.ID
+	if id := RequestIDFromContext(ctx); id != nil {
+		msgID = id
+	}
+
+	ctx = parentSession.addWorker(ctx, msgID)
+	defer parentSession.removeWorker(msgID, nil)
+
+	f(ctx, msg)
+}
+
+func (s *Session) addWorker(ctx context.Context, id any) context.Context {
+	if id != nil {
+		parentSession := s.Root()
+		parentSession.workerLock.Lock()
+		if parentSession.workers == nil {
+			parentSession.workers = make(map[any]context.CancelCauseFunc, 1)
+		}
+
+		userCtx, cancel := context.WithCancelCause(ctx)
+		parentSession.workers[id] = cancel
+		parentSession.workerLock.Unlock()
+
+		ctx = withUserCtx(ctx, userCtx)
+	}
+
+	return ctx
+}
+
+func (s *Session) StopAllFromRequestID(id any, reason *string) {
+	parentSession := s.Root()
+
+	parentSession.requestIDToProgressTokenLock.RLock()
+	ids := slices.Collect(maps.Keys(parentSession.requestIDToProgressToken[id]))
+	parentSession.requestIDToProgressTokenLock.RUnlock()
+
+	for _, id := range ids {
+		parentSession.removeWorker(id, reason)
+	}
+
+	parentSession.removeWorker(id, reason)
+
+	parentSession.requestIDToProgressTokenLock.Lock()
+	delete(s.requestIDToProgressToken, id)
+	parentSession.requestIDToProgressTokenLock.Unlock()
+}
+
+func (s *Session) removeWorker(id any, reason *string) {
+	if id == nil {
+		return
+	}
+
+	parentSession := s.Root()
+
+	parentSession.workerLock.Lock()
+	cancel := parentSession.workers[id]
+	delete(parentSession.workers, id)
+	parentSession.workerLock.Unlock()
+
+	if cancel != nil {
+		var err error
+		if reason != nil {
+			err = &RequestCancelledError{Reason: *reason}
+		}
+		cancel(err)
+	}
+}
+
+func (s *Session) addRequestToProgressMapping(ctx context.Context, id any) {
+	msgID := RequestIDFromContext(ctx)
+	if msgID != nil && id != nil {
+		parentSession := s.Root()
+		parentSession.requestIDToProgressTokenLock.Lock()
+
+		if parentSession.requestIDToProgressToken == nil {
+			parentSession.requestIDToProgressToken = make(map[any]map[any]struct{}, 1)
+		}
+
+		if parentSession.requestIDToProgressToken[msgID] == nil {
+			parentSession.requestIDToProgressToken[msgID] = make(map[any]struct{})
+		}
+
+		parentSession.requestIDToProgressToken[msgID][id] = struct{}{}
+		parentSession.requestIDToProgressTokenLock.Unlock()
+	}
+}
+
+func (s *Session) removeProgressTokenMapping(ctx context.Context, id any) {
+	msgID := RequestIDFromContext(ctx)
+	if msgID != nil && id != nil {
+		parentSession := s.Root()
+
+		parentSession.requestIDToProgressTokenLock.Lock()
+		delete(parentSession.requestIDToProgressToken[msgID], id)
+		if len(parentSession.requestIDToProgressToken[msgID]) == 0 {
+			delete(parentSession.requestIDToProgressToken, msgID)
+		}
+		parentSession.requestIDToProgressTokenLock.Unlock()
+	}
 }
 
 func (s *Session) ID() string {
@@ -628,6 +748,18 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 	for {
 		select {
 		case <-ctx.Done():
+			// Check if this was a client-initiated cancellation and forward it downstream
+			cause := context.Cause(ctx)
+			if cancelErr, ok := errors.AsType[*RequestCancelledError](cause); ok {
+				// Forward cancellation notification to the downstream server
+				// Use the session context since the current context is cancelled
+				_ = s.SendPayload(s.Context(), "notifications/cancelled", CancelledNotification{
+					RequestID: req.ID,
+					Reason:    cancelErr.Reason,
+				})
+
+				return cause
+			}
 			return ctx.Err()
 		case err = <-errChan:
 			if err != nil {

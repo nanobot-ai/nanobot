@@ -290,6 +290,8 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 		mcp.Invoke(ctx, msg, s.initialize)
 	case "notifications/initialized":
 		// nothing to do
+	case "notifications/cancelled":
+		mcp.HandleCancelled(ctx, msg)
 	case "tools/list":
 		mcp.Invoke(ctx, msg, s.tools.List)
 	case "tools/call":

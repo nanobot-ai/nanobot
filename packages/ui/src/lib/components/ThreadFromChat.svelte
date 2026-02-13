@@ -6,7 +6,7 @@ interface Props {
 	chat: ChatService;
 }
 
-let { chat }: Props = $props();
+const { chat }: Props = $props();
 </script>
 
 {#key chat.chatId}
@@ -26,5 +26,6 @@ let { chat }: Props = $props();
 		uploadedFiles={chat.uploadedFiles}
 		isLoading={chat.isLoading}
 		agent={chat.agent}
+		onCancel={chat.cancelChat}
 	/>
 {/key}
