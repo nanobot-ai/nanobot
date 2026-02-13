@@ -172,6 +172,27 @@ func (s *Server) readProgress(ctx context.Context) (ret []mcp.ResourceContent, _
 	return result, nil
 }
 
+func (s *Server) readPendingElicitation(ctx context.Context) ([]mcp.ResourceContent, error) {
+	var pending PendingElicitation
+	session := mcp.SessionFromContext(ctx)
+	if !session.Get(pendingElicitationKey, &pending) {
+		return nil, nil
+	}
+
+	data, err := json.Marshal(pending)
+	if err != nil {
+		return nil, err
+	}
+
+	return []mcp.ResourceContent{
+		{
+			URI:      types.ElicitationURI,
+			MIMEType: types.ElicitationMimeType,
+			Text:     &[]string{string(data)}[0],
+		},
+	}, nil
+}
+
 func (s *Server) promptGet(ctx context.Context, _ mcp.Message, payload mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 	c := types.ConfigFromContext(ctx)
 	agent := c.Agents[s.agentName]
@@ -223,6 +244,14 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 		}, nil
 	case types.ProgressURI:
 		contents, err = s.readProgress(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return &mcp.ReadResourceResult{
+			Contents: contents,
+		}, nil
+	case types.ElicitationURI:
+		contents, err = s.readPendingElicitation(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -295,6 +324,12 @@ func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListRes
 		Title:       "Chat Streaming Progress",
 		Description: "The streaming content of the current or last chat exchange.",
 		MimeType:    types.ToolResultMimeType,
+	}, mcp.Resource{
+		URI:         types.ElicitationURI,
+		Name:        "pending-elicitation",
+		Title:       "Pending Elicitation",
+		Description: "The pending elicitation for the current session, if any.",
+		MimeType:    types.ElicitationMimeType,
 	})
 	return result, nil
 }

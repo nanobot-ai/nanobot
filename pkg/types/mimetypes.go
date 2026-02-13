@@ -1,17 +1,19 @@
 package types
 
 const (
-	MessageMimeType    = "application/vnd.nanobot.chat.message+json"
-	HistoryMimeType    = "application/vnd.nanobot.chat.history+json"
-	ToolResultMimeType = "application/vnd.nanobot.tool.result+json"
-	ErrorMimeType      = "application/vnd.nanobot.error+json"
-	AgentMimeType      = "application/vnd.nanobot.agent+json"
-	SessionMimeType    = "application/vnd.nanobot.session+json"
-	MetaNanobot        = "ai.nanobot"
+	MessageMimeType     = "application/vnd.nanobot.chat.message+json"
+	HistoryMimeType     = "application/vnd.nanobot.chat.history+json"
+	ToolResultMimeType  = "application/vnd.nanobot.tool.result+json"
+	ErrorMimeType       = "application/vnd.nanobot.error+json"
+	AgentMimeType       = "application/vnd.nanobot.agent+json"
+	SessionMimeType     = "application/vnd.nanobot.session+json"
+	ElicitationMimeType = "application/vnd.nanobot.elicitation+json"
+	MetaNanobot         = "ai.nanobot"
 
-	MessageURI  = "chat://message/%s"
-	HistoryURI  = "chat://history"
-	ProgressURI = "chat://progress"
+	MessageURI     = "chat://message/%s"
+	HistoryURI     = "chat://history"
+	ProgressURI    = "chat://progress"
+	ElicitationURI = "chat://elicitation"
 )
 
 var (
