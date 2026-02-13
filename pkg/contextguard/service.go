@@ -53,7 +53,7 @@ type State struct {
 	Messages     []types.Message
 }
 
-const defaultWarnThreshold = 0.9
+const defaultWarnThreshold = 0.1
 
 func NewService(cfg Config) Service {
 	threshold := cfg.WarnThreshold
@@ -64,6 +64,10 @@ func NewService(cfg Config) Service {
 		WarnThreshold: threshold,
 		UseTiktoken:   cfg.UseTiktoken,
 	}}
+}
+
+func (s Service) Threshold() float64 {
+	return s.config.WarnThreshold
 }
 
 func (s Service) Evaluate(state State) Result {

@@ -607,7 +607,10 @@ func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execut
 			return nil
 		}
 
-		guard := contextguard.NewService(contextguard.Config{WarnThreshold: config.Compaction.EffectiveGuardThreshold(), UseTiktoken: true})
+		guardThreshold := config.Compaction.EffectiveGuardThreshold()
+		log.Infof(ctx, "context guard config: guardThreshold=%.4f compactionEnabled=%v compactionAgent=%s",
+			guardThreshold, config.Compaction.IsEnabled(), config.Compaction.AgentName())
+		guard := contextguard.NewService(contextguard.Config{WarnThreshold: guardThreshold, UseTiktoken: true})
 		guardState := contextguard.State{
 			Model:        modifiedRequest.Model,
 			SystemPrompt: modifiedRequest.SystemPrompt,
@@ -615,9 +618,10 @@ func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execut
 			Messages:     modifiedRequest.Input,
 		}
 		guardResult := guard.Evaluate(guardState)
-		log.Infof(ctx, "context guard: status=%s model=%s estimatedTokens=%d usable=%d context=%d msgCount=%d toolCount=%d",
+		log.Infof(ctx, "context guard: status=%s model=%s estimatedTokens=%d usable=%d context=%d msgCount=%d toolCount=%d threshold=%.4f ratio=%.4f",
 			guardResult.Status, modifiedRequest.Model, guardResult.Totals.InputTokens, guardResult.Limits.Usable,
-			guardResult.Limits.Context, len(modifiedRequest.Input), len(modifiedRequest.Tools))
+			guardResult.Limits.Context, len(modifiedRequest.Input), len(modifiedRequest.Tools),
+			guard.Threshold(), float64(guardResult.Totals.InputTokens)/float64(guardResult.Limits.Usable))
 
 		if run.PendingCompaction && guardResult.Status == contextguard.StatusOK {
 			log.Infof(ctx, "context guard: overriding status to needs_compaction due to PendingCompaction flag")

@@ -139,10 +139,26 @@ func (a *Agents) runCompaction(ctx context.Context, config types.Config, prev *t
 		summaryText = "(compaction summary unavailable)"
 	}
 
-	// Drop older messages entirely and replace with a summary.
-	summaryMessage := types.Message{
+	// Build the summary as a user→assistant pair so that the summary
+	// (assistant role) naturally alternates with a following user message
+	// such as a tool_result. The user message satisfies the Anthropic
+	// requirement that the first message use the "user" role.
+	summaryUser := types.Message{
 		ID:   "compaction-summary-" + uuid.String(),
 		Role: "user",
+		Items: []types.CompletionItem{
+			{
+				ID: uuid.String(),
+				Content: &mcp.Content{
+					Type: "text",
+					Text: "The earlier portion of this conversation has been compacted. A summary follows.",
+				},
+			},
+		},
+	}
+	summaryAssistant := types.Message{
+		ID:   "compaction-summary-asst-" + uuid.String(),
+		Role: "assistant",
 		Items: []types.CompletionItem{
 			{
 				ID: uuid.String(),
@@ -157,9 +173,15 @@ func (a *Agents) runCompaction(ctx context.Context, config types.Config, prev *t
 		},
 	}
 
-	// Rebuild: summary + recent only.
-	newInput := make([]types.Message, 0, 1+len(recent))
-	newInput = append(newInput, summaryMessage)
+	// Rebuild: summary pair + recent messages.
+	newInput := make([]types.Message, 0, 2+len(recent))
+	newInput = append(newInput, summaryUser, summaryAssistant)
+	// If the first retained message is also assistant role, merge its
+	// content into the summary assistant message to maintain alternation.
+	if len(recent) > 0 && recent[0].Role == "assistant" {
+		newInput[1].Items = append(newInput[1].Items, recent[0].Items...)
+		recent = recent[1:]
+	}
 	newInput = append(newInput, recent...)
 
 	// Strip tool_result items whose corresponding tool_call was in the
@@ -286,15 +308,13 @@ func stripOrphanedToolItems(messages []types.Message) []types.Message {
 func extractCompactionSummary(messages []types.Message) string {
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
-		if msg.Role != "user" || len(msg.Items) != 1 {
+		if msg.Role != "assistant" {
 			continue
 		}
-		item := msg.Items[0]
-		if item.Content == nil {
-			continue
-		}
-		if strings.HasPrefix(item.Content.Text, compactionSummaryPrefix) {
-			return strings.TrimSpace(item.Content.Text[len(compactionSummaryPrefix):])
+		for _, item := range msg.Items {
+			if item.Content != nil && strings.HasPrefix(item.Content.Text, compactionSummaryPrefix) {
+				return strings.TrimSpace(item.Content.Text[len(compactionSummaryPrefix):])
+			}
 		}
 	}
 	return ""
