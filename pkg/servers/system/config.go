@@ -10,17 +10,17 @@ import (
 )
 
 var allowedPermsToTools = map[string][]string{
-	"bash":       {"bash"},
-	"read":       {"read"},
-	"write":      {"write", "edit"},
-	"edit":       {"edit"},
-	"glob":       {"glob"},
-	"grep":       {"grep"},
-	"todoWrite":  {"todoWrite"},
-	"webFetch":   {"webFetch"},
-	"skills":     {"getSkill"},
-	"mcpServers": {"addMCPServer", "removeMCPServer"},
-	"question":   {"question"},
+	"bash":            {"bash"},
+	"read":            {"read"},
+	"write":           {"write", "edit"},
+	"edit":            {"edit"},
+	"glob":            {"glob"},
+	"grep":            {"grep"},
+	"todoWrite":       {"todoWrite"},
+	"webFetch":        {"webFetch"},
+	"skills":          {"getSkill"},
+	"mcpServers":      {"addMCPServer", "removeMCPServer"},
+	"askUserQuestion": {"askUserQuestion"},
 }
 
 func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (types.AgentConfigHook, error) {
