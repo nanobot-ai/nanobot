@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -54,7 +55,10 @@ func ExchangeElicitation(ctx context.Context, session *mcp.Session, elicit any, 
 		ID:     msg.ID,
 		Params: msg.Params,
 	})
-	defer root.Delete(pendingElicitationKey)
 
-	return root.Exchange(ctx, "elicitation/create", msg, result)
+	err = root.Exchange(ctx, "elicitation/create", msg, result)
+	if err == nil || errors.Is(err, mcp.ErrNoReader) {
+		root.Delete(pendingElicitationKey)
+	}
+	return err
 }
