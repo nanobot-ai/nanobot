@@ -232,7 +232,7 @@ Usage notes:
   - This tool is read-only and does not modify any files
   - When a URL redirects to a different host, the tool will inform you and provide the redirect URL`, s.webFetch),
 		// Question tool
-		mcp.NewServerTool("question", `Use this tool when you need to ask the user questions during execution. This allows you to:
+		mcp.NewServerTool("askUserQuestion", `Use this tool when you need to ask the user questions during execution. This allows you to:
 1. Gather user preferences or requirements
 2. Clarify ambiguous instructions
 3. Get decisions on implementation choices as you work
