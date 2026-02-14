@@ -106,7 +106,9 @@ my-config/
 ├── agents/              # Agent definitions directory
 │   ├── main.md          # Main agent (auto-set as entrypoint)
 │   └── helper.md        # Additional agent
-└── mcp-servers.yaml     # MCP server definitions
+├── mcp-servers.yaml     # MCP server definitions
+├── skills/              # User-defined skills (optional, overrides built-in)
+└── workflows/           # Workflow definitions (optional)
 ```
 
 **Agent File Format (`agents/main.md`):**
@@ -148,6 +150,7 @@ nanobot run ./my-config/
 - **Auto-entrypoint**: If `agents/main.md` exists, it's automatically set as the default agent
 - **Agent ID**: Use the `id` field in front-matter, or defaults to the filename (without `.md`)
 - **README.md**: Automatically ignored in the `agents/` directory (use it for documentation)
+- **Default location**: Nanobot looks for configuration in `.nanobot/` (current directory or `~/.nanobot/`)
 
 See the [directory-config example](./examples/directory-config/) for a complete working example.
 
@@ -183,7 +186,7 @@ The Nanobot UI lives in the `./ui` directory. To develop against it:
 
    ```bash
    cd ui
-   npm run dev
+   pnpm run dev
    ```
 
 4. The UI must be served from port **5173**.\
