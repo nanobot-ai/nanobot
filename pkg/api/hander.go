@@ -63,6 +63,12 @@ func (s *server) setupContext(_ http.ResponseWriter, req *http.Request) (Context
 		"Authorization": req.Header.Get("Authorization"),
 		"Cookie":        req.Header.Get("Cookie"),
 	}
+	// Forward any X-Forwarded-* headers
+	for key, values := range req.Header {
+		if strings.HasPrefix(key, "X-Forwarded-") && len(values) > 0 {
+			currentServer.Headers[key] = values[0]
+		}
+	}
 
 	if threadID != "" {
 		chatClient, err = mcp.NewClient(req.Context(), "nanobot.ui", currentServer, mcp.ClientOption{
