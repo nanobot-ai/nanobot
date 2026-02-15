@@ -5,12 +5,14 @@ import "github.com/nanobot-ai/nanobot/pkg/mcp"
 const PreviousExecutionKey = "thread"
 
 type Execution struct {
-	Request          CompletionRequest     `json:"request,omitempty"`
-	Done             bool                  `json:"done,omitempty"`
-	PopulatedRequest *CompletionRequest    `json:"populatedRequest,omitempty"`
-	ToolToMCPServer  ToolMappings          `json:"toolToMCPServer,omitempty"`
-	Response         *CompletionResponse   `json:"response,omitempty"`
-	ToolOutputs      map[string]ToolOutput `json:"toolOutputs,omitempty"`
+	Request           CompletionRequest     `json:"request,omitempty"`
+	Done              bool                  `json:"done,omitempty"`
+	PopulatedRequest  *CompletionRequest    `json:"populatedRequest,omitempty"`
+	ToolToMCPServer   ToolMappings          `json:"toolToMCPServer,omitempty"`
+	Response          *CompletionResponse   `json:"response,omitempty"`
+	ToolOutputs       map[string]ToolOutput `json:"toolOutputs,omitempty"`
+	Usage             TokenUsage            `json:"usage,omitempty"`
+	PendingCompaction bool                  `json:"pendingCompaction,omitempty"`
 }
 
 func (e *Execution) Serialize() (any, error) {

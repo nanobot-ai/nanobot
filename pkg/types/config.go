@@ -80,6 +80,37 @@ type Config struct {
 	Hooks            mcp.Hooks             `json:"hooks,omitempty"`
 	WorkspaceID      string                `json:"workspaceId,omitempty"`
 	WorkspaceBaseURI string                `json:"workspaceBaseUri,omitempty"`
+	Compaction       CompactionConfig      `json:"compaction,omitempty"`
+}
+
+type CompactionConfig struct {
+	Enabled        bool    `json:"enabled,omitempty"`
+	Agent          string  `json:"agent,omitempty"`
+	RecentMessages int     `json:"recentMessages,omitempty"`
+	GuardThreshold float64 `json:"guardThreshold,omitempty"`
+}
+
+const (
+	DefaultCompactionAgent          = "nanobot.compact"
+	DefaultCompactionRecentMessages = 6
+)
+
+func (c CompactionConfig) AgentName() string {
+	if c.Agent != "" {
+		return c.Agent
+	}
+	return DefaultCompactionAgent
+}
+
+func (c CompactionConfig) RecentCount() int {
+	if c.RecentMessages > 0 {
+		return c.RecentMessages
+	}
+	return DefaultCompactionRecentMessages
+}
+
+func (c CompactionConfig) EffectiveGuardThreshold() float64 {
+	return c.GuardThreshold
 }
 
 type ConfigFactory func(ctx context.Context, profiles string) (Config, error)
@@ -134,6 +165,16 @@ func (c Config) Validate(allowLocal bool) error {
 		}
 		if err := agent.validate(agentName, c); err != nil {
 			errs = append(errs, err)
+		}
+	}
+
+	if c.Compaction.Enabled {
+		if c.Compaction.RecentMessages < 0 {
+			errs = append(errs, fmt.Errorf("compaction.recentMessages must be non-negative"))
+		}
+		agentName := c.Compaction.AgentName()
+		if _, ok := c.Agents[agentName]; !ok {
+			errs = append(errs, fmt.Errorf("compaction agent %q not defined", agentName))
 		}
 	}
 
