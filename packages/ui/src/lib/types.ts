@@ -20,6 +20,7 @@ export interface Chat {
 	created: string;
 	visibility?: 'public' | 'private';
 	readonly?: boolean;
+	workflowURIs?: string[];
 }
 
 export interface ChatMessage {

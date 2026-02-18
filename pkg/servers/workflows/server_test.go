@@ -74,7 +74,7 @@ func TestResourcesList(t *testing.T) {
 		t.Error("should have no-description workflow")
 	}
 
-	// Verify description and URI format
+	// Verify description, URI format, and _meta from frontmatter
 	testWf := resourceMap["test-workflow"]
 	if testWf.Description != "This is a test workflow for unit testing purposes." {
 		t.Errorf("test-workflow description = %q, want 'This is a test workflow for unit testing purposes.'", testWf.Description)
@@ -85,16 +85,37 @@ func TestResourcesList(t *testing.T) {
 	if testWf.MimeType != "text/markdown" {
 		t.Errorf("test-workflow MimeType = %q, want 'text/markdown'", testWf.MimeType)
 	}
+	if testWf.Meta == nil {
+		t.Fatal("test-workflow Meta should not be nil")
+	}
+	if testWf.Meta["name"] != "Test Workflow" {
+		t.Errorf("test-workflow Meta[name] = %q, want 'Test Workflow'", testWf.Meta["name"])
+	}
+	if testWf.Meta["description"] != "This is a test workflow for unit testing purposes." {
+		t.Errorf("test-workflow Meta[description] = %q", testWf.Meta["description"])
+	}
+	if testWf.Meta["createdAt"] != "2026-01-15T09:00:00Z" {
+		t.Errorf("test-workflow Meta[createdAt] = %q", testWf.Meta["createdAt"])
+	}
 
 	anotherWf := resourceMap["another"]
 	if anotherWf.Description != "Another workflow for testing multiple workflow listing." {
 		t.Errorf("another description = %q, want 'Another workflow for testing multiple workflow listing.'", anotherWf.Description)
+	}
+	if anotherWf.Meta == nil {
+		t.Fatal("another Meta should not be nil")
+	}
+	if anotherWf.Meta["name"] != "Another Workflow" {
+		t.Errorf("another Meta[name] = %q, want 'Another Workflow'", anotherWf.Meta["name"])
 	}
 
 	// no-description should have empty description since it doesn't have "# Workflow:" header
 	noDescWf := resourceMap["no-description"]
 	if noDescWf.Description != "" {
 		t.Errorf("no-description should have empty description, got %q", noDescWf.Description)
+	}
+	if noDescWf.Meta != nil {
+		t.Errorf("no-description Meta should be nil, got %v", noDescWf.Meta)
 	}
 }
 
@@ -150,25 +171,39 @@ func TestResourcesRead(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name          string
-		uri           string
-		expectError   bool
-		shouldContain string
-		expectName    string
+		name             string
+		uri              string
+		expectError      bool
+		shouldContain    string
+		shouldNotContain string
+		expectName       string
+		expectMeta       map[string]string
 	}{
 		{
-			name:          "read workflow with standard URI",
-			uri:           "workflow:///test-workflow",
-			expectError:   false,
-			shouldContain: "# Workflow: test-workflow",
-			expectName:    "test-workflow",
+			name:             "read workflow with standard URI",
+			uri:              "workflow:///test-workflow",
+			expectError:      false,
+			shouldContain:    "## Inputs",
+			shouldNotContain: "---\nname:",
+			expectName:       "test-workflow",
+			expectMeta: map[string]string{
+				"name":        "Test Workflow",
+				"description": "This is a test workflow for unit testing purposes.",
+				"createdAt":   "2026-01-15T09:00:00Z",
+			},
 		},
 		{
-			name:          "read another workflow",
-			uri:           "workflow:///another",
-			expectError:   false,
-			shouldContain: "# Workflow: another",
-			expectName:    "another",
+			name:             "read another workflow",
+			uri:              "workflow:///another",
+			expectError:      false,
+			shouldContain:    "## Steps",
+			shouldNotContain: "---\nname:",
+			expectName:       "another",
+			expectMeta: map[string]string{
+				"name":        "Another Workflow",
+				"description": "Another workflow for testing multiple workflow listing.",
+				"createdAt":   "2026-01-16T10:30:00Z",
+			},
 		},
 		{
 			name:        "nonexistent workflow",
@@ -209,6 +244,9 @@ func TestResourcesRead(t *testing.T) {
 				if tt.shouldContain != "" && !strings.Contains(*content.Text, tt.shouldContain) {
 					t.Errorf("content should contain %q", tt.shouldContain)
 				}
+				if tt.shouldNotContain != "" && strings.Contains(*content.Text, tt.shouldNotContain) {
+					t.Errorf("content should not contain %q (frontmatter should be stripped)", tt.shouldNotContain)
+				}
 				if content.Name != tt.expectName {
 					t.Errorf("content name = %q, want %q", content.Name, tt.expectName)
 				}
@@ -217,6 +255,19 @@ func TestResourcesRead(t *testing.T) {
 				}
 				if content.URI != tt.uri {
 					t.Errorf("content URI = %q, want %q", content.URI, tt.uri)
+				}
+				if tt.expectMeta != nil {
+					if content.Meta == nil {
+						t.Fatal("expected _meta to be set, got nil")
+					}
+					for key, want := range tt.expectMeta {
+						got, ok := content.Meta[key]
+						if !ok {
+							t.Errorf("_meta missing key %q", key)
+						} else if got != want {
+							t.Errorf("_meta[%q] = %q, want %q", key, got, want)
+						}
+					}
 				}
 			}
 		})
@@ -290,6 +341,70 @@ Second paragraph is ignored.
 			result := parseWorkflowDescription(tt.content)
 			if result != tt.expected {
 				t.Errorf("parseWorkflowDescription() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestParseWorkflowFrontmatter(t *testing.T) {
+	tests := []struct {
+		name       string
+		content    string
+		expectMeta workflowMeta
+		expectBody string
+	}{
+		{
+			name:    "full frontmatter",
+			content: "---\nname: Code Review\ndescription: Review code.\ncreatedAt: 2026-01-15T09:00:00Z\n---\n\n## Steps\n\nBody here.",
+			expectMeta: workflowMeta{
+				Name:        "Code Review",
+				Description: "Review code.",
+				CreatedAt:   "2026-01-15T09:00:00Z",
+			},
+			expectBody: "## Steps\n\nBody here.",
+		},
+		{
+			name:       "no frontmatter",
+			content:    "# Workflow: test\n\nJust a body.",
+			expectMeta: workflowMeta{},
+			expectBody: "# Workflow: test\n\nJust a body.",
+		},
+		{
+			name:    "partial fields",
+			content: "---\nname: My Workflow\n---\n\n## Steps",
+			expectMeta: workflowMeta{
+				Name: "My Workflow",
+			},
+			expectBody: "## Steps",
+		},
+		{
+			name:       "malformed frontmatter - no closing delimiter",
+			content:    "---\nname: Broken\n# Workflow: test",
+			expectMeta: workflowMeta{},
+			expectBody: "---\nname: Broken\n# Workflow: test",
+		},
+		{
+			name:       "malformed frontmatter - invalid yaml",
+			content:    "---\n: :\n---\n\n# Workflow: test",
+			expectMeta: workflowMeta{},
+			expectBody: "---\n: :\n---\n\n# Workflow: test",
+		},
+		{
+			name:       "empty content",
+			content:    "",
+			expectMeta: workflowMeta{},
+			expectBody: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			meta, body := parseWorkflowFrontmatter(tt.content)
+			if meta != tt.expectMeta {
+				t.Errorf("meta = %+v, want %+v", meta, tt.expectMeta)
+			}
+			if body != tt.expectBody {
+				t.Errorf("body = %q, want %q", body, tt.expectBody)
 			}
 		})
 	}

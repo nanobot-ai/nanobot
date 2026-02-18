@@ -13,13 +13,54 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/version"
+	"gopkg.in/yaml.v3"
 )
 
 const (
 	workflowsDir = "workflows"
 )
 
+type workflowMeta struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+	CreatedAt   string `yaml:"createdAt"`
+}
+
+// parseWorkflowFrontmatter extracts YAML frontmatter from workflow content.
+// Returns parsed metadata and the remaining body (without frontmatter).
+// If no frontmatter is found, returns zero-value metadata and the full content.
+func parseWorkflowFrontmatter(content string) (workflowMeta, string) {
+	lines := strings.Split(content, "\n")
+	if len(lines) < 3 || strings.TrimSpace(lines[0]) != "---" {
+		return workflowMeta{}, content
+	}
+
+	endIdx := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			endIdx = i
+			break
+		}
+	}
+
+	if endIdx == -1 {
+		return workflowMeta{}, content
+	}
+
+	frontmatterYAML := strings.Join(lines[1:endIdx], "\n")
+	var meta workflowMeta
+	if err := yaml.Unmarshal([]byte(frontmatterYAML), &meta); err != nil {
+		return workflowMeta{}, content
+	}
+
+	body := strings.Join(lines[endIdx+1:], "\n")
+	body = strings.TrimLeft(body, "\n")
+
+	return meta, body
+}
+
 type Server struct {
+	tools          mcp.ServerTools
 	watcher        *fswatch.Watcher
 	subscriptions  *fswatch.SubscriptionManager
 	watcherOnce    sync.Once
@@ -27,9 +68,16 @@ type Server struct {
 }
 
 func NewServer() *Server {
-	return &Server{
+	s := &Server{
 		subscriptions: fswatch.NewSubscriptionManager(context.Background()),
 	}
+
+	s.tools = mcp.NewServerTools(
+		mcp.NewServerTool("record_workflow_run", "Record that a workflow was executed in the current chat session", s.recordWorkflowRun),
+		mcp.NewServerTool("delete_workflow", "Delete a workflow by its URI", s.deleteWorkflow),
+	)
+
+	return s
 }
 
 // Close stops the file watcher and cleans up resources
@@ -48,6 +96,10 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 		// nothing to do
 	case "notifications/cancelled":
 		mcp.HandleCancelled(ctx, msg)
+	case "tools/list":
+		mcp.Invoke(ctx, msg, s.tools.List)
+	case "tools/call":
+		mcp.Invoke(ctx, msg, s.tools.Call)
 	case "resources/list":
 		mcp.Invoke(ctx, msg, s.resourcesList)
 	case "resources/read":
@@ -74,6 +126,7 @@ func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.Ini
 	return &mcp.InitializeResult{
 		ProtocolVersion: params.ProtocolVersion,
 		Capabilities: mcp.ServerCapabilities{
+			Tools: &mcp.ToolsServerCapability{},
 			Resources: &mcp.ResourcesServerCapability{
 				Subscribe:   true,
 				ListChanged: true,
@@ -84,6 +137,40 @@ func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.Ini
 			Version: version.Get().String(),
 		},
 	}, nil
+}
+
+func (s *Server) recordWorkflowRun(ctx context.Context, data struct {
+	URI string `json:"uri"`
+}) (*map[string]string, error) {
+	mcpSession := mcp.SessionFromContext(ctx).Root()
+
+	var uris []string
+	mcpSession.Get(types.WorkflowURIsSessionKey, &uris)
+
+	uris = append(uris, data.URI)
+
+	mcpSession.Set(types.WorkflowURIsSessionKey, uris)
+
+	return &map[string]string{"uri": data.URI}, nil
+}
+
+func (s *Server) deleteWorkflow(ctx context.Context, data struct {
+	URI string `json:"uri"`
+}) (*struct{}, error) {
+	workflowName, err := s.parseWorkflowURI(data.URI)
+	if err != nil {
+		return nil, err
+	}
+
+	workflowPath := filepath.Join(".", workflowsDir, workflowName+".md")
+	if err := os.Remove(workflowPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", data.URI)
+		}
+		return nil, fmt.Errorf("failed to delete workflow: %w", err)
+	}
+
+	return &struct{}{}, nil
 }
 
 // parseWorkflowURI extracts the workflow name from a workflow:///name URI
@@ -161,21 +248,42 @@ func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListR
 
 		name := strings.TrimSuffix(entry.Name(), ".md")
 
-		// Read file to extract description
+		// Read file to extract description and metadata
 		content, err := os.ReadFile(filepath.Join(workflowsPath, entry.Name()))
 		if err != nil {
 			// Skip files we can't read
 			continue
 		}
 
-		description := parseWorkflowDescription(string(content))
+		meta, body := parseWorkflowFrontmatter(string(content))
 
-		result = append(result, mcp.Resource{
+		description := meta.Description
+		if description == "" {
+			description = parseWorkflowDescription(body)
+		}
+
+		resourceMeta := make(map[string]any)
+		if meta.Name != "" {
+			resourceMeta["name"] = meta.Name
+		}
+		if meta.Description != "" {
+			resourceMeta["description"] = meta.Description
+		}
+		if meta.CreatedAt != "" {
+			resourceMeta["createdAt"] = meta.CreatedAt
+		}
+
+		res := mcp.Resource{
 			URI:         fmt.Sprintf("workflow:///%s", name),
 			Name:        name,
 			Description: description,
 			MimeType:    "text/markdown",
-		})
+		}
+		if len(resourceMeta) > 0 {
+			res.Meta = resourceMeta
+		}
+
+		result = append(result, res)
 	}
 
 	return &mcp.ListResourcesResult{Resources: result}, nil
@@ -193,16 +301,31 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
 	}
 
-	contentStr := string(content)
+	meta, body := parseWorkflowFrontmatter(string(content))
+
+	resourceMeta := make(map[string]any)
+	if meta.Name != "" {
+		resourceMeta["name"] = meta.Name
+	}
+	if meta.Description != "" {
+		resourceMeta["description"] = meta.Description
+	}
+	if meta.CreatedAt != "" {
+		resourceMeta["createdAt"] = meta.CreatedAt
+	}
+
+	rc := mcp.ResourceContent{
+		URI:      request.URI,
+		Name:     workflowName,
+		MIMEType: "text/markdown",
+		Text:     &body,
+	}
+	if len(resourceMeta) > 0 {
+		rc.Meta = resourceMeta
+	}
+
 	return &mcp.ReadResourceResult{
-		Contents: []mcp.ResourceContent{
-			{
-				URI:      request.URI,
-				Name:     workflowName,
-				MIMEType: "text/markdown",
-				Text:     &contentStr,
-			},
-		},
+		Contents: []mcp.ResourceContent{rc},
 	}, nil
 }
 
