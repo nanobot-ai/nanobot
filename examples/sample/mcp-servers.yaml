@@ -1,0 +1,8 @@
+systemMonitor:
+  url: http://localhost:3001/mcp
+  publish: true
+  # command: npx
+  # args:
+  #   - -y
+  #   - "@modelcontextprotocol/server-system-monitor"
+  #   - "--stdio"

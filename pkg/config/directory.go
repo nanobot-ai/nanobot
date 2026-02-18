@@ -215,6 +215,13 @@ func loadMCPServers(config *types.Config, dirPath string) error {
 		}
 	}
 
+	// Add servers with Publish flag to config.Publish.MCPServers
+	for name, server := range config.MCPServers {
+		if server.Publish {
+			config.Publish.MCPServers = append(config.Publish.MCPServers, name)
+		}
+	}
+
 	// Validate that all referenced MCP servers exist
 	for agentID, agent := range config.Agents {
 		for _, serverRef := range agent.MCPServers {
