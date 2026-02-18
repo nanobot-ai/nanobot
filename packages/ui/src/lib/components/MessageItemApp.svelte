@@ -17,10 +17,35 @@
 	let reactRoot: ReactDOM.Root | undefined;
 	let displayMode = $state<'inline' | 'fullscreen' | 'pip'>('inline');
 	let prefersBorder = $state<boolean | undefined>(undefined);
+	let appErrors = $state<string[]>([]);
 	let bridgeRef: AppBridge | undefined;
+	let cspHandler: ((e: SecurityPolicyViolationEvent) => void) | undefined;
 
 	const mcpApps = getMcpAppsContext();
 	const sandboxUrl = new URL('/sandbox_proxy.html', window.location.origin);
+
+	// Debounced error sending to LLM
+	let errorDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+	let pendingErrors: string[] = [];
+
+	function flushErrorsToLLM() {
+		if (pendingErrors.length === 0 || !mcpApps.sendMessage) return;
+		const errors = pendingErrors.slice();
+		pendingErrors = [];
+		const msg = `[App Error] The app reported errors:\n${errors.map((e) => `- ${e}`).join('\n')}`;
+		mcpApps.sendMessage(msg);
+	}
+
+	function queueErrorForLLM(error: string) {
+		pendingErrors.push(error);
+		appErrors = [...appErrors, error];
+		clearTimeout(errorDebounceTimer);
+		errorDebounceTimer = setTimeout(flushErrorsToLLM, 500);
+	}
+
+	function dismissErrors() {
+		appErrors = [];
+	}
 
 	function buildHostContext(el: HTMLElement) {
 		const root = document.documentElement;
@@ -85,10 +110,25 @@
 		}
 	}
 
+	// Watch for theme changes and push updated context to the app
+	let themeObserver: MutationObserver | undefined;
+
 	onMount(async () => {
 		if (!container) return;
 
 		document.addEventListener('keydown', handleKeydown);
+
+		// Observe theme changes on <html> element
+		themeObserver = new MutationObserver(() => {
+			if (bridgeRef && container) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				bridgeRef.setHostContext(buildHostContext(container) as any);
+			}
+		});
+		themeObserver.observe(document.documentElement, {
+			attributes: true,
+			attributeFilter: ['data-theme', 'class', 'style']
+		});
 
 		const client = await mcpApps.ensureClient();
 
@@ -153,6 +193,8 @@
 			const prefix = logger ? `[${logger}]` : '[MCP App]';
 			if (['error', 'critical', 'alert', 'emergency'].includes(level)) {
 				console.error(prefix, data);
+				const errorText = typeof data === 'string' ? data : JSON.stringify(data);
+				queueErrorForLLM(`${prefix} ${errorText}`);
 			} else {
 				console.log(prefix, level, data);
 			}
@@ -209,17 +251,47 @@
 						container.style.height = `${height}px`;
 					}
 				},
-				onError: (error: Error) => console.error('[MCP App Error]', error)
+				onError: (error: Error) => {
+					console.error('[MCP App Error]', error);
+					queueErrorForLLM(error.message || String(error));
+				}
 			})
 		);
+
+		// Listen for CSP violations and report them
+		cspHandler = (e: SecurityPolicyViolationEvent) => {
+			const blocked = e.blockedURI || 'unknown';
+			console.warn('[MCP App CSP Violation]', `Blocked: ${blocked}, Directive: ${e.violatedDirective}`);
+			queueErrorForLLM(
+				`[CSP Violation] App tried to load blocked resource from: ${blocked} (directive: ${e.violatedDirective}). The server may need to declare this domain in _meta.ui.csp.resourceDomains.`
+			);
+		};
+		document.addEventListener('securitypolicyviolation', cspHandler);
 	});
 
 	onDestroy(() => {
 		document.removeEventListener('keydown', handleKeydown);
+		if (cspHandler) {
+			document.removeEventListener('securitypolicyviolation', cspHandler);
+		}
+		themeObserver?.disconnect();
+		clearTimeout(errorDebounceTimer);
 		bridgeRef?.close();
 		reactRoot?.unmount();
 	});
 </script>
+
+{#if appErrors.length > 0}
+	<div class="alert alert-error mb-2 text-sm">
+		<div class="flex-1">
+			<p class="font-semibold">App errors:</p>
+			{#each appErrors as error}
+				<p class="text-xs opacity-80">{error}</p>
+			{/each}
+		</div>
+		<button class="btn btn-ghost btn-xs" onclick={dismissErrors}>Dismiss</button>
+	</div>
+{/if}
 
 <div
 	bind:this={container}

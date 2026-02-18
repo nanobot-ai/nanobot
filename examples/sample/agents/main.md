@@ -2,6 +2,7 @@
 name: Scrat 
 model: claude-opus-4-6
 mcpServers:
+  - excalidraw
   - systemMonitor
 ---
 

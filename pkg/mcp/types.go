@@ -383,11 +383,12 @@ func (s ReadResourceResult) MarshalJSON() ([]byte, error) {
 }
 
 type ResourceContent struct {
-	URI      string  `json:"uri"`
-	Name     string  `json:"name"`
-	MIMEType string  `json:"mimeType"`
-	Text     *string `json:"text,omitempty"`
-	Blob     *string `json:"blob,omitempty"`
+	URI      string         `json:"uri"`
+	Name     string         `json:"name"`
+	MIMEType string         `json:"mimeType"`
+	Text     *string        `json:"text,omitempty"`
+	Blob     *string        `json:"blob,omitempty"`
+	Meta     map[string]any `json:"_meta,omitempty"`
 }
 
 func (r ResourceContent) ToDataURI() string {

@@ -1,3 +1,6 @@
+excalidraw:
+  url: https://mcp.excalidraw.com/mcp
+  publish: true
 systemMonitor:
   url: http://localhost:3001/mcp
   publish: true

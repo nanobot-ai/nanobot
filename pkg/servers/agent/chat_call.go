@@ -219,6 +219,7 @@ func (c chatCall) Invoke(ctx context.Context, msg mcp.Message, payload mcp.CallT
 				},
 				{
 					Type:     "resource_link",
+					Name:     "progress",
 					URI:      types.ProgressURI,
 					MIMEType: types.ToolResultMimeType,
 				},
