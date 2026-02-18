@@ -18,6 +18,7 @@
 		get client() { return chat.client; },
 		get tools() { return chat.tools; },
 		ensureClient: () => chat.ensureClient(),
+		sendMessage: (msg: string) => chat.sendMessage(msg),
 	});
 
 	$effect(() => {

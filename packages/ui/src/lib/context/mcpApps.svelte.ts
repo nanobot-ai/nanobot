@@ -6,6 +6,7 @@ interface McpAppsContext {
 	readonly client: Client | undefined;
 	readonly tools: ToolDef[];
 	ensureClient(): Promise<Client | undefined>;
+	sendMessage?(message: string): Promise<unknown>;
 }
 
 const MCP_APPS_KEY = Symbol('mcp-apps');

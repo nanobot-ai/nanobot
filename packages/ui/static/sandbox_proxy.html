@@ -3,8 +3,25 @@
 <body><script>
 window.addEventListener('message', (event) => {
   if (event.data?.method === 'ui/notifications/sandbox-resource-ready') {
-    const html = event.data?.params?.html;
-    if (html) { document.open(); document.write(html); document.close(); }
+    const { html, csp } = event.data?.params ?? {};
+    if (html) {
+      var rd = (csp && csp.resourceDomains || []).join(' ');
+      var cd = (csp && csp.connectDomains || []).join(' ');
+      var cspStr = [
+        "default-src 'none'",
+        "script-src 'self' 'unsafe-inline'" + (rd ? ' ' + rd : ''),
+        "style-src 'self' 'unsafe-inline'" + (rd ? ' ' + rd : ''),
+        cd ? "connect-src 'self' " + cd : "connect-src 'none'",
+        "img-src 'self' data:" + (rd ? ' ' + rd : ''),
+        "font-src 'self'" + (rd ? ' ' + rd : ''),
+        "media-src 'self' data:" + (rd ? ' ' + rd : ''),
+        "object-src 'none'"
+      ].join('; ');
+      var meta = '<meta http-equiv="Content-Security-Policy" content="' + cspStr + '">';
+      document.open();
+      document.write(meta + html);
+      document.close();
+    }
   }
 });
 window.parent.postMessage({ method: 'ui/notifications/sandbox-proxy-ready', params: {} }, '*');
