@@ -254,13 +254,14 @@ type SummaryText struct {
 }
 
 type CompletionResponse struct {
-	Output           Message   `json:"output,omitempty"`
-	InternalMessages []Message `json:"internalMessages,omitempty"`
-	Agent            string    `json:"agent,omitempty"`
-	Model            string    `json:"model,omitempty"`
-	HasMore          bool      `json:"hasMore,omitempty"`
-	Error            string    `json:"error,omitempty"`
-	ProgressToken    any       `json:"progressToken,omitempty"`
+	Output           Message     `json:"output,omitempty"`
+	InternalMessages []Message   `json:"internalMessages,omitempty"`
+	Agent            string      `json:"agent,omitempty"`
+	Model            string      `json:"model,omitempty"`
+	HasMore          bool        `json:"hasMore,omitempty"`
+	Error            string      `json:"error,omitempty"`
+	ProgressToken    any         `json:"progressToken,omitempty"`
+	Usage            *TokenUsage `json:"usage,omitempty"`
 }
 
 func (c *CompletionResponse) Serialize() (any, error) {

@@ -13,6 +13,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hexops/autogold/v2 v2.3.0
 	github.com/obot-platform/mcp-oauth-proxy v0.0.3-0.20260106135339-3745d9b14a30
+	github.com/pkoukk/tiktoken-go v0.1.7
+	github.com/pkoukk/tiktoken-go-loader v0.0.2-0.20240522064338-c17e8bc0f699
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spf13/cobra v1.9.1
 	github.com/tidwall/gjson v1.18.0

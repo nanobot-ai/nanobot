@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
+	"github.com/nanobot-ai/nanobot/pkg/contextguard"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
+	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/schema"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
@@ -22,6 +24,7 @@ import (
 type Agents struct {
 	completer types.Completer
 	registry  *tools.Service
+	guard     contextguard.Service
 }
 
 type ToolListOptions struct {
@@ -33,6 +36,7 @@ func New(completer types.Completer, registry *tools.Service) *Agents {
 	return &Agents{
 		completer: completer,
 		registry:  registry,
+		guard:     contextguard.NewService(contextguard.Config{UseTiktoken: true}),
 	}
 }
 
@@ -568,50 +572,97 @@ func (a *Agents) runAfter(ctx context.Context, config types.Config, req types.Co
 }
 
 func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execution, prev *types.Execution, opts []types.CompletionOptions) error {
-	completionRequest, toolMapping, err := a.populateRequest(ctx, config, run, prev, opts)
-	if err != nil {
-		return err
-	}
+	for {
+		completionRequest, toolMapping, err := a.populateRequest(ctx, config, run, prev, opts)
+		if err != nil {
+			return err
+		}
 
-	// Don't forget about old tools that might not be in use anymore. If the old name mapped to a
-	// different tool we will have a problem but, oh well?
-	allToolMappings := types.ToolMappings{}
-	if prev != nil {
-		maps.Copy(allToolMappings, prev.ToolToMCPServer)
-	}
-	maps.Copy(allToolMappings, toolMapping)
+		allToolMappings := types.ToolMappings{}
+		if prev != nil {
+			maps.Copy(allToolMappings, prev.ToolToMCPServer)
+		}
+		maps.Copy(allToolMappings, toolMapping)
 
-	run.ToolToMCPServer = allToolMappings
+		run.ToolToMCPServer = allToolMappings
 
-	completionRequest, resp, err := a.runBefore(ctx, config, completionRequest)
-	if err != nil {
-		return fmt.Errorf("failed to run before agent: %w", err)
-	} else if resp != nil {
+		completionRequest, resp, err := a.runBefore(ctx, config, completionRequest)
+		if err != nil {
+			return fmt.Errorf("failed to run before agent: %w", err)
+		} else if resp != nil {
+			run.PopulatedRequest = &completionRequest
+			run.Response = resp
+			return nil
+		}
+
 		run.PopulatedRequest = &completionRequest
+
+		modifiedRequest, resp, err := a.handleUIAction(ctx, config, completionRequest, opts)
+		if err != nil {
+			return fmt.Errorf("failed to handle UI action: %w", err)
+		} else if resp != nil {
+			run.Response = resp
+			return nil
+		}
+
+		guardThreshold := config.Compaction.EffectiveGuardThreshold()
+		log.Infof(ctx, "context guard config: guardThreshold=%.4f compactionEnabled=%v compactionAgent=%s",
+			guardThreshold, config.Compaction.IsEnabled(), config.Compaction.AgentName())
+		guard := contextguard.NewService(contextguard.Config{WarnThreshold: guardThreshold, UseTiktoken: true})
+		guardState := contextguard.State{
+			Model:        modifiedRequest.Model,
+			SystemPrompt: modifiedRequest.SystemPrompt,
+			Tools:        modifiedRequest.Tools,
+			Messages:     modifiedRequest.Input,
+		}
+		guardResult := guard.Evaluate(guardState)
+		log.Infof(ctx, "context guard: status=%s model=%s estimatedTokens=%d usable=%d context=%d msgCount=%d toolCount=%d threshold=%.4f ratio=%.4f",
+			guardResult.Status, modifiedRequest.Model, guardResult.Totals.InputTokens, guardResult.Limits.Usable,
+			guardResult.Limits.Context, len(modifiedRequest.Input), len(modifiedRequest.Tools),
+			guard.Threshold(), float64(guardResult.Totals.InputTokens)/float64(guardResult.Limits.Usable))
+
+		if run.PendingCompaction && guardResult.Status == contextguard.StatusOK {
+			log.Infof(ctx, "context guard: overriding status to needs_compaction due to PendingCompaction flag")
+			guardResult.Status = contextguard.StatusNeedsCompaction
+		}
+
+		switch guardResult.Status {
+		case contextguard.StatusNeedsCompaction, contextguard.StatusOverLimit:
+			if !config.Compaction.IsEnabled() {
+				return fmt.Errorf("model %s conversation requires compaction but it is disabled", modifiedRequest.Model)
+			}
+			log.Infof(ctx, "running compaction: status=%s msgCount=%d", guardResult.Status, len(modifiedRequest.Input))
+			changed, err := a.runCompaction(ctx, config, prev, run, &modifiedRequest)
+			if err != nil {
+				return err
+			}
+			if !changed {
+				log.Infof(ctx, "compaction returned no changes, proceeding to completion")
+				run.PendingCompaction = false
+			} else {
+				log.Infof(ctx, "compaction applied, re-running guard with %d messages", len(modifiedRequest.Input))
+				run.PendingCompaction = false
+				// History updated, rebuild the request and re-run guard.
+				continue
+			}
+		case contextguard.StatusOK:
+			log.Infof(ctx, "context guard: proceeding to completion")
+		}
+
+		resp, err = a.completer.Complete(ctx, modifiedRequest, opts...)
+		if err != nil {
+			return err
+		}
+
+		resp, err = a.runAfter(ctx, config, completionRequest, resp)
+		if err != nil {
+			return fmt.Errorf("failed to run after agent: %w", err)
+		}
+
 		run.Response = resp
+		if resp.Usage != nil {
+			run.Usage = types.MergeUsage(run.Usage, *resp.Usage)
+		}
 		return nil
 	}
-
-	run.PopulatedRequest = &completionRequest
-
-	modifiedRequest, resp, err := a.handleUIAction(ctx, config, completionRequest, opts)
-	if err != nil {
-		return fmt.Errorf("failed to handle UI action: %w", err)
-	} else if resp != nil {
-		run.Response = resp
-		return nil
-	}
-
-	resp, err = a.completer.Complete(ctx, modifiedRequest, opts...)
-	if err != nil {
-		return err
-	}
-
-	resp, err = a.runAfter(ctx, config, completionRequest, resp)
-	if err != nil {
-		return fmt.Errorf("failed to run after agent: %w", err)
-	}
-
-	run.Response = resp
-	return nil
 }

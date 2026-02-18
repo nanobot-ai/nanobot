@@ -5,8 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
+	"github.com/nanobot-ai/nanobot/pkg/contextguard"
+	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/tools"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -80,6 +84,11 @@ func (a *Agents) toolCalls(ctx context.Context, run *types.Execution, opts []typ
 			Output: *callOutput,
 			Done:   true,
 		}
+
+		if a.guardAfterTool(ctx, config, run) {
+			run.PendingCompaction = true
+			break
+		}
 	}
 
 	if len(run.ToolOutputs) == 0 {
@@ -114,6 +123,9 @@ func (a *Agents) invoke(ctx context.Context, target types.TargetMapping[types.Ta
 			IsError: true,
 		}
 	}
+	if response != nil {
+		response = a.truncateToolResult(funcCall.ToolCall.CallID, response)
+	}
 	return &types.Message{
 		Role: "user",
 		Items: []types.CompletionItem{
@@ -125,4 +137,47 @@ func (a *Agents) invoke(ctx context.Context, target types.TargetMapping[types.Ta
 			},
 		},
 	}, nil
+}
+
+func (a *Agents) guardAfterTool(ctx context.Context, config types.Config, run *types.Execution) bool {
+	if run == nil || run.Response == nil || run.PopulatedRequest == nil {
+		return false
+	}
+
+	model := run.Response.Model
+	if model == "" {
+		model = run.PopulatedRequest.Model
+	}
+
+	messages := make([]types.Message, 0, len(run.PopulatedRequest.Input)+1+len(run.ToolOutputs))
+	messages = append(messages, run.PopulatedRequest.Input...)
+	messages = append(messages, run.Response.Output)
+
+	if len(run.ToolOutputs) > 0 {
+		for _, callID := range slices.Sorted(maps.Keys(run.ToolOutputs)) {
+			toolCall := run.ToolOutputs[callID]
+			if toolCall.Done {
+				messages = append(messages, toolCall.Output)
+			}
+		}
+	}
+
+	guard := contextguard.NewService(contextguard.Config{WarnThreshold: config.Compaction.EffectiveGuardThreshold(), UseTiktoken: true})
+	result := guard.Evaluate(contextguard.State{
+		Model:        model,
+		SystemPrompt: run.PopulatedRequest.SystemPrompt,
+		Tools:        run.PopulatedRequest.Tools,
+		Messages:     messages,
+	})
+
+	switch result.Status {
+	case contextguard.StatusNeedsCompaction, contextguard.StatusOverLimit:
+		log.Infof(ctx, "guard after tool: status=%s model=%s estimatedTokens=%d usable=%d msgCount=%d",
+			result.Status, model, result.Totals.InputTokens, result.Limits.Usable, len(messages))
+		return true
+	default:
+		log.Infof(ctx, "guard after tool: status=%s model=%s estimatedTokens=%d usable=%d msgCount=%d",
+			result.Status, model, result.Totals.InputTokens, result.Limits.Usable, len(messages))
+		return false
+	}
 }
