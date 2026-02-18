@@ -11,6 +11,7 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
+	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/schema"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
@@ -570,6 +571,30 @@ func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execut
 	completionRequest, toolMapping, err := a.populateRequest(ctx, config, run, prev, opts)
 	if err != nil {
 		return err
+	}
+
+	// Check if compaction is needed
+	agent, agentExists := config.Agents[completionRequest.GetAgent()]
+	if agentExists {
+		ctxWindowSize := getContextWindowSize(agent.ContextWindow)
+		if shouldCompact(completionRequest, ctxWindowSize) {
+			var prevCompacted []types.Message
+			if prev != nil {
+				prevCompacted = prev.CompactedMessages
+			}
+
+			result, compactErr := a.compact(ctx, completionRequest, run.Request.Input, prevCompacted)
+			if compactErr != nil {
+				log.Errorf(ctx, "compaction failed, continuing without: %v", compactErr)
+			} else if result != nil {
+				completionRequest.Input = result.compactedInput
+				run.CompactedMessages = result.archivedMessages
+			}
+		}
+	}
+	// Carry forward compacted messages if no compaction this turn
+	if run.CompactedMessages == nil && prev != nil {
+		run.CompactedMessages = prev.CompactedMessages
 	}
 
 	// Don't forget about old tools that might not be in use anymore. If the old name mapped to a

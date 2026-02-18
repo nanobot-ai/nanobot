@@ -126,6 +126,8 @@ func (a *Agents) toolCalls(ctx context.Context, run *types.Execution, opts []typ
 			}
 		}
 
+		callOutput = truncateToolResult(ctx, functionCall.Name, functionCall.CallID, callOutput)
+
 		if run.ToolOutputs == nil {
 			run.ToolOutputs = make(map[string]types.ToolOutput)
 		}

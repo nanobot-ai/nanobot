@@ -40,6 +40,7 @@ type HookAgent struct {
 	TopP            *json.Number              `json:"topP,omitempty"`
 	Truncation      string                    `json:"truncation,omitempty"`
 	MaxTokens       int                       `json:"maxTokens,omitempty"`
+	ContextWindow   int                       `json:"contextWindow,omitempty"`
 	MimeTypes       []string                  `json:"mimeTypes,omitempty"`
 	Hooks           mcp.Hooks                 `json:"hooks,omitempty"`
 
