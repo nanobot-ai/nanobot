@@ -9,7 +9,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
-	github.com/google/jsonschema-go v0.3.0
+	github.com/google/jsonschema-go v0.4.2
 	github.com/google/uuid v1.6.0
 	github.com/hexops/autogold/v2 v2.3.0
 	github.com/obot-platform/mcp-oauth-proxy v0.0.3-0.20260106135339-3745d9b14a30
