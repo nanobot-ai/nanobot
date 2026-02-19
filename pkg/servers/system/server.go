@@ -264,6 +264,7 @@ Parameters:
 - url (required): The URL of the MCP server to add
 - name (required): A unique name for the server (used to reference it later)
 
+The response includes a "tools" field listing the server's available tools with their names and descriptions.
 The server is session-scoped and will not persist after the session ends.`, s.addMCPServer),
 		mcp.NewServerTool("removeMCPServer", `Removes a dynamically added MCP server from the current session.
 
