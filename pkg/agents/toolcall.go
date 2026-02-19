@@ -12,7 +12,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func (a *Agents) toolCalls(ctx context.Context, run *types.Execution, opts []types.CompletionOptions) error {
+func (a *Agents) toolCalls(ctx context.Context, run *types.Execution, opts []types.CompletionOptions) {
 	for _, output := range run.Response.Output.Items {
 		functionCall := output.ToolCall
 
@@ -22,7 +22,59 @@ func (a *Agents) toolCalls(ctx context.Context, run *types.Execution, opts []typ
 
 		targetServer, ok := run.ToolToMCPServer[functionCall.Name]
 		if !ok {
-			return fmt.Errorf("can not map tool %s to a MCP server", functionCall.Name)
+			err := fmt.Errorf("can not map tool %s to a MCP server", functionCall.Name)
+
+			tcResult := &types.ToolCallResult{
+				CallID: functionCall.CallID,
+				Output: types.CallResult{
+					Content: []mcp.Content{
+						{
+							Type: "text",
+							Text: err.Error(),
+						},
+					},
+				},
+			}
+
+			opt := complete.Complete(opts...)
+			if opt.ProgressToken != nil {
+				// Send a notification so that UI updates.
+				_ = mcp.SessionFromContext(ctx).SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
+					ProgressToken: opt.ProgressToken,
+					Meta: map[string]any{
+						types.CompletionProgressMetaKey: types.CompletionProgress{
+							MessageID: run.Response.Output.ID,
+							Item: types.CompletionItem{
+								ID:             output.ID,
+								ToolCall:       functionCall,
+								ToolCallResult: tcResult,
+							},
+						},
+					},
+				})
+			}
+
+			callOutput := &types.Message{
+				Role: "user",
+				Items: []types.CompletionItem{
+					{
+						Partial:        true,
+						ID:             output.ID,
+						ToolCallResult: tcResult,
+					},
+				},
+			}
+
+			if run.ToolOutputs == nil {
+				run.ToolOutputs = make(map[string]types.ToolOutput)
+			}
+
+			run.ToolOutputs[functionCall.CallID] = types.ToolOutput{
+				Output: *callOutput,
+				Done:   true,
+			}
+
+			return
 		}
 
 		if targetServer.Target.External {
@@ -40,11 +92,13 @@ func (a *Agents) toolCalls(ctx context.Context, run *types.Execution, opts []typ
 		if err != nil || cancelCause != nil {
 			// Check if this was a client-initiated cancellation
 			cancelErr, ok := errors.AsType[*mcp.RequestCancelledError](cancelCause)
-			if !ok || cancelErr == nil {
-				return fmt.Errorf("failed to invoke tool %s on MCP server %s: %w", functionCall.Name, targetServer.MCPServer, err)
+			if ok && cancelErr != nil {
+				err = cancelErr
+				// Preserve what we have and stop processing further tool calls
+				run.Done = true
+			} else {
+				err = fmt.Errorf("failed to invoke tool %s on MCP server %s: %w", functionCall.Name, targetServer.MCPServer, err)
 			}
-			// Preserve what we have and stop processing further tool calls
-			run.Done = true
 
 			if callOutput == nil ||
 				len(callOutput.Items) == 0 ||
@@ -61,7 +115,7 @@ func (a *Agents) toolCalls(ctx context.Context, run *types.Execution, opts []typ
 									Content: []mcp.Content{
 										{
 											Type: "text",
-											Text: cancelErr.Error(),
+											Text: err.Error(),
 										},
 									},
 								},
@@ -85,8 +139,6 @@ func (a *Agents) toolCalls(ctx context.Context, run *types.Execution, opts []typ
 	if len(run.ToolOutputs) == 0 {
 		run.Done = true
 	}
-
-	return nil
 }
 
 func (a *Agents) invoke(ctx context.Context, target types.TargetMapping[types.TargetTool], funcCall tools.ToolCallInvocation, opts []types.CompletionOptions) (*types.Message, error) {
