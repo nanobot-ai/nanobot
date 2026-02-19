@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -34,7 +35,21 @@ func estimateTokens(messages []types.Message, systemPrompt string, tools []types
 			}
 			if item.ToolCallResult != nil {
 				for _, c := range item.ToolCallResult.Output.Content {
-					sb.WriteString(c.Text)
+					switch c.Type {
+					case "text", "":
+						sb.WriteString(c.Text)
+					case "image", "audio":
+						sb.WriteString(c.Data)
+					case "resource":
+						if c.Resource != nil {
+							sb.WriteString(c.Resource.Text)
+							sb.WriteString(c.Resource.Blob)
+						}
+					default:
+						if data, err := json.Marshal(c); err == nil {
+							sb.Write(data)
+						}
+					}
 					sb.WriteString(" ")
 				}
 			}

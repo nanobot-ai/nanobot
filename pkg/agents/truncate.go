@@ -28,10 +28,6 @@ func truncateToolResult(ctx context.Context, toolName, callID string, msg *types
 		return msg
 	}
 
-	if result.Output.IsError {
-		return msg
-	}
-
 	content := result.Output.Content
 	if len(content) == 0 {
 		return msg
@@ -61,12 +57,24 @@ func truncateToolResult(ctx context.Context, toolName, callID string, msg *types
 		"truncated-outputs",
 		sanitizePathComponent(toolName)+"-"+sanitizePathComponent(callID)+ext)
 
+	var writeErr error
 	if err := writeFullResult(content, filePath); err != nil {
 		log.Errorf(ctx, "failed to write truncated tool result to %s: %v", filePath, err)
-		return msg
+		writeErr = err
 	}
 
 	truncated := buildTruncatedContent(content, maxToolResultSize, filePath)
+
+	if writeErr != nil {
+		noticePart := mcp.Content{
+			Type: "text",
+			Text: fmt.Sprintf("Note: failed to persist full tool output to %s: %v. Only truncated output is available.", filePath, writeErr),
+		}
+		truncated = append([]mcp.Content{noticePart}, truncated...)
+	}
+
+	newOutput := result.Output
+	newOutput.Content = truncated
 
 	return &types.Message{
 		ID:   msg.ID,
@@ -76,9 +84,7 @@ func truncateToolResult(ctx context.Context, toolName, callID string, msg *types
 				ID: msg.Items[0].ID,
 				ToolCallResult: &types.ToolCallResult{
 					CallID: result.CallID,
-					Output: types.CallResult{
-						Content: truncated,
-					},
+					Output: newOutput,
 				},
 			},
 		},
@@ -108,7 +114,7 @@ func contentSize(content []mcp.Content) int {
 }
 
 func writeFullResult(content []mcp.Content, filePath string) error {
-	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0700); err != nil {
 		return err
 	}
 
@@ -128,14 +134,14 @@ func writeFullResult(content []mcp.Content, filePath string) error {
 			}
 			sb.WriteString(c.Text)
 		}
-		return os.WriteFile(filePath, []byte(sb.String()), 0644)
+		return os.WriteFile(filePath, []byte(sb.String()), 0600)
 	}
 
 	data, err := json.MarshalIndent(content, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filePath, data, 0644)
+	return os.WriteFile(filePath, data, 0600)
 }
 
 func buildTruncatedContent(content []mcp.Content, budget int, filePath string) []mcp.Content {

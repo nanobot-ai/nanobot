@@ -407,12 +407,34 @@ func TestTruncateToolResult_NoToolCallResult(t *testing.T) {
 	}
 }
 
-func TestTruncateToolResult_ErrorResult(t *testing.T) {
+func TestTruncateToolResult_SmallErrorResult(t *testing.T) {
 	ctx := context.Background()
 	msg := makeToolResultMessage("call1", makeTextContent("error details"), true)
 	result := truncateToolResult(ctx, "tool", "call1", msg)
 	if result != msg {
-		t.Error("expected same message returned for error results")
+		t.Error("expected same message returned for small error results")
+	}
+}
+
+func TestTruncateToolResult_LargeErrorResult(t *testing.T) {
+	origDir, _ := os.Getwd()
+	tmpDir := t.TempDir()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	ctx := context.Background()
+	bigError := strings.Repeat("error line\n", maxToolResultSize/10)
+	msg := makeToolResultMessage("call1", makeTextContent(bigError), true)
+
+	result := truncateToolResult(ctx, "tool", "call1", msg)
+	if result == msg {
+		t.Fatal("expected large error result to be truncated")
+	}
+
+	// IsError should be preserved
+	tcr := result.Items[0].ToolCallResult
+	if !tcr.Output.IsError {
+		t.Error("truncated error result should preserve IsError=true")
 	}
 }
 
