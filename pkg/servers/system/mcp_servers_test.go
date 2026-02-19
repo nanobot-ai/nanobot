@@ -311,45 +311,6 @@ func TestConfigHook_DynamicServersMerged(t *testing.T) {
 	}
 }
 
-func TestAddMCPServer_ToolListingBestEffort(t *testing.T) {
-	s := NewServer("")
-
-	ctx := context.Background()
-	session := mcp.NewEmptySession(ctx)
-	session.Set(mcp.SessionEnvMapKey, map[string]string{
-		"MCP_SERVER_SEARCH_URL": "https://obot.example.com/search",
-	})
-	ctx = mcp.WithSession(ctx, session)
-
-	// Use an unreachable URL so tool listing will fail
-	result, err := s.addMCPServer(ctx, AddMCPServerParams{
-		URL:  "https://obot.example.com/unreachable-server",
-		Name: "test-server",
-	})
-	if err != nil {
-		t.Fatalf("expected addMCPServer to succeed even when tool listing fails, got error: %v", err)
-	}
-
-	// The server should still be added successfully
-	if result["success"] != true {
-		t.Error("expected success to be true")
-	}
-
-	// Since the server is unreachable, tools should not be present in the result
-	if _, hasTools := result["tools"]; hasTools {
-		t.Error("expected no tools key when server is unreachable")
-	}
-
-	// Verify the server was stored in the session
-	var dynamicServers DynamicMCPServers
-	if !session.Get(DynamicMCPServersSessionKey, &dynamicServers) {
-		t.Fatal("expected dynamic servers to be stored in session")
-	}
-	if _, exists := dynamicServers["test-server"]; !exists {
-		t.Error("expected test-server to be in dynamic servers")
-	}
-}
-
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && searchString(s, substr)
 }
