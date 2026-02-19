@@ -276,9 +276,7 @@ func (s *Session) AddEnv(kvs map[string]string) {
 		env = make(map[string]string)
 		s.attributes[SessionEnvMapKey] = env
 	}
-	for k, v := range kvs {
-		env[k] = v
-	}
+	maps.Copy(env, kvs)
 }
 
 func (s *Session) GetEnvMap() map[string]string {

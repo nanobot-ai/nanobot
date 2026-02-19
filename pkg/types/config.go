@@ -430,6 +430,16 @@ const (
 	AgentPermissionDeny  AgentPermission = "deny"
 )
 
+var denyAll = [][2]string{
+	{"*", string(AgentPermissionDeny)},
+}
+
+func DenyAllPermissions() *AgentPermissions {
+	return &AgentPermissions{
+		permissions: denyAll,
+	}
+}
+
 type AgentPermissions struct {
 	permissions [][2]string `json:"-"`
 }
