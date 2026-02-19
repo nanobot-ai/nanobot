@@ -66,7 +66,7 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 
 		// Configure MCP search server if environment variables are set
 		session := mcp.SessionFromContext(ctx)
-		if session != nil {
+		if agent.Name != "nanobot.summary" && session != nil {
 			envMap := session.GetEnvMap()
 			if searchURL := envMap["MCP_SERVER_SEARCH_URL"]; searchURL != "" {
 				mcpServer := types.AgentConfigHookMCPServer{
