@@ -100,4 +100,3 @@ func countTokens(text string) int {
 	fmt.Printf("[DEBUG tokencount] countTokens: tiktoken encoded %d bytes -> %d tokens\n", len(text), len(tokens))
 	return len(tokens)
 }
-

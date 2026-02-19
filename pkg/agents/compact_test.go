@@ -348,4 +348,3 @@ func TestExtractTextFromResponse_NoTextItems(t *testing.T) {
 		t.Errorf("expected empty string for non-text items, got %q", text)
 	}
 }
-
