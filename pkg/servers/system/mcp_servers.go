@@ -168,7 +168,7 @@ func listServerTools(ctx context.Context, serverURL string, headers map[string]s
 	client, err := mcp.NewClient(ctx, "tmp-tool-list", mcp.Server{
 		BaseURL: serverURL,
 		Headers: headers,
-	}, mcp.WithClientName("nanobot-tool-lister"), mcp.WithClientVersion("0.0.0"))
+	})
 	if err != nil {
 		return nil, fmt.Errorf("connecting to server: %w", err)
 	}
