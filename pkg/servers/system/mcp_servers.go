@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
@@ -136,10 +138,48 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 		"success": true,
 		"name":    params.Name,
 		"url":     params.URL,
-		"message": fmt.Sprintf("Successfully added MCP server '%s'. The server's tools will be available in the next agent turn.", params.Name),
+	}
+
+	// Best-effort: try to list the server's tools so the LLM knows their real names
+	tools, err := listServerTools(ctx, params.URL, headers)
+	if err != nil {
+		log.Debugf(ctx, "failed to list tools for MCP server %q: %v", params.Name, err)
+		result["message"] = fmt.Sprintf("Successfully added MCP server '%s'. The server's tools will be available in the next agent turn.", params.Name)
+	} else {
+		toolList := make([]map[string]string, 0, len(tools))
+		for _, t := range tools {
+			toolList = append(toolList, map[string]string{
+				"name":        t.Name,
+				"description": t.Description,
+			})
+		}
+		result["tools"] = toolList
+		result["message"] = fmt.Sprintf("Successfully added MCP server '%s' with %d tool(s). The tools will be available in the next agent turn.", params.Name, len(tools))
 	}
 
 	return result, nil
+}
+
+// listServerTools creates a temporary MCP client to fetch the tool list from a server.
+func listServerTools(ctx context.Context, serverURL string, headers map[string]string) ([]mcp.Tool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	client, err := mcp.NewClient(ctx, "tmp-tool-list", mcp.Server{
+		BaseURL: serverURL,
+		Headers: headers,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("connecting to server: %w", err)
+	}
+	defer client.Close(true)
+
+	result, err := client.ListTools(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing tools: %w", err)
+	}
+
+	return result.Tools, nil
 }
 
 func (s *Server) removeMCPServer(ctx context.Context, params RemoveMCPServerParams) (map[string]any, error) {
