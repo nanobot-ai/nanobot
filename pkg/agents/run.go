@@ -452,9 +452,8 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 			session.Set(previousExecutionKey, currentRun)
 		}
 
-		if err := a.toolCalls(ctx, currentRun, opts); err != nil {
-			return nil, err
-		}
+		// This doesn't return an error because any issues we run into should be returned to the LLM for further processing.
+		a.toolCalls(ctx, currentRun, opts)
 
 		if currentRun.Done {
 			if isChat {
