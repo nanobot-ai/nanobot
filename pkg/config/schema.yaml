@@ -558,6 +558,12 @@ definitions:
           The maximum number of tokens to generate in the response. This is used
           to limit the length of the response from the LLM. If not set, the LLM
           provider will decide the default value.
+      contextWindow:
+        type: number
+        description: |
+          The context window size in tokens for this agent's model. Used to determine
+          when conversation compaction should trigger. If not set, a hardcoded
+          default of 200,000 tokens is used.
       aliases:
         type: array
         items:

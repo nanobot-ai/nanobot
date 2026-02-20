@@ -106,6 +106,7 @@ export interface ChatMessageItemResource extends ChatMessageItemBase {
 export interface ChatMessageItemBase {
 	id: string;
 	hasMore?: boolean;
+	_meta?: { [key: string]: unknown };
 	type:
 		| 'text'
 		| 'image'

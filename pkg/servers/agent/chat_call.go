@@ -272,8 +272,14 @@ func GetMessages(ctx context.Context) ([]types.Message, error) {
 	session := mcp.SessionFromContext(ctx)
 	session.Get(types.PreviousExecutionKey, &run)
 
+	// Prepend archived pre-compaction messages
+	if len(run.CompactedMessages) > 0 {
+		allMessages = append(allMessages, run.CompactedMessages...)
+	}
+
+	// Add current input (includes compaction summary in its natural position)
 	if run.PopulatedRequest != nil {
-		allMessages = run.PopulatedRequest.Input
+		allMessages = append(allMessages, run.PopulatedRequest.Input...)
 	}
 	if run.Response != nil {
 		allMessages = append(allMessages, run.Response.Output)
