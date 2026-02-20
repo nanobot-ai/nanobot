@@ -107,9 +107,12 @@ func TestListFileResources(t *testing.T) {
 	}
 
 	for _, f := range expectedFiles {
-		if _, ok := found[f]; !ok {
+		r, ok := found[f]
+		if !ok {
 			t.Errorf("expected file %s not found in resources", f)
+			continue
 		}
+		assertFileTimestampMeta(t, f, r.Meta)
 	}
 
 	// Check that excluded directory files are NOT present
@@ -258,6 +261,8 @@ func TestReadFileResource(t *testing.T) {
 			if content.URI != tt.uri {
 				t.Errorf("expected URI %q, got %q", tt.uri, content.URI)
 			}
+
+			assertFileTimestampMeta(t, tt.uri, content.Meta)
 		})
 	}
 }
@@ -522,3 +527,33 @@ func (m *mockFileInfo) Mode() os.FileMode  { return 0644 }
 func (m *mockFileInfo) ModTime() time.Time { return time.Time{} }
 func (m *mockFileInfo) IsDir() bool        { return m.isDir }
 func (m *mockFileInfo) Sys() interface{}   { return nil }
+
+func assertFileTimestampMeta(t *testing.T, resourceID string, meta map[string]any) {
+	t.Helper()
+
+	if meta == nil {
+		t.Fatalf("resource %s expected _meta to be set", resourceID)
+	}
+
+	modifiedAtRaw, ok := meta["modifiedAt"]
+	if !ok {
+		t.Fatalf("resource %s expected _meta.modifiedAt", resourceID)
+	}
+	modifiedAt, ok := modifiedAtRaw.(string)
+	if !ok {
+		t.Fatalf("resource %s expected _meta.modifiedAt to be string, got %T", resourceID, modifiedAtRaw)
+	}
+	if _, err := time.Parse(time.RFC3339Nano, modifiedAt); err != nil {
+		t.Fatalf("resource %s expected _meta.modifiedAt in RFC3339 format, got %q", resourceID, modifiedAt)
+	}
+
+	if createdAtRaw, ok := meta["createdAt"]; ok {
+		createdAt, ok := createdAtRaw.(string)
+		if !ok {
+			t.Fatalf("resource %s expected _meta.createdAt to be string, got %T", resourceID, createdAtRaw)
+		}
+		if _, err := time.Parse(time.RFC3339Nano, createdAt); err != nil {
+			t.Fatalf("resource %s expected _meta.createdAt in RFC3339 format, got %q", resourceID, createdAt)
+		}
+	}
+}

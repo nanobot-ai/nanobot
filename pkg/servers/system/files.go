@@ -166,6 +166,7 @@ func (s *Server) listFileResources() ([]mcp.Resource, error) {
 			URI:      "file:///" + relPath,
 			Name:     relPath,
 			MimeType: mimeType,
+			Meta:     buildFileResourceMeta(relPath, info),
 		})
 
 		return nil
@@ -212,14 +213,19 @@ func (s *Server) readFileResource(uri string) (*mcp.ReadResourceResult, error) {
 	}
 
 	contentStr := string(content)
+	resourceContent := mcp.ResourceContent{
+		URI:      uri,
+		Name:     filepath.Base(relPath),
+		MIMEType: mimeType,
+		Text:     &contentStr,
+	}
+	if info, err := os.Stat(relPath); err == nil {
+		resourceContent.Meta = buildFileResourceMeta(relPath, info)
+	}
+
 	return &mcp.ReadResourceResult{
 		Contents: []mcp.ResourceContent{
-			{
-				URI:      uri,
-				Name:     filepath.Base(relPath),
-				MIMEType: mimeType,
-				Text:     &contentStr,
-			},
+			resourceContent,
 		},
 	}, nil
 }
