@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
+	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 	"github.com/tidwall/gjson"
@@ -100,7 +101,7 @@ func buildAuditLog(req *http.Request, method string, sessionID string) auditlogs
 type HTTPServer struct {
 	mux                       *http.ServeMux
 	protectedResourceMetadata *protectedResourceMetadata
-	env                       map[string]string
+	envProvider               func() (map[string]string, error)
 	MessageHandler            MessageHandler
 	sessions                  SessionStore
 	ctx                       context.Context
@@ -147,12 +148,12 @@ func (h HTTPServerOptions) Merge(other HTTPServerOptions) (result HTTPServerOpti
 	return h
 }
 
-func NewHTTPServer(ctx context.Context, env map[string]string, handler MessageHandler, opts ...HTTPServerOptions) (*HTTPServer, error) {
+func NewHTTPServer(ctx context.Context, envProvider func() (map[string]string, error), handler MessageHandler, opts ...HTTPServerOptions) (*HTTPServer, error) {
 	o := complete.Complete(opts...)
 	h := &HTTPServer{
 		MessageHandler:    handler,
 		mux:               http.NewServeMux(),
-		env:               env,
+		envProvider:       envProvider,
 		sessions:          o.SessionStore,
 		ctx:               o.BaseContext,
 		auditLogCollector: o.AuditLogCollector,
@@ -389,7 +390,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 
 		streamingSession.session.sessionManager = h.sessions
 
-		streamingSession.session.AddEnv(h.getEnv(req))
+		streamingSession.session.SetEnv(h.getEnv(req))
 
 		streamingSession.session.Set("subject", auditLog.Subject)
 		streamingSession.session.Set("clientIP", auditLog.ClientIP)
@@ -444,7 +445,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	defer h.sessions.Release(session)
 
 	session.session.sessionManager = h.sessions
-	session.session.AddEnv(h.getEnv(req))
+	session.session.SetEnv(h.getEnv(req))
 
 	resp, err := session.Exchange(ctx, msg)
 	if err != nil {
@@ -580,7 +581,12 @@ func (h *HTTPServer) ensureInternalSession(ctx context.Context) (*ServerSession,
 	session.session.Set("accountID", "healthcheck")
 
 	// Set base environment on the internal session
-	session.session.AddEnv(h.env)
+	env, err := h.baseEnv()
+	if err != nil {
+		session.Close(true)
+		return nil, fmt.Errorf("failed to load environment: %w", err)
+	}
+	session.session.SetEnv(env)
 
 	// Initialize the session
 	if _, err := session.Exchange(ctx, Message{
@@ -622,6 +628,12 @@ func (h *HTTPServer) checkTools(ctx context.Context) error {
 		return err
 	}
 
+	env, err := h.baseEnv()
+	if err != nil {
+		return fmt.Errorf("failed to load environment: %w", err)
+	}
+	session.session.SetEnv(env)
+
 	resp, err := session.Exchange(ctx, Message{
 		JSONRPC: "2.0",
 		ID:      uuid.String(),
@@ -647,8 +659,11 @@ func (h *HTTPServer) checkTools(ctx context.Context) error {
 }
 
 func (h *HTTPServer) getEnv(req *http.Request) map[string]string {
-	env := make(map[string]string)
-	maps.Copy(env, h.env)
+	env, err := h.baseEnv()
+	if err != nil {
+		log.Errorf(req.Context(), "failed to reload environment: %v", err)
+		env = make(map[string]string)
+	}
 	token, ok := strings.CutPrefix(req.Header.Get("Authorization"), "Bearer ")
 	if ok {
 		env["http:bearer-token"] = token
@@ -659,4 +674,18 @@ func (h *HTTPServer) getEnv(req *http.Request) map[string]string {
 		}
 	}
 	return env
+}
+
+func (h *HTTPServer) baseEnv() (map[string]string, error) {
+	env := make(map[string]string)
+	if h.envProvider == nil {
+		return env, nil
+	}
+
+	base, err := h.envProvider()
+	if err != nil {
+		return nil, err
+	}
+	maps.Copy(env, base)
+	return env, nil
 }

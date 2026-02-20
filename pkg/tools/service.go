@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -203,6 +204,7 @@ type clientFactory struct {
 	clientLock *sync.Mutex
 	client     *mcp.Client
 	oldState   *mcp.SessionState
+	envHash    string
 	new        func(client *mcp.SessionState) (*mcp.Client, error)
 }
 
@@ -213,19 +215,36 @@ func newClientFactory(f func(state *mcp.SessionState) (*mcp.Client, error)) clie
 	}
 }
 
-func (c *clientFactory) get() (*mcp.Client, error) {
+func (c *clientFactory) get(envHash string) (*mcp.Client, error) {
 	c.clientLock.Lock()
 	defer c.clientLock.Unlock()
 
-	if c.client != nil {
+	if c.client != nil && c.envHash == envHash {
 		return c.client, nil
 	}
+
+	if c.client != nil {
+		c.client.Close(false)
+		c.client = nil
+	}
+
 	newClient, err := c.new(c.oldState)
 	if err != nil {
 		return nil, err
 	}
 	c.client = newClient
+	c.envHash = envHash
 	return c.client, nil
+}
+
+func (c *clientFactory) Close(deleteSession bool) {
+	c.clientLock.Lock()
+	defer c.clientLock.Unlock()
+	if c.client != nil {
+		c.client.Close(deleteSession)
+		c.client = nil
+	}
+	c.envHash = ""
 }
 
 func (c *clientFactory) Serialize() (any, error) {
@@ -239,6 +258,7 @@ func (c *clientFactory) Deserialize(data any) (_ any, err error) {
 	if data == nil {
 		return &clientFactory{
 			clientLock: &sync.Mutex{},
+			envHash:    c.envHash,
 			new:        c.new,
 		}, nil
 	}
@@ -253,6 +273,7 @@ func (c *clientFactory) Deserialize(data any) (_ any, err error) {
 	return &clientFactory{
 		clientLock: &sync.Mutex{},
 		oldState:   &state,
+		envHash:    c.envHash,
 		new:        c.new,
 	}, nil
 }
@@ -263,18 +284,32 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 		return nil, fmt.Errorf("session not found in context")
 	}
 
+	envHash, err := envMapHash(session.GetEnvMap())
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash env map: %w", err)
+	}
+
 	sessionKey := "clients/" + name
 	factory := newClientFactory(func(state *mcp.SessionState) (*mcp.Client, error) {
 		return s.newClient(ctx, name, state)
 	})
 	if session.Get(sessionKey, &factory) {
-		return factory.get()
+		return factory.get(envHash)
 	}
 
 	// ensure we are holding the same object
 	session.Set(sessionKey, &factory)
 	session.Get(sessionKey, &factory)
-	return factory.get()
+
+	return factory.get(envHash)
+}
+
+func envMapHash(env map[string]string) (string, error) {
+	digest := sha256.New()
+	if err := json.NewEncoder(digest).Encode(env); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", digest.Sum(nil)), nil
 }
 
 func (s *Service) newClient(ctx context.Context, name string, state *mcp.SessionState) (*mcp.Client, error) {
@@ -784,12 +819,12 @@ func (s *Service) ListTools(ctx context.Context, opts ...ListToolsOptions) (resu
 
 		c, err := s.GetClient(ctx, server)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get client for %s: %w", server, err)
 		}
 
 		tools, err := c.ListTools(ctx)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to list tools for %s: %w", server, err)
 		}
 
 		tools = filterTools(tools, opt.Tools)

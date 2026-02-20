@@ -48,7 +48,7 @@ type Nanobot struct {
 	Trace                   bool              `usage:"Enable trace logging"`
 	Quiet                   bool              `usage:"Disable most output" short:"q"`
 	Env                     []string          `usage:"Environment variables to set in the form of KEY=VALUE, or KEY to load from current environ" short:"e"`
-	EnvFile                 string            `usage:"Path to the environment file (default: ./nanobot.env)"`
+	EnvFile                 string            `usage:"Path to the environment file (default: ./nanobot.env)" default:"./nanobot.env"`
 	EmptyEnv                bool              `usage:"Do not load environment variables from the environment by default"`
 	DefaultModel            string            `usage:"Default model to use for completions" default:"gpt-4.1" env:"NANOBOT_DEFAULT_MODEL" name:"default-model"`
 	OpenAIAPIKey            string            `usage:"OpenAI API key" env:"OPENAI_API_KEY" name:"openai-api-key"`
@@ -63,8 +63,6 @@ type Nanobot struct {
 	State                   string            `usage:"Path to the state file" default:"./nanobot.db"`
 	ConfigPath              string            `usage:"Path to nanobot configuration file or directory" default:".nanobot/" name:"config" short:"c"`
 	ExcludeBuiltInAgents    bool              `usage:"Exclude built-in agents from the configuration"`
-
-	env map[string]string
 }
 
 func ensureDirectoryForDSN(dsn string) error {
@@ -170,10 +168,6 @@ func (n *Nanobot) llmConfig() llm.Config {
 }
 
 func (n *Nanobot) loadEnv() (map[string]string, error) {
-	if n.env != nil {
-		return n.env, nil
-	}
-
 	env := map[string]string{}
 	cwd, err := os.Getwd()
 	if err == nil {
@@ -188,15 +182,11 @@ func (n *Nanobot) loadEnv() (map[string]string, error) {
 		}
 	}
 
-	defaultFile := n.EnvFile == ""
-	if defaultFile {
-		n.EnvFile = "./nanobot.env"
-	}
-
 	data, err := os.ReadFile(n.EnvFile)
-	if errors.Is(err, fs.ErrNotExist) && defaultFile {
-	} else if err != nil {
-		return nil, err
+	if errors.Is(err, fs.ErrNotExist) {
+		if n.EnvFile != "./nanobot.env" {
+			return nil, err
+		}
 	} else {
 		for line := range strings.SplitSeq(string(data), "\n") {
 			line = strings.TrimSpace(line)
@@ -220,7 +210,6 @@ func (n *Nanobot) loadEnv() (map[string]string, error) {
 		env[k] = v
 	}
 
-	n.env = env
 	return env, nil
 }
 
@@ -246,7 +235,11 @@ type mcpOpts struct {
 }
 
 func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, auditLogCollector *auditlogs.Collector, opts mcpOpts) error {
-	env, err := n.loadEnv()
+	envProvider := func() (map[string]string, error) {
+		return n.loadEnv()
+	}
+
+	env, err := envProvider()
 	if err != nil {
 		return fmt.Errorf("failed to load environment: %w", err)
 	}
@@ -281,7 +274,7 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 	})
 
 	if address == "stdio" {
-		stdio := mcp.NewStdioServer(env, mcpServer)
+		stdio := mcp.NewStdioServer(envProvider, mcpServer)
 		if err := stdio.Start(ctx, os.Stdin, os.Stdout); err != nil {
 			return fmt.Errorf("failed to start stdio server: %w", err)
 		}
@@ -290,7 +283,7 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 		return nil
 	}
 
-	httpServer, err := mcp.NewHTTPServer(ctx, env, mcpServer, mcp.HTTPServerOptions{
+	httpServer, err := mcp.NewHTTPServer(ctx, envProvider, mcpServer, mcp.HTTPServerOptions{
 		HealthCheckPath:   opts.HealthzPath,
 		RunHealthChecker:  opts.HealthzPath != "" && os.Getenv("NANOBOT_DISABLE_HEALTH_CHECKER") != "true",
 		SessionStore:      sessionManager,

@@ -12,12 +12,12 @@ import (
 type StdioServer struct {
 	MessageHandler MessageHandler
 	stdio          *Stdio
-	env            map[string]string
+	envProvider    func() (map[string]string, error)
 }
 
-func NewStdioServer(env map[string]string, handler MessageHandler) *StdioServer {
+func NewStdioServer(envProvider func() (map[string]string, error), handler MessageHandler) *StdioServer {
 	return &StdioServer{
-		env:            env,
+		envProvider:    envProvider,
 		MessageHandler: handler,
 	}
 }
@@ -34,11 +34,18 @@ func (s *StdioServer) Start(ctx context.Context, in io.ReadCloser, out io.WriteC
 		return fmt.Errorf("failed to create stdio session: %w", err)
 	}
 
-	session.session.AddEnv(s.env)
-
 	s.stdio = NewStdio("proxy", nil, in, out, func() {})
 
 	if err = s.stdio.Start(ctx, func(ctx context.Context, msg Message) {
+		if s.envProvider != nil {
+			env, err := s.envProvider()
+			if err != nil {
+				log.Errorf(ctx, "failed to reload environment: %v", err)
+			} else {
+				session.session.SetEnv(env)
+			}
+		}
+
 		resp, err := session.Exchange(ctx, msg)
 		if errors.Is(err, ErrNoResponse) {
 			return

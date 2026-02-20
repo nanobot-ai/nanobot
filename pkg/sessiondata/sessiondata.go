@@ -360,7 +360,13 @@ func (d *Data) Sync(ctx context.Context, defaultConfig types.ConfigFactory) erro
 	session.Get(types.ConfigHashSessionKey, &existingHash)
 
 	digest := sha256.New()
-	_ = json.NewEncoder(digest).Encode(config)
+	_ = json.NewEncoder(digest).Encode(struct {
+		Config types.Config      `json:"config"`
+		Env    map[string]string `json:"env"`
+	}{
+		Config: config,
+		Env:    session.GetEnvMap(),
+	})
 	hash := fmt.Sprintf("%x", digest.Sum(nil))
 
 	if hash != existingHash {
@@ -373,6 +379,17 @@ func (d *Data) Sync(ctx context.Context, defaultConfig types.ConfigFactory) erro
 
 func (d *Data) Refresh(ctx context.Context) {
 	session := mcp.SessionFromContext(ctx)
+
+	for key, value := range session.Attributes() {
+		if !strings.HasPrefix(key, "clients/") {
+			continue
+		}
+		if closer, ok := value.(interface{ Close(bool) }); ok {
+			closer.Close(false)
+		}
+		session.Delete(key)
+	}
+
 	session.Delete(toolMappingKey)
 	session.Delete(types.CurrentAgentSessionKey)
 	session.Delete(promptMappingKey)

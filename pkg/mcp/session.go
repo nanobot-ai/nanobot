@@ -279,6 +279,21 @@ func (s *Session) AddEnv(kvs map[string]string) {
 	maps.Copy(env, kvs)
 }
 
+func (s *Session) SetEnv(kvs map[string]string) {
+	if s == nil {
+		return
+	}
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if s.attributes == nil {
+		s.attributes = make(map[string]any)
+	}
+	env := make(map[string]string)
+	maps.Copy(env, kvs)
+	s.attributes[SessionEnvMapKey] = env
+}
+
 func (s *Session) GetEnvMap() map[string]string {
 	if s == nil {
 		return map[string]string{}

@@ -2,7 +2,10 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"maps"
+	"strconv"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -27,22 +30,14 @@ func NewClient(cfg Config) *Client {
 	return &Client{
 		useCompletions: cfg.Responses.ChatCompletionAPI,
 		defaultModel:   cfg.DefaultModel,
-		completions: completions.NewClient(completions.Config{
-			APIKey:  cfg.Responses.APIKey,
-			BaseURL: cfg.Responses.BaseURL,
-			Headers: cfg.Responses.Headers,
-		}),
-		responses: responses.NewClient(cfg.Responses),
-		anthropic: anthropic.NewClient(cfg.Anthropic),
+		cfg:            cfg,
 	}
 }
 
 type Client struct {
 	defaultModel   string
 	useCompletions bool
-	completions    *completions.Client
-	responses      *responses.Client
-	anthropic      *anthropic.Client
+	cfg            Config
 }
 
 func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts ...types.CompletionOptions) (ret *types.CompletionResponse, err error) {
@@ -79,8 +74,10 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 		}
 	}()
 
+	dynamic := c.dynamicConfig(ctx)
+
 	if req.Model == "default" || req.Model == "" {
-		req.Model = c.defaultModel
+		req.Model = dynamic.DefaultModel
 	}
 
 	opt := complete.Complete(opts...)
@@ -99,10 +96,95 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 	}
 
 	if strings.HasPrefix(req.Model, "claude") {
-		return c.anthropic.Complete(ctx, req, opts...)
+		return anthropic.NewClient(dynamic.Anthropic).Complete(ctx, req, opts...)
 	}
-	if c.useCompletions {
-		return c.completions.Complete(ctx, req, opts...)
+	if dynamic.Responses.ChatCompletionAPI {
+		return completions.NewClient(completions.Config{
+			APIKey:  dynamic.Responses.APIKey,
+			BaseURL: dynamic.Responses.BaseURL,
+			Headers: maps.Clone(dynamic.Responses.Headers),
+		}).Complete(ctx, req, opts...)
 	}
-	return c.responses.Complete(ctx, req, opts...)
+	return responses.NewClient(dynamic.Responses).Complete(ctx, req, opts...)
+}
+
+func (c Client) dynamicConfig(ctx context.Context) Config {
+	cfg := Config{
+		DefaultModel: c.defaultModel,
+		Responses: responses.Config{
+			ChatCompletionAPI: c.useCompletions,
+			APIKey:            c.cfg.Responses.APIKey,
+			BaseURL:           c.cfg.Responses.BaseURL,
+			Headers:           maps.Clone(c.cfg.Responses.Headers),
+		},
+		Anthropic: anthropic.Config{
+			APIKey:  c.cfg.Anthropic.APIKey,
+			BaseURL: c.cfg.Anthropic.BaseURL,
+			Headers: maps.Clone(c.cfg.Anthropic.Headers),
+		},
+	}
+
+	session := mcp.SessionFromContext(ctx)
+	if session == nil {
+		return cfg
+	}
+
+	env := session.GetEnvMap()
+	if v := strings.TrimSpace(env["NANOBOT_DEFAULT_MODEL"]); v != "" {
+		cfg.DefaultModel = v
+	}
+	if v := strings.TrimSpace(env["OPENAI_API_KEY"]); v != "" {
+		cfg.Responses.APIKey = v
+	}
+	if v := strings.TrimSpace(env["OPENAI_BASE_URL"]); v != "" {
+		cfg.Responses.BaseURL = v
+	}
+	if v := strings.TrimSpace(env["OPENAI_CHAT_COMPLETION_API"]); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.Responses.ChatCompletionAPI = b
+		}
+	}
+	if hdrs := parseHeaderEnv(env["OPENAI_HEADERS"]); len(hdrs) > 0 {
+		cfg.Responses.Headers = hdrs
+	}
+
+	if v := strings.TrimSpace(env["ANTHROPIC_API_KEY"]); v != "" {
+		cfg.Anthropic.APIKey = v
+	}
+	if v := strings.TrimSpace(env["ANTHROPIC_BASE_URL"]); v != "" {
+		cfg.Anthropic.BaseURL = v
+	}
+	if hdrs := parseHeaderEnv(env["ANTHROPIC_HEADERS"]); len(hdrs) > 0 {
+		cfg.Anthropic.Headers = hdrs
+	}
+
+	return cfg
+}
+
+func parseHeaderEnv(raw string) map[string]string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+
+	result := map[string]string{}
+	if err := json.Unmarshal([]byte(raw), &result); err == nil {
+		return result
+	}
+
+	for part := range strings.SplitSeq(raw, ",") {
+		k, v, ok := strings.Cut(part, "=")
+		if !ok {
+			continue
+		}
+		k = strings.TrimSpace(k)
+		v = strings.TrimSpace(v)
+		if k != "" {
+			result[k] = v
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
