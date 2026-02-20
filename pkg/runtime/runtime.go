@@ -111,6 +111,10 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 		return workflows.NewServer()
 	})
 
+	registry.AddServer("nanobot.workflow-tools", func(string) mcp.MessageHandler {
+		return workflows.NewToolsServer()
+	})
+
 	return r, nil
 }
 

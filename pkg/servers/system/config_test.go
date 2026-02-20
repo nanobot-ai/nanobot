@@ -309,8 +309,13 @@ func TestConfigAddsToolsForPermissions(t *testing.T) {
 		t.Fatal("expected Agent to be set in result")
 	}
 
-	// Check that appropriate tools were added to MCPServers
-	expectedTools := []string{"nanobot.system/read", "nanobot.system/write", "nanobot.system/getSkill"}
+	// Check that appropriate tools were added to MCPServers.
+	expectedTools := []string{
+		"nanobot.system/read",
+		"nanobot.system/write",
+		"nanobot.system/getSkill",
+		"nanobot.workflow-tools",
+	}
 	for _, tool := range expectedTools {
 		found := false
 		for _, mcpServer := range result.Agent.MCPServers {
@@ -322,6 +327,10 @@ func TestConfigAddsToolsForPermissions(t *testing.T) {
 		if !found {
 			t.Errorf("expected tool '%s' to be added to MCPServers", tool)
 		}
+	}
+
+	if _, ok := result.MCPServers["nanobot.workflow-tools"]; !ok {
+		t.Error("expected 'nanobot.workflow-tools' to be present in MCPServers")
 	}
 }
 

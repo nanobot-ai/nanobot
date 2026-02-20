@@ -57,16 +57,17 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 					agent.Instructions.Instructions += skillsPrompt.String()
 				}
 
-				// Make workflow tools available to agents with skills permission
-				agent.MCPServers = append(agent.MCPServers, "nanobot.workflows/recordWorkflowRun", "nanobot.workflows/deleteWorkflow")
+				// Make workflow tools available to agents with skills permission.
+				agent.MCPServers = append(agent.MCPServers, "nanobot.workflow-tools")
 			}
 		}
 
 		if params.MCPServers == nil {
-			params.MCPServers = make(map[string]types.AgentConfigHookMCPServer, 2)
+			params.MCPServers = make(map[string]types.AgentConfigHookMCPServer, 3)
 		}
 		params.MCPServers["nanobot.system"] = types.AgentConfigHookMCPServer{}
 		params.MCPServers["nanobot.workflows"] = types.AgentConfigHookMCPServer{}
+		params.MCPServers["nanobot.workflow-tools"] = types.AgentConfigHookMCPServer{}
 
 		// Configure MCP search server if environment variables are set
 		session := mcp.SessionFromContext(ctx)

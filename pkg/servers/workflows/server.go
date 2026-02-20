@@ -56,7 +56,6 @@ func parseWorkflowFrontmatter(content string) (workflowMeta, error) {
 }
 
 type Server struct {
-	tools          mcp.ServerTools
 	watcher        *fswatch.Watcher
 	subscriptions  *fswatch.SubscriptionManager
 	watcherOnce    sync.Once
@@ -64,16 +63,9 @@ type Server struct {
 }
 
 func NewServer() *Server {
-	s := &Server{
+	return &Server{
 		subscriptions: fswatch.NewSubscriptionManager(context.Background()),
 	}
-
-	s.tools = mcp.NewServerTools(
-		mcp.NewServerTool("recordWorkflowRun", "Record that a workflow was executed in the current chat session", s.recordWorkflowRun),
-		mcp.NewServerTool("deleteWorkflow", "Delete a workflow by its URI", s.deleteWorkflow),
-	)
-
-	return s
 }
 
 // Close stops the file watcher and cleans up resources
@@ -92,10 +84,6 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 		// nothing to do
 	case "notifications/cancelled":
 		mcp.HandleCancelled(ctx, msg)
-	case "tools/list":
-		mcp.Invoke(ctx, msg, s.tools.List)
-	case "tools/call":
-		mcp.Invoke(ctx, msg, s.tools.Call)
 	case "resources/list":
 		mcp.Invoke(ctx, msg, s.resourcesList)
 	case "resources/read":
@@ -122,7 +110,6 @@ func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.Ini
 	return &mcp.InitializeResult{
 		ProtocolVersion: params.ProtocolVersion,
 		Capabilities: mcp.ServerCapabilities{
-			Tools: &mcp.ToolsServerCapability{},
 			Resources: &mcp.ResourcesServerCapability{
 				Subscribe:   true,
 				ListChanged: true,
@@ -135,49 +122,8 @@ func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.Ini
 	}, nil
 }
 
-func (s *Server) recordWorkflowRun(ctx context.Context, data struct {
-	URI string `json:"uri"`
-}) (*map[string]string, error) {
-	mcpSession := mcp.SessionFromContext(ctx).Root()
-
-	var uris []string
-	mcpSession.Get(types.WorkflowURIsSessionKey, &uris)
-
-	// Deduplicate: only append if URI is not already recorded
-	var found bool
-	for _, u := range uris {
-		if u == data.URI {
-			found = true
-			break
-		}
-	}
-	if !found {
-		uris = append(uris, data.URI)
-	}
-
-	mcpSession.Set(types.WorkflowURIsSessionKey, uris)
-
-	return &map[string]string{"uri": data.URI}, nil
-}
-
-func (s *Server) deleteWorkflow(ctx context.Context, data struct {
-	URI string `json:"uri"`
-}) (*struct{}, error) {
-	workflowName, err := s.parseWorkflowURI(data.URI)
-	if err != nil {
-		return nil, err
-	}
-
-	workflowPath := filepath.Join(".", workflowsDir, workflowName+".md")
-	if err := os.Remove(workflowPath); err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("failed to delete workflow: %w", err)
-	}
-
-	return &struct{}{}, nil
-}
-
 // parseWorkflowURI extracts the workflow name from a workflow:///name URI
-func (s *Server) parseWorkflowURI(uri string) (string, error) {
+func parseWorkflowURI(uri string) (string, error) {
 	if !strings.HasPrefix(uri, "workflow:///") {
 		return "", mcp.ErrRPCInvalidParams.WithMessage("invalid workflow URI format, expected workflow:///name")
 	}
@@ -247,7 +193,7 @@ func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListR
 }
 
 func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-	workflowName, err := s.parseWorkflowURI(request.URI)
+	workflowName, err := parseWorkflowURI(request.URI)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +234,7 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 }
 
 func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, request mcp.SubscribeRequest) (*mcp.SubscribeResult, error) {
-	workflowName, err := s.parseWorkflowURI(request.URI)
+	workflowName, err := parseWorkflowURI(request.URI)
 	if err != nil {
 		return nil, err
 	}
