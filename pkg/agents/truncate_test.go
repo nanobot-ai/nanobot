@@ -35,6 +35,23 @@ func makeToolResultMessage(callID string, content []mcp.Content, isError bool) *
 	}
 }
 
+func contextWithSessionID(t *testing.T, sessionID string) context.Context {
+	t.Helper()
+
+	serverSession, err := mcp.NewExistingServerSession(
+		context.Background(),
+		mcp.SessionState{ID: sessionID},
+		mcp.MessageHandlerFunc(func(context.Context, mcp.Message) {}),
+	)
+	if err != nil {
+		t.Fatalf("failed to create test session: %v", err)
+	}
+	t.Cleanup(func() {
+		serverSession.Close(false)
+	})
+	return mcp.WithSession(context.Background(), serverSession.GetSession())
+}
+
 // --- contentSize tests ---
 
 func TestContentSize_TextOnly(t *testing.T) {
@@ -463,7 +480,7 @@ func TestTruncateToolResult_LargeTextContent(t *testing.T) {
 	os.Chdir(tmpDir)
 	defer os.Chdir(origDir)
 
-	ctx := context.Background()
+	ctx := contextWithSessionID(t, "default")
 	bigText := strings.Repeat("x", maxToolResultSize+1000)
 	msg := makeToolResultMessage("call1", makeTextContent(bigText), false)
 
@@ -523,7 +540,7 @@ func TestTruncateToolResult_MixedContentUsesJSON(t *testing.T) {
 	os.Chdir(tmpDir)
 	defer os.Chdir(origDir)
 
-	ctx := context.Background()
+	ctx := contextWithSessionID(t, "default")
 	content := []mcp.Content{
 		{Type: "text", Text: strings.Repeat("a", maxToolResultSize)},
 		{Type: "image", Data: strings.Repeat("b", 1000)},
@@ -593,7 +610,7 @@ func TestTruncateToolResult_SpecialCharsInNames(t *testing.T) {
 	os.Chdir(tmpDir)
 	defer os.Chdir(origDir)
 
-	ctx := context.Background()
+	ctx := contextWithSessionID(t, "default")
 	bigText := strings.Repeat("x", maxToolResultSize+100)
 	msg := makeToolResultMessage("call/5!@#", makeTextContent(bigText), false)
 
