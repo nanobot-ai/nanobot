@@ -85,11 +85,12 @@ func (s *Server) listChats(ctx context.Context, _ struct{}) (*types.ChatList, er
 	}, nil
 }
 
-func chatFromSession(session *session.Session, currentAccountID string) types.Chat {
+func chatFromSession(s *session.Session, currentAccountID string) types.Chat {
 	return types.Chat{
-		ID:       session.SessionID,
-		Title:    session.Description,
-		Created:  session.CreatedAt,
-		ReadOnly: session.AccountID != currentAccountID,
+		ID:           s.SessionID,
+		Title:        s.Description,
+		Created:      s.CreatedAt,
+		ReadOnly:     s.AccountID != currentAccountID,
+		WorkflowURIs: s.WorkflowURIs,
 	}
 }

@@ -13,11 +13,47 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/version"
+	"gopkg.in/yaml.v3"
 )
 
 const (
 	workflowsDir = "workflows"
 )
+
+type workflowMeta struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+	CreatedAt   string `yaml:"createdAt"`
+}
+
+// parseWorkflowFrontmatter extracts YAML frontmatter from workflow content.
+// If no frontmatter is found (no opening ---), returns zero-value metadata with a nil error.
+func parseWorkflowFrontmatter(content string) (workflowMeta, error) {
+	lines := strings.Split(content, "\n")
+	if len(lines) < 3 || strings.TrimSpace(lines[0]) != "---" {
+		return workflowMeta{}, nil
+	}
+
+	endIdx := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			endIdx = i
+			break
+		}
+	}
+
+	if endIdx == -1 {
+		return workflowMeta{}, fmt.Errorf("frontmatter missing closing delimiter")
+	}
+
+	frontmatterYAML := strings.Join(lines[1:endIdx], "\n")
+	var meta workflowMeta
+	if err := yaml.Unmarshal([]byte(frontmatterYAML), &meta); err != nil {
+		return workflowMeta{}, fmt.Errorf("failed to parse frontmatter: %w", err)
+	}
+
+	return meta, nil
+}
 
 type Server struct {
 	watcher        *fswatch.Watcher
@@ -87,7 +123,7 @@ func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.Ini
 }
 
 // parseWorkflowURI extracts the workflow name from a workflow:///name URI
-func (s *Server) parseWorkflowURI(uri string) (string, error) {
+func parseWorkflowURI(uri string) (string, error) {
 	if !strings.HasPrefix(uri, "workflow:///") {
 		return "", mcp.ErrRPCInvalidParams.WithMessage("invalid workflow URI format, expected workflow:///name")
 	}
@@ -101,47 +137,6 @@ func (s *Server) parseWorkflowURI(uri string) (string, error) {
 	workflowName = strings.TrimSuffix(workflowName, ".md")
 
 	return workflowName, nil
-}
-
-// parseWorkflowDescription extracts description from workflow markdown content.
-// Looks for: # Workflow: <name>\n\n<description paragraph>
-func parseWorkflowDescription(content string) string {
-	lines := strings.Split(content, "\n")
-
-	// Find the "# Workflow:" line
-	startIdx := -1
-	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "# Workflow:") {
-			startIdx = i + 1
-			break
-		}
-	}
-
-	if startIdx == -1 || startIdx >= len(lines) {
-		return ""
-	}
-
-	// Skip empty lines after header
-	for startIdx < len(lines) && strings.TrimSpace(lines[startIdx]) == "" {
-		startIdx++
-	}
-
-	if startIdx >= len(lines) {
-		return ""
-	}
-
-	// Collect description paragraph (until empty line or next header)
-	var desc []string
-	for i := startIdx; i < len(lines); i++ {
-		line := lines[i]
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			break
-		}
-		desc = append(desc, trimmed)
-	}
-
-	return strings.Join(desc, " ")
 }
 
 func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
@@ -161,53 +156,85 @@ func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListR
 
 		name := strings.TrimSuffix(entry.Name(), ".md")
 
-		// Read file to extract description
-		content, err := os.ReadFile(filepath.Join(workflowsPath, entry.Name()))
+		// Read file to extract description and metadata
+		contentBytes, err := os.ReadFile(filepath.Join(workflowsPath, entry.Name()))
 		if err != nil {
 			// Skip files we can't read
 			continue
 		}
 
-		description := parseWorkflowDescription(string(content))
+		meta, err := parseWorkflowFrontmatter(string(contentBytes))
+		if err != nil {
+			log.Debugf(ctx, "failed to parse frontmatter for workflow %s: %v", entry.Name(), err)
+		}
 
-		result = append(result, mcp.Resource{
+		resourceMeta := make(map[string]any)
+		if meta.Name != "" {
+			resourceMeta["name"] = meta.Name
+		}
+		if meta.CreatedAt != "" {
+			resourceMeta["createdAt"] = meta.CreatedAt
+		}
+
+		res := mcp.Resource{
 			URI:         fmt.Sprintf("workflow:///%s", name),
 			Name:        name,
-			Description: description,
+			Description: meta.Description,
 			MimeType:    "text/markdown",
-		})
+		}
+		if len(resourceMeta) > 0 {
+			res.Meta = resourceMeta
+		}
+
+		result = append(result, res)
 	}
 
 	return &mcp.ListResourcesResult{Resources: result}, nil
 }
 
 func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-	workflowName, err := s.parseWorkflowURI(request.URI)
+	workflowName, err := parseWorkflowURI(request.URI)
 	if err != nil {
 		return nil, err
 	}
 
 	workflowPath := filepath.Join(".", workflowsDir, workflowName+".md")
-	content, err := os.ReadFile(workflowPath)
+	contentBytes, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
 	}
 
-	contentStr := string(content)
+	content := string(contentBytes)
+	meta, err := parseWorkflowFrontmatter(content)
+	if err != nil {
+		log.Debugf(ctx, "failed to parse frontmatter for workflow %s: %v", workflowName, err)
+	}
+
+	resourceMeta := make(map[string]any)
+	if meta.Name != "" {
+		resourceMeta["name"] = meta.Name
+	}
+	if meta.CreatedAt != "" {
+		resourceMeta["createdAt"] = meta.CreatedAt
+	}
+
+	rc := mcp.ResourceContent{
+		URI:      request.URI,
+		Name:     workflowName,
+		MIMEType: "text/markdown",
+		Text:     &content,
+	}
+	if len(resourceMeta) > 0 {
+		rc.Meta = resourceMeta
+	}
+
 	return &mcp.ReadResourceResult{
-		Contents: []mcp.ResourceContent{
-			{
-				URI:      request.URI,
-				Name:     workflowName,
-				MIMEType: "text/markdown",
-				Text:     &contentStr,
-			},
-		},
+		Contents: []mcp.ResourceContent{rc},
 	}, nil
 }
 
 func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, request mcp.SubscribeRequest) (*mcp.SubscribeResult, error) {
-	workflowName, err := s.parseWorkflowURI(request.URI)
+	workflowName, err := parseWorkflowURI(request.URI)
 	if err != nil {
 		return nil, err
 	}

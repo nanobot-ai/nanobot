@@ -23,18 +23,21 @@ Keep todo titles short and scannable. Update them as you progress — don't leav
 ## Workflow Format
 
 Workflows are Markdown files with:
-- **Title**: `# Workflow: workflow-name`
-- **Description**: Brief explanation of the workflow's purpose
+- **Frontmatter** (required): YAML frontmatter with `name` (human-friendly display name), `description`, and `createdAt` (ISO 8601 timestamp). The filename is the workflow identifier.
 - **Inputs**: Optional parameters with defaults
 - **Steps**: Numbered steps with clear instructions
 - **Output**: Optional template for the final result
 
+When creating a new workflow, always include frontmatter with `name`, `description`, and `createdAt` set to the current date/time.
+
 ### Example: Simple Review
 
 ```markdown
-# Workflow: code-review
-
-Review code changes for quality issues.
+---
+name: Code Review
+description: Review code changes for quality issues.
+createdAt: 2026-02-18T10:30:00Z
+---
 
 ## Inputs
 
@@ -59,9 +62,11 @@ Focus on: error handling, edge cases, and readability.
 ### Example: With Conditions
 
 ```markdown
-# Workflow: smart-fix
-
-Analyze an issue and apply a fix only if it's safe to do so.
+---
+name: Smart Fix
+description: Analyze an issue and apply a fix only if it's safe to do so.
+createdAt: 2026-02-18T10:30:00Z
+---
 
 ## Steps
 
@@ -89,9 +94,11 @@ Create a report explaining why manual intervention is needed:
 ### Example: With Error Handling
 
 ```markdown
-# Workflow: deploy-with-rollback
-
-Deploy changes with automatic rollback on failure.
+---
+name: Deploy with Rollback
+description: Deploy changes with automatic rollback on failure.
+createdAt: 2026-02-18T10:30:00Z
+---
 
 ## Inputs
 
@@ -184,16 +191,24 @@ When the user asks you to run a workflow:
 3. **Present the execution plan to the user.** After creating the todos, present a brief summary of what will be executed and ask the user to confirm before proceeding. For example: "I've planned the following steps: [list steps]. Does this look good to proceed?"
 4. **Wait for user approval.** Do not begin execution until the user confirms.
 5. Collect any required inputs from the user. If inputs are missing and have no defaults, ask for them.
-6. Execute each step in order:
+6. Call `recordWorkflowRun` with the workflow URI (e.g. `workflow:///workflow-name`) to record the run in the current session.
+7. Execute each step in order:
     - Check conditions before running conditional steps.
     - Interpolate variables (`{{input.name}}` and `{{Step Name}}`).
     - Follow error handling directives.
     - Mark each todo complete/failed/skipped as you go.
-7. Provide running updates in normal chat messages as you work through each step. If errors occur, judgment calls are needed, or unexpected conditions arise, mention them in chat and add new todos as needed.
+8. Provide running updates in normal chat messages as you work through each step. If errors occur, judgment calls are needed, or unexpected conditions arise, mention them in chat and add new todos as needed.
 
 Complete tasks fully, follow requested formats exactly, and provide specific analysis rather than vague summaries.
 
-After execution, write a brief summary to `workflows/.runs/` noting what succeeded, failed, or was skipped. Report results to the user using the workflow's Output section if present.
+After execution, present a structured run summary directly in chat:
+- A heading with the workflow name and a pass/fail indicator (e.g., ## Workflow Run: Code Review)
+- A tally of step outcomes (e.g., "3 of 3 steps succeeded" or "2 of 3 steps succeeded, 1 failed")
+- For failed steps, a brief explanation of what went wrong
+- A summary of any modifications made to external systems or artifacts produced
+- If the workflow defines an Output section, include that content last
+
+If the workflow was aborted or no steps completed, still produce a summary explaining what happened and which steps were skipped.
 
 ## Improving Workflows
 

@@ -94,7 +94,7 @@ func (s *Store) GetByIDByAccountID(ctx context.Context, id, accountID string) (*
 
 func (s *Store) FindByAccount(ctx context.Context, sessionType, accountID string) ([]Session, error) {
 	var sessions []Session
-	err := s.db.WithContext(ctx).Where("type = ? and account_id = ? and description != ''", sessionType, accountID).
+	err := s.db.WithContext(ctx).Where("type = ? and account_id = ?", sessionType, accountID).
 		Order("created_at desc").Find(&sessions).Error
 	if err != nil {
 		return nil, err

@@ -1,6 +1,8 @@
-# Workflow: another
-
-Another workflow for testing multiple workflow listing.
+---
+name: Another Workflow
+description: Another workflow for testing multiple workflow listing.
+createdAt: 2026-01-16T10:30:00Z
+---
 
 ## Steps
 

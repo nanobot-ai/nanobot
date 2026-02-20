@@ -78,11 +78,14 @@ type ChatList struct {
 	Chats []Chat `json:"chats"`
 }
 
+const WorkflowURIsSessionKey = "workflowURIs"
+
 type Chat struct {
-	ID       string    `json:"id"`
-	Title    string    `json:"title"`
-	Created  time.Time `json:"created"`
-	ReadOnly bool      `json:"readonly,omitempty"`
+	ID           string    `json:"id"`
+	Title        string    `json:"title"`
+	Created      time.Time `json:"created"`
+	ReadOnly     bool      `json:"readonly,omitempty"`
+	WorkflowURIs []string  `json:"workflowURIs,omitempty"`
 }
 
 type AgentList struct {

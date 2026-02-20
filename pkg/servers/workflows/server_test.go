@@ -74,7 +74,7 @@ func TestResourcesList(t *testing.T) {
 		t.Error("should have no-description workflow")
 	}
 
-	// Verify description and URI format
+	// Verify description, URI format, and _meta from frontmatter
 	testWf := resourceMap["test-workflow"]
 	if testWf.Description != "This is a test workflow for unit testing purposes." {
 		t.Errorf("test-workflow description = %q, want 'This is a test workflow for unit testing purposes.'", testWf.Description)
@@ -85,16 +85,34 @@ func TestResourcesList(t *testing.T) {
 	if testWf.MimeType != "text/markdown" {
 		t.Errorf("test-workflow MimeType = %q, want 'text/markdown'", testWf.MimeType)
 	}
+	if testWf.Meta == nil {
+		t.Fatal("test-workflow Meta should not be nil")
+	}
+	if testWf.Meta["name"] != "Test Workflow" {
+		t.Errorf("test-workflow Meta[name] = %q, want 'Test Workflow'", testWf.Meta["name"])
+	}
+	if testWf.Meta["createdAt"] != "2026-01-15T09:00:00Z" {
+		t.Errorf("test-workflow Meta[createdAt] = %q", testWf.Meta["createdAt"])
+	}
 
 	anotherWf := resourceMap["another"]
 	if anotherWf.Description != "Another workflow for testing multiple workflow listing." {
 		t.Errorf("another description = %q, want 'Another workflow for testing multiple workflow listing.'", anotherWf.Description)
+	}
+	if anotherWf.Meta == nil {
+		t.Fatal("another Meta should not be nil")
+	}
+	if anotherWf.Meta["name"] != "Another Workflow" {
+		t.Errorf("another Meta[name] = %q, want 'Another Workflow'", anotherWf.Meta["name"])
 	}
 
 	// no-description should have empty description since it doesn't have "# Workflow:" header
 	noDescWf := resourceMap["no-description"]
 	if noDescWf.Description != "" {
 		t.Errorf("no-description should have empty description, got %q", noDescWf.Description)
+	}
+	if noDescWf.Meta != nil {
+		t.Errorf("no-description Meta should be nil, got %v", noDescWf.Meta)
 	}
 }
 
@@ -155,20 +173,29 @@ func TestResourcesRead(t *testing.T) {
 		expectError   bool
 		shouldContain string
 		expectName    string
+		expectMeta    map[string]string
 	}{
 		{
 			name:          "read workflow with standard URI",
 			uri:           "workflow:///test-workflow",
 			expectError:   false,
-			shouldContain: "# Workflow: test-workflow",
+			shouldContain: "## Inputs",
 			expectName:    "test-workflow",
+			expectMeta: map[string]string{
+				"name":      "Test Workflow",
+				"createdAt": "2026-01-15T09:00:00Z",
+			},
 		},
 		{
 			name:          "read another workflow",
 			uri:           "workflow:///another",
 			expectError:   false,
-			shouldContain: "# Workflow: another",
+			shouldContain: "## Steps",
 			expectName:    "another",
+			expectMeta: map[string]string{
+				"name":      "Another Workflow",
+				"createdAt": "2026-01-16T10:30:00Z",
+			},
 		},
 		{
 			name:        "nonexistent workflow",
@@ -218,78 +245,79 @@ func TestResourcesRead(t *testing.T) {
 				if content.URI != tt.uri {
 					t.Errorf("content URI = %q, want %q", content.URI, tt.uri)
 				}
+				if tt.expectMeta != nil {
+					if content.Meta == nil {
+						t.Fatal("expected _meta to be set, got nil")
+					}
+					for key, want := range tt.expectMeta {
+						got, ok := content.Meta[key]
+						if !ok {
+							t.Errorf("_meta missing key %q", key)
+						} else if got != want {
+							t.Errorf("_meta[%q] = %q, want %q", key, got, want)
+						}
+					}
+				}
 			}
 		})
 	}
 }
 
-func TestParseWorkflowDescription(t *testing.T) {
+func TestParseWorkflowFrontmatter(t *testing.T) {
 	tests := []struct {
-		name     string
-		content  string
-		expected string
+		name       string
+		content    string
+		expectMeta workflowMeta
+		expectErr  bool
 	}{
 		{
-			name: "standard workflow header",
-			content: `# Workflow: my-workflow
-
-This is the description.
-
-## Steps`,
-			expected: "This is the description.",
+			name:    "full frontmatter",
+			content: "---\nname: Code Review\ndescription: Review code.\ncreatedAt: 2026-01-15T09:00:00Z\n---\n\n## Steps\n\nBody here.",
+			expectMeta: workflowMeta{
+				Name:        "Code Review",
+				Description: "Review code.",
+				CreatedAt:   "2026-01-15T09:00:00Z",
+			},
 		},
 		{
-			name: "multi-line description",
-			content: `# Workflow: my-workflow
-
-This is the first line.
-This is the second line.
-
-## Steps`,
-			expected: "This is the first line. This is the second line.",
+			name:       "no frontmatter",
+			content:    "# Workflow: test\n\nJust a body.",
+			expectMeta: workflowMeta{},
 		},
 		{
-			name: "no workflow header",
-			content: `# Something Else
-
-Description here.`,
-			expected: "",
+			name:    "partial fields",
+			content: "---\nname: My Workflow\n---\n\n## Steps",
+			expectMeta: workflowMeta{
+				Name: "My Workflow",
+			},
 		},
 		{
-			name: "workflow header with no description",
-			content: `# Workflow: my-workflow
-
-## Steps`,
-			expected: "",
+			name:       "malformed frontmatter - no closing delimiter",
+			content:    "---\nname: Broken\n# Workflow: test",
+			expectMeta: workflowMeta{},
+			expectErr:  true,
 		},
 		{
-			name:     "workflow header at end of file",
-			content:  `# Workflow: my-workflow`,
-			expected: "",
+			name:       "malformed frontmatter - invalid yaml",
+			content:    "---\n: :\n---\n\n# Workflow: test",
+			expectMeta: workflowMeta{},
+			expectErr:  true,
 		},
 		{
-			name:     "empty content",
-			content:  "",
-			expected: "",
-		},
-		{
-			name: "description with multiple paragraphs",
-			content: `# Workflow: my-workflow
-
-First paragraph only.
-
-Second paragraph is ignored.
-
-## Steps`,
-			expected: "First paragraph only.",
+			name:       "empty content",
+			content:    "",
+			expectMeta: workflowMeta{},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseWorkflowDescription(tt.content)
-			if result != tt.expected {
-				t.Errorf("parseWorkflowDescription() = %q, want %q", result, tt.expected)
+			meta, err := parseWorkflowFrontmatter(tt.content)
+			if meta != tt.expectMeta {
+				t.Errorf("meta = %+v, want %+v", meta, tt.expectMeta)
+			}
+			if (err != nil) != tt.expectErr {
+				t.Errorf("err = %v, expectErr = %v", err, tt.expectErr)
 			}
 		})
 	}

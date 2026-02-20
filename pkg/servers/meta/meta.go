@@ -23,7 +23,6 @@ func NewServer(data *sessiondata.Data) *Server {
 		mcp.NewServerTool("list_chats", "Returns all previous chat threads", s.listChats),
 		mcp.NewServerTool("update_chat", "Update fields of a give chat thread", s.updateChat),
 		mcp.NewServerTool("list_agents", "List available agents and their meta data", s.listAgents),
-		//mcp.NewServerTool("clone", "Clone the current session and return a new session ID", s.clone),
 	)
 
 	return s
