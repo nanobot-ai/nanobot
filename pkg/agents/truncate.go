@@ -49,10 +49,6 @@ func truncateToolResult(ctx context.Context, toolName, callID string, msg *types
 
 	// Build file path
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
-	if sessionID == "" {
-		sessionID = "default"
-	}
-
 	filePath := filepath.Join(".nanobot", sanitizePathComponent(sessionID),
 		"truncated-outputs",
 		sanitizePathComponent(toolName)+"-"+sanitizePathComponent(callID)+ext)
