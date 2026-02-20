@@ -111,44 +111,9 @@ func (a *Agents) compact(ctx context.Context, req types.CompletionRequest, curre
 
 	var summaryPrompt string
 	if previousSummaryText != "" {
-		summaryPrompt = fmt.Sprintf(`You are a conversation summarizer. Below is a previous summary of an earlier portion of the conversation, followed by the new messages since that summary.
-
-Please provide an updated summary that incorporates both the previous summary and the new messages. Capture:
-1. All key topics discussed
-2. Important decisions made
-3. Relevant context and details that would be needed to continue the conversation
-4. Any pending questions or tasks
-
-Be thorough but concise. This summary will replace the conversation history to allow the conversation to continue.
-Be clear about whether any task is incomplete, and if so, which parts are finished and which parts are not.
-If the user asked for something that has already been completed, state this clearly to avoid the next agent repeating the work.
-
---- PREVIOUS SUMMARY ---
-%s
---- END PREVIOUS SUMMARY ---
-
---- NEW MESSAGES ---
-%s
---- END NEW MESSAGES ---
-
-Provide your updated summary now:`, previousSummaryText, transcript)
+		summaryPrompt = buildRecompactionPrompt(previousSummaryText, transcript)
 	} else {
-		summaryPrompt = fmt.Sprintf(`You are a conversation summarizer. Below is a conversation transcript between a user and an assistant.
-Please provide a detailed summary that captures:
-1. All key topics discussed
-2. Important decisions made
-3. Relevant context and details that would be needed to continue the conversation
-4. Any pending questions or tasks
-
-Be thorough but concise. This summary will replace the conversation history to allow the conversation to continue.
-Be clear about whether any task is incomplete, and if so, which parts are finished and which parts are not.
-If the user asked for something that has already been completed, state this clearly to avoid the next agent repeating the work.
-
---- CONVERSATION TRANSCRIPT ---
-%s
---- END TRANSCRIPT ---
-
-Provide your summary now:`, transcript)
+		summaryPrompt = buildInitialCompactionPrompt(transcript)
 	}
 
 	summaryReq := types.CompletionRequest{
@@ -192,7 +157,7 @@ Provide your summary now:`, transcript)
 				ID: uuid.String(),
 				Content: &mcp.Content{
 					Type: "text",
-					Text: fmt.Sprintf("The conversation became too long and was compacted. The following is a summary. Please do not acknowledge the summary in your response, but continue where you left off with the conversation.\n\n[Conversation Summary]\n%s", summaryText),
+					Text: buildCompactionCarryForwardMessage(summaryText),
 					Meta: map[string]any{
 						compactionSummaryMetaKey: true,
 					},
@@ -265,4 +230,102 @@ func extractTextFromResponse(resp *types.CompletionResponse) string {
 		}
 	}
 	return strings.Join(texts, "\n")
+}
+
+func buildInitialCompactionPrompt(transcript string) string {
+	return fmt.Sprintf(`You are a helpful AI assistant tasked with summarizing conversations for handoff.
+
+Provide a detailed but concise summary that will help another general-purpose assistant continue the conversation correctly.
+Focus on:
+- What has already been done
+- What is currently in progress
+- What should happen next
+- Key user goals, constraints, preferences, and instructions that must persist
+- Important decisions, facts, and context needed to avoid repeating work
+
+When constructing the summary, use this template:
+## Goal
+
+[What the user is trying to accomplish]
+
+## Key Instructions & Preferences
+
+- [Important constraints, preferences, or requirements]
+
+## What Happened
+
+[Key actions, decisions, and notable outcomes so far]
+
+## Current State
+
+[What is complete, what is in progress, and any known blockers]
+
+## Next Steps
+
+- [The next concrete actions the assistant should take]
+
+## Open Questions / Risks
+
+- [Any unresolved questions, ambiguities, or risks]
+
+Do not answer questions from the transcript. Output only the summary.
+
+--- CONVERSATION TRANSCRIPT ---
+%s
+--- END TRANSCRIPT ---
+`, transcript)
+}
+
+func buildRecompactionPrompt(previousSummaryText, transcript string) string {
+	return fmt.Sprintf(`You are a helpful AI assistant tasked with updating a conversation handoff summary.
+
+You are given a previous summary plus new messages that occurred after that summary.
+Create a single updated summary suitable for a general-purpose assistant to continue the conversation.
+
+Merge rules:
+- Treat the previous summary as prior context
+- Integrate only the new information and status changes from the new messages
+- Preserve unresolved tasks and open questions
+- Remove or collapse duplicate details
+- Keep completed items clearly marked as completed
+
+Use this template:
+## Goal
+
+[What the user is trying to accomplish]
+
+## Key Instructions & Preferences
+
+- [Important constraints, preferences, or requirements]
+
+## What Happened
+
+[Key actions, decisions, and notable outcomes so far]
+
+## Current State
+
+[What is complete, what is in progress, and any known blockers]
+
+## Next Steps
+
+- [The next concrete actions the assistant should take]
+
+## Open Questions / Risks
+
+- [Any unresolved questions, ambiguities, or risks]
+
+Do not answer questions from the transcript. Output only the updated summary.
+
+--- PREVIOUS SUMMARY ---
+%s
+--- END PREVIOUS SUMMARY ---
+
+--- NEW MESSAGES ---
+%s
+--- END NEW MESSAGES ---
+`, previousSummaryText, transcript)
+}
+
+func buildCompactionCarryForwardMessage(summaryText string) string {
+	return fmt.Sprintf("The conversation history was compacted to stay within context limits. Continue the conversation naturally using the summary below as working context. Do not mention this compaction unless the user asks.\n\n[Conversation Summary]\n%s", summaryText)
 }
