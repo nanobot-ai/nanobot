@@ -14,7 +14,7 @@ import (
 const (
 	compactionThreshold      = 0.835
 	compactionSummaryMetaKey = "ai.nanobot.meta/compaction-summary"
-	defaultContextWindow = 200_000
+	defaultContextWindow     = 200_000
 )
 
 // getContextWindowSize returns the context window size for the given model.
