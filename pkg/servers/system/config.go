@@ -58,8 +58,7 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 				}
 
 				// Make workflow tools available to agents with skills permission
-				agent.MCPServers = append(agent.MCPServers, "nanobot.workflows/record_workflow_run")
-				agent.MCPServers = append(agent.MCPServers, "nanobot.workflows/delete_workflow")
+				agent.MCPServers = append(agent.MCPServers, "nanobot.workflows/recordWorkflowRun", "nanobot.workflows/deleteWorkflow")
 			}
 		}
 

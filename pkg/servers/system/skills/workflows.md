@@ -191,7 +191,7 @@ When the user asks you to run a workflow:
 3. **Present the execution plan to the user.** After creating the todos, present a brief summary of what will be executed and ask the user to confirm before proceeding. For example: "I've planned the following steps: [list steps]. Does this look good to proceed?"
 4. **Wait for user approval.** Do not begin execution until the user confirms.
 5. Collect any required inputs from the user. If inputs are missing and have no defaults, ask for them.
-6. Call `record_workflow_run` with the workflow URI (e.g. `workflow:///workflow-name`) to record the run in the current session.
+6. Call `recordWorkflowRun` with the workflow URI (e.g. `workflow:///workflow-name`) to record the run in the current session.
 7. Execute each step in order:
     - Check conditions before running conditional steps.
     - Interpolate variables (`{{input.name}}` and `{{Step Name}}`).

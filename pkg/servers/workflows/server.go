@@ -73,8 +73,8 @@ func NewServer() *Server {
 	}
 
 	s.tools = mcp.NewServerTools(
-		mcp.NewServerTool("record_workflow_run", "Record that a workflow was executed in the current chat session", s.recordWorkflowRun),
-		mcp.NewServerTool("delete_workflow", "Delete a workflow by its URI", s.deleteWorkflow),
+		mcp.NewServerTool("recordWorkflowRun", "Record that a workflow was executed in the current chat session", s.recordWorkflowRun),
+		mcp.NewServerTool("deleteWorkflow", "Delete a workflow by its URI", s.deleteWorkflow),
 	)
 
 	return s
@@ -147,7 +147,17 @@ func (s *Server) recordWorkflowRun(ctx context.Context, data struct {
 	var uris []string
 	mcpSession.Get(types.WorkflowURIsSessionKey, &uris)
 
-	uris = append(uris, data.URI)
+	// Deduplicate: only append if URI is not already recorded
+	var found bool
+	for _, u := range uris {
+		if u == data.URI {
+			found = true
+			break
+		}
+	}
+	if !found {
+		uris = append(uris, data.URI)
+	}
 
 	mcpSession.Set(types.WorkflowURIsSessionKey, uris)
 
@@ -163,10 +173,7 @@ func (s *Server) deleteWorkflow(ctx context.Context, data struct {
 	}
 
 	workflowPath := filepath.Join(".", workflowsDir, workflowName+".md")
-	if err := os.Remove(workflowPath); err != nil {
-		if os.IsNotExist(err) {
-			return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", data.URI)
-		}
+	if err := os.Remove(workflowPath); err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("failed to delete workflow: %w", err)
 	}
 
