@@ -58,14 +58,11 @@ func truncateToolResult(ctx context.Context, toolName, callID string, msg *types
 		sanitizePathComponent(toolName)+"-"+sanitizePathComponent(callID)+ext)
 
 	var writeErr error
-	if err := writeFullResult(content, filePath); err != nil {
-		log.Errorf(ctx, "failed to write truncated tool result to %s: %v", filePath, err)
-		writeErr = err
-	}
-
+	writeErr := writeFullResult(content, filePath)
 	truncated := buildTruncatedContent(content, maxToolResultSize, filePath)
-
 	if writeErr != nil {
+		log.Errorf(ctx, "failed to write truncated tool result to %s: %v", filePath, writeErr)
+		
 		noticePart := mcp.Content{
 			Type: "text",
 			Text: fmt.Sprintf("Note: failed to persist full tool output to %s: %v. Only truncated output is available.", filePath, writeErr),
