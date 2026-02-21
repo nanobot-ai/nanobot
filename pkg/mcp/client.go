@@ -149,7 +149,8 @@ type Server struct {
 	// If providing no tool overrides, all tools will be enabled.
 	ToolOverrides ToolOverrides `json:"toolOverrides,omitzero"`
 
-	Hooks Hooks `json:"hooks,omitzero"`
+	Publish bool  `json:"publish,omitempty"`
+	Hooks   Hooks `json:"hooks,omitzero"`
 }
 
 func (s Server) MarshalJSON() ([]byte, error) {

@@ -1,5 +1,6 @@
 <script lang="ts">
 import { ChevronDown } from "@lucide/svelte";
+import type { Client } from "@modelcontextprotocol/sdk/client";
 import Elicitation from "$lib/components/Elicitation.svelte";
 import Prompt from "$lib/components/Prompt.svelte";
 import type {
@@ -43,6 +44,8 @@ interface Props {
 	selectedAgentId?: string;
 	onAgentChange?: (agentId: string) => void;
 	onCancel?: () => void;
+	/** SDK Client instance scoped to the current thread's MCP session */
+	client?: Client;
 }
 
 const {
@@ -63,6 +66,7 @@ const {
 	onAgentChange,
 	isLoading,
 	onCancel,
+	client,
 }: Props = $props();
 
 let messagesContainer: HTMLElement;

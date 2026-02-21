@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { ChatService } from "$lib/chat.svelte";
+import { setMcpAppsContext } from "$lib/context/mcpApps.svelte";
 import Thread from "$lib/components/Thread.svelte";
 
 interface Props {
@@ -7,6 +8,13 @@ interface Props {
 }
 
 const { chat }: Props = $props();
+
+setMcpAppsContext({
+	get client() { return chat.client; },
+	get tools() { return chat.tools; },
+	ensureClient: () => chat.ensureClient(),
+	sendMessage: (msg: string) => chat.sendMessage(msg),
+});
 </script>
 
 {#key chat.chatId}
@@ -27,5 +35,6 @@ const { chat }: Props = $props();
 		isLoading={chat.isLoading}
 		agent={chat.agent}
 		onCancel={chat.cancelChat}
+		client={chat.client}
 	/>
 {/key}

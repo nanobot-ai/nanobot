@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { Settings } from '@lucide/svelte';
 	import { renderMarkdown } from '$lib/markdown';
-	import type { Attachment, ChatResult, ChatMessageItemToolCall, ToolOutputItem } from '$lib/types';
-	import '@mcp-ui/client/ui-resource-renderer.wc.js';
-	import MessageItemUI from '$lib/components/MessageItemUI.svelte';
-	import { isUIResource } from '@mcp-ui/client';
+	import type { Attachment, ChatResult, ChatMessageItemToolCall } from '$lib/types';
+	import { getMcpAppsContext } from '$lib/context/mcpApps.svelte';
+	import MessageItemApp from './MessageItemApp.svelte';
 
 	interface Props {
 		item: ChatMessageItemToolCall;
@@ -12,11 +11,10 @@
 	}
 
 	let { item, onSend }: Props = $props();
-	let singleUIResource = $derived(
-		item.output?.content &&
-			item.output?.content?.filter((i) => {
-				return isUIResource(i) && !i.resource?._meta?.['ai.nanobo.meta/workspace'];
-			}).length === 1
+
+	const { tools } = getMcpAppsContext();
+	const toolResourceUri = $derived(
+		tools?.find((t) => t.name === item.name)?._meta?.ui?.resourceUri
 	);
 
 	function parseToolInput(input: string) {
@@ -29,38 +27,6 @@
 			// JSON parsing failed, fall back to string display
 		}
 		return { success: false, data: input };
-	}
-
-	function getStyle(
-		item: ToolOutputItem,
-		singleUIResource: boolean = false
-	): Record<string, string> {
-		if (singleUIResource) {
-			return {};
-		}
-		if (isUIResource(item) && item.resource._meta?.['mcpui.dev/ui-preferred-frame-size']) {
-			const coords = item.resource._meta['mcpui.dev/ui-preferred-frame-size'];
-			if (Array.isArray(coords) && coords[0] && coords[1]) {
-				return {
-					width: `${coords[0]}`,
-					height: `${coords[1]}`
-				};
-			} else if (
-				coords &&
-				typeof coords === 'object' &&
-				'height' in coords &&
-				'width' in coords
-			) {
-				return {
-					width: `${coords.width}`,
-					height: `${coords.height}`
-				};
-			}
-		}
-		return {
-			width: '300px',
-			height: '400px'
-		};
 	}
 
 	function parseToolOutput(output: string) {
@@ -171,16 +137,13 @@
 	</div>
 </div>
 
+{#if toolResourceUri && item.output}
+	<MessageItemApp {item} resourceUri={toolResourceUri} />
+{/if}
+
 <div class="flex w-full flex-wrap items-start justify-start gap-2 p-2">
 	{#if item.output && item.output.content}
 		{#each item.output.content as contentItem, i (i)}
-			{#if contentItem.type === 'resource' && contentItem.resource && isUIResource(contentItem) && !contentItem.resource._meta?.['ai.nanobot.meta/workspace']}
-				<MessageItemUI
-					item={contentItem}
-					{onSend}
-					style={getStyle(contentItem, singleUIResource)}
-				/>
-			{/if}
 			{#if contentItem.type === 'image'}
 				<img
 					src="data:{contentItem.mimeType};base64,{contentItem.data}"

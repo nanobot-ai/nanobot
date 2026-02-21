@@ -43,7 +43,7 @@
 							title: content.resource.title,
 							mimeType: content.resource.mimeType,
 							size: content.resource.size,
-							annotations: content.resource.annotations,
+							annotations: content.resource.annotations as Resource['annotations'],
 							_meta: content.resource._meta
 						});
 					} else if (content.type === 'resource_link') {

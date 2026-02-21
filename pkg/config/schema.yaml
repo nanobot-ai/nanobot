@@ -361,6 +361,12 @@ definitions:
         description: |
           A map of hooks that will be executed at various stages of the MCP Server lifecycle.
           This is useful for customizing the behavior of the MCP Server.
+      publish:
+        type: boolean
+        description: |
+          Whether the tools from this MCP Server should be published and available in the UI's
+          tools list. This is useful for directory-based config where there is no separate
+          publish section. Defaults to false if unset.
       toolOverrides:
         type: object
         description: |

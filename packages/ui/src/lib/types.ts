@@ -1,5 +1,28 @@
 import type { ChatService } from '$lib/chat.svelte';
 
+// Re-export types from the official MCP SDK.
+// Some SDK Zod schemas lag behind the spec interfaces (e.g. Resource missing `size`,
+// PromptArgument missing `title`), so we extend the inferred types where needed.
+export type { BaseMetadata, Icon } from '@modelcontextprotocol/sdk/types.js';
+
+import type {
+	Resource as SDKResource,
+	Prompt as SDKPrompt,
+	PromptArgument as SDKPromptArgument
+} from '@modelcontextprotocol/sdk/types.js';
+
+/** SDK Resource extended with `size` (present in spec but missing from Zod schema). */
+export type Resource = SDKResource & { size?: number };
+
+/** SDK PromptArgument extended with `title` (present in spec's BaseMetadata but missing from Zod schema). */
+export type PromptArgument = SDKPromptArgument & { title?: string };
+
+/** SDK Prompt with arguments typed using our extended PromptArgument. */
+export type Prompt = Omit<SDKPrompt, 'arguments'> & { arguments?: PromptArgument[] };
+
+// Re-export the ElicitResult type (named ElicitResult in SDK, was ElicitationResult here)
+export type { ElicitResult as ElicitationResult } from '@modelcontextprotocol/sdk/types.js';
+
 export interface Agent {
 	id: string;
 	name?: string;
@@ -162,102 +185,24 @@ export interface Notification {
 }
 
 export interface Prompts {
-	prompts: Prompt[];
+	prompts: import('@modelcontextprotocol/sdk/types.js').Prompt[];
 }
 
 export interface Resources {
-	resources: Resource[];
+	resources: import('@modelcontextprotocol/sdk/types.js').Resource[];
 }
 
+/**
+ * Convenience type for resource contents that allows checking both text and blob.
+ * The SDK splits these into TextResourceContents and BlobResourceContents,
+ * but our code commonly checks both fields on a single object.
+ */
 export interface ResourceContents {
 	uri: string;
 	mimeType?: string;
 	text?: string;
 	blob?: string;
 	_meta?: { [key: string]: unknown };
-}
-
-export interface Resource extends BaseMetadata, Icons {
-	uri: string;
-	description?: string;
-	mimeType?: string;
-	annotations?: {
-		audience?: string[];
-		priority?: number;
-		lastModified?: string;
-	};
-	size?: number;
-	_meta?: { [key: string]: unknown };
-}
-
-export interface Icons {
-	/**
-	 * Optional set of sized icons that the client can display in a user interface.
-	 *
-	 * Clients that support rendering icons MUST support at least the following MIME types:
-	 * - `image/png` - PNG images (safe, universal compatibility)
-	 * - `image/jpeg` (and `image/jpg`) - JPEG images (safe, universal compatibility)
-	 *
-	 * Clients that support rendering icons SHOULD also support:
-	 * - `image/svg+xml` - SVG images (scalable but requires security precautions)
-	 * - `image/webp` - WebP images (modern, efficient format)
-	 */
-	icons?: Icon[];
-}
-
-export interface Icon {
-	/**
-	 * A standard URI pointing to an icon resource. May be an HTTP/HTTPS URL or a
-	 * `data:` URI with Base64-encoded image data.
-	 *
-	 * Consumers SHOULD takes steps to ensure URLs serving icons are from the
-	 * same domain as the client/server or a trusted domain.
-	 *
-	 * Consumers SHOULD take appropriate precautions when consuming SVGs as they can contain
-	 * executable JavaScript.
-	 *
-	 * @format uri
-	 */
-	src: string;
-
-	/**
-	 * Optional MIME type override if the source MIME type is missing or generic.
-	 * For example: `"image/png"`, `"image/jpeg"`, or `"image/svg+xml"`.
-	 */
-	mimeType?: string;
-
-	/**
-	 * Optional array of strings that specify sizes at which the icon can be used.
-	 * Each string should be in WxH format (e.g., `"48x48"`, `"96x96"`) or `"any"` for scalable formats like SVG.
-	 *
-	 * If not provided, the client should assume that the icon can be used at any size.
-	 */
-	sizes?: string[];
-
-	/**
-	 * Optional specifier for the theme this icon is designed for. `light` indicates
-	 * the icon is designed to be used with a light background, and `dark` indicates
-	 * the icon is designed to be used with a dark background.
-	 *
-	 * If not provided, the client should assume the icon can be used with any theme.
-	 */
-	theme?: 'light' | 'dark';
-}
-
-export interface BaseMetadata {
-	name: string;
-	title?: string;
-}
-
-export interface Prompt extends BaseMetadata {
-	description?: string;
-	arguments?: PromptArgument[];
-	_meta?: { [key: string]: unknown };
-}
-
-export interface PromptArgument extends BaseMetadata {
-	description?: string;
-	required?: boolean;
 }
 
 export interface Elicitation {
@@ -271,11 +216,6 @@ export interface Elicitation {
 		required?: string[];
 	};
 	_meta?: { [key: string]: unknown };
-}
-
-export interface ElicitationResult {
-	action: 'accept' | 'decline' | 'cancel';
-	content?: { [key: string]: string | number | boolean };
 }
 
 export type PrimitiveSchemaDefinition = StringSchema | NumberSchema | BooleanSchema | EnumSchema;
@@ -332,15 +272,16 @@ export interface UploadingFile {
 // Workspace types
 export const SessionMimeType = 'application/vnd.nanobot.session+json';
 
-// Forward declaration for WorkspaceClient
-export type { SimpleClient } from './mcpclient';
+// Forward declaration for WorkspaceClient - export both names
+export type { NanobotClient, NanobotClient as SimpleClient } from './mcpclient';
 
-export interface Workspace extends Icons {
+export interface Workspace {
 	id: string;
 	name: string;
 	created: string;
 	order?: number;
 	color?: string;
+	icons?: import('@modelcontextprotocol/sdk/types.js').Icon[];
 }
 
 export interface Session {
@@ -394,7 +335,15 @@ export interface InitializationResult {
 				};
 			};
 		};
+		[key: string]: unknown;
 	};
+	[key: string]: unknown;
+}
+
+export interface ToolDef {
+	name: string;
+	description?: string;
+	_meta?: { ui?: { resourceUri?: string }; [key: string]: unknown };
 }
 
 export const UIPath = '/mcp?ui';

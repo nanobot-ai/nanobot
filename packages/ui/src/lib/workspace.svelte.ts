@@ -1,6 +1,6 @@
 import { SvelteDate, SvelteMap } from "svelte/reactivity";
 import { ChatService } from "./chat.svelte";
-import { SimpleClient } from "./mcpclient";
+import { NanobotClient } from "./mcpclient";
 import type {
 	Session,
 	SessionDetails,
@@ -10,7 +10,7 @@ import type {
 } from "./types";
 
 export class WorkspaceInstance implements WorkspaceClient {
-	readonly #client: SimpleClient;
+	readonly #client: NanobotClient;
 	readonly #workspaceId: string;
 	readonly #service: WorkspaceService;
 	readonly #chatCache = new SvelteMap<string, ChatService>();
@@ -22,12 +22,12 @@ export class WorkspaceInstance implements WorkspaceClient {
 	constructor(
 		workspaceId: string,
 		service: WorkspaceService,
-		client?: SimpleClient,
+		client?: NanobotClient,
 	) {
 		this.#workspaceId = workspaceId;
 		this.#service = service;
 		this.#client =
-			client ?? new SimpleClient({ workspaceId, workspaceShared: true });
+			client ?? new NanobotClient({ workspaceId, workspaceShared: true });
 
 		// Load resources asynchronously
 		this.load();
@@ -67,7 +67,7 @@ export class WorkspaceInstance implements WorkspaceClient {
 	}
 
 	async newSession(opts?: { editor?: boolean }): Promise<ChatService> {
-		const client = new SimpleClient({
+		const client = new NanobotClient({
 			sessionId: "new",
 			workspaceId: this.#workspaceId,
 			workspaceShared: opts?.editor,
@@ -237,13 +237,13 @@ export class WorkspaceInstance implements WorkspaceClient {
 }
 
 export class WorkspaceService {
-	#client: SimpleClient;
+	#client: NanobotClient;
 	#instanceCache = new SvelteMap<string, WorkspaceInstance>();
 
 	workspaces = $state<Workspace[]>([]);
 
-	constructor(client?: SimpleClient) {
-		this.#client = client ?? new SimpleClient();
+	constructor(client?: NanobotClient) {
+		this.#client = client ?? new NanobotClient();
 	}
 
 	async load(): Promise<void> {

@@ -5,6 +5,7 @@
 	import { ChatService } from '$lib/chat.svelte';
 	import { onDestroy } from 'svelte';
 	import { getNotificationContext } from '$lib/context/notifications.svelte';
+	import { setMcpAppsContext } from '$lib/context/mcpApps.svelte';
 	import Workspace from '$lib/components/Workspace.svelte';
 	import ThreadFromChat from "$lib/components/ThreadFromChat.svelte";
 
@@ -12,6 +13,13 @@
 	// loose the event stream.
 	const chat = page.data.chat || new ChatService();
 	const notification = getNotificationContext();
+
+	setMcpAppsContext({
+		get client() { return chat.client; },
+		get tools() { return chat.tools; },
+		ensureClient: () => chat.ensureClient(),
+		sendMessage: (msg: string) => chat.sendMessage(msg),
+	});
 
 	$effect(() => {
 		if (!page.params.id) return;

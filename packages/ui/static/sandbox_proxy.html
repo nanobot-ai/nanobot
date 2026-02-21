@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;width:100%;height:100%}</style></head>
+<body><script>
+window.addEventListener('message', (event) => {
+  if (event.data?.method === 'ui/notifications/sandbox-resource-ready') {
+    const { html, csp } = event.data?.params ?? {};
+    if (html) {
+      var rd = (csp && csp.resourceDomains || []).join(' ');
+      var cd = (csp && csp.connectDomains || []).join(' ');
+      var cspStr = [
+        "default-src 'none'",
+        "script-src 'self' 'unsafe-inline'" + (rd ? ' ' + rd : ''),
+        "style-src 'self' 'unsafe-inline'" + (rd ? ' ' + rd : ''),
+        cd ? "connect-src 'self' " + cd : "connect-src 'none'",
+        "img-src 'self' data:" + (rd ? ' ' + rd : ''),
+        "font-src 'self'" + (rd ? ' ' + rd : ''),
+        "media-src 'self' data:" + (rd ? ' ' + rd : ''),
+        "object-src 'none'",
+        "frame-src 'none'"
+      ].join('; ');
+      console.debug('[sandbox_proxy] Applying CSP:', cspStr);
+      if (rd) console.debug('[sandbox_proxy] Resource domains:', rd);
+      if (cd) console.debug('[sandbox_proxy] Connect domains:', cd);
+      var meta = '<meta http-equiv="Content-Security-Policy" content="' + cspStr + '">';
+      document.open();
+      document.write(meta + html);
+      document.close();
+    }
+  }
+});
+window.parent.postMessage({ method: 'ui/notifications/sandbox-proxy-ready', params: {} }, '*');
+</script></body></html>
