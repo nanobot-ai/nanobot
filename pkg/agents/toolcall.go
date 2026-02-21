@@ -168,6 +168,7 @@ func (a *Agents) invoke(ctx context.Context, target types.TargetMapping[types.Ta
 			IsError: true,
 		}
 	}
+
 	return &types.Message{
 		Role: "user",
 		Items: []types.CompletionItem{
