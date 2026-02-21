@@ -714,6 +714,31 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 		}
 	}
 
+	// Apply truncation to prevent context overflow. Registered after the progress
+	// defer so it runs BEFORE it (LIFO), ensuring the progress notification also
+	// sees the truncated content.
+	defer func() {
+		if ret == nil || err != nil {
+			return
+		}
+		callID := ""
+		if opt.ToolCallInvocation != nil {
+			callID = opt.ToolCallInvocation.ToolCall.CallID
+		}
+		truncResult, truncErr := TruncateToolOutput(ctx, target, callID, ret, DefaultMaxBytes)
+		if truncErr != nil {
+			ret.Content = []mcp.Content{
+				{
+					Type: "text",
+					Text: fmt.Sprintf("Error: tool output too large and truncation failed: %v", truncErr),
+				},
+			}
+			ret.IsError = true
+		} else if truncResult.Truncated {
+			ret.Content = truncResult.Content
+		}
+	}()
+
 	if _, ok := config.Agents[server]; ok && tool != types.AgentTool+server {
 		return s.sampleCall(ctx, server, args, SampleCallOptions{
 			ProgressToken: opt.ProgressToken,
