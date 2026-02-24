@@ -195,6 +195,11 @@ func TestReadFileResource(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	goContent := "package main\n\nfunc main() {}\n"
+	if err := os.WriteFile("test.go", []byte(goContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	tests := []struct {
 		name         string
 		uri          string
@@ -223,6 +228,13 @@ func TestReadFileResource(t *testing.T) {
 			expectError:  false,
 			expectedName: "dot.png",
 			expectBlob:   true,
+		},
+		{
+			name:         "read Go file returns resource.text",
+			uri:          "file:///test.go",
+			expectError:  false,
+			expectedText: goContent,
+			expectedName: "test.go",
 		},
 		{
 			name:        "nonexistent file",
