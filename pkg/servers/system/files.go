@@ -273,8 +273,7 @@ func (s *Server) readFileResource(uri string) (*mcp.ReadResourceResult, error) {
 	} else if _, isPDF := types.PDFMimeTypes[mimeType]; isPDF {
 		rc.Blob = new(base64.StdEncoding.EncodeToString(content))
 	} else {
-		contentStr := string(content)
-		rc.Text = &contentStr
+		rc.Text = new(string(content))
 	}
 
 	return &mcp.ReadResourceResult{
