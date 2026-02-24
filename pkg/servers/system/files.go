@@ -269,11 +269,9 @@ func (s *Server) readFileResource(uri string) (*mcp.ReadResourceResult, error) {
 		Meta:     fileResourceMeta(relPath, info),
 	}
 	if _, isImage := types.ImageMimeTypes[mimeType]; isImage {
-		blob := base64.StdEncoding.EncodeToString(content)
-		rc.Blob = &blob
+		rc.Blob = new(base64.StdEncoding.EncodeToString(content))
 	} else if _, isPDF := types.PDFMimeTypes[mimeType]; isPDF {
-		blob := base64.StdEncoding.EncodeToString(content)
-		rc.Blob = &blob
+		rc.Blob = new(base64.StdEncoding.EncodeToString(content))
 	} else {
 		contentStr := string(content)
 		rc.Text = &contentStr
