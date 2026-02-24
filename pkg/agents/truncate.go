@@ -47,11 +47,7 @@ func truncateToolResult(ctx context.Context, toolName, callID string, msg *types
 		}
 	}
 
-	// Build file path
-	sessionID, _ := types.GetSessionAndAccountID(ctx)
-	filePath := filepath.Join(".nanobot", sanitizePathComponent(sessionID),
-		"truncated-outputs",
-		sanitizePathComponent(toolName)+"-"+sanitizePathComponent(callID)+ext)
+	filePath := truncatedOutputPath(ctx, toolName, callID, ext)
 
 	writeErr := writeFullResult(content, filePath)
 	truncated := buildTruncatedContent(content, maxToolResultSize, filePath)
@@ -81,6 +77,21 @@ func truncateToolResult(ctx context.Context, toolName, callID string, msg *types
 			},
 		},
 	}
+}
+
+func truncatedOutputPath(ctx context.Context, toolName, callID, ext string) string {
+	fileName := sanitizePathComponent(toolName) + "-" + sanitizePathComponent(callID) + ext
+
+	session := mcp.SessionFromContext(ctx)
+	if session != nil {
+		var cwd string
+		if session.Root().Get(types.CwdSessionKey, &cwd) && cwd != "" {
+			return filepath.Join(cwd, "truncated-outputs", fileName)
+		}
+	}
+
+	sessionID, _ := types.GetSessionAndAccountID(ctx)
+	return filepath.Join("sessions", sanitizePathComponent(sessionID), "truncated-outputs", fileName)
 }
 
 func contentSize(content []mcp.Content) int {

@@ -1,12 +1,13 @@
 import { SvelteDate, SvelteMap } from "svelte/reactivity";
 import { ChatService } from "./chat.svelte";
 import { SimpleClient } from "./mcpclient";
-import type {
-	Session,
-	SessionDetails,
-	Workspace,
-	WorkspaceClient,
-	WorkspaceFile,
+import {
+	ChatUIPath,
+	type Session,
+	type SessionDetails,
+	type Workspace,
+	type WorkspaceClient,
+	type WorkspaceFile,
 } from "./types";
 
 export class WorkspaceInstance implements WorkspaceClient {
@@ -27,7 +28,12 @@ export class WorkspaceInstance implements WorkspaceClient {
 		this.#workspaceId = workspaceId;
 		this.#service = service;
 		this.#client =
-			client ?? new SimpleClient({ workspaceId, workspaceShared: true });
+			client ??
+			new SimpleClient({
+				path: ChatUIPath,
+				workspaceId,
+				workspaceShared: true,
+			});
 
 		// Load resources asynchronously
 		this.load();
@@ -68,6 +74,7 @@ export class WorkspaceInstance implements WorkspaceClient {
 
 	async newSession(opts?: { editor?: boolean }): Promise<ChatService> {
 		const client = new SimpleClient({
+			path: ChatUIPath,
 			sessionId: "new",
 			workspaceId: this.#workspaceId,
 			workspaceShared: opts?.editor,
@@ -243,7 +250,7 @@ export class WorkspaceService {
 	workspaces = $state<Workspace[]>([]);
 
 	constructor(client?: SimpleClient) {
-		this.#client = client ?? new SimpleClient();
+		this.#client = client ?? new SimpleClient({ path: ChatUIPath });
 	}
 
 	async load(): Promise<void> {

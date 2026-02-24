@@ -18,7 +18,7 @@ func Handler(sessionManager *session.Manager, callBackAddress string) http.Handl
 
 	s := &server{
 		server: mcp.Server{
-			BaseURL: fmt.Sprintf("http://%s/mcp/ui", callBackAddress),
+			BaseURL: fmt.Sprintf("http://%s/mcp/chat", callBackAddress),
 		},
 		sessionManager: sessionManager,
 	}

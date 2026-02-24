@@ -43,7 +43,18 @@ func (s *ToolsServer) OnMessage(ctx context.Context, msg mcp.Message) {
 	}
 }
 
-func (s *ToolsServer) initialize(_ context.Context, _ mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
+func (s *ToolsServer) initialize(ctx context.Context, _ mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
+	if !types.IsUISession(ctx) {
+		// Only the UI sessions should have access to this server, so return no capabilities if it's not a UI session.
+		return &mcp.InitializeResult{
+			ProtocolVersion: params.ProtocolVersion,
+			ServerInfo: mcp.ServerInfo{
+				Name:    version.Name,
+				Version: version.Get().String(),
+			},
+		}, nil
+	}
+
 	return &mcp.InitializeResult{
 		ProtocolVersion: params.ProtocolVersion,
 		Capabilities: mcp.ServerCapabilities{

@@ -397,4 +397,8 @@ export interface InitializationResult {
 	};
 }
 
-export const UIPath = '/mcp?ui';
+export const UIPath = '/mcp/meta';
+export const ChatUIPath = '/mcp/chat';
+
+export const AgentResourcePrefix = 'agent:///';
+export const ChatThreadResourcePrefix = 'chat:///threads/';

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -35,18 +36,25 @@ const (
 )
 
 type Server struct {
-	configDir          string
-	tools              mcp.ServerTools
-	subscriptions      *fswatch.SubscriptionManager
-	fileWatcher        *fswatch.Watcher
-	fileWatcherOnce    sync.Once
-	fileWatcherInitErr error
+	configDir        string
+	tools            mcp.ServerTools
+	subscriptions    *fswatch.SubscriptionManager
+	baseCwd          string
+	fileWatchers     map[string]*fswatch.Watcher
+	fileWatchersLock sync.Mutex
 }
 
 func NewServer(configDir string) *Server {
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = ""
+	}
+
 	s := &Server{
 		configDir:     configDir,
 		subscriptions: fswatch.NewSubscriptionManager(context.Background()),
+		baseCwd:       cwd,
+		fileWatchers:  map[string]*fswatch.Watcher{},
 	}
 
 	s.tools = mcp.NewServerTools(
@@ -93,13 +101,14 @@ Usage notes:
     - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
   - AVOID using `+"`cd <directory> && <command>`"+`. Use the `+"`workdir`"+` parameter to change directories instead.
 
-The working directory is the current directory from which commands are executed. File paths can be relative to this directory.`, s.bash),
+The working directory is the current directory from which commands are executed. Prefer absolute paths. Relative paths are resolved from this working directory.`, s.bash),
 		// Read tool
 		mcp.NewServerTool("read", `Reads a file from the local filesystem. You can access any file directly by using this tool.
 Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
 
 Usage:
-- The file_path parameter can be relative to the working directory or an absolute path
+- Prefer using an absolute file_path
+- Relative file_path values are resolved from the session working directory
 - By default, it reads up to 2000 lines starting from the beginning of the file
 - You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters
 - Any lines longer than 2000 characters will be truncated
@@ -117,7 +126,7 @@ Usage:
 - NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
 - Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.
 
-File paths should be relative to the working directory, but can be absolute if absolutely necessary.`, s.write),
+Prefer absolute file paths. Relative paths are still supported and are resolved from the session working directory.`, s.write),
 		// Edit tool
 		mcp.NewServerTool("edit", `Performs exact string replacements in files.
 
@@ -129,7 +138,7 @@ Usage:
 - The edit will FAIL if `+"`old_string`"+` is not unique in the file. Either provide a larger string with more surrounding context to make it unique or use `+"`replace_all`"+` to change every instance of `+"`old_string`"+`.
 - Use `+"`replace_all`"+` for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.
 
-File paths should be relative to the working directory, but can be absolute if absolutely necessary.`, s.edit),
+Prefer absolute file paths. Relative paths are still supported and are resolved from the session working directory.`, s.edit),
 		// Glob tool
 		mcp.NewServerTool("glob", `- Fast file pattern matching tool that works with any codebase size
 - Supports glob patterns like "**/*.js" or "src/**/*.ts"
@@ -138,7 +147,7 @@ File paths should be relative to the working directory, but can be absolute if a
 - When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the Task tool instead
 - You can call multiple tools in a single response. It is always better to speculatively perform multiple searches in parallel if they are potentially useful.
 
-File paths should be relative to the working directory, but can be absolute if absolutely necessary.`, s.glob),
+Prefer absolute paths. Relative paths are still supported and are resolved from the session working directory.`, s.glob),
 		// Grep tool
 		mcp.NewServerTool("grep", `A powerful search tool built on ripgrep
 
@@ -151,7 +160,7 @@ File paths should be relative to the working directory, but can be absolute if a
   - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `+"`interface\\{\\}`"+` to find `+"`interface{}`"+` in Go code)
   - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `+"`struct \\{[\\s\\S]*?field`"+`, use `+"`multiline: true`"+`
 
-The path parameter is relative to the working directory if not specified as absolute.`, s.grep),
+Prefer an absolute path parameter. Relative paths are still supported and are resolved from the session working directory.`, s.grep),
 		// TodoWrite tool
 		mcp.NewServerTool("todoWrite", `Use this tool to create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.
 It also helps the user understand the progress of the task and overall progress of their requests.
@@ -279,10 +288,17 @@ Only servers added via addMCPServer can be removed with this tool.`, s.removeMCP
 
 // Close cleans up resources
 func (s *Server) Close() error {
-	if s.fileWatcher != nil {
-		return s.fileWatcher.Close()
+	s.fileWatchersLock.Lock()
+	defer s.fileWatchersLock.Unlock()
+
+	var errs []error
+	for _, watcher := range s.fileWatchers {
+		if err := watcher.Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
-	return nil
+	clear(s.fileWatchers)
+	return errors.Join(errs...)
 }
 
 func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
@@ -311,8 +327,22 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 }
 
 func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
+	if !types.IsChatSession(ctx) {
+		// Only chat sessions should have access to the resources in this server, so return tools as the only capability
+		return &mcp.InitializeResult{
+			ProtocolVersion: params.ProtocolVersion,
+			Capabilities: mcp.ServerCapabilities{
+				Tools: &mcp.ToolsServerCapability{},
+			},
+			ServerInfo: mcp.ServerInfo{
+				Name:    version.Name,
+				Version: version.Get().String(),
+			},
+		}, nil
+	}
+
 	// Ensure watcher is running
-	if err := s.ensureFileWatcher(); err != nil {
+	if err := s.ensureFileWatcher(ctx); err != nil {
 		return nil, mcp.ErrRPCInternal.WithMessage("failed to start file watcher: %v", err)
 	}
 
@@ -341,7 +371,7 @@ func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListRes
 	resources := s.listTodoResources()
 
 	// Add file resources
-	fileResources, err := s.listFileResources()
+	fileResources, err := s.listFileResources(ctx)
 	if err != nil {
 		// Log but don't fail - still return todo resources
 		log.Errorf(ctx, "failed to list file resources: %v", err)
@@ -357,7 +387,7 @@ func (s *Server) resourcesRead(ctx context.Context, msg mcp.Message, request mcp
 	if strings.HasPrefix(request.URI, "todo:///") {
 		return s.readTodoResource(ctx, request.URI)
 	} else if strings.HasPrefix(request.URI, "file:///") {
-		return s.readFileResource(request.URI)
+		return s.readFileResource(ctx, request.URI)
 	}
 	return nil, mcp.ErrRPCInvalidParams.WithMessage("unsupported resource URI: %s", request.URI)
 }
@@ -371,7 +401,7 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 	if strings.HasPrefix(request.URI, "todo:///") {
 		err = s.subscribeTodoResource(request.URI)
 	} else if strings.HasPrefix(request.URI, "file:///") {
-		err = s.subscribeFileResource(request.URI)
+		err = s.subscribeFileResource(ctx, request.URI)
 	} else {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("unsupported resource URI: %s", request.URI)
 	}
@@ -411,14 +441,12 @@ func (s *Server) bash(ctx context.Context, params BashParams) (string, error) {
 	}
 
 	// Determine working directory
-	workdir := "."
+	workdir, err := s.ensureSessionWorkdir(ctx)
+	if err != nil {
+		return "", err
+	}
 	if params.Workdir != nil {
-		workdir = *params.Workdir
-	} else {
-		cwd, err := os.Getwd()
-		if err == nil {
-			workdir = cwd
-		}
+		workdir = resolvePath(workdir, *params.Workdir)
 	}
 
 	// Create context with timeout
@@ -463,7 +491,12 @@ func (s *Server) read(ctx context.Context, params ReadParams) (string, error) {
 		return "", mcp.ErrRPCInvalidParams.WithMessage("file_path is required")
 	}
 
-	file, err := os.Open(params.FilePath)
+	workdir, err := s.ensureSessionWorkdir(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	file, err := os.Open(resolvePath(workdir, params.FilePath))
 	if err != nil {
 		return "", fmt.Errorf("error reading file: %w", err)
 	}
@@ -531,14 +564,20 @@ func (s *Server) write(ctx context.Context, params WriteParams) (string, error) 
 		return "", mcp.ErrRPCInvalidParams.WithMessage("file_path is required")
 	}
 
+	workdir, err := s.ensureSessionWorkdir(ctx)
+	if err != nil {
+		return "", err
+	}
+	targetPath := resolvePath(workdir, params.FilePath)
+
 	// Create parent directories if needed
-	dir := filepath.Dir(params.FilePath)
+	dir := filepath.Dir(targetPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", fmt.Errorf("error creating directories: %w", err)
 	}
 
 	// Write file
-	if err := os.WriteFile(params.FilePath, []byte(params.Content), 0644); err != nil {
+	if err := os.WriteFile(targetPath, []byte(params.Content), 0644); err != nil {
 		return "", fmt.Errorf("error writing file: %w", err)
 	}
 
@@ -564,8 +603,14 @@ func (s *Server) edit(ctx context.Context, params EditParams) (string, error) {
 		return "", mcp.ErrRPCInvalidParams.WithMessage("old_string and new_string must be different")
 	}
 
+	workdir, err := s.ensureSessionWorkdir(ctx)
+	if err != nil {
+		return "", err
+	}
+	targetPath := resolvePath(workdir, params.FilePath)
+
 	// Read file
-	content, err := os.ReadFile(params.FilePath)
+	content, err := os.ReadFile(targetPath)
 	if err != nil {
 		return "", fmt.Errorf("error reading file: %w", err)
 	}
@@ -592,7 +637,7 @@ func (s *Server) edit(ctx context.Context, params EditParams) (string, error) {
 	}
 
 	// Write back
-	if err := os.WriteFile(params.FilePath, []byte(newContent), 0644); err != nil {
+	if err := os.WriteFile(targetPath, []byte(newContent), 0644); err != nil {
 		return "", fmt.Errorf("error writing file: %w", err)
 	}
 
@@ -610,21 +655,20 @@ func (s *Server) glob(ctx context.Context, params GlobParams) (string, error) {
 		return "", mcp.ErrRPCInvalidParams.WithMessage("pattern is required")
 	}
 
+	workdir, err := s.ensureSessionWorkdir(ctx)
+	if err != nil {
+		return "", err
+	}
+
 	searchPath := "."
 	if params.Path != nil {
 		searchPath = *params.Path
 	}
 
-	// Determine working directory
-	workdir, err := os.Getwd()
-	if err != nil {
-		workdir = "."
-	}
-
 	// Build ripgrep command
 	args := []string{"--files", "--glob", params.Pattern}
 	if params.Path != nil {
-		args = append(args, searchPath)
+		args = append(args, resolvePath(workdir, searchPath))
 	}
 
 	cmd := exec.CommandContext(ctx, "rg", args...)
@@ -692,6 +736,11 @@ func (s *Server) grep(ctx context.Context, params GrepParams) (string, error) {
 		outputMode = *params.OutputMode
 	}
 
+	workdir, err := s.ensureSessionWorkdir(ctx)
+	if err != nil {
+		return "", err
+	}
+
 	// Build ripgrep command
 	args := []string{"--json", params.Pattern}
 
@@ -731,13 +780,7 @@ func (s *Server) grep(ctx context.Context, params GrepParams) (string, error) {
 
 	// Path
 	if params.Path != nil {
-		args = append(args, *params.Path)
-	}
-
-	// Determine working directory
-	workdir, err := os.Getwd()
-	if err != nil {
-		workdir = "."
+		args = append(args, resolvePath(workdir, *params.Path))
 	}
 
 	cmd := exec.CommandContext(ctx, "rg", args...)

@@ -1,9 +1,9 @@
 import { logError } from "$lib/notify";
 import {
+	ChatUIPath,
 	type InitializationResult,
 	type ResourceContents,
 	type Resources,
-	UIPath,
 } from "$lib/types";
 
 interface JSONRPCRequest {
@@ -43,6 +43,7 @@ export class SimpleClient {
 		string,
 		Set<(resource: ResourceContents) => void>
 	>();
+	#sseListChangedCallbacks = new Set<() => void>();
 
 	constructor(opts?: {
 		path?: string;
@@ -53,7 +54,7 @@ export class SimpleClient {
 		sessionId?: string;
 	}) {
 		const baseUrl = opts?.baseUrl || "";
-		const path = opts?.path || UIPath;
+		const path = opts?.path || ChatUIPath;
 		this.#url = `${baseUrl}${path}`;
 		this.#fetcher = opts?.fetcher || fetch;
 		if (opts?.workspaceId) {
@@ -134,6 +135,7 @@ export class SimpleClient {
 			this.#sseConnection = undefined;
 		}
 		this.#sseSubscriptions.clear();
+		this.#sseListChangedCallbacks.clear();
 	}
 
 	async getSessionDetails(): Promise<{
@@ -492,12 +494,13 @@ export class SimpleClient {
 		}
 
 		// Ensure we have a session before connecting
-		await this.#ensureSession();
+		const sessionId = await this.#ensureSession();
 
 		// Build SSE URL
 		const [basePath, existingQuery] = this.#url.split("?");
 		const queryParams = new URLSearchParams(existingQuery || "");
 		queryParams.set("stream", "true");
+		queryParams.set("id", sessionId);
 		const sseUrl = `${basePath}?${queryParams.toString()}`;
 
 		// Create EventSource connection
@@ -529,6 +532,11 @@ export class SimpleClient {
 							});
 						}
 					}
+					return;
+				}
+
+				if (message.method === "notifications/resources/list_changed") {
+					this.#sseListChangedCallbacks.forEach((callback) => callback());
 				}
 			} catch (e) {
 				console.error("[SimpleClient] Failed to parse SSE message:", e);
@@ -614,11 +622,31 @@ export class SimpleClient {
 				`[SimpleClient] Stopped watching resources with prefix: ${prefix}`,
 			);
 
-			// Close SSE connection if no more subscriptions
-			if (this.#sseSubscriptions.size === 0 && this.#sseConnection) {
-				this.#sseConnection.close();
-				this.#sseConnection = undefined;
-			}
+			this.#closeSSEIfIdle();
 		};
+	}
+
+	watchResourceListChanged(callback: () => void): () => void {
+		this.#sseListChangedCallbacks.add(callback);
+
+		this.#ensureSSEConnection().catch((e) => {
+			console.error("[SimpleClient] Failed to establish SSE connection:", e);
+		});
+
+		return () => {
+			this.#sseListChangedCallbacks.delete(callback);
+			this.#closeSSEIfIdle();
+		};
+	}
+
+	#closeSSEIfIdle() {
+		if (
+			this.#sseSubscriptions.size === 0 &&
+			this.#sseListChangedCallbacks.size === 0 &&
+			this.#sseConnection
+		) {
+			this.#sseConnection.close();
+			this.#sseConnection = undefined;
+		}
 	}
 }

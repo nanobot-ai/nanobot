@@ -20,14 +20,53 @@
 	let isMobileSidebarOpen = $state(false);
 	let currentTheme = $state('nanobotlight');
 	let currentLogoUrl = $state('/assets/nanobot.svg');
+	let refreshThreadsPromise: Promise<void> | null = null;
+	const threadWatchers = new Map<string, () => void>();
 	const root = resolve('/');
 	const newThread = resolve('/');
 	const notifications = new NotificationStore();
 
+	function syncThreadWatchers() {
+		const activeThreadIDs = new Set(threads.map((thread) => thread.id));
+
+		for (const [threadID, stop] of threadWatchers.entries()) {
+			if (activeThreadIDs.has(threadID)) {
+				continue;
+			}
+			stop();
+			threadWatchers.delete(threadID);
+		}
+
+		for (const threadID of activeThreadIDs) {
+			if (threadWatchers.has(threadID)) {
+				continue;
+			}
+			const stop = defaultChatApi.watchThreadChanged(threadID, () => {
+				void refreshThreads();
+			});
+			threadWatchers.set(threadID, stop);
+		}
+	}
+
+	async function refreshThreads() {
+		if (refreshThreadsPromise) {
+			return refreshThreadsPromise;
+		}
+
+		refreshThreadsPromise = (async () => {
+			threads = await defaultChatApi.getThreads();
+			syncThreadWatchers();
+		})().finally(() => {
+			refreshThreadsPromise = null;
+		});
+
+		return refreshThreadsPromise;
+	}
+
 	// Set notification context for global access
 	setNotificationContext(notifications);
 
-	onMount(async () => {
+	onMount(() => {
 		// Load sidebar state from localStorage (desktop only)
 		if (browser && window.innerWidth >= 1024) {
 			const saved = localStorage.getItem('sidebar-collapsed');
@@ -50,8 +89,25 @@
 			document.documentElement.setAttribute('data-theme', currentTheme);
 		}
 
-		threads = await defaultChatApi.getThreads()
-		isLoading = false;
+		const stopThreadListWatcher = defaultChatApi.watchThreadListChanged(() => {
+			void refreshThreads();
+		});
+
+		void (async () => {
+			try {
+				await refreshThreads();
+			} finally {
+				isLoading = false;
+			}
+		})();
+
+		return () => {
+			stopThreadListWatcher();
+			for (const stop of threadWatchers.values()) {
+				stop();
+			}
+			threadWatchers.clear();
+		};
 	});
 
 	$effect(() => {

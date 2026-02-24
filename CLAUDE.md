@@ -128,7 +128,7 @@ When working on the UI, Nanobot automatically forwards requests to the developme
 
 **UI Communication:**
 
-- UI communicates with backend via HTTP endpoints at `/mcp/ui` (MCP-UI protocol)
+- UI communicates with backend via HTTP endpoints at `/mcp/meta` and `/mcp/chat` (MCP-UI protocol)
 - Event streaming for real-time updates during agent execution
 - Session management via `Mcp-Session-Id` header
 

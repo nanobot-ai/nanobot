@@ -48,6 +48,7 @@ var (
 		".vscode":      {},
 		".idea":        {},
 		".nanobot":     {},
+		"sessions":     {},
 	}
 
 	excludedFiles = map[string]struct{}{
@@ -122,7 +123,7 @@ func formatTimestamp(t time.Time) string {
 // handleFileEvents processes filesystem events from the watcher.
 func (s *Server) handleFileEvents(events []fswatch.Event) {
 	for _, event := range events {
-		uri := "file:///" + event.Path
+		uri := "file:///" + filepath.ToSlash(event.Path)
 
 		switch event.Type {
 		case fswatch.EventDelete:
@@ -143,10 +144,10 @@ func (s *Server) handleFileEvents(events []fswatch.Event) {
 }
 
 // listFileResources returns all file resources in the working directory up to maxWatchDepth.
-func (s *Server) listFileResources() ([]mcp.Resource, error) {
+func (s *Server) listFileResources(ctx context.Context) ([]mcp.Resource, error) {
 	var resources []mcp.Resource
 
-	cwd, err := os.Getwd()
+	cwd, err := s.ensureSessionWorkdir(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +199,7 @@ func (s *Server) listFileResources() ([]mcp.Resource, error) {
 		}
 
 		resources = append(resources, mcp.Resource{
-			URI:      "file:///" + relPath,
+			URI:      "file:///" + filepath.ToSlash(relPath),
 			Name:     relPath,
 			MimeType: mimeType,
 			Size:     info.Size(),
@@ -216,7 +217,7 @@ func (s *Server) listFileResources() ([]mcp.Resource, error) {
 }
 
 // readFileResource reads a file resource by URI.
-func (s *Server) readFileResource(uri string) (*mcp.ReadResourceResult, error) {
+func (s *Server) readFileResource(ctx context.Context, uri string) (*mcp.ReadResourceResult, error) {
 	// Parse file:/// URI
 	if !strings.HasPrefix(uri, "file:///") {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid file URI, expected file:///path")
@@ -233,8 +234,14 @@ func (s *Server) readFileResource(uri string) (*mcp.ReadResourceResult, error) {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid file path: cannot access files outside working directory")
 	}
 
+	workdir, err := s.ensureSessionWorkdir(ctx)
+	if err != nil {
+		return nil, err
+	}
+	targetPath := filepath.Join(workdir, cleanPath)
+
 	// Open file once to get both content and metadata
-	f, err := os.Open(relPath)
+	f, err := os.Open(targetPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, mcp.ErrRPCInvalidParams.WithMessage("file not found: %s", uri)
@@ -282,7 +289,7 @@ func (s *Server) readFileResource(uri string) (*mcp.ReadResourceResult, error) {
 }
 
 // subscribeFileResource subscribes to a file resource.
-func (s *Server) subscribeFileResource(uri string) error {
+func (s *Server) subscribeFileResource(ctx context.Context, uri string) error {
 	// Parse file:/// URI
 	if !strings.HasPrefix(uri, "file:///") {
 		return mcp.ErrRPCInvalidParams.WithMessage("invalid file URI, expected file:///path")
@@ -292,9 +299,18 @@ func (s *Server) subscribeFileResource(uri string) error {
 	if relPath == "" {
 		return mcp.ErrRPCInvalidParams.WithMessage("file path is required")
 	}
+	cleanPath := filepath.Clean(relPath)
+	if strings.HasPrefix(cleanPath, "..") || filepath.IsAbs(cleanPath) {
+		return mcp.ErrRPCInvalidParams.WithMessage("invalid file path: cannot access files outside working directory")
+	}
+
+	workdir, err := s.ensureSessionWorkdir(ctx)
+	if err != nil {
+		return err
+	}
 
 	// Verify file exists
-	if _, err := os.Stat(relPath); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(workdir, cleanPath)); os.IsNotExist(err) {
 		return mcp.ErrRPCInvalidParams.WithMessage("file not found: %s", uri)
 	}
 
@@ -302,22 +318,43 @@ func (s *Server) subscribeFileResource(uri string) error {
 }
 
 // ensureFileWatcher starts the file watcher if not already started.
-func (s *Server) ensureFileWatcher() error {
-	s.fileWatcherOnce.Do(func() {
-		cwd, err := os.Getwd()
-		if err != nil {
-			s.fileWatcherInitErr = fmt.Errorf("failed to get working directory: %w", err)
-			return
-		}
+func (s *Server) ensureFileWatcher(ctx context.Context) error {
+	session := mcp.SessionFromContext(ctx)
+	if session == nil {
+		return nil
+	}
 
-		s.fileWatcher = fswatch.NewWatcher(cwd, maxWatchDepth, fileFilter, s.handleFileEvents)
-		if err := s.fileWatcher.Start(); err != nil {
-			s.fileWatcherInitErr = err
-			return
-		}
+	s.fileWatchersLock.Lock()
+	defer s.fileWatchersLock.Unlock()
 
-		log.Debugf(context.Background(), "started file watcher for %s with max depth %d", cwd, maxWatchDepth)
-	})
+	sessionID := session.Root().ID()
+	if _, ok := s.fileWatchers[sessionID]; ok {
+		return nil
+	}
 
-	return s.fileWatcherInitErr
+	cwd, err := s.ensureSessionWorkdir(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	watcher := fswatch.NewWatcher(cwd, maxWatchDepth, fileFilter, s.handleFileEvents)
+	if err := watcher.Start(); err != nil {
+		return err
+	}
+
+	s.fileWatchers[sessionID] = watcher
+	log.Debugf(context.Background(), "started file watcher for %s with max depth %d", cwd, maxWatchDepth)
+
+	if sessionCtx := session.Context(); sessionCtx != nil {
+		context.AfterFunc(sessionCtx, func() {
+			s.fileWatchersLock.Lock()
+			if current, ok := s.fileWatchers[sessionID]; ok && current == watcher {
+				delete(s.fileWatchers, sessionID)
+				defer current.Close()
+			}
+			s.fileWatchersLock.Unlock()
+		})
+	}
+
+	return nil
 }

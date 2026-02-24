@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
 type TodoItem struct {
@@ -40,11 +39,13 @@ func (s *Server) readTodoResource(ctx context.Context, uri string) (*mcp.ReadRes
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid todo URI, expected todo:///list")
 	}
 
-	// Get session ID
-	sessionID, _ := types.GetSessionAndAccountID(ctx)
+	workdir, err := s.ensureSessionWorkdir(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	// Read from .nanobot/<sessionId>/status/todo.json
-	todoPath := filepath.Join(".nanobot", sessionID, "status", "todo.json")
+	// Read from <session_workdir>/.nanobot/status/todo.json
+	todoPath := filepath.Join(workdir, ".nanobot", "status", "todo.json")
 
 	// Check if file exists
 	var contentStr string
@@ -94,11 +95,13 @@ func (s *Server) todoWrite(ctx context.Context, params TodoWriteParams) (string,
 		return "", mcp.ErrRPCInvalidParams.WithMessage("only one task can be in_progress at a time")
 	}
 
-	// Get session ID
-	sessionID, _ := types.GetSessionAndAccountID(ctx)
+	workdir, err := s.ensureSessionWorkdir(ctx)
+	if err != nil {
+		return "", err
+	}
 
-	// Write to .nanobot/<sessionId>/status/todo.json
-	todoPath := filepath.Join(".nanobot", sessionID, "status", "todo.json")
+	// Write to <session_workdir>/.nanobot/status/todo.json
+	todoPath := filepath.Join(workdir, ".nanobot", "status", "todo.json")
 
 	// Create directories
 	if err := os.MkdirAll(filepath.Dir(todoPath), 0755); err != nil {

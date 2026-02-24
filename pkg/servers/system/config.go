@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"maps"
+	"path/filepath"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -21,6 +22,54 @@ var allowedPermsToTools = map[string][]string{
 	"skills":          {"getSkill"},
 	"mcpServers":      {"addMCPServer", "removeMCPServer"},
 	"askUserQuestion": {"askUserQuestion"},
+}
+
+func absPath(path string) string {
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return path
+}
+
+func (s *Server) sessionWorkdirForPrompt(ctx context.Context, sessionID string) string {
+	session := mcp.SessionFromContext(ctx)
+	if session != nil {
+		root := session.Root()
+		var cwd string
+		if root.Get(types.CwdSessionKey, &cwd) && cwd != "" {
+			return cwd
+		}
+		if id := root.ID(); id != "" {
+			return s.defaultSessionWorkdir(id)
+		}
+	}
+
+	if sessionID != "" {
+		return s.defaultSessionWorkdir(sessionID)
+	}
+	return s.defaultSessionWorkdir("default")
+}
+
+func (s *Server) workflowsDirForPrompt() string {
+	return filepath.Join(s.baseWorkdir(), "workflows")
+}
+
+func (s *Server) filesystemPrompt(ctx context.Context, sessionID string) string {
+	sessionDir := absPath(s.sessionWorkdirForPrompt(ctx, sessionID))
+	workflowsDir := absPath(s.workflowsDirForPrompt())
+
+	var prompt strings.Builder
+	prompt.WriteString("\n\n## Filesystem Context\n\n")
+	prompt.WriteString("- Session directory (absolute path): `")
+	prompt.WriteString(sessionDir)
+	prompt.WriteString("`\n")
+	prompt.WriteString("- Workflows directory (absolute path): `")
+	prompt.WriteString(workflowsDir)
+	prompt.WriteString("`\n")
+	prompt.WriteString("- The workflows directory is outside the per-session directory.\n")
+	prompt.WriteString("- Prefer absolute paths for file-related tools. Relative paths are resolved against the session directory.\n")
+
+	return prompt.String()
 }
 
 func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (types.AgentConfigHook, error) {
@@ -61,6 +110,8 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 				agent.MCPServers = append(agent.MCPServers, "nanobot.workflow-tools")
 			}
 		}
+
+		agent.Instructions.Instructions += s.filesystemPrompt(ctx, params.SessionID)
 
 		if params.MCPServers == nil {
 			params.MCPServers = make(map[string]types.AgentConfigHookMCPServer, 3)

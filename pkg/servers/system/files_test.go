@@ -52,6 +52,7 @@ func TestListFileResources(t *testing.T) {
 	excludedDirFiles := []string{
 		".git/config",
 		".nanobot/status/todo.json",
+		"sessions/test-session/.nanobot/status/todo.json",
 		"node_modules/package/index.js",
 		"vendor/lib/code.go",
 	}
@@ -87,7 +88,7 @@ func TestListFileResources(t *testing.T) {
 
 	// Create server and list resources
 	server := NewServer("")
-	resources, err := server.listFileResources()
+	resources, err := server.listFileResources(context.Background())
 	if err != nil {
 		t.Fatalf("listFileResources failed: %v", err)
 	}
@@ -265,7 +266,7 @@ func TestReadFileResource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := server.readFileResource(tt.uri)
+			result, err := server.readFileResource(context.Background(), tt.uri)
 
 			if tt.expectError {
 				if err == nil {
@@ -330,6 +331,7 @@ func TestFileFilter(t *testing.T) {
 		// Specifically excluded hidden directories
 		{name: "hidden directory .git", path: ".git", isDir: true, expected: false},
 		{name: "hidden directory .nanobot", path: ".nanobot", isDir: true, expected: false},
+		{name: "excluded directory sessions", path: "sessions", isDir: true, expected: false},
 		{name: "hidden directory .hidden", path: ".hidden", isDir: true, expected: true}, // Changed: now allowed
 
 		// Excluded directories
@@ -430,7 +432,7 @@ func TestSubscribeFileResource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := server.subscribeFileResource(tt.uri)
+			err := server.subscribeFileResource(context.Background(), tt.uri)
 
 			if tt.expectError {
 				if err == nil {
@@ -563,6 +565,59 @@ func TestResourcesReadDispatch(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestEnsureFileWatcherCleansUpOnSessionClose(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(oldWd)
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	server := NewServer("")
+
+	serverSession, err := mcp.NewExistingServerSession(
+		context.Background(),
+		mcp.SessionState{ID: "watcher-test"},
+		mcp.MessageHandlerFunc(func(context.Context, mcp.Message) {}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := mcp.WithSession(context.Background(), serverSession.GetSession())
+	if err := server.ensureFileWatcher(ctx); err != nil {
+		t.Fatalf("ensureFileWatcher failed: %v", err)
+	}
+
+	server.fileWatchersLock.Lock()
+	_, ok := server.fileWatchers["watcher-test"]
+	server.fileWatchersLock.Unlock()
+	if !ok {
+		t.Fatal("expected watcher to be registered")
+	}
+
+	serverSession.Close(false)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		server.fileWatchersLock.Lock()
+		_, ok := server.fileWatchers["watcher-test"]
+		server.fileWatchersLock.Unlock()
+		if !ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("watcher was not cleaned up after session close")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

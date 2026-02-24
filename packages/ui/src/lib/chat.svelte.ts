@@ -1,6 +1,12 @@
 import { SvelteDate } from "svelte/reactivity";
 import { getNotificationContext } from "./context/notifications.svelte";
 import { SimpleClient } from "./mcpclient";
+import {
+	AgentResourcePrefix,
+	ChatUIPath,
+	ChatThreadResourcePrefix,
+	UIPath,
+} from "./types";
 import type {
 	Agent,
 	Agents,
@@ -25,9 +31,90 @@ export interface CallToolResult {
 	content?: ToolOutputItem[];
 }
 
+function asString(value: unknown): string | undefined {
+	return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+	return typeof value === "boolean" ? value : undefined;
+}
+
+function asStringArray(value: unknown): string[] | undefined {
+	if (!Array.isArray(value)) {
+		return undefined;
+	}
+
+	const values = value.filter((item): item is string => typeof item === "string");
+	return values.length > 0 ? values : undefined;
+}
+
+function parseResourceID(uri: string, prefix: string): string | undefined {
+	if (!uri.startsWith(prefix)) {
+		return undefined;
+	}
+	const raw = uri.slice(prefix.length);
+	if (!raw) {
+		return undefined;
+	}
+
+	try {
+		return decodeURIComponent(raw);
+	} catch {
+		return raw;
+	}
+}
+
+function mapAgentResource(resource: Resource): Agent {
+	const meta = resource._meta ?? {};
+	const id =
+		asString(meta["id"]) ??
+		parseResourceID(resource.uri, AgentResourcePrefix) ??
+		resource.uri;
+
+	return {
+		id,
+		name: asString(meta["name"]) ?? resource.title ?? resource.name ?? id,
+		description: asString(meta["description"]) ?? resource.description,
+		icon: asString(meta["icon"]),
+		iconDark: asString(meta["iconDark"]),
+		starterMessages: asStringArray(meta["starterMessages"]),
+		current: asBoolean(meta["current"]) ?? false,
+	};
+}
+
+function mapChatResource(resource: Resource): Chat {
+	const meta = resource._meta ?? {};
+	const id =
+		asString(meta["id"]) ??
+		parseResourceID(resource.uri, ChatThreadResourcePrefix) ??
+		resource.uri;
+	const created =
+		asString(meta["created"]) ??
+		asString(meta["sessionCreatedAt"]) ??
+		new SvelteDate().toISOString();
+	const visibility = asString(meta["visibility"]);
+	const resourceName = asString(resource.name);
+	const titleCandidate =
+		asString(meta["title"]) ??
+		resource.title ??
+		resource.description ??
+		(resourceName && resourceName !== id ? resourceName : undefined);
+
+	return {
+		id,
+		title: titleCandidate ?? "Untitled",
+		created,
+		visibility: visibility === "public" || visibility === "private" ? visibility : undefined,
+		readonly: asBoolean(meta["readonly"]),
+		workflowURIs: asStringArray(meta["workflowURIs"]),
+	};
+}
+
 export class ChatAPI {
 	private readonly baseUrl: string;
-	private readonly mcpClient: SimpleClient;
+	private readonly fetcher: typeof fetch;
+	private readonly chatClient: SimpleClient;
+	private readonly metaClient: SimpleClient;
 
 	constructor(
 		baseUrl: string = "",
@@ -37,21 +124,85 @@ export class ChatAPI {
 		},
 	) {
 		this.baseUrl = baseUrl;
-		this.mcpClient = new SimpleClient({
+		this.fetcher = opts?.fetcher || fetch;
+		this.chatClient = new SimpleClient({
 			baseUrl: baseUrl,
-			fetcher: opts?.fetcher,
+			path: ChatUIPath,
+			fetcher: this.fetcher,
 			sessionId: opts?.sessionId,
+		});
+		this.metaClient = new SimpleClient({
+			baseUrl: baseUrl,
+			path: UIPath,
+			fetcher: this.fetcher,
 		});
 	}
 
-	#getClient(sessionId?: string) {
+	#getChatClient(sessionId?: string) {
 		if (sessionId) {
 			return new SimpleClient({
 				baseUrl: this.baseUrl,
+				path: ChatUIPath,
+				fetcher: this.fetcher,
 				sessionId,
 			});
 		}
-		return this.mcpClient;
+		return this.chatClient;
+	}
+
+	#getMetaClient(sessionId?: string) {
+		if (sessionId) {
+			return new SimpleClient({
+				baseUrl: this.baseUrl,
+				path: UIPath,
+				fetcher: this.fetcher,
+				sessionId,
+			});
+		}
+		return this.metaClient;
+	}
+
+	async #callMCPToolWithClient<T>(
+		client: SimpleClient,
+		name: string,
+		opts?: {
+			payload?: Record<string, unknown>;
+			progressToken?: string;
+			async?: boolean;
+			abort?: AbortController;
+			requestId?: string;
+			parseResponse?: (data: CallToolResult) => T;
+		},
+	): Promise<{ result: T; requestId: string }> {
+		const { result, requestId } = await client.exchange(
+			"tools/call",
+			{
+				name: name,
+				arguments: opts?.payload || {},
+				...(opts?.async && {
+					_meta: {
+						"ai.nanobot.async": true,
+						progressToken: opts?.progressToken,
+					},
+				}),
+			},
+			{ abort: opts?.abort, requestId: opts?.requestId },
+		);
+
+		let finalResult: T;
+		if (opts?.parseResponse) {
+			finalResult = opts.parseResponse(result as CallToolResult);
+		} else if (
+			result &&
+			typeof result === "object" &&
+			"structuredContent" in result
+		) {
+			finalResult = (result as { structuredContent: T }).structuredContent;
+		} else {
+			finalResult = result as T;
+		}
+
+		return { result: finalResult, requestId };
 	}
 
 	async reply(
@@ -60,7 +211,7 @@ export class ChatAPI {
 		opts?: { sessionId?: string },
 	) {
 		// If sessionId is provided, create a new client instance with that session
-		const client = this.#getClient(opts?.sessionId);
+		const client = this.#getChatClient(opts?.sessionId);
 		await client.reply(id, result);
 	}
 
@@ -70,7 +221,7 @@ export class ChatAPI {
 		opts?: { sessionId?: string },
 	) {
 		// If sessionId is provided, create a new client instance with that session
-		const client = this.#getClient(opts?.sessionId);
+		const client = this.#getChatClient(opts?.sessionId);
 		const { result } = await client.exchange(method, params);
 		return result;
 	}
@@ -88,40 +239,10 @@ export class ChatAPI {
 		},
 	): Promise<{ result: T; requestId: string }> {
 		// If sessionId is provided, create a new client instance with that session
-		const client = this.#getClient(opts?.sessionId);
+		const client = this.#getChatClient(opts?.sessionId);
 
 		try {
-			// Get the raw result and requestId from exchange
-			const { result, requestId } = await client.exchange(
-				"tools/call",
-				{
-					name: name,
-					arguments: opts?.payload || {},
-					...(opts?.async && {
-						_meta: {
-							"ai.nanobot.async": true,
-							progressToken: opts?.progressToken,
-						},
-					}),
-				},
-				{ abort: opts?.abort, requestId: opts?.requestId },
-			);
-
-			let finalResult: T;
-			if (opts?.parseResponse) {
-				finalResult = opts.parseResponse(result as CallToolResult);
-			} else if (
-				result &&
-				typeof result === "object" &&
-				"structuredContent" in result
-			) {
-				// Handle structured content
-				finalResult = (result as { structuredContent: T }).structuredContent;
-			} else {
-				finalResult = result as T;
-			}
-
-			return { result: finalResult, requestId };
+			return await this.#callMCPToolWithClient(client, name, opts);
 		} catch (error) {
 			// Try to get notification context and show error
 			try {
@@ -137,7 +258,7 @@ export class ChatAPI {
 	}
 
 	async capabilities() {
-		const client = this.#getClient();
+		const client = this.#getChatClient();
 		const { initializeResult } = await client.getSessionDetails();
 		return (
 			initializeResult?.capabilities?.experimental?.["ai.nanobot"]?.session ??
@@ -146,34 +267,60 @@ export class ChatAPI {
 	}
 
 	async deleteThread(threadId: string): Promise<void> {
-		const client = this.#getClient(threadId);
+		const client = this.#getChatClient(threadId);
 		return client.deleteSession();
 	}
 
 	async renameThread(threadId: string, title: string): Promise<Chat> {
-		const { result } = await this.callMCPTool<Chat>("update_chat", {
-			payload: {
-				chatId: threadId,
-				title: title,
+		const { result } = await this.#callMCPToolWithClient<Chat>(
+			this.#getMetaClient(),
+			"update_chat",
+			{
+				payload: {
+					chatId: threadId,
+					title: title,
+				},
 			},
-		});
+		);
 		return result;
 	}
 
-	async listAgents(opts?: { sessionId?: string }): Promise<Agents> {
-		const { result } = await this.callMCPTool<Agents>("list_agents", opts);
-		return result;
+	async listAgents(_opts?: { sessionId?: string }): Promise<Agents> {
+		const result = await this.metaClient.listResources({
+			prefix: AgentResourcePrefix,
+		});
+
+		return {
+			agents: result.resources.map(mapAgentResource),
+		};
 	}
 
 	async getThreads(): Promise<Chat[]> {
-		const { result } = await this.callMCPTool<{
-			chats: Chat[];
-		}>("list_chats");
-		return result.chats;
+		const result = await this.metaClient.listResources({
+			prefix: ChatThreadResourcePrefix,
+		});
+
+		return result.resources
+			.map(mapChatResource)
+			.sort(
+				(a, b) =>
+					new Date(b.created).getTime() - new Date(a.created).getTime(),
+			);
+	}
+
+	watchThreadListChanged(onListChanged: () => void): () => void {
+		return this.metaClient.watchResourceListChanged(onListChanged);
+	}
+
+	watchThreadChanged(threadId: string, onChanged: () => void): () => void {
+		return this.metaClient.watchResource(
+			`${ChatThreadResourcePrefix}${encodeURIComponent(threadId)}`,
+			() => onChanged(),
+		);
 	}
 
 	async createThread(): Promise<Chat> {
-		const client = this.#getClient("new");
+		const client = this.#getChatClient("new");
 		const { id } = await client.getSessionDetails();
 		return {
 			id,
@@ -255,7 +402,7 @@ export class ChatAPI {
 	}
 
 	async cancelRequest(requestId: string, sessionId: string): Promise<void> {
-		const client = this.#getClient(sessionId);
+		const client = this.#getChatClient(sessionId);
 		await client.notify("notifications/cancelled", {
 			requestId,
 			reason: "User requested cancellation",
@@ -472,7 +619,7 @@ export class ChatService {
 	};
 
 	private reloadAgent = async () => {
-		const agentsData = await this.api.listAgents({ sessionId: this.chatId });
+		const agentsData = await this.api.listAgents();
 		if (agentsData.agents?.length > 0) {
 			this.agents = agentsData.agents;
 			this.agent =

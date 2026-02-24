@@ -97,6 +97,14 @@ func IsUISession(ctx context.Context) bool {
 	return isUI
 }
 
+func IsChatSession(ctx context.Context) bool {
+	session := mcp.SessionFromContext(ctx)
+	var sessionInit SessionInitHook
+	session.Get(SessionInitSessionKey, &sessionInit)
+	isChat, _ := sessionInit.Meta["chat"].(bool)
+	return isChat
+}
+
 func GetWorkspaceID(ctx context.Context) string {
 	var sessionInit SessionInitHook
 	mcp.SessionFromContext(ctx).Get(SessionInitSessionKey, &sessionInit)

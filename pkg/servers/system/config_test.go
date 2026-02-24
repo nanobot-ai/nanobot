@@ -143,8 +143,8 @@ func TestConfigNoSkillsPermission(t *testing.T) {
 	}
 
 	instructions := result.Agent.Instructions.Instructions
-	if instructions != originalInstructions {
-		t.Errorf("instructions should not be modified when skills permission is not present\ngot: %s\nwant: %s", instructions, originalInstructions)
+	if !strings.Contains(instructions, originalInstructions) {
+		t.Errorf("original instructions should be preserved\ngot: %s", instructions)
 	}
 
 	// Verify skills section was NOT added
@@ -181,8 +181,8 @@ func TestConfigSkillsPermissionDenied(t *testing.T) {
 	}
 
 	instructions := result.Agent.Instructions.Instructions
-	if instructions != originalInstructions {
-		t.Errorf("instructions should not be modified when skills permission is denied\ngot: %s\nwant: %s", instructions, originalInstructions)
+	if !strings.Contains(instructions, originalInstructions) {
+		t.Errorf("original instructions should be preserved\ngot: %s", instructions)
 	}
 
 	// Verify skills section was NOT added

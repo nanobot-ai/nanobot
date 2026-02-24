@@ -474,7 +474,7 @@ func TestTruncateToolResult_SmallContent(t *testing.T) {
 }
 
 func TestTruncateToolResult_LargeTextContent(t *testing.T) {
-	// Change to temp dir so .nanobot is created in a clean location
+	// Change to temp dir so sessions is created in a clean location
 	origDir, _ := os.Getwd()
 	tmpDir := t.TempDir()
 	os.Chdir(tmpDir)
@@ -524,7 +524,7 @@ func TestTruncateToolResult_LargeTextContent(t *testing.T) {
 	}
 
 	// File should exist with full content
-	filePath := filepath.Join(".nanobot", "default", "truncated-outputs", "my-tool-call1.txt")
+	filePath := filepath.Join("sessions", "default", "truncated-outputs", "my-tool-call1.txt")
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("failed to read output file: %v", err)
@@ -553,7 +553,7 @@ func TestTruncateToolResult_MixedContentUsesJSON(t *testing.T) {
 	}
 
 	// Should use .json extension
-	filePath := filepath.Join(".nanobot", "default", "truncated-outputs", "img-tool-call2.json")
+	filePath := filepath.Join("sessions", "default", "truncated-outputs", "img-tool-call2.json")
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("failed to read output file: %v", err)
@@ -620,8 +620,33 @@ func TestTruncateToolResult_SpecialCharsInNames(t *testing.T) {
 	}
 
 	// File should exist with sanitized name
-	filePath := filepath.Join(".nanobot", "default", "truncated-outputs", "tool_name_special-call_5___.txt")
+	filePath := filepath.Join("sessions", "default", "truncated-outputs", "tool_name_special-call_5___.txt")
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		t.Errorf("expected file at %s", filePath)
+	}
+}
+
+func TestTruncateToolResult_UsesSessionCwdWhenSet(t *testing.T) {
+	origDir, _ := os.Getwd()
+	tmpDir := t.TempDir()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	ctx := contextWithSessionID(t, "default")
+	session := mcp.SessionFromContext(ctx).Root()
+	sessionCwd := filepath.Join(tmpDir, "sessions", "default")
+	session.Set(types.CwdSessionKey, sessionCwd)
+
+	bigText := strings.Repeat("x", maxToolResultSize+100)
+	msg := makeToolResultMessage("call6", makeTextContent(bigText), false)
+
+	result := truncateToolResult(ctx, "tool", "call6", msg)
+	if result == msg {
+		t.Fatal("expected truncated message")
+	}
+
+	filePath := filepath.Join(sessionCwd, "truncated-outputs", "tool-call6.txt")
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		t.Fatalf("expected file at %s", filePath)
 	}
 }

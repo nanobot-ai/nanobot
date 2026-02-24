@@ -2,6 +2,8 @@ package types
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,10 +24,24 @@ const (
 	SessionInitSessionKey           = "sessionInit"
 	DefaultAgentSessionKey          = "defaultAgent"
 	AccountIDSessionKey             = "accountID"
+	CwdSessionKey                   = "cwd"
 	DescriptionSessionKey           = "description"
 	ResourceSubscriptionsSessionKey = "resourceSubscriptions"
 	PublicURLSessionKey             = "publicURL"
 )
+
+var safeSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+func SanitizeSessionDirectoryName(id string) string {
+	if id == "" {
+		return "default"
+	}
+	if safeSessionIDPattern.MatchString(id) {
+		return id
+	}
+	sum := sha256.Sum256([]byte(id))
+	return "session-" + hex.EncodeToString(sum[:8])
+}
 
 type configContextKey struct{}
 

@@ -317,7 +317,9 @@ func (s *Server) handleInitialized(ctx context.Context, msg mcp.Message, payload
 }
 
 func (s *Server) initUI(params types.SessionInitHook) types.SessionInitHook {
-	if _, ok := params.Meta["ui"]; ok {
+	_, isUI := params.Meta["ui"]
+	_, isChat := params.Meta["chat"]
+	if isUI || isChat {
 		return params
 	}
 
@@ -330,7 +332,8 @@ func (s *Server) initUI(params types.SessionInitHook) types.SessionInitHook {
 	if params.Meta == nil {
 		params.Meta = make(map[string]any)
 	}
-	params.Meta["ui"] = u.Query().Has("ui") || u.Path == "/mcp/ui"
+	params.Meta["ui"] = u.Path == "/mcp/meta"
+	params.Meta["chat"] = u.Path == "/mcp/chat"
 	return params
 }
 

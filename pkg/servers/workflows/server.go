@@ -141,55 +141,7 @@ func parseWorkflowURI(uri string) (string, error) {
 
 func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
 	workflowsPath := filepath.Join(".", workflowsDir)
-
-	entries, err := os.ReadDir(workflowsPath)
-	if err != nil {
-		// Directory doesn't exist or can't be read - return empty list
-		return &mcp.ListResourcesResult{Resources: []mcp.Resource{}}, nil
-	}
-
-	var result []mcp.Resource
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
-			continue
-		}
-
-		name := strings.TrimSuffix(entry.Name(), ".md")
-
-		// Read file to extract description and metadata
-		contentBytes, err := os.ReadFile(filepath.Join(workflowsPath, entry.Name()))
-		if err != nil {
-			// Skip files we can't read
-			continue
-		}
-
-		meta, err := parseWorkflowFrontmatter(string(contentBytes))
-		if err != nil {
-			log.Debugf(ctx, "failed to parse frontmatter for workflow %s: %v", entry.Name(), err)
-		}
-
-		resourceMeta := make(map[string]any)
-		if meta.Name != "" {
-			resourceMeta["name"] = meta.Name
-		}
-		if meta.CreatedAt != "" {
-			resourceMeta["createdAt"] = meta.CreatedAt
-		}
-
-		res := mcp.Resource{
-			URI:         fmt.Sprintf("workflow:///%s", name),
-			Name:        name,
-			Description: meta.Description,
-			MimeType:    "text/markdown",
-		}
-		if len(resourceMeta) > 0 {
-			res.Meta = resourceMeta
-		}
-
-		result = append(result, res)
-	}
-
-	return &mcp.ListResourcesResult{Resources: result}, nil
+	return &mcp.ListResourcesResult{Resources: ListWorkflowResources(ctx, workflowsPath)}, nil
 }
 
 func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
