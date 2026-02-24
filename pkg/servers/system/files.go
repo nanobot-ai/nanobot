@@ -33,15 +33,6 @@ func init() {
 	}
 }
 
-var textExtensionMimeTypes = map[string]string{
-	".txt":  "text/plain",
-	".md":   "text/markdown",
-	".html": "text/html",
-	".htm":  "text/html",
-	".csv":  "text/csv",
-	".json": "application/json",
-}
-
 var (
 	// Common directories/patterns to exclude from watching
 	excludedDirs = map[string]struct{}{
@@ -265,11 +256,7 @@ func (s *Server) readFileResource(uri string) (*mcp.ReadResourceResult, error) {
 	// Determine MIME type
 	mimeType := mime.TypeByExtension(filepath.Ext(relPath))
 	if mimeType == "" {
-		if fallback, ok := textExtensionMimeTypes[strings.ToLower(filepath.Ext(relPath))]; ok {
-			mimeType = fallback
-		} else {
-			mimeType = "application/octet-stream"
-		}
+		mimeType = "application/octet-stream"
 	}
 	if i := strings.IndexByte(mimeType, ';'); i >= 0 {
 		mimeType = strings.TrimSpace(mimeType[:i])
@@ -284,12 +271,12 @@ func (s *Server) readFileResource(uri string) (*mcp.ReadResourceResult, error) {
 	if _, isImage := types.ImageMimeTypes[mimeType]; isImage {
 		blob := base64.StdEncoding.EncodeToString(content)
 		rc.Blob = &blob
-	} else if _, isText := types.TextMimeTypes[mimeType]; isText {
-		contentStr := string(content)
-		rc.Text = &contentStr
-	} else {
+	} else if _, isPDF := types.PDFMimeTypes[mimeType]; isPDF {
 		blob := base64.StdEncoding.EncodeToString(content)
 		rc.Blob = &blob
+	} else {
+		contentStr := string(content)
+		rc.Text = &contentStr
 	}
 
 	return &mcp.ReadResourceResult{
