@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"mime"
@@ -14,6 +15,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
 var (
@@ -29,6 +31,15 @@ func init() {
 			maxWatchDepth = depth
 		}
 	}
+}
+
+var textExtensionMimeTypes = map[string]string{
+	".txt":  "text/plain",
+	".md":   "text/markdown",
+	".html": "text/html",
+	".htm":  "text/html",
+	".csv":  "text/csv",
+	".json": "application/json",
 }
 
 var (
@@ -254,20 +265,35 @@ func (s *Server) readFileResource(uri string) (*mcp.ReadResourceResult, error) {
 	// Determine MIME type
 	mimeType := mime.TypeByExtension(filepath.Ext(relPath))
 	if mimeType == "" {
-		mimeType = "application/octet-stream"
+		if fallback, ok := textExtensionMimeTypes[strings.ToLower(filepath.Ext(relPath))]; ok {
+			mimeType = fallback
+		} else {
+			mimeType = "application/octet-stream"
+		}
+	}
+	if i := strings.IndexByte(mimeType, ';'); i >= 0 {
+		mimeType = strings.TrimSpace(mimeType[:i])
 	}
 
-	contentStr := string(content)
+	rc := mcp.ResourceContent{
+		URI:      uri,
+		Name:     filepath.Base(relPath),
+		MIMEType: mimeType,
+		Meta:     fileResourceMeta(relPath, info),
+	}
+	if _, isImage := types.ImageMimeTypes[mimeType]; isImage {
+		blob := base64.StdEncoding.EncodeToString(content)
+		rc.Blob = &blob
+	} else if _, isText := types.TextMimeTypes[mimeType]; isText {
+		contentStr := string(content)
+		rc.Text = &contentStr
+	} else {
+		blob := base64.StdEncoding.EncodeToString(content)
+		rc.Blob = &blob
+	}
+
 	return &mcp.ReadResourceResult{
-		Contents: []mcp.ResourceContent{
-			{
-				URI:      uri,
-				Name:     filepath.Base(relPath),
-				MIMEType: mimeType,
-				Text:     &contentStr,
-				Meta:     fileResourceMeta(relPath, info),
-			},
-		},
+		Contents: []mcp.ResourceContent{rc},
 	}, nil
 }
 

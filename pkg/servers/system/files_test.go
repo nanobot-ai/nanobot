@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
@@ -182,12 +183,25 @@ func TestReadFileResource(t *testing.T) {
 
 	server := NewServer("")
 
+	// Minimal 1x1 PNG (binary); image resources must be returned as base64 Blob, not Text
+	minimalPNG := []byte{
+		0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+		0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0xf8, 0xff, 0xff, 0x3f,
+		0x00, 0x05, 0xfe, 0x02, 0xfe, 0xdc, 0xcc, 0x59, 0xe7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+		0x44, 0xae, 0x42, 0x60, 0x82,
+	}
+	if err := os.WriteFile("dot.png", minimalPNG, 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	tests := []struct {
 		name         string
 		uri          string
 		expectError  bool
 		expectedText string
 		expectedName string
+		expectBlob   bool // image/binary: expect Blob set, Text nil
 	}{
 		{
 			name:         "read root file",
@@ -202,6 +216,13 @@ func TestReadFileResource(t *testing.T) {
 			expectError:  false,
 			expectedText: "# Nested file",
 			expectedName: "nested.md",
+		},
+		{
+			name:         "read image file returns base64 Blob",
+			uri:          "file:///dot.png",
+			expectError:  false,
+			expectedName: "dot.png",
+			expectBlob:   true,
 		},
 		{
 			name:        "nonexistent file",
@@ -250,8 +271,25 @@ func TestReadFileResource(t *testing.T) {
 			}
 
 			content := result.Contents[0]
-			if content.Text == nil || *content.Text != tt.expectedText {
-				t.Errorf("expected text %q, got %q", tt.expectedText, *content.Text)
+			if tt.expectBlob {
+				if content.Blob == nil {
+					t.Error("expected Blob to be set for image/binary file")
+				}
+				if content.Text != nil {
+					t.Error("expected Text to be nil for image/binary file")
+				}
+				if content.Blob != nil {
+					decoded, err := base64.StdEncoding.DecodeString(*content.Blob)
+					if err != nil {
+						t.Errorf("Blob is not valid base64: %v", err)
+					} else if len(decoded) != len(minimalPNG) {
+						t.Errorf("decoded Blob length = %d, want %d", len(decoded), len(minimalPNG))
+					}
+				}
+			} else {
+				if content.Text == nil || *content.Text != tt.expectedText {
+					t.Errorf("expected text %q, got %q", tt.expectedText, *content.Text)
+				}
 			}
 
 			if content.Name != tt.expectedName {
