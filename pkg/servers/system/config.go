@@ -88,7 +88,7 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 				params.MCPServers["mcp-server-search"] = mcpServer
 
 				// Also add to the agent's MCP server list so tools get fetched
-				agent.MCPServers = append(agent.MCPServers, "mcp-server-search")
+				agent.Tools = append(agent.Tools, "mcp-server-search")
 			}
 
 			var dynamicServers DynamicMCPServers
