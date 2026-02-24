@@ -77,7 +77,7 @@ func (d *Data) SetCurrentAgent(ctx context.Context, newAgent string) error {
 		session = session.Parent
 	}
 
-	d.Refresh(ctx)
+	d.Refresh(ctx, false)
 	if newAgent == "" {
 		session.Delete(types.CurrentAgentSessionKey)
 		return nil
@@ -370,24 +370,26 @@ func (d *Data) Sync(ctx context.Context, defaultConfig types.ConfigFactory) erro
 	hash := fmt.Sprintf("%x", digest.Sum(nil))
 
 	if hash != existingHash {
-		d.Refresh(ctx)
+		d.Refresh(ctx, true)
 	}
 
 	session.Set(types.ConfigHashSessionKey, mcp.SavedString(hash))
 	return nil
 }
 
-func (d *Data) Refresh(ctx context.Context) {
+func (d *Data) Refresh(ctx context.Context, close bool) {
 	session := mcp.SessionFromContext(ctx)
 
-	for key, value := range session.Attributes() {
-		if !strings.HasPrefix(key, "clients/") {
-			continue
+	if close {
+		for key, value := range session.Attributes() {
+			if !strings.HasPrefix(key, "clients/") {
+				continue
+			}
+			if closer, ok := value.(interface{ Close(bool) }); ok {
+				closer.Close(false)
+			}
+			session.Delete(key)
 		}
-		if closer, ok := value.(interface{ Close(bool) }); ok {
-			closer.Close(false)
-		}
-		session.Delete(key)
 	}
 
 	session.Delete(toolMappingKey)
@@ -723,7 +725,7 @@ func (d *Data) BuildResourceMappings(ctx context.Context, refs []string) (types.
 		}
 		resources, err := c.ListResources(ctx)
 		if err != nil {
-			log.Errorf(ctx, "failed to get resources for server %s while building resource mappings, skipping: %v", toolRef, err)
+			log.Errorf(ctx, "failed to get resources for server %q while building resource mappings, skipping: %v", toolRef, err)
 			continue
 		}
 

@@ -194,8 +194,8 @@ func (s *serverWire) exchange(ctx context.Context, msg Message) (Message, error)
 	defer s.pending.Done(msg.ID)
 
 	go func() {
+		defer close(ch)
 		s.handler(ctx, msg)
-		close(ch)
 	}()
 
 	select {

@@ -261,6 +261,16 @@ func (t ToolRef) PublishedName(name string) string {
 	return name
 }
 
+func (t ToolRef) String() string {
+	if t.As != "" {
+		return fmt.Sprintf("%s:%s/%s", t.As, t.Server, t.Tool)
+	}
+	if t.Tool == "" {
+		return t.Server
+	}
+	return fmt.Sprintf("%s/%s", t.Server, t.Tool)
+}
+
 func ParseToolRef(ref string) ToolRef {
 	name, as, _ := strings.Cut(ref, ":")
 	server, tool, _ := strings.Cut(name, "/")
@@ -273,19 +283,11 @@ func ParseToolRef(ref string) ToolRef {
 
 type ResourceMappings map[string]TargetMapping[mcp.Resource]
 
-//func (r ResourceMappings) Serialize() (any, error) {
-//	return r, nil
-//}
-
 func (r ResourceMappings) Deserialize(data any) (any, error) {
 	return r, mcp.JSONCoerce(data, &r)
 }
 
 type ResourceTemplateMappings map[string]TargetMapping[TemplateMatch]
-
-//func (r ResourceTemplateMappings) Serialize() (any, error) {
-//	return r, nil
-//}
 
 func (r ResourceTemplateMappings) Deserialize(data any) (any, error) {
 	return r, mcp.JSONCoerce(data, &r)

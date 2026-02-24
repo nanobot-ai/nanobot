@@ -178,7 +178,7 @@ func (s *Server) handleListResources(ctx context.Context, msg mcp.Message, _ mcp
 }
 
 func (s *Server) handleListPrompts(ctx context.Context, msg mcp.Message, _ mcp.ListPromptsRequest) error {
-	s.data.Refresh(ctx)
+	s.data.Refresh(ctx, false)
 	promptMappings, err := s.data.PublishedPromptMappings(ctx)
 	if err != nil {
 		return err
@@ -203,7 +203,7 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 
 	toolMapping, ok := toolMappings[payload.Name]
 	if !ok {
-		s.data.Refresh(ctx)
+		s.data.Refresh(ctx, false)
 		toolMappings, err = s.data.ToolMapping(ctx)
 		if err != nil {
 			return err
@@ -372,7 +372,7 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 		return err
 	}
 
-	s.data.Refresh(ctx)
+	s.data.Refresh(ctx, false)
 
 	experimental := map[string]any{}
 	meta := map[string]any{}
