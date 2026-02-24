@@ -14,9 +14,15 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func writeEvent(wl *sync.Mutex, rw http.ResponseWriter, id any, name string, textOrData any) error {
+type flusher interface {
+	http.ResponseWriter
+	http.Flusher
+}
+
+func writeEvent(wl *sync.Mutex, rw flusher, id any, name string, textOrData any) error {
 	wl.Lock()
 	defer wl.Unlock()
+	defer rw.Flush()
 
 	asMap := make(map[string]any)
 	if textOrData != nil {
@@ -36,31 +42,28 @@ func writeEvent(wl *sync.Mutex, rw http.ResponseWriter, id any, name string, tex
 			v, _ := json.Marshal(id)
 			id = string(v)
 		}
-		_, err = rw.Write([]byte(fmt.Sprintf("id: %v\n", id)))
+		_, err = fmt.Fprintf(rw, "id: %v\n", id)
 		if err != nil {
 			return fmt.Errorf("failed to write id line: %w", err)
 		}
 	}
 
 	if name != "message" {
-		_, err = rw.Write([]byte(fmt.Sprintf("event: %s\n", name)))
+		_, err = fmt.Fprintf(rw, "event: %s\n", name)
 		if err != nil {
 			return fmt.Errorf("failed to write event line: %w", err)
 		}
 	}
 
-	_, err = rw.Write([]byte(fmt.Sprintf("data: %s\n\n", data)))
+	_, err = fmt.Fprintf(rw, "data: %s\n\n", data)
 	if err != nil {
 		return fmt.Errorf("failed to write message: %w", err)
-	}
-	if f, ok := rw.(http.Flusher); ok {
-		f.Flush()
 	}
 
 	return nil
 }
 
-func printHistory(wl *sync.Mutex, rw http.ResponseWriter, req *http.Request, client *mcp.Client, printedIDs map[string]struct{}) error {
+func printHistory(wl *sync.Mutex, rw flusher, req *http.Request, client *mcp.Client, printedIDs map[string]struct{}) error {
 	resources, err := client.ListResources(req.Context())
 	if err != nil {
 		return fmt.Errorf("failed to list resources: %w", err)
@@ -119,7 +122,7 @@ func printHistory(wl *sync.Mutex, rw http.ResponseWriter, req *http.Request, cli
 	return nil
 }
 
-func printPendingElicitation(wl *sync.Mutex, rw http.ResponseWriter, req *http.Request, client *mcp.Client) error {
+func printPendingElicitation(wl *sync.Mutex, rw flusher, req *http.Request, client *mcp.Client) error {
 	elicitContents, err := client.ReadResource(req.Context(), types.ElicitationURI)
 	if err != nil || elicitContents == nil {
 		return nil
@@ -141,7 +144,7 @@ func printPendingElicitation(wl *sync.Mutex, rw http.ResponseWriter, req *http.R
 	return nil
 }
 
-func printProgressURI(wl *sync.Mutex, rw http.ResponseWriter, req *http.Request, client *mcp.Client, progressURI string,
+func printProgressURI(wl *sync.Mutex, rw flusher, req *http.Request, client *mcp.Client, progressURI string,
 	printedIDs map[string]struct{}) error {
 	messages, err := client.ReadResource(req.Context(), progressURI)
 	if err != nil {
@@ -244,22 +247,20 @@ func Events(rw http.ResponseWriter, req *http.Request) error {
 
 	rw.Header().Set("Content-Type", "text/event-stream")
 	rw.WriteHeader(http.StatusOK)
-	if _, f := rw.(http.Flusher); f {
-		rw.(http.Flusher).Flush()
-	}
+	f := newFlusher(rw)
 
 	ids := map[string]struct{}{}
 	wl := sync.Mutex{}
 
 	go func() {
 		// Transform chat messages into SSE events
-		if err := printHistory(&wl, rw, req, subClient, ids); err != nil {
+		if err := printHistory(&wl, f, req, subClient, ids); err != nil {
 			log.Errorf(req.Context(), "failed to print history: %v", err)
 		}
 	}()
 
 	for msg := range events {
-		err := printProgressMessage(&wl, rw, req, msg, subClient, ids)
+		err := printProgressMessage(&wl, f, req, msg, subClient, ids)
 		if err != nil {
 			return err
 		}
@@ -268,7 +269,7 @@ func Events(rw http.ResponseWriter, req *http.Request) error {
 	return nil
 }
 
-func printProgressMessage(wl *sync.Mutex, rw http.ResponseWriter, req *http.Request, msg mcp.Message, client *mcp.Client, printedIDs map[string]struct{}) error {
+func printProgressMessage(wl *sync.Mutex, rw flusher, req *http.Request, msg mcp.Message, client *mcp.Client, printedIDs map[string]struct{}) error {
 	defer func() {
 		if f, ok := rw.(http.Flusher); ok {
 			f.Flush()
@@ -295,3 +296,16 @@ func printProgressMessage(wl *sync.Mutex, rw http.ResponseWriter, req *http.Requ
 
 	return nil
 }
+
+func newFlusher(w http.ResponseWriter) flusher {
+	if f, ok := w.(flusher); ok {
+		return f
+	}
+	return responseFlusher{ResponseWriter: w}
+}
+
+type responseFlusher struct {
+	http.ResponseWriter
+}
+
+func (rf responseFlusher) Flush() {}
