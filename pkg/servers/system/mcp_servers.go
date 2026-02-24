@@ -146,12 +146,9 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 		log.Debugf(ctx, "failed to list tools for MCP server %q: %v", params.Name, err)
 		result["message"] = fmt.Sprintf("Successfully added MCP server '%s'. The server's tools will be available in the next agent turn.", params.Name)
 	} else {
-		toolList := make([]map[string]string, 0, len(tools))
+		toolList := make([]string, 0, len(tools))
 		for _, t := range tools {
-			toolList = append(toolList, map[string]string{
-				"name":        t.Name,
-				"description": t.Description,
-			})
+			toolList = append(toolList, t.Name)
 		}
 		result["tools"] = toolList
 		result["message"] = fmt.Sprintf("Successfully added MCP server '%s' with %d tool(s). The tools will be available in the next agent turn.", params.Name, len(tools))
