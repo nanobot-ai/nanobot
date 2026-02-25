@@ -311,11 +311,24 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 }
 
 func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
+	if !types.IsChatSession(ctx) {
+		return &mcp.InitializeResult{
+			ProtocolVersion: params.ProtocolVersion,
+			Capabilities: mcp.ServerCapabilities{
+				Tools: &mcp.ToolsServerCapability{},
+			},
+			ServerInfo: mcp.ServerInfo{
+				Name:    version.Name,
+				Version: version.Get().String(),
+			},
+		}, nil
+	}
 	// Ensure watcher is running
 	if err := s.ensureFileWatcher(); err != nil {
 		return nil, mcp.ErrRPCInternal.WithMessage("failed to start file watcher: %v", err)
 	}
 
+	// NOTE: The UI needs access to these resources to show the resources.
 	// Track this session for sending list_changed notifications
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
 	s.subscriptions.AddSession(sessionID, msg.Session)

@@ -20,9 +20,14 @@ func NewServer(data *sessiondata.Data) *Server {
 	}
 
 	s.tools = mcp.NewServerTools(
-		mcp.NewServerTool("list_chats", "Returns all previous chat threads", s.listChats),
 		mcp.NewServerTool("update_chat", "Update fields of a give chat thread", s.updateChat),
+		// chat://
+		mcp.NewServerTool("list_chats", "Returns all previous chat threads", s.listChats),
+		// agent://
 		mcp.NewServerTool("list_agents", "List available agents and their meta data", s.listAgents),
+		// workflow://
+
+		// file://
 	)
 
 	return s

@@ -11,7 +11,6 @@ import (
 // Hook Name = "config"
 type AgentConfigHook struct {
 	Agent      *HookAgent                          `json:"agent,omitempty"`
-	Meta       map[string]any                      `json:"_meta,omitempty"`
 	SessionID  string                              `json:"sessionId,omitempty"`
 	MCPServers map[string]AgentConfigHookMCPServer `json:"mcpServers,omitempty"`
 }
@@ -95,6 +94,14 @@ func IsUISession(ctx context.Context) bool {
 	session.Get(SessionInitSessionKey, &sessionInit)
 	isUI, _ := sessionInit.Meta["ui"].(bool)
 	return isUI
+}
+
+func IsChatSession(ctx context.Context) bool {
+	session := mcp.SessionFromContext(ctx)
+	var sessionInit SessionInitHook
+	session.Get(SessionInitSessionKey, &sessionInit)
+	isChat, _ := sessionInit.Meta["chat"].(bool)
+	return isChat
 }
 
 func GetWorkspaceID(ctx context.Context) string {

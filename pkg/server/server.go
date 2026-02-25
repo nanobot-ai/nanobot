@@ -330,7 +330,12 @@ func (s *Server) initUI(params types.SessionInitHook) types.SessionInitHook {
 	if params.Meta == nil {
 		params.Meta = make(map[string]any)
 	}
+
+	// This would represent a "meta" UI session
 	params.Meta["ui"] = u.Query().Has("ui") || u.Path == "/mcp/ui"
+
+	// This would represent a "chat" session initiated from the UI.
+	params.Meta["chat"] = u.Path == "/mcp/chat"
 	return params
 }
 
