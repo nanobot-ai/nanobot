@@ -27,7 +27,7 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 	if agent := params.Agent; agent != nil {
 		for _, perm := range agent.Permissions.Allowed(maps.Keys(allowedPermsToTools)) {
 			for _, tool := range allowedPermsToTools[perm] {
-				agent.MCPServers = append(agent.MCPServers, "nanobot.system/"+tool)
+				agent.Tools = append(agent.Tools, "nanobot.system/"+tool)
 			}
 
 			if perm == "skills" {
