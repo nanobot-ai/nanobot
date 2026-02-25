@@ -21,23 +21,25 @@ import (
 var _ types.Completer = (*Client)(nil)
 
 type Config struct {
-	DefaultModel string
-	Responses    responses.Config
-	Anthropic    anthropic.Config
+	DefaultModel, DefaultMiniModel string
+	Responses                      responses.Config
+	Anthropic                      anthropic.Config
 }
 
 func NewClient(cfg Config) *Client {
 	return &Client{
-		useCompletions: cfg.Responses.ChatCompletionAPI,
-		defaultModel:   cfg.DefaultModel,
-		cfg:            cfg,
+		useCompletions:   cfg.Responses.ChatCompletionAPI,
+		defaultModel:     cfg.DefaultModel,
+		defaultMiniModel: cfg.DefaultMiniModel,
+		cfg:              cfg,
 	}
 }
 
 type Client struct {
-	defaultModel   string
-	useCompletions bool
-	cfg            Config
+	defaultModel     string
+	defaultMiniModel string
+	useCompletions   bool
+	cfg              Config
 }
 
 func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts ...types.CompletionOptions) (ret *types.CompletionResponse, err error) {
@@ -79,6 +81,9 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 	if req.Model == "default" || req.Model == "" {
 		req.Model = dynamic.DefaultModel
 	}
+	if req.Model == "mini" {
+		req.Model = dynamic.DefaultMiniModel
+	}
 
 	opt := complete.Complete(opts...)
 	if opt.ProgressToken != nil && len(req.Input) > 0 {
@@ -110,7 +115,8 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 
 func (c Client) dynamicConfig(ctx context.Context) Config {
 	cfg := Config{
-		DefaultModel: c.defaultModel,
+		DefaultModel:     c.defaultModel,
+		DefaultMiniModel: c.defaultMiniModel,
 		Responses: responses.Config{
 			ChatCompletionAPI: c.useCompletions,
 			APIKey:            c.cfg.Responses.APIKey,
@@ -132,6 +138,9 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 	env := session.GetEnvMap()
 	if v := strings.TrimSpace(env["NANOBOT_DEFAULT_MODEL"]); v != "" {
 		cfg.DefaultModel = v
+	}
+	if v := strings.TrimSpace(env["NANOBOT_DEFAULT_MINI_MODEL"]); v != "" {
+		cfg.DefaultMiniModel = v
 	}
 	if v := strings.TrimSpace(env["OPENAI_API_KEY"]); v != "" {
 		cfg.Responses.APIKey = v

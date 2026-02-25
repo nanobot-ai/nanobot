@@ -9,8 +9,9 @@ var UI = types.Config{
 	Agents: map[string]types.Agent{
 		"nanobot.summary": {
 			HookAgent: types.HookAgent{
-				Name: "nanobot.summary",
-				Chat: new(bool),
+				Name:  "nanobot.summary",
+				Model: "mini",
+				Chat:  new(bool),
 				Instructions: types.DynamicInstructions{
 					Instructions: `- you will generate a short title based on the first message a user begins a conversation with
 - ensure it is not more than 80 characters long
