@@ -187,12 +187,7 @@ func appendProgress(ctx context.Context, session *mcp.Session, progressMessage *
 }
 
 func (c chatCall) Invoke(ctx context.Context, msg mcp.Message, payload mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	description := c.s.describeSession(ctx, payload.Arguments)
-	if description != nil {
-		defer func() {
-			<-description
-		}()
-	}
+	c.s.describeSession(ctx, payload.Arguments)
 
 	if attachments, _ := payload.Arguments["attachments"].([]any); len(attachments) > 0 {
 		var err error

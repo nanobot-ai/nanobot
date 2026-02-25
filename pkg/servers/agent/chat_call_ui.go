@@ -85,8 +85,7 @@ attachmentsLoop:
 	return newAttachments, nil
 }
 
-func (s *Server) describeSession(ctx context.Context, args any) <-chan struct{} {
-	result := make(chan struct{})
+func (s *Server) describeSession(ctx context.Context, args any) {
 	var description string
 
 	session := mcp.SessionFromContext(ctx)
@@ -94,8 +93,7 @@ func (s *Server) describeSession(ctx context.Context, args any) <-chan struct{} 
 	session.Get(types.DescriptionSessionKey, &description)
 	if description == "" && s.agentName != "nanobot.summary" {
 		go func() {
-			defer close(result)
-			ret, err := s.runtime.Call(ctx, "nanobot.summary", "nanobot.summary", args)
+			ret, err := s.runtime.Call(session.Context(), "nanobot.summary", "nanobot.summary", args)
 			if err != nil {
 				return
 			}
@@ -107,9 +105,5 @@ func (s *Server) describeSession(ctx context.Context, args any) <-chan struct{} 
 				}
 			}
 		}()
-	} else {
-		close(result)
 	}
-
-	return result
 }
