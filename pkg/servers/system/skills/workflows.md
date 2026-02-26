@@ -1,6 +1,6 @@
 ---
 name: workflows
-description: Design and execute workflows - structured multi-step processes with inputs, conditions, and error handling.
+description: Load this skill for ANY request that mentions workflows, including listing, creating, running, editing, or discussing them.
 ---
 
 # Workflows
