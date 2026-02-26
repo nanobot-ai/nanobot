@@ -340,6 +340,16 @@ func TestResourcesListIncludesAgentAndChatResources(t *testing.T) {
 		AccountID:   "account-a",
 		Description: "Chat One",
 		Cwd:         t.TempDir(),
+		State: session.State(mcp.SessionState{
+			Attributes: map[string]any{
+				types.CurrentAgentSessionKey: "assistant",
+			},
+		}),
+		Config: session.ConfigWrapper(types.Config{
+			Publish: types.Publish{
+				Entrypoint: []string{"assistant", "reviewer"},
+			},
+		}),
 	}); err != nil {
 		t.Fatalf("failed to create chat session: %v", err)
 	}
@@ -383,6 +393,16 @@ func TestResourcesListIncludesAgentAndChatResources(t *testing.T) {
 	if got, _ := chatResource.Meta["id"].(string); got != "chat-1" {
 		t.Fatalf("chat _meta.id = %q, want %q", got, "chat-1")
 	}
+	if got, _ := chatResource.Meta["currentAgentId"].(string); got != "assistant" {
+		t.Fatalf("chat _meta.currentAgentId = %q, want %q", got, "assistant")
+	}
+	available, ok := chatResource.Meta["availableAgentIds"].([]any)
+	if !ok {
+		t.Fatalf("chat _meta.availableAgentIds has unexpected type %T", chatResource.Meta["availableAgentIds"])
+	}
+	if len(available) != 2 || available[0] != "assistant" || available[1] != "reviewer" {
+		t.Fatalf("chat _meta.availableAgentIds = %v, want [assistant reviewer]", available)
+	}
 }
 
 func TestResourcesReadChat(t *testing.T) {
@@ -393,6 +413,16 @@ func TestResourcesReadChat(t *testing.T) {
 		AccountID:   "account-a",
 		Description: "Chat One",
 		Cwd:         t.TempDir(),
+		State: session.State(mcp.SessionState{
+			Attributes: map[string]any{
+				types.CurrentAgentSessionKey: "assistant",
+			},
+		}),
+		Config: session.ConfigWrapper(types.Config{
+			Publish: types.Publish{
+				Entrypoint: []string{"assistant", "reviewer"},
+			},
+		}),
 	}); err != nil {
 		t.Fatalf("failed to create chat session: %v", err)
 	}
@@ -422,6 +452,12 @@ func TestResourcesReadChat(t *testing.T) {
 	}
 	if chat.ID != "chat-1" {
 		t.Fatalf("chat.ID = %q, want %q", chat.ID, "chat-1")
+	}
+	if chat.CurrentAgentID != "assistant" {
+		t.Fatalf("chat.CurrentAgentID = %q, want %q", chat.CurrentAgentID, "assistant")
+	}
+	if len(chat.AvailableAgentIDs) != 2 || chat.AvailableAgentIDs[0] != "assistant" || chat.AvailableAgentIDs[1] != "reviewer" {
+		t.Fatalf("chat.AvailableAgentIDs = %v, want [assistant reviewer]", chat.AvailableAgentIDs)
 	}
 }
 

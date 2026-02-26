@@ -20,6 +20,8 @@ export interface Chat {
 	created: string;
 	visibility?: 'public' | 'private';
 	readonly?: boolean;
+	currentAgentId?: string;
+	availableAgentIds?: string[];
 	workflowURIs?: string[];
 }
 

@@ -44,8 +44,9 @@ func (s *ToolsServer) OnMessage(ctx context.Context, msg mcp.Message) {
 }
 
 func (s *ToolsServer) initialize(ctx context.Context, _ mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
-	if !types.IsUISession(ctx) {
-		// Only the UI sessions should have access to this server, so return no capabilities if it's not a UI session.
+	if !types.IsUISession(ctx) && !types.IsChatSession(ctx) {
+		// Only UI and chat sessions should have access to this server, so return
+		// no capabilities otherwise.
 		return &mcp.InitializeResult{
 			ProtocolVersion: params.ProtocolVersion,
 			ServerInfo: mcp.ServerInfo{

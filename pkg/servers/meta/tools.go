@@ -719,13 +719,54 @@ func resourceDisplayName(preferred, fallback string) string {
 }
 
 func chatFromSession(s *session.Session, currentAccountID string) types.Chat {
+	availableAgentIDs := availableAgentIDsFromSession(s)
+	currentAgentID := currentAgentIDFromSession(s, availableAgentIDs)
+
 	return types.Chat{
-		ID:           s.SessionID,
-		Title:        s.Description,
-		Created:      s.CreatedAt,
-		ReadOnly:     s.AccountID != currentAccountID,
-		WorkflowURIs: s.WorkflowURIs,
+		ID:                s.SessionID,
+		Title:             s.Description,
+		Created:           s.CreatedAt,
+		ReadOnly:          s.AccountID != currentAccountID,
+		CurrentAgentID:    currentAgentID,
+		AvailableAgentIDs: availableAgentIDs,
+		WorkflowURIs:      s.WorkflowURIs,
 	}
+}
+
+func availableAgentIDsFromSession(s *session.Session) []string {
+	config := types.Config(s.Config)
+	if len(config.Publish.Entrypoint) == 0 {
+		return nil
+	}
+
+	result := make([]string, 0, len(config.Publish.Entrypoint))
+	seen := map[string]struct{}{}
+	for _, id := range config.Publish.Entrypoint {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		result = append(result, id)
+	}
+
+	return result
+}
+
+func currentAgentIDFromSession(s *session.Session, availableAgentIDs []string) string {
+	if s.State.Attributes != nil {
+		if current, ok := s.State.Attributes[types.CurrentAgentSessionKey].(string); ok && strings.TrimSpace(current) != "" {
+			return current
+		}
+	}
+
+	if len(availableAgentIDs) > 0 {
+		return availableAgentIDs[0]
+	}
+	return ""
 }
 
 func defaultSessionCwd(sessionID string) string {

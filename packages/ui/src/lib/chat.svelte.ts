@@ -106,6 +106,8 @@ function mapChatResource(resource: Resource): Chat {
 		created,
 		visibility: visibility === "public" || visibility === "private" ? visibility : undefined,
 		readonly: asBoolean(meta["readonly"]),
+		currentAgentId: asString(meta["currentAgentId"]),
+		availableAgentIds: asStringArray(meta["availableAgentIds"]),
 		workflowURIs: asStringArray(meta["workflowURIs"]),
 	};
 }
@@ -306,6 +308,11 @@ export class ChatAPI {
 				(a, b) =>
 					new Date(b.created).getTime() - new Date(a.created).getTime(),
 			);
+	}
+
+	async getThread(threadId: string): Promise<Chat | undefined> {
+		const threads = await this.getThreads();
+		return threads.find((thread) => thread.id === threadId);
 	}
 
 	watchThreadListChanged(onListChanged: () => void): () => void {
@@ -619,16 +626,28 @@ export class ChatService {
 	};
 
 	private reloadAgent = async () => {
-		const agentsData = await this.api.listAgents();
-		if (agentsData.agents?.length > 0) {
-			this.agents = agentsData.agents;
+		const [agentsData, thread] = await Promise.all([
+			this.api.listAgents(),
+			this.chatId ? this.api.getThread(this.chatId) : Promise.resolve(undefined),
+		]);
+
+		let agents = agentsData.agents || [];
+		if (thread?.availableAgentIds && thread.availableAgentIds.length > 0) {
+			const allowedAgents = new Set(thread.availableAgentIds);
+			agents = agents.filter((agent) => allowedAgents.has(agent.id));
+		}
+
+		if (agents.length > 0) {
+			this.agents = agents;
 			this.agent =
-				agentsData.agents.find((a) => a.current) || agentsData.agents[0];
+				(thread?.currentAgentId && agents.find((a) => a.id === thread.currentAgentId)) ||
+				agents.find((a) => a.current) ||
+				agents[0];
 
 			// Only reset selectedAgentId if:
 			// 1. It's not set yet (empty string), OR
 			// 2. The currently selected agent is no longer in the agents list
-			const isSelectedAgentStillAvailable = agentsData.agents.some(
+			const isSelectedAgentStillAvailable = agents.some(
 				(a) => a.id === this.selectedAgentId,
 			);
 

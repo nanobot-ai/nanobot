@@ -10,6 +10,54 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
+func TestInitialize_AccessBySessionType(t *testing.T) {
+	tests := []struct {
+		name        string
+		meta        map[string]any
+		expectTools bool
+	}{
+		{
+			name:        "ui session has tools",
+			meta:        map[string]any{"ui": true},
+			expectTools: true,
+		},
+		{
+			name:        "chat session has tools",
+			meta:        map[string]any{"chat": true},
+			expectTools: true,
+		},
+		{
+			name:        "non-ui non-chat session has no tools",
+			meta:        map[string]any{},
+			expectTools: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewToolsServer()
+			baseCtx := context.Background()
+			session := mcp.NewEmptySession(baseCtx)
+			session.Set(types.SessionInitSessionKey, types.SessionInitHook{
+				Meta: tt.meta,
+			})
+			ctx := mcp.WithSession(baseCtx, session)
+
+			result, err := s.initialize(ctx, mcp.Message{}, mcp.InitializeRequest{
+				ProtocolVersion: "2024-11-05",
+			})
+			if err != nil {
+				t.Fatalf("initialize() failed: %v", err)
+			}
+
+			hasTools := result.Capabilities.Tools != nil
+			if hasTools != tt.expectTools {
+				t.Fatalf("tools capability mismatch: got %v, want %v", hasTools, tt.expectTools)
+			}
+		})
+	}
+}
+
 func TestRecordWorkflowRun_DeduplicatesURI(t *testing.T) {
 	s := NewToolsServer()
 	ctx := context.Background()
