@@ -46,7 +46,6 @@ func New() *cobra.Command {
 type Nanobot struct {
 	Debug                   bool              `usage:"Enable debug logging"`
 	Trace                   bool              `usage:"Enable trace logging"`
-	Quiet                   bool              `usage:"Disable most output" short:"q"`
 	Env                     []string          `usage:"Environment variables to set in the form of KEY=VALUE, or KEY to load from current environ" short:"e"`
 	EnvFile                 string            `usage:"Path to the environment file (default: ./nanobot.env)" default:"./nanobot.env"`
 	EmptyEnv                bool              `usage:"Do not load environment variables from the environment by default"`
@@ -126,7 +125,7 @@ func (n *Nanobot) PersistentPre(cmd *cobra.Command, _ []string) error {
 		log.DebugLog = true
 	}
 
-	log.EnableMessages = n.Debug || n.Trace || !n.Quiet
+	log.EnableMessages = n.Debug || n.Trace
 
 	for _, sub := range cmd.Commands() {
 		if sub.Name() == "help" {
