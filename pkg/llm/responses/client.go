@@ -68,7 +68,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 		opt      = complete.Complete(opts...)
 	)
 
-	req.Stream = &[]bool{true}[0]
+	req.Stream = new(true)
 	req.Store = new(bool)
 
 	data, _ := json.Marshal(req)
