@@ -72,9 +72,20 @@ func (s *Server) listChats(ctx context.Context) (*types.ChatList, error) {
 	}, nil
 }
 
-func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
-	if err := s.ensureWatchers(ctx); err != nil {
-		log.Debugf(ctx, "failed to refresh meta resource watchers: %v", err)
+func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
+	session := msg.Session
+	if session == nil {
+		session = mcp.SessionFromContext(ctx)
+	}
+	if session != nil {
+		s.trackSession(ctx, session)
+	}
+
+	// Watchers are only needed when we have a live session to notify and clean up.
+	if session != nil {
+		if err := s.ensureWatchers(ctx); err != nil {
+			log.Debugf(ctx, "failed to refresh meta resource watchers: %v", err)
+		}
 	}
 
 	agents, err := s.listAgents(ctx)
@@ -134,9 +145,15 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 }
 
 func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, request mcp.SubscribeRequest) (*mcp.SubscribeResult, error) {
-	s.trackSession(ctx, msg.Session)
-	if err := s.ensureWatchers(ctx); err != nil {
-		log.Debugf(ctx, "failed to refresh meta resource watchers before subscribe: %v", err)
+	session := msg.Session
+	if session == nil {
+		session = mcp.SessionFromContext(ctx)
+	}
+	if session != nil {
+		s.trackSession(ctx, session)
+		if err := s.ensureWatchers(ctx); err != nil {
+			log.Debugf(ctx, "failed to refresh meta resource watchers before subscribe: %v", err)
+		}
 	}
 
 	if err := s.validateResourceExists(ctx, request.URI); err != nil {

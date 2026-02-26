@@ -167,6 +167,10 @@ func (s *Server) untrackSession(sessionID string) {
 
 func (s *Server) ensureManagerEventSubscription(ctx context.Context) {
 	mcpSession := mcp.SessionFromContext(ctx)
+	if mcpSession != nil {
+		s.trackSession(ctx, mcpSession)
+	}
+
 	manager, _, err := s.getManagerAndAccountID(mcpSession)
 	if err != nil || manager == nil {
 		return

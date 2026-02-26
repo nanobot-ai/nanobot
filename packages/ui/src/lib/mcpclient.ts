@@ -586,13 +586,25 @@ export class SimpleClient {
 		callback: (resource: ResourceContents) => void,
 	): () => void {
 		// Add callback to subscriptions
-		if (!this.#sseSubscriptions.has(prefix)) {
+		const shouldSubscribe = !this.#sseSubscriptions.has(prefix);
+		if (shouldSubscribe) {
 			this.#sseSubscriptions.set(prefix, new Set());
 		}
 		this.#sseSubscriptions.get(prefix)!.add(callback);
 
 		// Ensure SSE connection is established
 		this.#ensureSSEConnection().then(async () => {
+			if (!shouldSubscribe) {
+				this.#closeSSEIfIdle();
+				return;
+			}
+
+			// Callback may have been removed while the SSE connection was being created.
+			if (!this.#sseSubscriptions.get(prefix)?.has(callback)) {
+				this.#closeSSEIfIdle();
+				return;
+			}
+
 			// Subscribe to resource changes for this prefix
 			try {
 				await this.exchange("resources/subscribe", { uri: prefix });
@@ -601,6 +613,8 @@ export class SimpleClient {
 				);
 			} catch (e) {
 				console.error(`[SimpleClient] Failed to subscribe to ${prefix}:`, e);
+			} finally {
+				this.#closeSSEIfIdle();
 			}
 		});
 
@@ -632,9 +646,14 @@ export class SimpleClient {
 		// Keep list watchers lightweight: no server-side subscribe/unsubscribe round-trip.
 		this.#sseListChangedCallbacks.add(callback);
 
-		this.#ensureSSEConnection().catch((e) => {
-			console.error("[SimpleClient] Failed to establish SSE connection:", e);
-		});
+		this.#ensureSSEConnection()
+			.then(() => {
+				// If the callback was removed before the connection finished opening, tear down.
+				this.#closeSSEIfIdle();
+			})
+			.catch((e) => {
+				console.error("[SimpleClient] Failed to establish SSE connection:", e);
+			});
 
 		return () => {
 			this.#sseListChangedCallbacks.delete(callback);
