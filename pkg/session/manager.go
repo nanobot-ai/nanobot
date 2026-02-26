@@ -59,6 +59,7 @@ const (
 	SessionEventUpdated SessionEventType = "updated"
 )
 
+// SessionEvent describes a persisted thread lifecycle change emitted by Manager.
 type SessionEvent struct {
 	Type        SessionEventType
 	SessionType string
@@ -117,6 +118,8 @@ func (m *Manager) saveAttributesToRecord(stored *Session, session *mcp.ServerSes
 	return nil
 }
 
+// SubscribeEvents registers a callback for session create/update/delete events.
+// The returned function unregisters the handler.
 func (m *Manager) SubscribeEvents(handler func(SessionEvent)) (unsubscribe func()) {
 	if handler == nil {
 		return func() {}
@@ -235,6 +238,7 @@ func (m *Manager) Store(ctx context.Context, id string, session *mcp.ServerSessi
 				sessionType = "thread"
 			}
 
+			// Description changes are surfaced as resource updates for thread UIs.
 			m.emitEvent(SessionEvent{
 				Type:        SessionEventUpdated,
 				SessionType: sessionType,
@@ -438,6 +442,7 @@ func (m *Manager) UpdateThreadDescription(ctx context.Context, id, accountID, de
 		return nil, false, fmt.Errorf("session %s is not a thread", id)
 	}
 	if stored.Description == description {
+		// No-op updates should not write to DB or trigger notifications.
 		return stored, false, nil
 	}
 

@@ -43,6 +43,7 @@ export class SimpleClient {
 		string,
 		Set<(resource: ResourceContents) => void>
 	>();
+	// List-changed notifications are independent of per-resource subscriptions.
 	#sseListChangedCallbacks = new Set<() => void>();
 
 	constructor(opts?: {
@@ -500,6 +501,7 @@ export class SimpleClient {
 		const [basePath, existingQuery] = this.#url.split("?");
 		const queryParams = new URLSearchParams(existingQuery || "");
 		queryParams.set("stream", "true");
+		// The backend expects an explicit session id for streaming updates.
 		queryParams.set("id", sessionId);
 		const sseUrl = `${basePath}?${queryParams.toString()}`;
 
@@ -627,6 +629,7 @@ export class SimpleClient {
 	}
 
 	watchResourceListChanged(callback: () => void): () => void {
+		// Keep list watchers lightweight: no server-side subscribe/unsubscribe round-trip.
 		this.#sseListChangedCallbacks.add(callback);
 
 		this.#ensureSSEConnection().catch((e) => {
@@ -640,6 +643,7 @@ export class SimpleClient {
 	}
 
 	#closeSSEIfIdle() {
+		// Close the socket only when no resource or list listeners remain.
 		if (
 			this.#sseSubscriptions.size === 0 &&
 			this.#sseListChangedCallbacks.size === 0 &&

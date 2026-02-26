@@ -31,6 +31,8 @@ export interface CallToolResult {
 	content?: ToolOutputItem[];
 }
 
+// Resource metadata can come from different servers with inconsistent typing.
+// These helpers normalize unknown values before mapping them into UI types.
 function asString(value: unknown): string | undefined {
 	return typeof value === "string" && value.trim() ? value : undefined;
 }
@@ -64,6 +66,7 @@ function parseResourceID(uri: string, prefix: string): string | undefined {
 	}
 }
 
+// Convert agent resources from the meta MCP server into stable UI agent objects.
 function mapAgentResource(resource: Resource): Agent {
 	const meta = resource._meta ?? {};
 	const id =
@@ -82,6 +85,7 @@ function mapAgentResource(resource: Resource): Agent {
 	};
 }
 
+// Convert chat thread resources into sidebar-friendly chat metadata.
 function mapChatResource(resource: Resource): Chat {
 	const meta = resource._meta ?? {};
 	const id =
@@ -142,6 +146,7 @@ export class ChatAPI {
 
 	#getChatClient(sessionId?: string) {
 		if (sessionId) {
+			// Session-scoped calls use an ephemeral client to avoid mutating shared client state.
 			return new SimpleClient({
 				baseUrl: this.baseUrl,
 				path: ChatUIPath,
@@ -154,6 +159,7 @@ export class ChatAPI {
 
 	#getMetaClient(sessionId?: string) {
 		if (sessionId) {
+			// Meta queries can also be session-scoped when we need per-session authorization.
 			return new SimpleClient({
 				baseUrl: this.baseUrl,
 				path: UIPath,
@@ -191,6 +197,7 @@ export class ChatAPI {
 			{ abort: opts?.abort, requestId: opts?.requestId },
 		);
 
+		// Most MCP tool calls return structuredContent, but some tools return raw payloads.
 		let finalResult: T;
 		if (opts?.parseResponse) {
 			finalResult = opts.parseResponse(result as CallToolResult);
@@ -288,6 +295,7 @@ export class ChatAPI {
 	}
 
 	async listAgents(_opts?: { sessionId?: string }): Promise<Agents> {
+		// Agent state is global metadata, so this always comes from the meta endpoint.
 		const result = await this.metaClient.listResources({
 			prefix: AgentResourcePrefix,
 		});
@@ -298,6 +306,7 @@ export class ChatAPI {
 	}
 
 	async getThreads(): Promise<Chat[]> {
+		// Thread metadata lives in resources and may be updated asynchronously.
 		const result = await this.metaClient.listResources({
 			prefix: ChatThreadResourcePrefix,
 		});
@@ -633,6 +642,7 @@ export class ChatService {
 
 		let agents = agentsData.agents || [];
 		if (thread?.availableAgentIds && thread.availableAgentIds.length > 0) {
+			// Thread-scoped allowlists hide agents that are not part of this thread's config.
 			const allowedAgents = new Set(thread.availableAgentIds);
 			agents = agents.filter((agent) => allowedAgents.has(agent.id));
 		}

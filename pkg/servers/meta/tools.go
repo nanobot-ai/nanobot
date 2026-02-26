@@ -13,6 +13,7 @@ func (s *Server) updateChat(ctx context.Context, data struct {
 	ID    string `json:"chatId"`
 	Title string `json:"title"`
 }) (*types.Chat, error) {
+	// Ensure rename operations trigger resource notifications for active UI sessions.
 	s.ensureManagerEventSubscription(ctx)
 
 	mcpSession := mcp.SessionFromContext(ctx)
@@ -72,6 +73,7 @@ func availableAgentIDsFromSession(s *session.Session) []string {
 		return nil
 	}
 
+	// Preserve order from publish.entrypoint while dropping blanks and duplicates.
 	result := make([]string, 0, len(config.Publish.Entrypoint))
 	seen := map[string]struct{}{}
 	for _, id := range config.Publish.Entrypoint {

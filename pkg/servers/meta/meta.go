@@ -132,6 +132,7 @@ func (s *Server) trackSession(ctx context.Context, session *mcp.Session) {
 			session:   session,
 			accountID: accountID,
 		}
+		// Auto-cleanup when the transport closes so we do not leak watchers/subscriptions.
 		context.AfterFunc(session.Context(), func() {
 			s.untrackSession(sessionID)
 		})
@@ -177,6 +178,7 @@ func (s *Server) ensureManagerEventSubscription(ctx context.Context) {
 		return
 	}
 
+	// Session manager events drive list_changed and resource updated notifications.
 	unsubscribe := manager.SubscribeEvents(s.handleSessionEvent)
 	s.managerSubscriptions[manager] = unsubscribe
 }
@@ -213,6 +215,7 @@ func (s *Server) handleSessionEvent(event session.SessionEvent) {
 
 func (s *Server) sendListChangedForAccount(accountID string) {
 	s.sessionLock.Lock()
+	// Copy recipients under lock, then send outside the lock to avoid blocking all sessions.
 	sessions := make([]*mcp.Session, 0, len(s.sessions))
 	for _, tracked := range s.sessions {
 		if tracked.session == nil {

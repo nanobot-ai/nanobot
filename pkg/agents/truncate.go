@@ -85,11 +85,13 @@ func truncatedOutputPath(ctx context.Context, toolName, callID, ext string) stri
 	session := mcp.SessionFromContext(ctx)
 	if session != nil {
 		var cwd string
+		// Prefer the session's working directory so each thread keeps its own outputs.
 		if session.Root().Get(types.CwdSessionKey, &cwd) && cwd != "" {
 			return filepath.Join(cwd, "truncated-outputs", fileName)
 		}
 	}
 
+	// Fallback for contexts that do not have session cwd state yet.
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
 	return filepath.Join("sessions", sanitizePathComponent(sessionID), "truncated-outputs", fileName)
 }

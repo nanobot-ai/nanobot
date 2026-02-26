@@ -97,6 +97,7 @@ func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListRes
 		return nil, err
 	}
 
+	// Merge all resource domains into one sorted response for the meta endpoint.
 	resources := make([]mcp.Resource, 0, len(agents.Agents)+len(chats.Chats)+len(files.Resources)+len(workflowsList.Resources))
 
 	for _, agent := range agents.Agents {
@@ -176,6 +177,7 @@ func (s *Server) listFiles(ctx context.Context) (*mcp.ListResourcesResult, error
 
 	files := make([]mcp.Resource, 0)
 	for _, chatSession := range sessions {
+		// Files are scoped to each thread's configured cwd.
 		cwd := strings.TrimSpace(chatSession.Cwd)
 		if cwd == "" {
 			cwd = defaultSessionCwd(chatSession.SessionID)
@@ -404,6 +406,8 @@ func (s *Server) readWorkflowResource(uri string) (*mcp.ReadResourceResult, erro
 }
 
 func (s *Server) validateResourceExists(ctx context.Context, uri string) error {
+	// subscriptions/subscribe should fail fast when a resource is missing so
+	// clients do not hold dead subscriptions.
 	switch {
 	case strings.HasPrefix(uri, agentURIPrefix):
 		agentID, err := parseAgentURI(uri)
@@ -493,6 +497,7 @@ func (s *Server) sessionForFile(ctx context.Context, targetPath string) (*sessio
 		if err != nil || relPath == "." || relPath == "" || filepath.IsAbs(relPath) {
 			continue
 		}
+		// Reject traversal outside the session root.
 		if relPath == ".." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) {
 			continue
 		}
@@ -612,6 +617,7 @@ func parseAbsoluteFileURI(uri string) (string, error) {
 
 	raw = strings.TrimPrefix(raw, "/")
 	path := "/" + raw
+	// Windows paths arrive as /C:/... from URI form, so preserve drive letters.
 	if runtime.GOOS == "windows" && len(raw) >= 2 && raw[1] == ':' {
 		path = raw
 	}

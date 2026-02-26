@@ -32,6 +32,8 @@ const (
 
 var safeSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
+// SanitizeSessionDirectoryName returns a filesystem-safe session directory name.
+// Unsafe IDs are replaced with a stable short hash to avoid traversal/invalid paths.
 func SanitizeSessionDirectoryName(id string) string {
 	if id == "" {
 		return "default"

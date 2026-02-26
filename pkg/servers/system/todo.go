@@ -44,7 +44,7 @@ func (s *Server) readTodoResource(ctx context.Context, uri string) (*mcp.ReadRes
 		return nil, err
 	}
 
-	// Read from <session_workdir>/.nanobot/status/todo.json
+	// Todo state is session-scoped so each thread keeps an independent task list.
 	todoPath := filepath.Join(workdir, ".nanobot", "status", "todo.json")
 
 	// Check if file exists
@@ -100,7 +100,7 @@ func (s *Server) todoWrite(ctx context.Context, params TodoWriteParams) (string,
 		return "", err
 	}
 
-	// Write to <session_workdir>/.nanobot/status/todo.json
+	// Persist todo state under the session workdir for thread isolation.
 	todoPath := filepath.Join(workdir, ".nanobot", "status", "todo.json")
 
 	// Create directories

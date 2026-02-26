@@ -328,7 +328,8 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 
 func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
 	if !types.IsChatSession(ctx) {
-		// Only chat sessions should have access to the resources in this server, so return tools as the only capability
+		// System resources expose per-thread files/todos, so they are only enabled for chat sessions.
+		// Non-chat callers still get tool capability for setup/config operations.
 		return &mcp.InitializeResult{
 			ProtocolVersion: params.ProtocolVersion,
 			Capabilities: mcp.ServerCapabilities{

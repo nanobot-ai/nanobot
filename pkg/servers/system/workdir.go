@@ -38,6 +38,7 @@ func (s *Server) sessionWorkdir(ctx context.Context) string {
 		return cwd
 	}
 
+	// Lazily assign a per-session default so callers can use it immediately.
 	cwd = s.defaultSessionWorkdir(root.ID())
 	root.Set(types.CwdSessionKey, cwd)
 	return cwd
@@ -55,5 +56,6 @@ func resolvePath(basePath, candidate string) string {
 	if filepath.IsAbs(candidate) {
 		return candidate
 	}
+	// Keep all relative file operations scoped to the session workdir.
 	return filepath.Join(basePath, candidate)
 }

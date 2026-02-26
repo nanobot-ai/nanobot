@@ -26,6 +26,7 @@
 	const newThread = resolve('/');
 	const notifications = new NotificationStore();
 
+	// Keep one live resource watcher per thread currently shown in the sidebar.
 	function syncThreadWatchers() {
 		const activeThreadIDs = new Set(threads.map((thread) => thread.id));
 
@@ -49,6 +50,7 @@
 	}
 
 	async function refreshThreads() {
+		// Coalesce concurrent refresh requests so list-change bursts only issue one fetch.
 		if (refreshThreadsPromise) {
 			return refreshThreadsPromise;
 		}

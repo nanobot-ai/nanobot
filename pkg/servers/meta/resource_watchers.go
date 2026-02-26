@@ -85,6 +85,7 @@ func (s *Server) ensureFileWatchers(ctx context.Context) error {
 	s.fileWatchersLock.Lock()
 	defer s.fileWatchersLock.Unlock()
 
+	// Reconcile watcher set against current thread roots: close stale watchers first.
 	for root, watcher := range s.fileWatchers {
 		if _, ok := desiredRoots[root]; ok {
 			continue
@@ -100,6 +101,7 @@ func (s *Server) ensureFileWatchers(ctx context.Context) error {
 			continue
 		}
 
+		// New thread roots get their own watcher so file resources can stream updates.
 		watcher := fswatch.NewWatcher(root, fileWatchMaxDepth, nil, s.handleFileEvents(root))
 		if err := watcher.Start(); err != nil {
 			log.Debugf(ctx, "failed to start file watcher for %s: %v", root, err)
@@ -115,6 +117,7 @@ func (s *Server) ensureFileWatchers(ctx context.Context) error {
 func (s *Server) handleFileEvents(root string) fswatch.EventHandler {
 	return func(events []fswatch.Event) {
 		for _, event := range events {
+			// fswatch events use relative paths; rebuild absolute path to generate stable URIs.
 			path := filepath.Join(root, event.Path)
 			uri := fileURI(path)
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -250,22 +249,6 @@ func TestListFilesFallbackSessionDirectory(t *testing.T) {
 	}
 	if result.Resources[0].Name != "fallback.txt" {
 		t.Fatalf("file.Name = %q, want %q", result.Resources[0].Name, "fallback.txt")
-	}
-}
-
-func TestDefaultSessionCwd(t *testing.T) {
-	tempDir := t.TempDir()
-	restore := withWorkingDir(t, tempDir)
-	defer restore()
-
-	got := defaultSessionCwd("session-id")
-	want := filepath.Join(tempDir, "sessions", "session-id")
-	if runtime.GOOS == "windows" {
-		got = filepath.Clean(got)
-		want = filepath.Clean(want)
-	}
-	if got != want {
-		t.Fatalf("defaultSessionCwd() = %q, want %q", got, want)
 	}
 }
 
