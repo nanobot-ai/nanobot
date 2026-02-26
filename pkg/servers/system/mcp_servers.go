@@ -114,6 +114,8 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 		headers = map[string]string{
 			"Authorization": "Bearer " + apiKey,
 		}
+	} else {
+		log.Infof(ctx, "MCP_API_KEY environment variable is not set, auth will fallback to OAuth")
 	}
 
 	// Create the new server config
