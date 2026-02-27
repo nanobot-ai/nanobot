@@ -300,8 +300,14 @@ Only servers added via addMCPServer can be removed with this tool.`, s.removeMCP
 func (s *Server) Close() error {
 	s.fileWatchersMu.Lock()
 	defer s.fileWatchersMu.Unlock()
+	var errs []error
 	for _, w := range s.fileWatchers {
-		w.Close()
+		if err := w.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if len(errs) > 0 {
+		return errs[0]
 	}
 	return nil
 }
