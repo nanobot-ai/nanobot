@@ -2,7 +2,10 @@ package system
 
 import (
 	"context"
+	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -60,6 +63,26 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 				// Make workflow tools available to agents with skills permission.
 				agent.MCPServers = append(agent.MCPServers, "nanobot.workflow-tools")
 			}
+		}
+
+		// Inject session directory and workflow directory paths into agent instructions
+		if params.SessionID != "" {
+			absSessionDir := sessionDir(params.SessionID)
+			cwd, _ := os.Getwd()
+			absWorkflowDir := filepath.Join(cwd, "workflows")
+
+			agent.Instructions.Instructions += fmt.Sprintf(`
+
+## File Paths
+
+Always use absolute file paths when using Read, Write, Edit, Glob, Grep, and Bash tools.
+
+Your session directory is: %s
+This is where your files for this session live. The Bash tool defaults to this as its working directory.
+
+Workflow files must always be stored in: %s
+Do NOT put workflow files in the session directory.
+`, absSessionDir, absWorkflowDir)
 		}
 
 		if params.MCPServers == nil {

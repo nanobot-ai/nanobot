@@ -2,7 +2,10 @@ package meta
 
 import (
 	"context"
+	"sync"
 
+	"github.com/nanobot-ai/nanobot/pkg/fswatch"
+	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -10,13 +13,19 @@ import (
 )
 
 type Server struct {
-	tools mcp.ServerTools
-	data  *sessiondata.Data
+	tools             mcp.ServerTools
+	data              *sessiondata.Data
+	subscriptions     *fswatch.SubscriptionManager
+	workflowWatcher   *fswatch.Watcher
+	sessionsWatcher   *fswatch.Watcher
+	watcherOnce       sync.Once
+	watcherInitErr    error
 }
 
 func NewServer(data *sessiondata.Data) *Server {
 	s := &Server{
-		data: data,
+		data:          data,
+		subscriptions: fswatch.NewSubscriptionManager(context.Background()),
 	}
 
 	s.tools = mcp.NewServerTools(
@@ -26,6 +35,25 @@ func NewServer(data *sessiondata.Data) *Server {
 	)
 
 	return s
+}
+
+// Close stops file watchers and cleans up resources
+func (s *Server) Close() error {
+	var errs []error
+	if s.workflowWatcher != nil {
+		if err := s.workflowWatcher.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if s.sessionsWatcher != nil {
+		if err := s.sessionsWatcher.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if len(errs) > 0 {
+		return errs[0]
+	}
+	return nil
 }
 
 func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
@@ -40,12 +68,20 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 		mcp.Invoke(ctx, msg, s.tools.List)
 	case "tools/call":
 		mcp.Invoke(ctx, msg, s.tools.Call)
+	case "resources/list":
+		mcp.Invoke(ctx, msg, s.resourcesList)
+	case "resources/read":
+		mcp.Invoke(ctx, msg, s.resourcesRead)
+	case "resources/subscribe":
+		mcp.Invoke(ctx, msg, s.resourcesSubscribe)
+	case "resources/unsubscribe":
+		mcp.Invoke(ctx, msg, s.resourcesUnsubscribe)
 	default:
 		msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage("%v", msg.Method))
 	}
 }
 
-func (s *Server) initialize(ctx context.Context, _ mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
+func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
 	if !types.IsUISession(ctx) {
 		s.tools = mcp.NewServerTools()
 		return &mcp.InitializeResult{
@@ -57,10 +93,23 @@ func (s *Server) initialize(ctx context.Context, _ mcp.Message, params mcp.Initi
 		}, nil
 	}
 
+	// Track this session for sending list_changed notifications
+	sessionID, _ := types.GetSessionAndAccountID(ctx)
+	s.subscriptions.AddSession(sessionID, msg.Session)
+
+	// Start watchers lazily
+	if err := s.ensureWatchers(); err != nil {
+		log.Errorf(ctx, "failed to start meta watchers: %v", err)
+	}
+
 	return &mcp.InitializeResult{
 		ProtocolVersion: params.ProtocolVersion,
 		Capabilities: mcp.ServerCapabilities{
 			Tools: &mcp.ToolsServerCapability{},
+			Resources: &mcp.ResourcesServerCapability{
+				Subscribe:   true,
+				ListChanged: true,
+			},
 		},
 		ServerInfo: mcp.ServerInfo{
 			Name:    version.Name,

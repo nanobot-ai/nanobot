@@ -12,6 +12,20 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 )
 
+const testSessionID = "test-session-123"
+
+// testContext creates a context with an MCP session that has the given session ID.
+func testContext(t *testing.T) context.Context {
+	t.Helper()
+	handler := mcp.MessageHandlerFunc(func(ctx context.Context, msg mcp.Message) {})
+	serverSession, err := mcp.NewExistingServerSession(context.Background(),
+		mcp.SessionState{ID: testSessionID}, handler)
+	if err != nil {
+		t.Fatalf("failed to create server session: %v", err)
+	}
+	return mcp.WithSession(context.Background(), serverSession.GetSession())
+}
+
 func TestListFileResources(t *testing.T) {
 	// Create temp directory
 	tmpDir := t.TempDir()
@@ -27,7 +41,13 @@ func TestListFileResources(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create test file structure
+	// Create session directory
+	sessDir := filepath.Join(tmpDir, sessionsDir, testSessionID)
+	if err := os.MkdirAll(sessDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create test file structure inside session directory
 	testFiles := []string{
 		"test.txt",
 		"test.md",
@@ -37,13 +57,12 @@ func TestListFileResources(t *testing.T) {
 	}
 
 	for _, f := range testFiles {
-		dir := filepath.Dir(f)
-		if dir != "." {
-			if err := os.MkdirAll(dir, 0755); err != nil {
-				t.Fatal(err)
-			}
+		fullPath := filepath.Join(sessDir, f)
+		dir := filepath.Dir(fullPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
 		}
-		if err := os.WriteFile(f, []byte("test content"), 0644); err != nil {
+		if err := os.WriteFile(fullPath, []byte("test content"), 0644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -53,15 +72,15 @@ func TestListFileResources(t *testing.T) {
 		".git/config",
 		".nanobot/status/todo.json",
 		"node_modules/package/index.js",
-		"vendor/lib/code.go",
 	}
 
 	for _, f := range excludedDirFiles {
-		dir := filepath.Dir(f)
+		fullPath := filepath.Join(sessDir, f)
+		dir := filepath.Dir(fullPath)
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(f, []byte("excluded"), 0644); err != nil {
+		if err := os.WriteFile(fullPath, []byte("excluded"), 0644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -74,20 +93,20 @@ func TestListFileResources(t *testing.T) {
 	}
 
 	for _, f := range excludedNameFiles {
-		dir := filepath.Dir(f)
-		if dir != "." {
-			if err := os.MkdirAll(dir, 0755); err != nil {
-				t.Fatal(err)
-			}
+		fullPath := filepath.Join(sessDir, f)
+		dir := filepath.Dir(fullPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
 		}
-		if err := os.WriteFile(f, []byte("excluded db file"), 0644); err != nil {
+		if err := os.WriteFile(fullPath, []byte("excluded db file"), 0644); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Create server and list resources
 	server := NewServer("")
-	resources, err := server.listFileResources()
+	ctx := testContext(t)
+	resources, err := server.listFileResources(ctx)
 	if err != nil {
 		t.Fatalf("listFileResources failed: %v", err)
 	}
@@ -167,21 +186,28 @@ func TestReadFileResource(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Create session directory
+	sessDir := filepath.Join(tmpDir, sessionsDir, testSessionID)
+	if err := os.MkdirAll(sessDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
 	// Create test file
 	testContent := "Hello, world!\nThis is a test file."
-	if err := os.WriteFile("test.txt", []byte(testContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(sessDir, "test.txt"), []byte(testContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	// Create subdirectory file
-	if err := os.MkdirAll("subdir", 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(sessDir, "subdir"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile("subdir/nested.md", []byte("# Nested file"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(sessDir, "subdir/nested.md"), []byte("# Nested file"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	server := NewServer("")
+	ctx := testContext(t)
 
 	// Minimal 1x1 PNG (binary); image resources must be returned as base64 Blob, not Text
 	minimalPNG := []byte{
@@ -191,12 +217,12 @@ func TestReadFileResource(t *testing.T) {
 		0x00, 0x05, 0xfe, 0x02, 0xfe, 0xdc, 0xcc, 0x59, 0xe7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
 		0x44, 0xae, 0x42, 0x60, 0x82,
 	}
-	if err := os.WriteFile("dot.png", minimalPNG, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(sessDir, "dot.png"), minimalPNG, 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	goContent := "package main\n\nfunc main() {}\n"
-	if err := os.WriteFile("test.go", []byte(goContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(sessDir, "test.go"), []byte(goContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -265,7 +291,7 @@ func TestReadFileResource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := server.readFileResource(tt.uri)
+			result, err := server.readFileResource(ctx, tt.uri)
 
 			if tt.expectError {
 				if err == nil {
@@ -340,6 +366,7 @@ func TestFileFilter(t *testing.T) {
 		{name: ".vscode", path: ".vscode", isDir: true, expected: false},
 		{name: "dist", path: "dist", isDir: true, expected: false},
 		{name: "build", path: "build", isDir: true, expected: false},
+		{name: "sessions", path: "sessions", isDir: true, expected: false},
 
 		// Normal directories
 		{name: "normal directory src", path: "src", isDir: true, expected: true},
@@ -395,12 +422,20 @@ func TestSubscribeFileResource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create test file
-	if err := os.WriteFile("test.txt", []byte("test"), 0644); err != nil {
+	// Create session directory
+	sessDir := filepath.Join(tmpDir, sessionsDir, testSessionID)
+	if err := os.MkdirAll(sessDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create test file in session directory
+	if err := os.WriteFile(filepath.Join(sessDir, "test.txt"), []byte("test"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	server := NewServer("")
+	ctx := testContext(t)
+
 	tests := []struct {
 		name        string
 		uri         string
@@ -430,7 +465,7 @@ func TestSubscribeFileResource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := server.subscribeFileResource(tt.uri)
+			err := server.subscribeFileResource(ctx, tt.uri)
 
 			if tt.expectError {
 				if err == nil {
@@ -460,18 +495,24 @@ func TestResourcesListCombined(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create some test files
-	if err := os.WriteFile("test.txt", []byte("test"), 0644); err != nil {
+	// Create session directory with some test files
+	sessDir := filepath.Join(tmpDir, sessionsDir, testSessionID)
+	if err := os.MkdirAll(sessDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile("test.md", []byte("# Test"), 0644); err != nil {
+
+	if err := os.WriteFile(filepath.Join(sessDir, "test.txt"), []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sessDir, "test.md"), []byte("# Test"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	server := NewServer("")
+	ctx := testContext(t)
 
 	// Call the combined resourcesList method
-	result, err := server.resourcesList(context.Background(), mcp.Message{}, mcp.ListResourcesRequest{})
+	result, err := server.resourcesList(ctx, mcp.Message{}, mcp.ListResourcesRequest{})
 	if err != nil {
 		t.Fatalf("resourcesList failed: %v", err)
 	}
@@ -516,13 +557,18 @@ func TestResourcesReadDispatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create test file
-	if err := os.WriteFile("test.txt", []byte("test content"), 0644); err != nil {
+	// Create session directory with test file
+	sessDir := filepath.Join(tmpDir, sessionsDir, testSessionID)
+	if err := os.MkdirAll(sessDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(sessDir, "test.txt"), []byte("test content"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	server := NewServer("")
-	ctx := context.Background()
+	ctx := testContext(t)
 
 	tests := []struct {
 		name        string

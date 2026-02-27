@@ -32,7 +32,26 @@ const (
 	maxBashTimeout     = 600 * time.Second
 	defaultReadLimit   = 2000
 	maxLineLength      = 2000
+	sessionsDir        = "sessions"
 )
+
+// sessionDir returns the absolute path for a session's working directory.
+func sessionDir(sessionID string) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	return filepath.Join(cwd, sessionsDir, sessionID)
+}
+
+// ensureSessionDir lazily creates and returns the session directory.
+func ensureSessionDir(sessionID string) (string, error) {
+	dir := sessionDir(sessionID)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create session directory: %w", err)
+	}
+	return dir, nil
+}
 
 type Server struct {
 	configDir          string
@@ -93,13 +112,13 @@ Usage notes:
     - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
   - AVOID using `+"`cd <directory> && <command>`"+`. Use the `+"`workdir`"+` parameter to change directories instead.
 
-The working directory is the current directory from which commands are executed. File paths can be relative to this directory.`, s.bash),
+The working directory defaults to your session directory. Always use absolute file paths. The session directory path is provided in your system prompt.`, s.bash),
 		// Read tool
 		mcp.NewServerTool("read", `Reads a file from the local filesystem. You can access any file directly by using this tool.
 Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
 
 Usage:
-- The file_path parameter can be relative to the working directory or an absolute path
+- Always use absolute file paths. The session directory path is provided in your system prompt.
 - By default, it reads up to 2000 lines starting from the beginning of the file
 - You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters
 - Any lines longer than 2000 characters will be truncated
@@ -117,7 +136,7 @@ Usage:
 - NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
 - Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.
 
-File paths should be relative to the working directory, but can be absolute if absolutely necessary.`, s.write),
+Always use absolute file paths. The session directory path is provided in your system prompt.`, s.write),
 		// Edit tool
 		mcp.NewServerTool("edit", `Performs exact string replacements in files.
 
@@ -129,7 +148,7 @@ Usage:
 - The edit will FAIL if `+"`old_string`"+` is not unique in the file. Either provide a larger string with more surrounding context to make it unique or use `+"`replace_all`"+` to change every instance of `+"`old_string`"+`.
 - Use `+"`replace_all`"+` for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.
 
-File paths should be relative to the working directory, but can be absolute if absolutely necessary.`, s.edit),
+Always use absolute file paths. The session directory path is provided in your system prompt.`, s.edit),
 		// Glob tool
 		mcp.NewServerTool("glob", `- Fast file pattern matching tool that works with any codebase size
 - Supports glob patterns like "**/*.js" or "src/**/*.ts"
@@ -138,7 +157,7 @@ File paths should be relative to the working directory, but can be absolute if a
 - When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the Task tool instead
 - You can call multiple tools in a single response. It is always better to speculatively perform multiple searches in parallel if they are potentially useful.
 
-File paths should be relative to the working directory, but can be absolute if absolutely necessary.`, s.glob),
+The search path defaults to your session directory. Use absolute paths for searching elsewhere. The session directory path is provided in your system prompt.`, s.glob),
 		// Grep tool
 		mcp.NewServerTool("grep", `A powerful search tool built on ripgrep
 
@@ -151,7 +170,7 @@ File paths should be relative to the working directory, but can be absolute if a
   - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `+"`interface\\{\\}`"+` to find `+"`interface{}`"+` in Go code)
   - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `+"`struct \\{[\\s\\S]*?field`"+`, use `+"`multiline: true`"+`
 
-The path parameter is relative to the working directory if not specified as absolute.`, s.grep),
+The search path defaults to your session directory. Use absolute paths for searching elsewhere. The session directory path is provided in your system prompt.`, s.grep),
 		// TodoWrite tool
 		mcp.NewServerTool("todoWrite", `Use this tool to create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.
 It also helps the user understand the progress of the task and overall progress of their requests.
@@ -341,7 +360,7 @@ func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListRes
 	resources := s.listTodoResources()
 
 	// Add file resources
-	fileResources, err := s.listFileResources()
+	fileResources, err := s.listFileResources(ctx)
 	if err != nil {
 		// Log but don't fail - still return todo resources
 		log.Errorf(ctx, "failed to list file resources: %v", err)
@@ -357,7 +376,7 @@ func (s *Server) resourcesRead(ctx context.Context, msg mcp.Message, request mcp
 	if strings.HasPrefix(request.URI, "todo:///") {
 		return s.readTodoResource(ctx, request.URI)
 	} else if strings.HasPrefix(request.URI, "file:///") {
-		return s.readFileResource(request.URI)
+		return s.readFileResource(ctx, request.URI)
 	}
 	return nil, mcp.ErrRPCInvalidParams.WithMessage("unsupported resource URI: %s", request.URI)
 }
@@ -371,7 +390,7 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 	if strings.HasPrefix(request.URI, "todo:///") {
 		err = s.subscribeTodoResource(request.URI)
 	} else if strings.HasPrefix(request.URI, "file:///") {
-		err = s.subscribeFileResource(request.URI)
+		err = s.subscribeFileResource(ctx, request.URI)
 	} else {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("unsupported resource URI: %s", request.URI)
 	}
@@ -415,9 +434,17 @@ func (s *Server) bash(ctx context.Context, params BashParams) (string, error) {
 	if params.Workdir != nil {
 		workdir = *params.Workdir
 	} else {
-		cwd, err := os.Getwd()
-		if err == nil {
-			workdir = cwd
+		sessionID, _ := types.GetSessionAndAccountID(ctx)
+		if sessionID != "" {
+			dir, err := ensureSessionDir(sessionID)
+			if err == nil {
+				workdir = dir
+			}
+		}
+		if workdir == "." {
+			if cwd, err := os.Getwd(); err == nil {
+				workdir = cwd
+			}
 		}
 	}
 
@@ -615,10 +642,17 @@ func (s *Server) glob(ctx context.Context, params GlobParams) (string, error) {
 		searchPath = *params.Path
 	}
 
-	// Determine working directory
-	workdir, err := os.Getwd()
-	if err != nil {
-		workdir = "."
+	// Determine working directory (session directory by default)
+	workdir := ""
+	sessionID, _ := types.GetSessionAndAccountID(ctx)
+	if sessionID != "" {
+		workdir = sessionDir(sessionID)
+	}
+	if workdir == "" {
+		workdir, _ = os.Getwd()
+		if workdir == "" {
+			workdir = "."
+		}
 	}
 
 	// Build ripgrep command
@@ -734,10 +768,17 @@ func (s *Server) grep(ctx context.Context, params GrepParams) (string, error) {
 		args = append(args, *params.Path)
 	}
 
-	// Determine working directory
-	workdir, err := os.Getwd()
-	if err != nil {
-		workdir = "."
+	// Determine working directory (session directory by default)
+	workdir := ""
+	sessionID, _ := types.GetSessionAndAccountID(ctx)
+	if sessionID != "" {
+		workdir = sessionDir(sessionID)
+	}
+	if workdir == "" {
+		workdir, _ = os.Getwd()
+		if workdir == "" {
+			workdir = "."
+		}
 	}
 
 	cmd := exec.CommandContext(ctx, "rg", args...)

@@ -48,6 +48,7 @@ var (
 		".vscode":      {},
 		".idea":        {},
 		".nanobot":     {},
+		"sessions":     {},
 	}
 
 	excludedFiles = map[string]struct{}{
@@ -142,23 +143,30 @@ func (s *Server) handleFileEvents(events []fswatch.Event) {
 	}
 }
 
-// listFileResources returns all file resources in the working directory up to maxWatchDepth.
-func (s *Server) listFileResources() ([]mcp.Resource, error) {
+// listFileResources returns all file resources in the session directory up to maxWatchDepth.
+func (s *Server) listFileResources(ctx context.Context) ([]mcp.Resource, error) {
 	var resources []mcp.Resource
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, err
+	sessionID, _ := types.GetSessionAndAccountID(ctx)
+	if sessionID == "" {
+		return nil, nil
+	}
+
+	dir := sessionDir(sessionID)
+
+	// If session directory doesn't exist yet, return empty list
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return nil, nil
 	}
 
 	// Walk directory tree
-	err = filepath.WalkDir(cwd, func(path string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil // Skip errors
 		}
 
 		// Get relative path
-		relPath, err := filepath.Rel(cwd, path)
+		relPath, err := filepath.Rel(dir, path)
 		if err != nil {
 			return nil
 		}
@@ -215,8 +223,8 @@ func (s *Server) listFileResources() ([]mcp.Resource, error) {
 	return resources, nil
 }
 
-// readFileResource reads a file resource by URI.
-func (s *Server) readFileResource(uri string) (*mcp.ReadResourceResult, error) {
+// readFileResource reads a file resource by URI, resolved against the session directory.
+func (s *Server) readFileResource(ctx context.Context, uri string) (*mcp.ReadResourceResult, error) {
 	// Parse file:/// URI
 	if !strings.HasPrefix(uri, "file:///") {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid file URI, expected file:///path")
@@ -230,11 +238,18 @@ func (s *Server) readFileResource(uri string) (*mcp.ReadResourceResult, error) {
 	// Prevent directory traversal attacks
 	cleanPath := filepath.Clean(relPath)
 	if strings.HasPrefix(cleanPath, "..") || filepath.IsAbs(cleanPath) {
-		return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid file path: cannot access files outside working directory")
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid file path: cannot access files outside session directory")
 	}
 
+	// Resolve against session directory
+	sessionID, _ := types.GetSessionAndAccountID(ctx)
+	if sessionID == "" {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("session not found")
+	}
+	absPath := filepath.Join(sessionDir(sessionID), relPath)
+
 	// Open file once to get both content and metadata
-	f, err := os.Open(relPath)
+	f, err := os.Open(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, mcp.ErrRPCInvalidParams.WithMessage("file not found: %s", uri)
@@ -282,7 +297,7 @@ func (s *Server) readFileResource(uri string) (*mcp.ReadResourceResult, error) {
 }
 
 // subscribeFileResource subscribes to a file resource.
-func (s *Server) subscribeFileResource(uri string) error {
+func (s *Server) subscribeFileResource(ctx context.Context, uri string) error {
 	// Parse file:/// URI
 	if !strings.HasPrefix(uri, "file:///") {
 		return mcp.ErrRPCInvalidParams.WithMessage("invalid file URI, expected file:///path")
@@ -293,8 +308,15 @@ func (s *Server) subscribeFileResource(uri string) error {
 		return mcp.ErrRPCInvalidParams.WithMessage("file path is required")
 	}
 
+	// Resolve against session directory
+	sessionID, _ := types.GetSessionAndAccountID(ctx)
+	if sessionID == "" {
+		return mcp.ErrRPCInvalidParams.WithMessage("session not found")
+	}
+	absPath := filepath.Join(sessionDir(sessionID), relPath)
+
 	// Verify file exists
-	if _, err := os.Stat(relPath); os.IsNotExist(err) {
+	if _, err := os.Stat(absPath); os.IsNotExist(err) {
 		return mcp.ErrRPCInvalidParams.WithMessage("file not found: %s", uri)
 	}
 
