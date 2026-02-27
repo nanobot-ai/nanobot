@@ -397,4 +397,4 @@ export interface InitializationResult {
 	};
 }
 
-export const UIPath = '/mcp?ui';
+export const UIPath = '/mcp/ui';
