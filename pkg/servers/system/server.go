@@ -332,7 +332,17 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 }
 
 func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
-	if !types.IsChatSession(ctx) {
+	if types.IsUISession(ctx) {
+		// UI sessions get neither tools nor resources
+		return &mcp.InitializeResult{
+			ProtocolVersion: params.ProtocolVersion,
+			ServerInfo: mcp.ServerInfo{
+				Name:    version.Name,
+				Version: version.Get().String(),
+			},
+		}, nil
+	} else if !types.IsChatSession(ctx) {
+		// Non-UI, non-chat sessions get tools but no resources
 		return &mcp.InitializeResult{
 			ProtocolVersion: params.ProtocolVersion,
 			Capabilities: mcp.ServerCapabilities{
