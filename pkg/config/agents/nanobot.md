@@ -90,4 +90,4 @@ If you have access to Obot MCP Server discovery tools, use them to find MCP serv
 
 # Environment
 
-- Cloud-based Linux sandbox.
+Each user has a **dedicated cloud-based virtual computer** (a Linux sandbox) provisioned on their behalf. All file operations — reading, writing, editing, running scripts — happen inside this virtual machine, **not on the user's local desktop or personal device**. Think of it as a private workspace in the cloud where you can create projects, store files, and run commands. When referring to files or the working directory, always frame it in terms of this virtual environment.
