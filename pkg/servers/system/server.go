@@ -542,37 +542,38 @@ func (s *Server) read(ctx context.Context, params ReadParams) (string, error) {
 		result    strings.Builder
 		linesRead int
 	)
-	scanner := bufio.NewScanner(file)
+	reader := bufio.NewReader(file)
 	lineNum := 1
 
-	for scanner.Scan() {
-		// Skip lines before offset
-		if lineNum <= offset {
-			lineNum++
-			continue
-		}
-
-		// Stop if we've read enough lines
+	for {
 		if linesRead >= limit {
 			break
 		}
 
-		line := scanner.Text()
+		line, err := reader.ReadString('\n')
+		if len(line) > 0 {
+			line = strings.TrimRight(line, "\n\r")
 
-		// Truncate long lines
-		if len(line) > maxLineLength {
-			line = line[:maxLineLength]
+			if lineNum > offset {
+				// Truncate long lines
+				if len(line) > maxLineLength {
+					line = line[:maxLineLength]
+				}
+
+				// Format with line number (cat -n style)
+				fmt.Fprintf(&result, "%6d\t%s\n", lineNum, line)
+				linesRead++
+			}
+
+			lineNum++
 		}
 
-		// Format with line number (cat -n style)
-		fmt.Fprintf(&result, "%6d\t%s\n", lineNum, line)
-
-		lineNum++
-		linesRead++
-	}
-
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("error reading file: %w", err)
+		if err != nil {
+			if err != io.EOF {
+				return "", fmt.Errorf("error reading file: %w", err)
+			}
+			break
+		}
 	}
 
 	return result.String(), nil
