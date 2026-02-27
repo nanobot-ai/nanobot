@@ -378,10 +378,14 @@ func (s *Server) readFileResource(ctx context.Context, uri string) (*mcp.ReadRes
 
 	relPath := strings.TrimPrefix(uri, "file:///")
 
-	// Prevent directory traversal
-	cleanPath := filepath.Clean(relPath)
-	if strings.Contains(cleanPath, "..") {
+	// Prevent directory traversal: reject absolute paths and any ".." segments.
+	if filepath.IsAbs(relPath) {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid file path")
+	}
+	for _, segment := range strings.Split(relPath, "/") {
+		if segment == ".." {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid file path")
+		}
 	}
 
 	cwd, err := os.Getwd()

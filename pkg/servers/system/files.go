@@ -308,6 +308,16 @@ func (s *Server) subscribeFileResource(ctx context.Context, uri string) error {
 		return mcp.ErrRPCInvalidParams.WithMessage("file path is required")
 	}
 
+	// Prevent directory traversal
+	if filepath.IsAbs(relPath) {
+		return mcp.ErrRPCInvalidParams.WithMessage("invalid file path: cannot access files outside session directory")
+	}
+	for _, segment := range strings.Split(relPath, "/") {
+		if segment == ".." {
+			return mcp.ErrRPCInvalidParams.WithMessage("invalid file path: cannot access files outside session directory")
+		}
+	}
+
 	// Resolve against session directory
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
 	if sessionID == "" {
@@ -323,23 +333,31 @@ func (s *Server) subscribeFileResource(ctx context.Context, uri string) error {
 	return nil
 }
 
-// ensureFileWatcher starts the file watcher if not already started.
-func (s *Server) ensureFileWatcher() error {
-	s.fileWatcherOnce.Do(func() {
-		cwd, err := os.Getwd()
-		if err != nil {
-			s.fileWatcherInitErr = fmt.Errorf("failed to get working directory: %w", err)
-			return
-		}
+// ensureFileWatcher starts the file watcher for a session's directory if not already started.
+func (s *Server) ensureFileWatcher(sessionID string) error {
+	if sessionID == "" {
+		return nil
+	}
 
-		s.fileWatcher = fswatch.NewWatcher(cwd, maxWatchDepth, fileFilter, s.handleFileEvents)
-		if err := s.fileWatcher.Start(); err != nil {
-			s.fileWatcherInitErr = err
-			return
-		}
+	s.fileWatchersMu.Lock()
+	defer s.fileWatchersMu.Unlock()
 
-		log.Debugf(context.Background(), "started file watcher for %s with max depth %d", cwd, maxWatchDepth)
-	})
+	if _, ok := s.fileWatchers[sessionID]; ok {
+		return nil
+	}
 
-	return s.fileWatcherInitErr
+	dir, err := ensureSessionDir(sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to create session directory: %w", err)
+	}
+
+	watcher := fswatch.NewWatcher(dir, maxWatchDepth, fileFilter, s.handleFileEvents)
+	if err := watcher.Start(); err != nil {
+		return err
+	}
+
+	log.Debugf(context.Background(), "started file watcher for session %s at %s with max depth %d", sessionID, dir, maxWatchDepth)
+
+	s.fileWatchers[sessionID] = watcher
+	return nil
 }

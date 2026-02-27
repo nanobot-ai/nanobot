@@ -54,18 +54,18 @@ func ensureSessionDir(sessionID string) (string, error) {
 }
 
 type Server struct {
-	configDir          string
-	tools              mcp.ServerTools
-	subscriptions      *fswatch.SubscriptionManager
-	fileWatcher        *fswatch.Watcher
-	fileWatcherOnce    sync.Once
-	fileWatcherInitErr error
+	configDir      string
+	tools          mcp.ServerTools
+	subscriptions  *fswatch.SubscriptionManager
+	fileWatchers   map[string]*fswatch.Watcher
+	fileWatchersMu sync.Mutex
 }
 
 func NewServer(configDir string) *Server {
 	s := &Server{
 		configDir:     configDir,
 		subscriptions: fswatch.NewSubscriptionManager(context.Background()),
+		fileWatchers:  make(map[string]*fswatch.Watcher),
 	}
 
 	s.tools = mcp.NewServerTools(
@@ -298,8 +298,10 @@ Only servers added via addMCPServer can be removed with this tool.`, s.removeMCP
 
 // Close cleans up resources
 func (s *Server) Close() error {
-	if s.fileWatcher != nil {
-		return s.fileWatcher.Close()
+	s.fileWatchersMu.Lock()
+	defer s.fileWatchersMu.Unlock()
+	for _, w := range s.fileWatchers {
+		w.Close()
 	}
 	return nil
 }
@@ -343,13 +345,13 @@ func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.Ini
 		}, nil
 	}
 
-	// Ensure watcher is running
-	if err := s.ensureFileWatcher(); err != nil {
-		return nil, mcp.ErrRPCInternal.WithMessage("failed to start file watcher: %v", err)
-	}
-
 	// Track this session for sending list_changed notifications
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
+
+	// Ensure watcher is running for this session's directory
+	if err := s.ensureFileWatcher(sessionID); err != nil {
+		return nil, mcp.ErrRPCInternal.WithMessage("failed to start file watcher: %v", err)
+	}
 	s.subscriptions.AddSession(sessionID, msg.Session)
 
 	return &mcp.InitializeResult{

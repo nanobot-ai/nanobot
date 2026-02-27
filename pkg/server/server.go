@@ -320,6 +320,9 @@ func (s *Server) initUI(params types.SessionInitHook) types.SessionInitHook {
 	if _, ok := params.Meta["ui"]; ok {
 		return params
 	}
+	if _, ok := params.Meta["chat"]; ok {
+		return params
+	}
 
 	u, err := url.Parse(params.URL)
 	if err != nil {

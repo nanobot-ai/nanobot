@@ -68,7 +68,10 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 		// Inject session directory and workflow directory paths into agent instructions
 		if params.SessionID != "" {
 			absSessionDir := sessionDir(params.SessionID)
-			cwd, _ := os.Getwd()
+			cwd, err := os.Getwd()
+			if err != nil {
+				return params, fmt.Errorf("failed to get working directory: %w", err)
+			}
 			absWorkflowDir := filepath.Join(cwd, "workflows")
 
 			agent.Instructions.Instructions += fmt.Sprintf(`
