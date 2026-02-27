@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
 	"github.com/nanobot-ai/nanobot/pkg/log"
@@ -423,7 +424,10 @@ func (s *Server) readFileResource(ctx context.Context, uri string) (*mcp.ReadRes
 		MIMEType: mimeType,
 	}
 
-	_ = info // info available for metadata if needed // TODO(g-linville): do we need it?
+	rc.Meta = map[string]any{
+		"size":         info.Size(),
+		"lastModified": info.ModTime().UTC().Format(time.RFC3339),
+	}
 
 	if _, isImage := types.ImageMimeTypes[mimeType]; isImage {
 		rc.Blob = new(base64.StdEncoding.EncodeToString(content))
@@ -450,7 +454,7 @@ func (s *Server) ensureWatchers() error {
 
 		workflowFilter := func(relPath string, info os.FileInfo) bool {
 			if info.IsDir() {
-				return true // TODO(g-linville): why does this return true? Shouldn't we exclude subdirs? The s.workflowWatcher only watches the top-level directory.
+				return false
 			}
 			return filepath.Ext(relPath) == ".md"
 		}
