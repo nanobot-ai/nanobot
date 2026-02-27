@@ -13,13 +13,13 @@ import (
 )
 
 type Server struct {
-	tools             mcp.ServerTools
-	data              *sessiondata.Data
-	subscriptions     *fswatch.SubscriptionManager
-	workflowWatcher   *fswatch.Watcher
-	sessionsWatcher   *fswatch.Watcher
-	watcherOnce       sync.Once
-	watcherInitErr    error
+	tools           mcp.ServerTools
+	data            *sessiondata.Data
+	subscriptions   *fswatch.SubscriptionManager
+	workflowWatcher *fswatch.Watcher
+	sessionsWatcher *fswatch.Watcher
+	watcherOnce     sync.Once
+	watcherInitErr  error
 }
 
 func NewServer(data *sessiondata.Data) *Server {
