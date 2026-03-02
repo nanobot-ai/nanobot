@@ -109,8 +109,12 @@ func toRequest(req *types.CompletionRequest) (Request, error) {
 	for _, msg := range req.Input {
 		for _, input := range msg.Items {
 			if input.Content != nil {
+				content := contentToContent([]mcp.Content{*input.Content})
+				if len(content) == 0 {
+					continue
+				}
 				result.Messages = append(result.Messages, Message{
-					Content: contentToContent([]mcp.Content{*input.Content}),
+					Content: content,
 					Role:    msg.Role,
 				})
 			}
