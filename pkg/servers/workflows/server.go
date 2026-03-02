@@ -100,7 +100,7 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
 	// Track this session for sending list_changed notifications
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
-	s.subscriptions.AddSession(sessionID, msg.Session)
+	s.subscriptions.AddSession(sessionID, msg.Session.Root())
 
 	// Start watcher when first session initializes
 	if err := s.ensureWatcher(); err != nil {
@@ -246,7 +246,7 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 	}
 
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
-	s.subscriptions.Subscribe(sessionID, msg.Session, request.URI)
+	s.subscriptions.Subscribe(sessionID, msg.Session.Root(), request.URI)
 	return &mcp.SubscribeResult{}, nil
 }
 
