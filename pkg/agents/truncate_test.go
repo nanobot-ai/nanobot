@@ -523,8 +523,8 @@ func TestTruncateToolResult_LargeTextContent(t *testing.T) {
 		t.Error("truncated result should not be marked as error")
 	}
 
-	// File should exist with full content
-	filePath := filepath.Join(".nanobot", "default", "truncated-outputs", "my-tool-call1.txt")
+	// File should exist with full content in the session working directory
+	filePath := filepath.Join("sessions", "default", "truncated-outputs", "my-tool-call1.txt")
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("failed to read output file: %v", err)
@@ -552,8 +552,8 @@ func TestTruncateToolResult_MixedContentUsesJSON(t *testing.T) {
 		t.Fatal("expected truncated message, got original")
 	}
 
-	// Should use .json extension
-	filePath := filepath.Join(".nanobot", "default", "truncated-outputs", "img-tool-call2.json")
+	// Should use .json extension in the session working directory
+	filePath := filepath.Join("sessions", "default", "truncated-outputs", "img-tool-call2.json")
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("failed to read output file: %v", err)
@@ -685,8 +685,8 @@ func TestTruncateToolResult_SpecialCharsInNames(t *testing.T) {
 		t.Fatal("expected truncated message")
 	}
 
-	// File should exist with sanitized name
-	filePath := filepath.Join(".nanobot", "default", "truncated-outputs", "tool_name_special-call_5___.txt")
+	// File should exist with sanitized name in the session working directory
+	filePath := filepath.Join("sessions", "default", "truncated-outputs", "tool_name_special-call_5___.txt")
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		t.Errorf("expected file at %s", filePath)
 	}
