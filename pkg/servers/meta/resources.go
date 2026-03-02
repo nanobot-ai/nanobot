@@ -327,6 +327,9 @@ func (s *Server) listFileResourcesAllSessions(ctx context.Context) ([]mcp.Resour
 				Name:     name,
 				MimeType: mimeType,
 				Size:     info.Size(),
+				Annotations: &mcp.Annotations{
+					LastModified: info.ModTime(),
+				},
 			})
 
 			return nil
