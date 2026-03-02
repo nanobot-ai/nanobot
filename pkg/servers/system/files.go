@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nanobot-ai/nanobot/pkg/fileuri"
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -91,7 +92,7 @@ func fileFilter(relPath string, info os.FileInfo) bool {
 // handleFileEvents processes filesystem events from the watcher.
 func (s *Server) handleFileEvents(events []fswatch.Event) {
 	for _, event := range events {
-		uri := "file:///" + event.Path
+		uri := fileuri.Encode(event.Path)
 
 		switch event.Type {
 		case fswatch.EventDelete:
@@ -174,7 +175,7 @@ func (s *Server) listFileResources(ctx context.Context) ([]mcp.Resource, error) 
 		}
 
 		resources = append(resources, mcp.Resource{
-			URI:      "file:///" + relPath,
+			URI:      fileuri.Encode(relPath),
 			Name:     filepath.Base(relPath),
 			MimeType: mimeType,
 			Size:     info.Size(),
@@ -195,14 +196,9 @@ func (s *Server) listFileResources(ctx context.Context) ([]mcp.Resource, error) 
 
 // readFileResource reads a file resource by URI, resolved against the session directory.
 func (s *Server) readFileResource(ctx context.Context, uri string) (*mcp.ReadResourceResult, error) {
-	// Parse file:/// URI
-	if !strings.HasPrefix(uri, "file:///") {
-		return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid file URI, expected file:///path")
-	}
-
-	relPath := strings.TrimPrefix(uri, "file:///")
-	if relPath == "" {
-		return nil, mcp.ErrRPCInvalidParams.WithMessage("file path is required")
+	relPath, err := fileuri.Decode(uri)
+	if err != nil {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("%v", err)
 	}
 
 	// Prevent directory traversal attacks
@@ -262,14 +258,9 @@ func (s *Server) readFileResource(ctx context.Context, uri string) (*mcp.ReadRes
 
 // subscribeFileResource subscribes to a file resource.
 func (s *Server) subscribeFileResource(ctx context.Context, uri string) error {
-	// Parse file:/// URI
-	if !strings.HasPrefix(uri, "file:///") {
-		return mcp.ErrRPCInvalidParams.WithMessage("invalid file URI, expected file:///path")
-	}
-
-	relPath := strings.TrimPrefix(uri, "file:///")
-	if relPath == "" {
-		return mcp.ErrRPCInvalidParams.WithMessage("file path is required")
+	relPath, err := fileuri.Decode(uri)
+	if err != nil {
+		return mcp.ErrRPCInvalidParams.WithMessage("%v", err)
 	}
 
 	// Prevent directory traversal
@@ -346,6 +337,9 @@ func (s *Server) uploadFile(ctx context.Context, params UploadFileParams) (*mcp.
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid file path: cannot access files outside session directory")
 	}
 
+	// Sanitize: replace Unicode space characters with regular ASCII space
+	relPath = fileuri.SafeFilename(relPath)
+
 	// Resolve against session directory
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
 	if sessionID == "" {
@@ -386,7 +380,7 @@ func (s *Server) uploadFile(ctx context.Context, params UploadFileParams) (*mcp.
 	}
 
 	return &mcp.Resource{
-		URI:      "file:///" + relPath,
+		URI:      fileuri.Encode(relPath),
 		Name:     relPath,
 		MimeType: mimeType,
 		Size:     info.Size(),
@@ -402,11 +396,9 @@ type DeleteFileParams struct {
 }
 
 func (s *Server) deleteFile(ctx context.Context, params DeleteFileParams) (string, error) {
-	relPath, ok := strings.CutPrefix(params.URI, "file:///")
-	if !ok {
-		return "", mcp.ErrRPCInvalidParams.WithMessage("invalid file URI, expected file:///path")
-	} else if relPath == "" {
-		return "", mcp.ErrRPCInvalidParams.WithMessage("file path is required")
+	relPath, err := fileuri.Decode(params.URI)
+	if err != nil {
+		return "", mcp.ErrRPCInvalidParams.WithMessage("%v", err)
 	}
 
 	// Prevent directory traversal attacks

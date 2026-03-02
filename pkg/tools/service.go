@@ -18,6 +18,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/envvar"
 	"github.com/nanobot-ai/nanobot/pkg/expr"
+	"github.com/nanobot-ai/nanobot/pkg/fileuri"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
@@ -959,25 +960,7 @@ func hasOnlySampleKeys(args map[string]any) bool {
 }
 
 func fileAttachmentPath(uri string) (string, error) {
-	if !strings.HasPrefix(uri, "file:///") {
-		return "", fmt.Errorf("invalid attachment URL: %s, only data URI and file:/// URIs are supported", uri)
-	}
-
-	rawPath := strings.TrimPrefix(uri, "file:///")
-	if rawPath == "" {
-		return "", fmt.Errorf("invalid attachment URL: %s, missing file path", uri)
-	}
-
-	path, err := url.PathUnescape(rawPath)
-	if err != nil {
-		return "", fmt.Errorf("invalid attachment URL: %s, failed to decode path: %w", uri, err)
-	}
-
-	if path == "" {
-		return "", fmt.Errorf("invalid attachment URL: %s, missing file path", uri)
-	}
-
-	return path, nil
+	return fileuri.Decode(uri)
 }
 
 func attachmentPreview(attachment types.Attachment, decodedPath string) mcp.Content {
@@ -1069,7 +1052,7 @@ func (s *Service) convertToSampleRequest(config types.Config, agent string, args
 
 	for _, attachment := range sampleArgs.Attachments {
 		if strings.HasPrefix(attachment.URL, "file:///") {
-			path, err := fileAttachmentPath(attachment.URL)
+			path, err := fileuri.Decode(attachment.URL)
 			if err != nil {
 				return nil, err
 			}

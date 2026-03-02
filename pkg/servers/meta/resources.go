@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nanobot-ai/nanobot/pkg/fileuri"
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -319,7 +320,7 @@ func (s *Server) listFileResourcesAllSessions(ctx context.Context) ([]mcp.Resour
 			}
 
 			// URI format: file:///sessions/{sessionID}/{path}
-			uri := fmt.Sprintf("file:///%s/%s/%s", sessionsDir, sess.SessionID, relPath)
+			uri := fileuri.Encode(filepath.Join(sessionsDir, sess.SessionID, relPath))
 			name := fmt.Sprintf("%s/%s", sess.SessionID, relPath)
 
 			resources = append(resources, mcp.Resource{
@@ -343,8 +344,7 @@ func (s *Server) listFileResourcesAllSessions(ctx context.Context) ([]mcp.Resour
 }
 
 // verifyFileResourceAccess verifies that the file URI belongs to a session owned by the current account.
-func (s *Server) verifyFileResourceAccess(ctx context.Context, uri string) error {
-	relPath := strings.TrimPrefix(uri, "file:///")
+func (s *Server) verifyFileResourceAccess(ctx context.Context, relPath string) error {
 
 	// Expected format: sessions/{sessionID}/...
 	if !strings.HasPrefix(relPath, sessionsDir+"/") {
@@ -374,11 +374,14 @@ func (s *Server) verifyFileResourceAccess(ctx context.Context, uri string) error
 
 // readFileResource reads a cross-session file resource.
 func (s *Server) readFileResource(ctx context.Context, uri string) (*mcp.ReadResourceResult, error) {
-	if err := s.verifyFileResourceAccess(ctx, uri); err != nil {
-		return nil, err
+	relPath, err := fileuri.Decode(uri)
+	if err != nil {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("%v", err)
 	}
 
-	relPath := strings.TrimPrefix(uri, "file:///")
+	if err := s.verifyFileResourceAccess(ctx, relPath); err != nil {
+		return nil, err
+	}
 
 	// Prevent directory traversal: reject absolute paths and any ".." segments.
 	if filepath.IsAbs(relPath) {
@@ -511,7 +514,7 @@ func (s *Server) handleWorkflowEvents(events []fswatch.Event) {
 func (s *Server) handleSessionFileEvents(events []fswatch.Event) {
 	for _, event := range events {
 		// event.Path is relative to the sessions directory, e.g. "{sessionID}/file.txt"
-		uri := fmt.Sprintf("file:///%s/%s", sessionsDir, event.Path)
+		uri := fileuri.Encode(filepath.Join(sessionsDir, event.Path))
 
 		switch event.Type {
 		case fswatch.EventDelete:
