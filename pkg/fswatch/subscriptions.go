@@ -101,7 +101,7 @@ func (sm *SubscriptionManager) SendResourceUpdatedNotification(uri string) {
 	var sessionsToNotify []*mcp.Session
 	for _, sub := range sm.subscriptions {
 		if _, ok := sub.uris[uri]; ok {
-			sessionsToNotify = append(sessionsToNotify, sub.session)
+			sessionsToNotify = append(sessionsToNotify, sub.session.Root())
 		}
 	}
 	sm.mu.RUnlock()
@@ -141,7 +141,7 @@ func (sm *SubscriptionManager) SendListChangedNotification() {
 	sm.mu.RLock()
 	sessions := make([]*mcp.Session, 0, len(sm.sessions))
 	for _, session := range sm.sessions {
-		sessions = append(sessions, session)
+		sessions = append(sessions, session.Root())
 	}
 	sm.mu.RUnlock()
 

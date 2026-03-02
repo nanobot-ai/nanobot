@@ -65,6 +65,14 @@ type ServerSession struct {
 	wire    *serverWire
 }
 
+// Subscribe returns a channel that receives a copy of every message sent through
+// the server wire. Multiple subscribers can exist concurrently and each receives
+// every message (broadcast semantics). The channel is closed when the provided
+// context is cancelled or when the session is closed.
+func (s *ServerSession) Subscribe(ctx context.Context) <-chan Message {
+	return s.wire.subscribe(ctx)
+}
+
 func (s *ServerSession) Wait() {
 	if s == nil || s.session == nil {
 		return
@@ -178,6 +186,9 @@ type serverWire struct {
 	noReader   chan struct{}
 	handler    WireHandler
 	sessionID  string
+
+	subscriberLock sync.RWMutex
+	subscribers    []chan Message
 }
 
 func (s *serverWire) SessionID() string {
@@ -211,7 +222,37 @@ func (s *serverWire) exchange(ctx context.Context, msg Message) (Message, error)
 	}
 }
 
+func (s *serverWire) subscribe(ctx context.Context) <-chan Message {
+	ch := make(chan Message, 32)
+	s.subscriberLock.Lock()
+	s.subscribers = append(s.subscribers, ch)
+	s.subscriberLock.Unlock()
+	context.AfterFunc(ctx, func() {
+		s.removeSubscriber(ch)
+	})
+	return ch
+}
+
+func (s *serverWire) removeSubscriber(ch chan Message) {
+	s.subscriberLock.Lock()
+	defer s.subscriberLock.Unlock()
+	for i, sub := range s.subscribers {
+		if sub == ch {
+			s.subscribers = append(s.subscribers[:i], s.subscribers[i+1:]...)
+			close(ch)
+			return
+		}
+	}
+}
+
 func (s *serverWire) Close(bool) {
+	s.subscriberLock.Lock()
+	for _, ch := range s.subscribers {
+		close(ch)
+	}
+	s.subscribers = nil
+	s.subscriberLock.Unlock()
+
 	s.cancel(fmt.Errorf("session %s closed", s.sessionID))
 }
 
@@ -229,6 +270,31 @@ func (s *serverWire) Send(ctx context.Context, req Message) error {
 	if s.pending.Notify(req) {
 		return nil
 	}
+
+	// If there are subscribers, broadcast to all of them instead of sending
+	// to the single read channel. This ensures that every SSE connection
+	// sees every server-to-client message (e.g. elicitation/create).
+	s.subscriberLock.RLock()
+	subs := make([]chan Message, len(s.subscribers))
+	copy(subs, s.subscribers)
+	s.subscriberLock.RUnlock()
+
+	if len(subs) > 0 {
+		for _, ch := range subs {
+			select {
+			case ch <- req:
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-s.ctx.Done():
+				return s.ctx.Err()
+			}
+		}
+		return nil
+	}
+
+	// No subscribers — fall back to single-reader channel. This path is
+	// used by in-process connections (ServerSession.Start) where there is
+	// exactly one reader on s.read.
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
