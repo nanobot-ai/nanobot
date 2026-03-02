@@ -18,6 +18,8 @@ const maxToolResultSize = 50 * 1024 // 50 KiB
 
 var sanitizeRe = regexp.MustCompile(`[^a-zA-Z0-9_\-.]`)
 
+const sessionsDir = "sessions"
+
 // hasSkipTruncation returns true if any content item has the skip-truncation meta key set.
 func hasSkipTruncation(content []mcp.Content) bool {
 	for _, c := range content {
@@ -61,11 +63,13 @@ func truncateToolResult(ctx context.Context, toolName, callID string, msg *types
 		}
 	}
 
-	// Build file path
+	// Build absolute file path (store under the session's working directory)
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
-	filePath := filepath.Join(".nanobot", sanitizePathComponent(sessionID),
-		"truncated-outputs",
-		sanitizePathComponent(toolName)+"-"+sanitizePathComponent(callID)+ext)
+	fileName := sanitizePathComponent(toolName) + "-" + sanitizePathComponent(callID) + ext
+	filePath := filepath.Join(sessionsDir, sessionID, "truncated-outputs", fileName)
+	if cwd, err := os.Getwd(); err == nil {
+		filePath = filepath.Join(cwd, filePath)
+	}
 
 	writeErr := writeFullResult(content, filePath)
 	truncated := buildTruncatedContent(content, maxToolResultSize, filePath)
