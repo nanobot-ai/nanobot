@@ -65,11 +65,12 @@ type ServerSession struct {
 	wire    *serverWire
 }
 
-// Subscribe returns a channel that receives a copy of every message sent through
-// the server wire. Multiple subscribers can exist concurrently and each receives
-// every message (broadcast semantics). The channel is closed when the provided
-// context is cancelled or when the session is closed.
-func (s *ServerSession) Subscribe(ctx context.Context) <-chan Message {
+// Subscribe returns a message channel and a done channel. The message channel
+// receives a copy of every message sent through the server wire. Multiple
+// subscribers can exist concurrently and each receives every message (broadcast
+// semantics). The done channel is closed when the session is closed; callers
+// must select on it to detect session shutdown.
+func (s *ServerSession) Subscribe(ctx context.Context) (<-chan Message, <-chan struct{}) {
 	return s.wire.subscribe(ctx)
 }
 
@@ -222,7 +223,7 @@ func (s *serverWire) exchange(ctx context.Context, msg Message) (Message, error)
 	}
 }
 
-func (s *serverWire) subscribe(ctx context.Context) <-chan Message {
+func (s *serverWire) subscribe(ctx context.Context) (<-chan Message, <-chan struct{}) {
 	ch := make(chan Message, 32)
 	s.subscriberLock.Lock()
 	s.subscribers = append(s.subscribers, ch)
@@ -230,7 +231,7 @@ func (s *serverWire) subscribe(ctx context.Context) <-chan Message {
 	context.AfterFunc(ctx, func() {
 		s.removeSubscriber(ch)
 	})
-	return ch
+	return ch, s.ctx.Done()
 }
 
 func (s *serverWire) removeSubscriber(ch chan Message) {
@@ -239,21 +240,17 @@ func (s *serverWire) removeSubscriber(ch chan Message) {
 	for i, sub := range s.subscribers {
 		if sub == ch {
 			s.subscribers = append(s.subscribers[:i], s.subscribers[i+1:]...)
-			close(ch)
 			return
 		}
 	}
 }
 
 func (s *serverWire) Close(bool) {
+	s.cancel(fmt.Errorf("session %s closed", s.sessionID))
+
 	s.subscriberLock.Lock()
-	for _, ch := range s.subscribers {
-		close(ch)
-	}
 	s.subscribers = nil
 	s.subscriberLock.Unlock()
-
-	s.cancel(fmt.Errorf("session %s closed", s.sessionID))
 }
 
 func (s *serverWire) Wait() {
@@ -274,13 +271,16 @@ func (s *serverWire) Send(ctx context.Context, req Message) error {
 	// If there are subscribers, broadcast to all of them instead of sending
 	// to the single read channel. This ensures that every SSE connection
 	// sees every server-to-client message (e.g. elicitation/create).
+	//
+	// We hold RLock for the entire send loop. This is safe from deadlock
+	// because Close() cancels s.ctx before acquiring the write lock, so any
+	// blocked send here will unblock via the s.ctx.Done() case, releasing
+	// the RLock and allowing Close() to proceed. Channels are never closed
+	// so there is no send-on-closed-channel panic.
 	s.subscriberLock.RLock()
-	subs := make([]chan Message, len(s.subscribers))
-	copy(subs, s.subscribers)
-	s.subscriberLock.RUnlock()
-
-	if len(subs) > 0 {
-		for _, ch := range subs {
+	if len(s.subscribers) > 0 {
+		defer s.subscriberLock.RUnlock()
+		for _, ch := range s.subscribers {
 			select {
 			case ch <- req:
 			case <-ctx.Done():
@@ -291,6 +291,7 @@ func (s *serverWire) Send(ctx context.Context, req Message) error {
 		}
 		return nil
 	}
+	s.subscriberLock.RUnlock()
 
 	// No subscribers — fall back to single-reader channel. This path is
 	// used by in-process connections (ServerSession.Start) where there is
