@@ -65,6 +65,15 @@ type ServerSession struct {
 	wire    *serverWire
 }
 
+// Subscribe returns a message channel and a done channel. The message channel
+// receives a copy of every message sent through the server wire. Multiple
+// subscribers can exist concurrently and each receives every message (broadcast
+// semantics). The done channel is closed when the session is closed; callers
+// must select on it to detect session shutdown.
+func (s *ServerSession) Subscribe(ctx context.Context) (<-chan Message, <-chan struct{}) {
+	return s.wire.subscribe(ctx)
+}
+
 func (s *ServerSession) Wait() {
 	if s == nil || s.session == nil {
 		return
@@ -178,6 +187,9 @@ type serverWire struct {
 	noReader   chan struct{}
 	handler    WireHandler
 	sessionID  string
+
+	subscriberLock sync.RWMutex
+	subscribers    []chan Message
 }
 
 func (s *serverWire) SessionID() string {
@@ -211,8 +223,34 @@ func (s *serverWire) exchange(ctx context.Context, msg Message) (Message, error)
 	}
 }
 
+func (s *serverWire) subscribe(ctx context.Context) (<-chan Message, <-chan struct{}) {
+	ch := make(chan Message, 32)
+	s.subscriberLock.Lock()
+	s.subscribers = append(s.subscribers, ch)
+	s.subscriberLock.Unlock()
+	context.AfterFunc(ctx, func() {
+		s.removeSubscriber(ch)
+	})
+	return ch, s.ctx.Done()
+}
+
+func (s *serverWire) removeSubscriber(ch chan Message) {
+	s.subscriberLock.Lock()
+	defer s.subscriberLock.Unlock()
+	for i, sub := range s.subscribers {
+		if sub == ch {
+			s.subscribers = append(s.subscribers[:i], s.subscribers[i+1:]...)
+			return
+		}
+	}
+}
+
 func (s *serverWire) Close(bool) {
 	s.cancel(fmt.Errorf("session %s closed", s.sessionID))
+
+	s.subscriberLock.Lock()
+	s.subscribers = nil
+	s.subscriberLock.Unlock()
 }
 
 func (s *serverWire) Wait() {
@@ -229,6 +267,35 @@ func (s *serverWire) Send(ctx context.Context, req Message) error {
 	if s.pending.Notify(req) {
 		return nil
 	}
+
+	// If there are subscribers, broadcast to all of them instead of sending
+	// to the single read channel. This ensures that every SSE connection
+	// sees every server-to-client message (e.g. elicitation/create).
+	//
+	// We hold RLock for the entire send loop. This is safe from deadlock
+	// because Close() cancels s.ctx before acquiring the write lock, so any
+	// blocked send here will unblock via the s.ctx.Done() case, releasing
+	// the RLock and allowing Close() to proceed. Channels are never closed
+	// so there is no send-on-closed-channel panic.
+	s.subscriberLock.RLock()
+	if len(s.subscribers) > 0 {
+		defer s.subscriberLock.RUnlock()
+		for _, ch := range s.subscribers {
+			select {
+			case ch <- req:
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-s.ctx.Done():
+				return s.ctx.Err()
+			}
+		}
+		return nil
+	}
+	s.subscriberLock.RUnlock()
+
+	// No subscribers — fall back to single-reader channel. This path is
+	// used by in-process connections (ServerSession.Start) where there is
+	// exactly one reader on s.read.
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

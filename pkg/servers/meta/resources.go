@@ -112,7 +112,7 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("unsupported resource URI: %s", request.URI)
 	}
 
-	s.subscriptions.Subscribe(sessionID, msg.Session, request.URI)
+	s.subscriptions.Subscribe(sessionID, msg.Session.Root(), request.URI)
 	return &mcp.SubscribeResult{}, nil
 }
 

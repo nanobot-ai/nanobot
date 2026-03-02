@@ -382,7 +382,7 @@ func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.Ini
 	if err := s.ensureFileWatcher(sessionID); err != nil {
 		return nil, mcp.ErrRPCInternal.WithMessage("failed to start file watcher: %v", err)
 	}
-	s.subscriptions.AddSession(sessionID, msg.Session)
+	s.subscriptions.AddSession(sessionID, msg.Session.Root())
 
 	return &mcp.InitializeResult{
 		ProtocolVersion: params.ProtocolVersion,
@@ -444,7 +444,7 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 	}
 
 	// Add subscription to manager
-	s.subscriptions.Subscribe(sessionID, msg.Session, request.URI)
+	s.subscriptions.Subscribe(sessionID, msg.Session.Root(), request.URI)
 	return &mcp.SubscribeResult{}, nil
 }
 

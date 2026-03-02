@@ -95,7 +95,7 @@ func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.Ini
 
 	// Track this session for sending list_changed notifications
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
-	s.subscriptions.AddSession(sessionID, msg.Session)
+	s.subscriptions.AddSession(sessionID, msg.Session.Root())
 
 	// Start watchers lazily
 	if err := s.ensureWatchers(); err != nil {

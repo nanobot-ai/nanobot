@@ -218,23 +218,25 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request, aud
 		flusher.Flush()
 	}
 
-	session.StartReading()
-	defer session.StopReading()
+	// Subscribe to the session wire using broadcast semantics. Multiple SSE
+	// connections for the same session each get their own channel and every
+	// message is delivered to all of them. The done channel signals session
+	// closure so we don't hang after the session is torn down.
+	ch, done := session.Subscribe(req.Context())
 
 	for {
-		msg, ok := session.Read(req.Context())
-		if !ok {
+		select {
+		case msg := <-ch:
+			data, _ := json.Marshal(msg)
+			_, err := rw.Write([]byte("data: " + string(data) + "\n\n"))
+			if err != nil {
+				return
+			}
+			if f, ok := rw.(http.Flusher); ok {
+				f.Flush()
+			}
+		case <-done:
 			return
-		}
-
-		data, _ := json.Marshal(msg)
-		_, err := rw.Write([]byte("data: " + string(data) + "\n\n"))
-		if err != nil {
-			http.Error(rw, "Failed to write message: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if f, ok := rw.(http.Flusher); ok {
-			f.Flush()
 		}
 	}
 }
