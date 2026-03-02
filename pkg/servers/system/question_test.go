@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -61,7 +62,7 @@ func TestQuestionValidation(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
-			if got := err.Error(); !contains(got, tt.wantErr) {
+			if got := err.Error(); !strings.Contains(got, tt.wantErr) {
 				t.Errorf("error %q does not contain %q", got, tt.wantErr)
 			}
 		})

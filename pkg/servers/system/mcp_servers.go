@@ -110,7 +110,7 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 	// Use MCP_API_KEY from the environment as the Bearer token for dynamic servers
 	var headers map[string]string
 
-	if apiKey := session.GetEnvMap()["MCP_API_KEY"]; apiKey != "" {
+	if apiKey := envMap["MCP_API_KEY"]; apiKey != "" {
 		headers = map[string]string{
 			"Authorization": "Bearer " + apiKey,
 		}

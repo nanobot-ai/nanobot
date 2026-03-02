@@ -22,7 +22,6 @@ var allowedPermsToTools = map[string][]string{
 	"todoWrite":       {"todoWrite"},
 	"webFetch":        {"webFetch"},
 	"skills":          {"getSkill"},
-	"mcpServers":      {"addMCPServer", "removeMCPServer"},
 	"askUserQuestion": {"askUserQuestion"},
 }
 
@@ -55,6 +54,8 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 						skillsPrompt.WriteString(skill.Description)
 						skillsPrompt.WriteString("\n")
 					}
+
+					skillsPrompt.WriteString("\nWhen you need to connect to a new MCP server, load the **mcp-cli** skill for instructions on configuring and using MCP servers.\n")
 
 					// Append to agent instructions
 					agent.Instructions.Instructions += skillsPrompt.String()

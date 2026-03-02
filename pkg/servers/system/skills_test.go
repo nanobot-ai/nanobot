@@ -51,7 +51,7 @@ func TestListSkills(t *testing.T) {
 	}
 
 	// Check for expected skills
-	expectedSkills := []string{"python-scripts", "workflows", "mcp-curl"}
+	expectedSkills := []string{"python-scripts", "workflows", "mcp-cli"}
 	for _, expected := range expectedSkills {
 		if !skillNames[expected] {
 			t.Errorf("should have %s skill", expected)
@@ -199,10 +199,10 @@ func TestGetSkill(t *testing.T) {
 			shouldContain: "name: workflows",
 		},
 		{
-			name:          "get mcp-curl skill",
-			skillName:     "mcp-curl",
+			name:          "get mcp-cli skill",
+			skillName:     "mcp-cli",
 			expectError:   false,
-			shouldContain: "name: mcp-curl",
+			shouldContain: "name: mcp-cli",
 		},
 		{
 			name:        "nonexistent skill",
