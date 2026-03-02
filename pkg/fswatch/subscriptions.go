@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/log"
@@ -96,12 +97,16 @@ func (sm *SubscriptionManager) Unsubscribe(sessionID string, uri string) {
 }
 
 // SendResourceUpdatedNotification sends a notifications/resources/updated message to sessions subscribed to the given URI.
+// Sessions that subscribed to a URI prefix of the given uri (e.g. "todo:///" for "todo:///list") are also notified.
 func (sm *SubscriptionManager) SendResourceUpdatedNotification(uri string) {
 	sm.mu.RLock()
 	var sessionsToNotify []*mcp.Session
 	for _, sub := range sm.subscriptions {
-		if _, ok := sub.uris[uri]; ok {
-			sessionsToNotify = append(sessionsToNotify, sub.session)
+		for subURI := range sub.uris {
+			if uri == subURI || strings.HasPrefix(uri, subURI) {
+				sessionsToNotify = append(sessionsToNotify, sub.session)
+				break
+			}
 		}
 	}
 	sm.mu.RUnlock()

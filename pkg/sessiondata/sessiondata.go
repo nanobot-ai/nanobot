@@ -250,9 +250,10 @@ func initSubscriptions(session *mcp.Session) {
 
 		subs := resourceSubscriptions{}
 		if session.Get(types.ResourceSubscriptionsSessionKey, &subs) {
-			_, ok := subs[uri]
-			if ok {
-				return msg, nil
+			for subURI := range subs {
+				if uri == subURI || strings.HasPrefix(uri, subURI) {
+					return msg, nil
+				}
 			}
 		}
 
