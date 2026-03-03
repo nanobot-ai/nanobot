@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -59,7 +60,7 @@ func TestAddMCPServer_ValidatesURL(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
 				}
-				if got := err.Error(); !contains(got, tt.wantErr) {
+				if got := err.Error(); !strings.Contains(got, tt.wantErr) {
 					t.Errorf("error = %q, want to contain %q", got, tt.wantErr)
 				}
 			} else {
@@ -185,7 +186,7 @@ func TestAddMCPServer_ValidatesName(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
 				}
-				if got := err.Error(); !contains(got, tt.wantErr) {
+				if got := err.Error(); !strings.Contains(got, tt.wantErr) {
 					t.Errorf("error = %q, want to contain %q", got, tt.wantErr)
 				}
 			} else {
@@ -309,17 +310,4 @@ func TestConfigHook_DynamicServersMerged(t *testing.T) {
 			t.Errorf("expected %q to be in agent MCPServers list", name)
 		}
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && searchString(s, substr)
-}
-
-func searchString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
