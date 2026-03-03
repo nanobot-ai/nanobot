@@ -7,10 +7,14 @@ description: Interface for MCP (Model Context Protocol) servers via CLI. Use whe
 
 Access MCP servers through the command line. MCP enables interaction with external systems like GitHub, filesystems, databases, and APIs.
 
-## Important
-
-When running mcp-cli, include the environment variable `MCP_CONFIG_PATH=<path to config file>` with every request.
+**Critical rules — never skip these:**
 Your config file is located in your session directory at `.nanobot/mcp_servers.json`.
+Always set `MCP_CONFIG_PATH=.nanobot/mcp_servers.json` when running mcp-cli.
+
+Before invoking any tool, you MUST make both of these calls in order:
+  1. Call `mcp-cli info <server>` to see all available tools on the server
+  2. Call `mcp-cli info <server> <tool>` to get the full schema for the specific tool you plan to call.
+DO NOT SKIP EITHER STEP. Do not call a tool until you have completed both info calls in the current session.
 
 ## Commands
 
