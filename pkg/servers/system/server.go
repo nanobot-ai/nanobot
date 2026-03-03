@@ -272,24 +272,6 @@ Usage notes:
 		// Skills tools
 		mcp.NewServerTool("listSkills", "List all available skills with their names and descriptions", s.listSkills),
 		mcp.NewServerTool("getSkill", "Get the full content of a specific skill by name (with or without .md extension)", s.getSkill),
-		// Dynamic MCP server tools
-		mcp.NewServerTool("addMCPServer", `Dynamically adds an MCP server to the current session.
-
-The new server will be available immediately and its tools can be used in subsequent turns.
-The URL must match the host in the mcp-server-search URL. Server names must not contain '/' or use reserved names.
-
-Parameters:
-- url (required): The URL of the MCP server to add
-- name (required): A unique name for the server (used to reference it later)
-
-When available, the response includes a "tools" field listing the server's available tool names. This field is only present if the server's tools can be listed successfully.
-The server is session-scoped and will not persist after the session ends.`, s.addMCPServer),
-		mcp.NewServerTool("removeMCPServer", `Removes a dynamically added MCP server from the current session.
-
-Parameters:
-- name (required): The name of the dynamically added server to remove
-
-Only servers added via addMCPServer can be removed with this tool.`, s.removeMCPServer),
 		// File management tools
 		mcp.NewServerTool("uploadFile", `Uploads a file to the session directory from base64-encoded content.
 
@@ -500,6 +482,13 @@ func (s *Server) bash(ctx context.Context, params BashParams) (string, error) {
 	// Execute command
 	cmd := exec.CommandContext(cmdCtx, "bash", "-c", params.Command)
 	cmd.Dir = workdir
+
+	// Inject MCP_API_KEY from session environment if available
+	if session := mcp.SessionFromContext(ctx); session != nil {
+		if apiKey := session.GetEnvMap()["MCP_API_KEY"]; apiKey != "" {
+			cmd.Env = append(os.Environ(), "MCP_API_KEY="+apiKey)
+		}
+	}
 
 	output, err := cmd.CombinedOutput()
 

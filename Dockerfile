@@ -40,6 +40,13 @@ RUN apk update && apk add --no-cache \
     uv \
     poppler-utils
 
+# Install mcp-cli
+ARG TARGETARCH
+RUN ARCH=$(if [ "${TARGETARCH}" = "amd64" ]; then echo "x64"; else echo "${TARGETARCH}"; fi) && \
+    wget "https://github.com/obot-platform/mcp-cli/releases/download/v0.3.1/mcp-cli-linux-${ARCH}" && \
+    mv mcp-cli-linux-${ARCH} /usr/bin/mcp-cli && \
+    chmod +x /usr/bin/mcp-cli
+
 # Create non-root user with home directory
 RUN adduser -D -h /home/nanobot -s /bin/bash nanobot
 
