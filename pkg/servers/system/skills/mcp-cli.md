@@ -32,6 +32,8 @@ Your config file is located in your session directory at `.nanobot/mcp_servers.j
 3. **Inspect**: `mcp-cli info <server> <tool>` → get full JSON schema
 4. **Execute**: `mcp-cli call <server> <tool> '<json>'` → run with arguments
 
+**IMPORTANT**: Always get the full JSON schema for a tool before calling it.
+
 ## Examples
 
 ```bash
