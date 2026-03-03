@@ -92,6 +92,7 @@ type PrimitiveSchema struct {
 	// Type must be "object" only
 	Type       string                       `json:"type"`
 	Properties map[string]PrimitiveProperty `json:"properties"`
+	Required   []string                     `json:"required,omitempty"`
 }
 
 type PrimitiveProperty struct {
