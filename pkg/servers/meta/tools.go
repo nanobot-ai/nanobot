@@ -36,7 +36,12 @@ func (s *Server) updateChat(ctx context.Context, data struct {
 		chatSession.Description = data.Title
 	}
 
-	chat := chatFromSession(chatSession, accountID)
+	workflowURIs, err := manager.DB.ListWorkflowURIs(ctx, chatSession.SessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	chat := chatFromSession(chatSession, accountID, workflowURIs[chatSession.SessionID])
 	return &chat, nil
 }
 
@@ -75,9 +80,19 @@ func (s *Server) listChats(ctx context.Context, _ struct{}) (*types.ChatList, er
 		return nil, err
 	}
 
+	sessionIDs := make([]string, 0, len(sessions))
+	for _, session := range sessions {
+		sessionIDs = append(sessionIDs, session.SessionID)
+	}
+
+	workflowURIs, err := manager.DB.ListWorkflowURIs(ctx, sessionIDs...)
+	if err != nil {
+		return nil, err
+	}
+
 	chats := make([]types.Chat, 0, len(sessions))
 	for _, s := range sessions {
-		chats = append(chats, chatFromSession(&s, accountID))
+		chats = append(chats, chatFromSession(&s, accountID, workflowURIs[s.SessionID]))
 	}
 
 	return &types.ChatList{
@@ -85,12 +100,12 @@ func (s *Server) listChats(ctx context.Context, _ struct{}) (*types.ChatList, er
 	}, nil
 }
 
-func chatFromSession(s *session.Session, currentAccountID string) types.Chat {
+func chatFromSession(s *session.Session, currentAccountID string, workflowURIs []string) types.Chat {
 	return types.Chat{
 		ID:           s.SessionID,
 		Title:        s.Description,
 		Created:      s.CreatedAt,
 		ReadOnly:     s.AccountID != currentAccountID,
-		WorkflowURIs: s.WorkflowURIs,
+		WorkflowURIs: workflowURIs,
 	}
 }

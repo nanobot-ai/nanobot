@@ -55,14 +55,19 @@ func scan(value any, obj any) error {
 
 type Session struct {
 	gorm.Model
-	Type         string        `json:"type,omitempty"`
-	SessionID    string        `json:"sessionId" gorm:"uniqueIndex;not null"`
-	Description  string        `json:"description,omitempty"`
-	AccountID    string        `json:"accountId,omitempty"`
-	State        State         `json:"state" gorm:"type:json"`
-	Config       ConfigWrapper `json:"config,omitempty" gorm:"type:json"`
-	Cwd          string        `json:"cwd,omitempty"`
-	WorkflowURIs []string      `json:"workflowURIs,omitempty" gorm:"column:workflow_uris;serializer:json"`
+	Type        string        `json:"type,omitempty"`
+	SessionID   string        `json:"sessionId" gorm:"uniqueIndex;not null"`
+	Description string        `json:"description,omitempty"`
+	AccountID   string        `json:"accountId,omitempty"`
+	State       State         `json:"state" gorm:"type:json"`
+	Config      ConfigWrapper `json:"config,omitempty" gorm:"type:json"`
+	Cwd         string        `json:"cwd,omitempty"`
+}
+
+// WorkflowRun records that a workflow was executed within a session.
+type WorkflowRun struct {
+	SessionID   string `json:"sessionId" gorm:"primaryKey;not null"`
+	WorkflowURI string `json:"workflowURI" gorm:"primaryKey;not null"`
 }
 
 type Token struct {

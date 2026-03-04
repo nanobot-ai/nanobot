@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 )
 
@@ -58,41 +58,41 @@ func (s *ToolsServer) initialize(ctx context.Context, _ mcp.Message, params mcp.
 
 func (s *ToolsServer) recordWorkflowRun(ctx context.Context, data struct {
 	URI string `json:"uri"`
-}) (*map[string]string, error) {
-	mcpSession := mcp.SessionFromContext(ctx).Root()
-
-	var uris []string
-	mcpSession.Get(types.WorkflowURIsSessionKey, &uris)
-
-	// Deduplicate: only append if URI is not already recorded.
-	var found bool
-	for _, u := range uris {
-		if u == data.URI {
-			found = true
-			break
-		}
-	}
-	if !found {
-		uris = append(uris, data.URI)
+}) (string, error) {
+	if _, err := parseWorkflowURI(data.URI); err != nil {
+		return "", fmt.Errorf("failed to parse workflow URI: %w", err)
 	}
 
-	mcpSession.Set(types.WorkflowURIsSessionKey, uris)
+	workflowSession := mcp.SessionFromContext(ctx).Root()
+	if workflowSession == nil {
+		return "", mcp.ErrRPCInvalidRequest.WithMessage("session not found")
+	}
 
-	return &map[string]string{"uri": data.URI}, nil
+	var manager session.Manager
+	if !workflowSession.Get(session.ManagerSessionKey, &manager) {
+		return "", mcp.ErrRPCInvalidRequest.WithMessage("session manager not found")
+	}
+
+	sessionID := workflowSession.ID()
+	if err := manager.DB.AddWorkflowRun(ctx, sessionID, data.URI); err != nil {
+		return "", fmt.Errorf("failed to add workflow run: %w", err)
+	}
+
+	return fmt.Sprintf("%s run recorded for session %s", data.URI, sessionID), nil
 }
 
 func (s *ToolsServer) deleteWorkflow(_ context.Context, data struct {
 	URI string `json:"uri"`
-}) (*struct{}, error) {
+}) (string, error) {
 	workflowName, err := parseWorkflowURI(data.URI)
 	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("failed to parse workflow URI: %w", err)
 	}
 
-	workflowPath := filepath.Join(".", workflowsDir, workflowName+".md")
+	workflowPath := filepath.Join(workflowsDir, workflowName+".md")
 	if err := os.Remove(workflowPath); err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("failed to delete workflow: %w", err)
+		return "", fmt.Errorf("failed to delete workflow: %w", err)
 	}
 
-	return &struct{}{}, nil
+	return fmt.Sprintf("%s deleted", data.URI), nil
 }
