@@ -1,7 +1,6 @@
 package fswatch
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"sync"
@@ -20,12 +19,11 @@ func TestWatcherBasic(t *testing.T) {
 	}
 
 	// Track events
-	var mu sync.Mutex
-	var events []Event
-	handler := func(evts []Event) {
-		mu.Lock()
-		defer mu.Unlock()
-		events = append(events, evts...)
+	eventCh := make(chan Event, 2)
+	handler := func(events []Event) {
+		for _, event := range events {
+			eventCh <- event
+		}
 	}
 
 	// Create watcher (depth 0, no subdirectories)
@@ -35,36 +33,21 @@ func TestWatcherBasic(t *testing.T) {
 	}
 	defer watcher.Close()
 
-	// Give watcher time to start
-	time.Sleep(100 * time.Millisecond)
-
 	// Modify the file
 	if err := os.WriteFile(testFile, []byte("modified"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Wait for event to be processed
-	time.Sleep(200 * time.Millisecond)
-
-	// Check events
-	mu.Lock()
-	defer mu.Unlock()
-
-	if len(events) == 0 {
-		t.Fatal("expected at least one event")
-	}
-
-	// Should have received a write event
-	foundWrite := false
-	for _, evt := range events {
-		if evt.Type == EventWrite && evt.Path == "test.txt" {
-			foundWrite = true
-			break
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case event := <-eventCh:
+			if event.Type == EventWrite && event.Path == "test.txt" {
+				return
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for write event for test.txt")
 		}
-	}
-
-	if !foundWrite {
-		t.Errorf("expected write event for test.txt, got events: %+v", events)
 	}
 }
 
@@ -73,8 +56,10 @@ func TestWatcherFilter(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Track events
-	var mu sync.Mutex
-	var events []Event
+	var (
+		mu     sync.Mutex
+		events []Event
+	)
 	handler := func(evts []Event) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -119,8 +104,7 @@ func TestWatcherFilter(t *testing.T) {
 	defer mu.Unlock()
 
 	// Should only see .md file
-	foundMd := false
-	foundTxt := false
+	var foundMd, foundTxt bool
 	for _, evt := range events {
 		if evt.Path == "test.md" {
 			foundMd = true
@@ -149,8 +133,10 @@ func TestWatcherRecursive(t *testing.T) {
 	}
 
 	// Track events
-	var mu sync.Mutex
-	var events []Event
+	var (
+		mu     sync.Mutex
+		events []Event
+	)
 	handler := func(evts []Event) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -181,7 +167,7 @@ func TestWatcherRecursive(t *testing.T) {
 	defer mu.Unlock()
 
 	// Should see the file creation in subdirectory
-	found := false
+	var found bool
 	for _, evt := range events {
 		if evt.Path == filepath.Join("subdir", "test.txt") {
 			found = true
@@ -195,10 +181,7 @@ func TestWatcherRecursive(t *testing.T) {
 }
 
 func TestSubscriptionManager(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	sm := NewSubscriptionManager(ctx)
+	sm := NewSubscriptionManager(t.Context())
 
 	// Create mock session (we can't easily create a real one in tests)
 	// Just test the subscribe/unsubscribe logic
