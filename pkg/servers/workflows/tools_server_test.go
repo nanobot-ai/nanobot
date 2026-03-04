@@ -2,40 +2,64 @@ package workflows
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/nanobot-ai/nanobot/pkg/session"
 )
 
 func TestRecordWorkflowRun_DeduplicatesURI(t *testing.T) {
 	s := NewToolsServer()
-	ctx := context.Background()
-	session := mcp.NewEmptySession(ctx)
-	ctx = mcp.WithSession(ctx, session)
+	ctx := t.Context()
+	manager, err := session.NewManager("sqlite::memory:")
+	if err != nil {
+		t.Fatalf("failed to create session manager: %v", err)
+	}
 
-	uri := "workflow:///test-workflow"
-	if _, err := s.recordWorkflowRun(ctx, struct {
+	if err := manager.DB.Create(ctx, &session.Session{
+		SessionID: "test-session",
+		AccountID: "test-account",
+		Type:      "thread",
+	}); err != nil {
+		t.Fatalf("failed to create test session record: %v", err)
+	}
+
+	serverSession, err := mcp.NewExistingServerSession(ctx, mcp.SessionState{ID: "test-session"}, mcp.MessageHandlerFunc(func(context.Context, mcp.Message) {}))
+	if err != nil {
+		t.Fatalf("failed to create test server session: %v", err)
+	}
+	defer serverSession.Close(false)
+
+	serverSession.GetSession().Set(session.ManagerSessionKey, manager)
+	ctx = mcp.WithSession(ctx, serverSession.GetSession())
+
+	data := struct {
 		URI string `json:"uri"`
-	}{URI: uri}); err != nil {
+	}{
+		URI: "workflow:///test-workflow",
+	}
+	if _, err := s.recordWorkflowRun(ctx, data); err != nil {
 		t.Fatalf("first recordWorkflowRun() failed: %v", err)
 	}
 
-	if _, err := s.recordWorkflowRun(ctx, struct {
-		URI string `json:"uri"`
-	}{URI: uri}); err != nil {
+	if _, err := s.recordWorkflowRun(ctx, data); err != nil {
 		t.Fatalf("second recordWorkflowRun() failed: %v", err)
 	}
 
-	var uris []string
-	session.Root().Get(types.WorkflowURIsSessionKey, &uris)
-	if len(uris) != 1 {
-		t.Fatalf("expected one recorded URI, got %d: %v", len(uris), uris)
+	workflowURIs, err := manager.DB.ListWorkflowURIs(ctx, "test-session")
+	if err != nil {
+		t.Fatalf("failed to load stored workflow URIs: %v", err)
 	}
-	if uris[0] != uri {
-		t.Errorf("recorded URI = %q, want %q", uris[0], uri)
+
+	expected := map[string][]string{
+		"test-session": {data.URI},
+	}
+	if !maps.EqualFunc(workflowURIs, expected, slices.Equal) {
+		t.Fatalf("workflowURIs = %#v, want %#v", workflowURIs, expected)
 	}
 }
 
@@ -55,7 +79,7 @@ func TestDeleteWorkflow_RemovesFile(t *testing.T) {
 	}
 
 	s := NewToolsServer()
-	if _, err := s.deleteWorkflow(context.Background(), struct {
+	if _, err := s.deleteWorkflow(t.Context(), struct {
 		URI string `json:"uri"`
 	}{URI: "workflow:///to-delete"}); err != nil {
 		t.Fatalf("deleteWorkflow() failed: %v", err)

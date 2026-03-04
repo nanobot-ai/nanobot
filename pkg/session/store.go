@@ -12,6 +12,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 	"golang.org/x/oauth2"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -26,14 +27,27 @@ func NewStore(db *gorm.DB) *Store {
 	return &Store{db: db}
 }
 
-func NewStoreFromDSN(dsn string) (*Store, error) {
+func NewStoreFromDSN(dsn string) (store *Store, err error) {
 	db, err := gormdsn.NewDBFromDSN(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create database connection: %w", err)
 	}
 
-	if err := db.AutoMigrate(&Session{}, &Token{}); err != nil {
+	tx := db.Begin()
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		} else {
+			tx.Commit()
+		}
+	}()
+
+	if err := tx.AutoMigrate(&Session{}, &Token{}, &WorkflowRun{}); err != nil {
 		return nil, fmt.Errorf("failed to migrate schema: %w", err)
+	}
+
+	if err := migrateSessionWorkflowURIs(tx); err != nil {
+		return nil, fmt.Errorf("failed to migrate session workflow URIs: %w", err)
 	}
 
 	return &Store{db: db}, nil
@@ -100,6 +114,46 @@ func (s *Store) FindByAccount(ctx context.Context, sessionType, accountID string
 		return nil, err
 	}
 	return sessions, nil
+}
+
+// ListWorkflowURIs returns the URIs of the workflows that have been run in each of the given sessions.
+func (s *Store) ListWorkflowURIs(ctx context.Context, sessionIDs ...string) (map[string][]string, error) {
+	if len(sessionIDs) == 0 {
+		return nil, nil
+	}
+
+	var runs []WorkflowRun
+	err := s.db.WithContext(ctx).
+		Where("session_id IN ?", sessionIDs).
+		Order("session_id ASC, workflow_uri ASC").
+		Find(&runs).Error
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string][]string, len(sessionIDs))
+	for _, run := range runs {
+		result[run.SessionID] = append(result[run.SessionID], run.WorkflowURI)
+	}
+
+	return result, nil
+}
+
+// AddWorkflowRun records a workflow run for a session and ignores duplicates.
+func (s *Store) AddWorkflowRun(ctx context.Context, sessionID, workflowURI string) error {
+	if sessionID == "" {
+		return fmt.Errorf("session ID cannot be empty")
+	}
+	if workflowURI == "" {
+		return fmt.Errorf("workflow URI cannot be empty")
+	}
+
+	run := WorkflowRun{
+		SessionID:   sessionID,
+		WorkflowURI: workflowURI,
+	}
+
+	return s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&run).Error
 }
 
 func (s *Store) List(ctx context.Context) ([]Session, error) {

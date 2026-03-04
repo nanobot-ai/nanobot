@@ -80,8 +80,6 @@ type ChatList struct {
 	Chats []Chat `json:"chats"`
 }
 
-const WorkflowURIsSessionKey = "workflowURIs"
-
 type Chat struct {
 	ID           string    `json:"id"`
 	Title        string    `json:"title"`

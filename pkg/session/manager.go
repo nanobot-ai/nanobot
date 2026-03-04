@@ -65,7 +65,6 @@ func (m *Manager) newRecord(id, accountID string) *Session {
 func (m *Manager) loadAttributesFromRecord(stored *Session, session *mcp.ServerSession) {
 	session.GetSession().Set(types.DescriptionSessionKey, stored.Description)
 	session.GetSession().Set(types.AccountIDSessionKey, stored.AccountID)
-	session.GetSession().Set(types.WorkflowURIsSessionKey, stored.WorkflowURIs)
 }
 
 func (m *Manager) saveAttributesToRecord(stored *Session, session *mcp.ServerSession) error {
@@ -75,7 +74,6 @@ func (m *Manager) saveAttributesToRecord(stored *Session, session *mcp.ServerSes
 
 	session.GetSession().Get(types.DescriptionSessionKey, &stored.Description)
 	session.GetSession().Get(types.ConfigSessionKey, &config)
-	session.GetSession().Get(types.WorkflowURIsSessionKey, &stored.WorkflowURIs)
 
 	stored.Config = ConfigWrapper(config)
 	return nil
