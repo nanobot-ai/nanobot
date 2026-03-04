@@ -2,58 +2,26 @@ package workflows
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"mime"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/nanobot-ai/nanobot/pkg/fileuri"
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/version"
-	"gopkg.in/yaml.v3"
 	"log/slog"
 )
 
 const (
 	workflowsDir = "workflows"
 )
-
-type workflowMeta struct {
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
-	CreatedAt   string `yaml:"createdAt"`
-}
-
-// parseWorkflowFrontmatter extracts YAML frontmatter from workflow content.
-// If no frontmatter is found (no opening ---), returns zero-value metadata with a nil error.
-func parseWorkflowFrontmatter(content string) (workflowMeta, error) {
-	lines := strings.Split(content, "\n")
-	if len(lines) < 3 || strings.TrimSpace(lines[0]) != "---" {
-		return workflowMeta{}, nil
-	}
-
-	endIdx := -1
-	for i := 1; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == "---" {
-			endIdx = i
-			break
-		}
-	}
-
-	if endIdx == -1 {
-		return workflowMeta{}, fmt.Errorf("frontmatter missing closing delimiter")
-	}
-
-	frontmatterYAML := strings.Join(lines[1:endIdx], "\n")
-	var meta workflowMeta
-	if err := yaml.Unmarshal([]byte(frontmatterYAML), &meta); err != nil {
-		return workflowMeta{}, fmt.Errorf("failed to parse frontmatter: %w", err)
-	}
-
-	return meta, nil
-}
 
 type Server struct {
 	watcher        *fswatch.Watcher
@@ -150,72 +118,105 @@ func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListR
 
 	var result []mcp.Resource
 	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
+		if !entry.IsDir() {
 			continue
 		}
 
-		name := strings.TrimSuffix(entry.Name(), ".md")
+		name := entry.Name()
+		workflowDir := filepath.Join(workflowsPath, name)
 
-		// Read file to extract description and metadata
-		contentBytes, err := os.ReadFile(filepath.Join(workflowsPath, entry.Name()))
-		if err != nil {
-			// Skip files we can't read
-			continue
+		// Read the main workflow file from the subdirectory
+		contentBytes, err := os.ReadFile(filepath.Join(workflowDir, skillformat.SkillMainFile))
+		if err == nil {
+			fm, _, err := skillformat.ParseFrontmatter(string(contentBytes))
+			if err != nil {
+				slog.Debug("failed to parse frontmatter for workflow", "workflow", name, "error", err)
+			}
+
+			resourceMeta := make(map[string]any)
+			if fm.Name != "" {
+				resourceMeta["name"] = fm.Name
+				resourceMeta["displayName"] = skillformat.DisplayName(fm.Name)
+			}
+			if fm.Metadata["createdAt"] != "" {
+				resourceMeta["createdAt"] = fm.Metadata["createdAt"]
+			}
+
+			res := mcp.Resource{
+				URI:         fmt.Sprintf("workflow:///%s", name),
+				Name:        name,
+				Description: fm.Description,
+				MimeType:    "text/markdown",
+			}
+			if len(resourceMeta) > 0 {
+				res.Meta = resourceMeta
+			}
+
+			result = append(result, res)
 		}
 
-		meta, err := parseWorkflowFrontmatter(string(contentBytes))
-		if err != nil {
-			slog.Debug("failed to parse frontmatter for workflow", "workflow", entry.Name(), "error", err)
-		}
-
-		resourceMeta := make(map[string]any)
-		if meta.Name != "" {
-			resourceMeta["name"] = meta.Name
-		}
-		if meta.CreatedAt != "" {
-			resourceMeta["createdAt"] = meta.CreatedAt
-		}
-
-		res := mcp.Resource{
-			URI:         fmt.Sprintf("workflow:///%s", name),
-			Name:        name,
-			Description: meta.Description,
-			MimeType:    "text/markdown",
-		}
-		if len(resourceMeta) > 0 {
-			res.Meta = resourceMeta
-		}
-
-		result = append(result, res)
+		// List supporting files in the workflow directory (even if SKILL.md doesn't exist yet)
+		_ = filepath.WalkDir(workflowDir, func(path string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil || d.IsDir() {
+				return nil
+			}
+			if filepath.Base(path) == skillformat.SkillMainFile {
+				return nil
+			}
+			relPath, err := filepath.Rel(".", path)
+			if err != nil {
+				return nil
+			}
+			info, err := d.Info()
+			if err != nil {
+				return nil
+			}
+			mimeType := mime.TypeByExtension(filepath.Ext(relPath))
+			if mimeType == "" {
+				mimeType = "application/octet-stream"
+			}
+			result = append(result, mcp.Resource{
+				URI:      fileuri.Encode(relPath),
+				Name:     filepath.Base(relPath),
+				MimeType: mimeType,
+				Size:     info.Size(),
+			})
+			return nil
+		})
 	}
 
 	return &mcp.ListResourcesResult{Resources: result}, nil
 }
 
 func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+	if strings.HasPrefix(request.URI, "file:///") {
+		return s.readWorkflowFile(request.URI)
+	}
+
 	workflowName, err := parseWorkflowURI(request.URI)
 	if err != nil {
 		return nil, err
 	}
 
-	workflowPath := filepath.Join(".", workflowsDir, workflowName+".md")
+	workflowPath := filepath.Join(".", workflowsDir, workflowName, skillformat.SkillMainFile)
 	contentBytes, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
 	}
 
 	content := string(contentBytes)
-	meta, err := parseWorkflowFrontmatter(content)
+	fm, _, err := skillformat.ParseFrontmatter(content)
 	if err != nil {
 		slog.Debug("failed to parse frontmatter for workflow", "workflow", workflowName, "error", err)
 	}
 
 	resourceMeta := make(map[string]any)
-	if meta.Name != "" {
-		resourceMeta["name"] = meta.Name
+	if fm.Name != "" {
+		resourceMeta["name"] = fm.Name
+		resourceMeta["displayName"] = skillformat.DisplayName(fm.Name)
 	}
-	if meta.CreatedAt != "" {
-		resourceMeta["createdAt"] = meta.CreatedAt
+	if fm.Metadata["createdAt"] != "" {
+		resourceMeta["createdAt"] = fm.Metadata["createdAt"]
 	}
 
 	rc := mcp.ResourceContent{
@@ -233,16 +234,85 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 	}, nil
 }
 
-func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, request mcp.SubscribeRequest) (*mcp.SubscribeResult, error) {
-	workflowName, err := parseWorkflowURI(request.URI)
+// readWorkflowFile reads a supporting file from a workflow directory.
+func (s *Server) readWorkflowFile(uri string) (*mcp.ReadResourceResult, error) {
+	relPath, err := fileuri.Decode(uri)
 	if err != nil {
-		return nil, err
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("%v", err)
 	}
 
-	// Verify the workflow file exists
-	workflowPath := filepath.Join(".", workflowsDir, workflowName+".md")
-	if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
-		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
+	cleanPath := filepath.Clean(relPath)
+
+	// Validate the path is under workflows/ and has no traversal
+	if !strings.HasPrefix(cleanPath, workflowsDir+string(filepath.Separator)) {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("file not in workflows directory: %s", uri)
+	}
+	for _, segment := range strings.Split(cleanPath, string(filepath.Separator)) {
+		if segment == ".." {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("invalid file path: %s", uri)
+		}
+	}
+
+	contentBytes, err := os.ReadFile(filepath.Join(".", cleanPath))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("file not found: %s", uri)
+		}
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	mimeType := mime.TypeByExtension(filepath.Ext(relPath))
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	if i := strings.IndexByte(mimeType, ';'); i >= 0 {
+		mimeType = strings.TrimSpace(mimeType[:i])
+	}
+
+	rc := mcp.ResourceContent{
+		URI:      uri,
+		Name:     filepath.Base(relPath),
+		MIMEType: mimeType,
+	}
+
+	if _, isImage := types.ImageMimeTypes[mimeType]; isImage {
+		blob := base64.StdEncoding.EncodeToString(contentBytes)
+		rc.Blob = &blob
+	} else if _, isPDF := types.PDFMimeTypes[mimeType]; isPDF {
+		blob := base64.StdEncoding.EncodeToString(contentBytes)
+		rc.Blob = &blob
+	} else {
+		text := string(contentBytes)
+		rc.Text = &text
+	}
+
+	return &mcp.ReadResourceResult{
+		Contents: []mcp.ResourceContent{rc},
+	}, nil
+}
+
+func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, request mcp.SubscribeRequest) (*mcp.SubscribeResult, error) {
+	if strings.HasPrefix(request.URI, "file:///") {
+		relPath, err := fileuri.Decode(request.URI)
+		if err != nil {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("%v", err)
+		}
+		cleanPath := filepath.Clean(relPath)
+		if !strings.HasPrefix(cleanPath, workflowsDir+string(filepath.Separator)) {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("file not in workflows directory: %s", request.URI)
+		}
+		if _, err := os.Stat(filepath.Join(".", cleanPath)); os.IsNotExist(err) {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("file not found: %s", request.URI)
+		}
+	} else {
+		workflowName, err := parseWorkflowURI(request.URI)
+		if err != nil {
+			return nil, err
+		}
+		workflowPath := filepath.Join(".", workflowsDir, workflowName, skillformat.SkillMainFile)
+		if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
+		}
 	}
 
 	sessionID, _ := types.GetSessionAndAccountID(ctx)
@@ -267,16 +337,8 @@ func (s *Server) ensureWatcher() error {
 			return
 		}
 
-		// Create a filter that only accepts .md files
-		filter := func(relPath string, info os.FileInfo) bool {
-			if info.IsDir() {
-				return true // Always allow directories
-			}
-			return filepath.Ext(relPath) == ".md"
-		}
-
-		// Create watcher with depth 0 (only watch workflows directory, not subdirectories)
-		s.watcher = fswatch.NewWatcher(workflowsPath, 0, filter, s.handleFileEvents)
+		// Depth 3 to watch nested files like <workflow>/scripts/analyze.py
+		s.watcher = fswatch.NewWatcher(workflowsPath, 3, nil, s.handleFileEvents)
 		if err := s.watcher.Start(); err != nil {
 			s.watcherInitErr = err
 			return
@@ -291,24 +353,37 @@ func (s *Server) ensureWatcher() error {
 // handleFileEvents processes filesystem events from the watcher
 func (s *Server) handleFileEvents(events []fswatch.Event) {
 	for _, event := range events {
-		// Convert filename to workflow URI
-		workflowName := strings.TrimSuffix(event.Path, ".md")
-		uri := fmt.Sprintf("workflow:///%s", workflowName)
+		// Event paths are relative to the workflows dir, e.g. "code-review/SKILL.md"
+		// or "code-review/scripts/analyze.py"
+		parts := strings.SplitN(event.Path, string(filepath.Separator), 2)
+		workflowName := parts[0]
+		workflowURI := fmt.Sprintf("workflow:///%s", workflowName)
+
+		// Determine if this is the main workflow file or a supporting file
+		isMainFile := len(parts) == 2 && parts[1] == skillformat.SkillMainFile
 
 		switch event.Type {
 		case fswatch.EventDelete:
-			// Send updated notification and list changed
-			s.subscriptions.SendResourceUpdatedNotification(uri)
-			s.subscriptions.AutoUnsubscribe(uri)
+			if isMainFile {
+				s.subscriptions.SendResourceUpdatedNotification(workflowURI)
+				s.subscriptions.AutoUnsubscribe(workflowURI)
+			} else if len(parts) == 2 {
+				fileURI := fileuri.Encode(filepath.Join(workflowsDir, event.Path))
+				s.subscriptions.SendResourceUpdatedNotification(fileURI)
+				s.subscriptions.AutoUnsubscribe(fileURI)
+			}
 			s.subscriptions.SendListChangedNotification()
 
 		case fswatch.EventCreate:
-			// New workflow created - send list changed
 			s.subscriptions.SendListChangedNotification()
 
 		case fswatch.EventWrite:
-			// Workflow modified - send updated notification
-			s.subscriptions.SendResourceUpdatedNotification(uri)
+			if isMainFile {
+				s.subscriptions.SendResourceUpdatedNotification(workflowURI)
+			} else if len(parts) == 2 {
+				fileURI := fileuri.Encode(filepath.Join(workflowsDir, event.Path))
+				s.subscriptions.SendResourceUpdatedNotification(fileURI)
+			}
 		}
 	}
 }

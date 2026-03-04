@@ -61,8 +61,9 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 					agent.Instructions.Instructions += skillsPrompt.String()
 				}
 
-				// Make workflow tools available to agents with skills permission.
+				// Make workflow and artifact tools available to agents with skills permission.
 				agent.Tools = append(agent.Tools, "nanobot.workflow-tools")
+				agent.Tools = append(agent.Tools, "nanobot.artifacts")
 			}
 		}
 
@@ -95,6 +96,7 @@ Do NOT put workflow files in the session directory.
 		params.MCPServers["nanobot.system"] = types.AgentConfigHookMCPServer{}
 		params.MCPServers["nanobot.workflows"] = types.AgentConfigHookMCPServer{}
 		params.MCPServers["nanobot.workflow-tools"] = types.AgentConfigHookMCPServer{}
+		params.MCPServers["nanobot.artifacts"] = types.AgentConfigHookMCPServer{}
 
 		session := mcp.SessionFromContext(ctx)
 

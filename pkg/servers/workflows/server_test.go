@@ -53,9 +53,9 @@ func TestResourcesList(t *testing.T) {
 		t.Fatal("resourcesList() returned nil result")
 	}
 
-	// We should have 3 workflows in the test directory
-	if len(result.Resources) != 3 {
-		t.Errorf("expected 3 resources, got %d", len(result.Resources))
+	// We should have 3 workflows + 1 supporting file (from in-progress dir without SKILL.md)
+	if len(result.Resources) != 4 {
+		t.Errorf("expected 4 resources, got %d", len(result.Resources))
 	}
 
 	// Verify resources are present with correct names and URIs
@@ -88,8 +88,8 @@ func TestResourcesList(t *testing.T) {
 	if testWf.Meta == nil {
 		t.Fatal("test-workflow Meta should not be nil")
 	}
-	if testWf.Meta["name"] != "Test Workflow" {
-		t.Errorf("test-workflow Meta[name] = %q, want 'Test Workflow'", testWf.Meta["name"])
+	if testWf.Meta["name"] != "test-workflow" {
+		t.Errorf("test-workflow Meta[name] = %q, want 'test-workflow'", testWf.Meta["name"])
 	}
 	if testWf.Meta["createdAt"] != "2026-01-15T09:00:00Z" {
 		t.Errorf("test-workflow Meta[createdAt] = %q", testWf.Meta["createdAt"])
@@ -102,8 +102,8 @@ func TestResourcesList(t *testing.T) {
 	if anotherWf.Meta == nil {
 		t.Fatal("another Meta should not be nil")
 	}
-	if anotherWf.Meta["name"] != "Another Workflow" {
-		t.Errorf("another Meta[name] = %q, want 'Another Workflow'", anotherWf.Meta["name"])
+	if anotherWf.Meta["name"] != "another" {
+		t.Errorf("another Meta[name] = %q, want 'another'", anotherWf.Meta["name"])
 	}
 
 	// no-description should have empty description since it doesn't have "# Workflow:" header
@@ -182,7 +182,7 @@ func TestResourcesRead(t *testing.T) {
 			shouldContain: "## Inputs",
 			expectName:    "test-workflow",
 			expectMeta: map[string]string{
-				"name":      "Test Workflow",
+				"name":      "test-workflow",
 				"createdAt": "2026-01-15T09:00:00Z",
 			},
 		},
@@ -193,7 +193,7 @@ func TestResourcesRead(t *testing.T) {
 			shouldContain: "## Steps",
 			expectName:    "another",
 			expectMeta: map[string]string{
-				"name":      "Another Workflow",
+				"name":      "another",
 				"createdAt": "2026-01-16T10:30:00Z",
 			},
 		},
@@ -263,62 +263,56 @@ func TestResourcesRead(t *testing.T) {
 	}
 }
 
-func TestParseWorkflowFrontmatter(t *testing.T) {
-	tests := []struct {
-		name       string
-		content    string
-		expectMeta workflowMeta
-		expectErr  bool
-	}{
-		{
-			name:    "full frontmatter",
-			content: "---\nname: Code Review\ndescription: Review code.\ncreatedAt: 2026-01-15T09:00:00Z\n---\n\n## Steps\n\nBody here.",
-			expectMeta: workflowMeta{
-				Name:        "Code Review",
-				Description: "Review code.",
-				CreatedAt:   "2026-01-15T09:00:00Z",
-			},
-		},
-		{
-			name:       "no frontmatter",
-			content:    "# Workflow: test\n\nJust a body.",
-			expectMeta: workflowMeta{},
-		},
-		{
-			name:    "partial fields",
-			content: "---\nname: My Workflow\n---\n\n## Steps",
-			expectMeta: workflowMeta{
-				Name: "My Workflow",
-			},
-		},
-		{
-			name:       "malformed frontmatter - no closing delimiter",
-			content:    "---\nname: Broken\n# Workflow: test",
-			expectMeta: workflowMeta{},
-			expectErr:  true,
-		},
-		{
-			name:       "malformed frontmatter - invalid yaml",
-			content:    "---\n: :\n---\n\n# Workflow: test",
-			expectMeta: workflowMeta{},
-			expectErr:  true,
-		},
-		{
-			name:       "empty content",
-			content:    "",
-			expectMeta: workflowMeta{},
-		},
+func TestResourcesListSupportingFilesWithoutSkillMD(t *testing.T) {
+	restore := withWorkingDir(t, testdataDir(t, "with-workflows"))
+	defer restore()
+
+	server := NewServer()
+	ctx := context.Background()
+
+	result, err := server.resourcesList(ctx, mcp.Message{}, mcp.ListResourcesRequest{})
+	if err != nil {
+		t.Fatalf("resourcesList() failed: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			meta, err := parseWorkflowFrontmatter(tt.content)
-			if meta != tt.expectMeta {
-				t.Errorf("meta = %+v, want %+v", meta, tt.expectMeta)
-			}
-			if (err != nil) != tt.expectErr {
-				t.Errorf("err = %v, expectErr = %v", err, tt.expectErr)
-			}
-		})
+	// The in-progress directory has script.py but no SKILL.md.
+	// Supporting files should still be listed so clients can read them.
+	var found bool
+	for _, res := range result.Resources {
+		if res.Name == "script.py" && strings.Contains(res.URI, "in-progress") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected supporting file script.py from in-progress workflow (no SKILL.md) to be listed")
+	}
+
+	// The in-progress directory should NOT produce a workflow:/// resource
+	for _, res := range result.Resources {
+		if res.URI == "workflow:///in-progress" {
+			t.Error("should not list workflow:/// resource when SKILL.md is missing")
+		}
+	}
+}
+
+func TestResourcesReadSupportingFileWithoutSkillMD(t *testing.T) {
+	restore := withWorkingDir(t, testdataDir(t, "with-workflows"))
+	defer restore()
+
+	server := NewServer()
+	ctx := context.Background()
+
+	// Read the supporting file directly via file:/// URI
+	uri := "file:///workflows/in-progress/script.py"
+	result, err := server.resourcesRead(ctx, mcp.Message{}, mcp.ReadResourceRequest{URI: uri})
+	if err != nil {
+		t.Fatalf("resourcesRead() should succeed for supporting file without SKILL.md: %v", err)
+	}
+	if result == nil || len(result.Contents) == 0 {
+		t.Fatal("expected non-empty contents")
+	}
+	if result.Contents[0].Text == nil || *result.Contents[0].Text == "" {
+		t.Error("expected non-empty text content")
 	}
 }

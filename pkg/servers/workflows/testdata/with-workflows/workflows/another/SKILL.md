@@ -1,7 +1,8 @@
 ---
-name: Another Workflow
+name: another
 description: Another workflow for testing multiple workflow listing.
-createdAt: 2026-01-16T10:30:00Z
+metadata:
+  createdAt: "2026-01-16T10:30:00Z"
 ---
 
 ## Steps

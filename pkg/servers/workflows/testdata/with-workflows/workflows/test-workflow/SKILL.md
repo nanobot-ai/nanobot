@@ -1,7 +1,8 @@
 ---
-name: Test Workflow
+name: test-workflow
 description: This is a test workflow for unit testing purposes.
-createdAt: 2026-01-15T09:00:00Z
+metadata:
+  createdAt: "2026-01-15T09:00:00Z"
 ---
 
 ## Inputs
