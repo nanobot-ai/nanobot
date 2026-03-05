@@ -24,7 +24,7 @@ const (
 )
 
 var (
-	reasoningPrefix = regexp.MustCompile("^o[0-9]")
+	reasoningPrefix = regexp.MustCompile("^(o[0-9]|gpt-5)")
 )
 
 type Request struct {
