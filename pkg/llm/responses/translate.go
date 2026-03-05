@@ -116,11 +116,11 @@ func toRequest(completion *types.CompletionRequest) (req Request, _ error) {
 		req.Truncation = &completion.Truncation
 	}
 
-	if completion.Temperature != nil {
+	if completion.Temperature != nil && !reasoningPrefix.MatchString(req.Model) {
 		req.Temperature = completion.Temperature
 	}
 
-	if completion.TopP != nil {
+	if completion.TopP != nil && !reasoningPrefix.MatchString(req.Model) {
 		req.TopP = completion.TopP
 	}
 
