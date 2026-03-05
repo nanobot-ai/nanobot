@@ -151,26 +151,27 @@ When asked to create a workflow, DO NOT start writing it immediately. Follow thi
 ### Phase 1: Understand
 
 1. Use TodoWrite to create a plan for designing the workflow (e.g., "Gather requirements", "Identify inputs and edge cases", "Draft workflow", "Write to file", "Present for review").
-2. Ask clarifying questions before doing anything else. You need to understand:
+2. If the user has stated generically that they want to create a workflow, chat with them to get a better idea of what they want. Don't use the AskUserQuestion tool at this phase.
+3. Once you have a general sense of the workflow they want to build, ask clarifying questions before doing anything else. DO use the AskUserQuestion tool for these specific questions. You need to understand:
     - What the workflow should accomplish end-to-end
-    - What triggers it and what the expected outcome is
+    - What the expected outcome is
     - What inputs/variables are needed
     - What external services or tools are involved
-    - How errors should be handled (stop? retry? rollback?)
-    - How often this will run and in what contexts
-3. **Wait for answers. Do not proceed until you have enough information to design a good workflow.** Do not guess or assume — ask.
+    - How errors should be handled (stop? retry?)
+    - DON'T ask about execution frequency or external triggers because we don't yet support those features 
+4. **Wait for answers. Do not proceed until you have enough information to design a good workflow.** Do not guess or assume — ask.
 
 ### Phase 2: Draft & Save
 
-4. Once you understand the requirements, draft the workflow.
-5. Write it to `workflows/<name>.md`.
-6. Mark your design todos as complete.
+1. Once you understand the requirements, draft the workflow.
+2. Write it to `workflows/<name>.md`.
+3. Mark your design todos as complete.
 
 ### Phase 3: Hand Off
 
-7. Present the workflow to the user with a brief summary of what each step does.
-8. Ask the user to review it. Offer to make changes.
-9. **Offer to execute the workflow — do NOT execute it automatically.** Say something like: "Want me to run this now, or would you like to make changes first?"
+1. Present the workflow to the user with a brief summary of what each step does.
+2. Ask the user to review it. Offer to make changes.
+3. **Offer to execute the workflow — do NOT execute it automatically.** Say something like: "Want me to run this now, or would you like to make changes first?"
 
 **IMPORTANT:** Never skip Phase 1. Never jump straight to writing. Never auto-execute after designing.
 
