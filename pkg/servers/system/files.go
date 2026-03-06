@@ -13,9 +13,9 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/fileuri"
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
+	"log/slog"
 )
 
 var maxWatchDepth = 2
@@ -311,7 +311,7 @@ func (s *Server) ensureFileWatcher(sessionID string) error {
 		return err
 	}
 
-	log.Debugf(context.Background(), "started file watcher for session %s at %s with max depth %d", sessionID, dir, maxWatchDepth)
+	slog.Debug("started file watcher", "session_id", sessionID, "path", dir, "max_watch_depth", maxWatchDepth)
 
 	s.fileWatchers[sessionID] = watcher
 	return nil

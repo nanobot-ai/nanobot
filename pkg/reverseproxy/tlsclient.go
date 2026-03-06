@@ -11,7 +11,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
+	"log/slog"
 )
 
 // TLSClient represents a non-TLS server that proxies connections to a TLS server
@@ -65,7 +65,7 @@ func (c *TLSClient) Start(ctx context.Context) error {
 		_ = listener.Close()
 	})
 
-	log.Infof(ctx, "TLS client proxy listening on localhost:%d, forwarding to %s:%d", c.localPort, c.remoteHost, c.remotePort)
+	slog.Info("TLS client proxy listening", "local_port", c.localPort, "remote_host", c.remoteHost, "remote_port", c.remotePort)
 
 	for {
 		conn, err := listener.Accept()
@@ -75,7 +75,7 @@ func (c *TLSClient) Start(ctx context.Context) error {
 				return nil
 			default:
 			}
-			log.Errorf(ctx, "Failed to accept connection: %v", err)
+			slog.Error("failed to accept connection", "error", err)
 			continue
 		}
 
@@ -90,7 +90,7 @@ func (c *TLSClient) handleConnection(ctx context.Context, clientConn net.Conn) {
 	remoteAddr := fmt.Sprintf("%s:%d", c.remoteHost, c.remotePort)
 	tlsConn, err := tls.Dial("tcp", remoteAddr, c.config)
 	if err != nil {
-		log.Errorf(ctx, "Failed to connect to remote TLS server %s: %v", remoteAddr, err)
+		slog.Error("failed to connect to remote TLS server", "remote_addr", remoteAddr, "error", err)
 		return
 	}
 	defer func() {
@@ -105,7 +105,7 @@ func (c *TLSClient) handleConnection(ctx context.Context, clientConn net.Conn) {
 	go func() {
 		_, err := io.Copy(tlsConn, clientConn)
 		if err != nil && !errors.Is(err, io.EOF) {
-			log.Errorf(ctx, "Error copying from client to remote: %v", err)
+			slog.Error("error copying from client to remote", "error", err)
 		}
 		close(clientClosed)
 	}()
@@ -114,7 +114,7 @@ func (c *TLSClient) handleConnection(ctx context.Context, clientConn net.Conn) {
 	go func() {
 		_, err := io.Copy(clientConn, tlsConn)
 		if err != nil && !errors.Is(err, io.EOF) {
-			log.Errorf(ctx, "Error copying from remote to client: %v", err)
+			slog.Error("error copying from remote to client", "error", err)
 		}
 		close(remoteClosed)
 	}()

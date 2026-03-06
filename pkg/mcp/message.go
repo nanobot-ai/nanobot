@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
+	"log/slog"
 )
 
 var messageID = time.Now().Unix()
@@ -142,7 +142,7 @@ func (r *Message) SendError(ctx context.Context, err error) {
 	}
 
 	if err := r.Session.Send(ctx, resp); err != nil {
-		log.Errorf(ctx, "failed to send error response: %v", err)
+		slog.Error("failed to send error response", "error", err)
 	}
 }
 

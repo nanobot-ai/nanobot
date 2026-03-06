@@ -12,10 +12,10 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/fileuri"
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"gopkg.in/yaml.v3"
+	"log/slog"
 )
 
 const (
@@ -63,7 +63,7 @@ func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListRes
 	// Add workflow resources
 	workflowResources, err := s.listWorkflowResources(ctx)
 	if err != nil {
-		log.Errorf(ctx, "failed to list workflow resources: %v", err)
+		slog.Error("failed to list workflow resources", "error", err)
 	} else {
 		resources = append(resources, workflowResources...)
 	}
@@ -71,7 +71,7 @@ func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListRes
 	// Add cross-session file resources
 	fileResources, err := s.listFileResourcesAllSessions(ctx)
 	if err != nil {
-		log.Errorf(ctx, "failed to list cross-session file resources: %v", err)
+		slog.Error("failed to list cross-session file resources", "error", err)
 	} else {
 		resources = append(resources, fileResources...)
 	}
@@ -149,7 +149,7 @@ func (s *Server) listWorkflowResources(ctx context.Context) ([]mcp.Resource, err
 
 		meta, err := parseWorkflowFrontmatter(string(contentBytes))
 		if err != nil {
-			log.Debugf(ctx, "failed to parse frontmatter for workflow %s: %v", entry.Name(), err)
+			slog.Debug("failed to parse frontmatter for workflow", "workflow", entry.Name(), "error", err)
 		}
 
 		resourceMeta := make(map[string]any)
@@ -193,7 +193,7 @@ func (s *Server) readWorkflowResource(ctx context.Context, uri string) (*mcp.Rea
 	content := string(contentBytes)
 	meta, err := parseWorkflowFrontmatter(content)
 	if err != nil {
-		log.Debugf(ctx, "failed to parse frontmatter for workflow %s: %v", workflowName, err)
+		slog.Debug("failed to parse frontmatter for workflow", "workflow", workflowName, "error", err)
 	}
 
 	resourceMeta := make(map[string]any)
@@ -336,7 +336,7 @@ func (s *Server) listFileResourcesAllSessions(ctx context.Context) ([]mcp.Resour
 			return nil
 		})
 		if err != nil {
-			log.Errorf(ctx, "failed to walk session directory %s: %v", sessDir, err)
+			slog.Error("failed to walk session directory", "path", sessDir, "error", err)
 		}
 	}
 
@@ -464,28 +464,28 @@ func (s *Server) ensureWatchers() error {
 			return
 		}
 
-		log.Debugf(context.Background(), "started meta workflow watcher for %s", workflowsPath)
+		slog.Debug("started meta workflow watcher", "path", workflowsPath)
 
 		// Watch sessions directory
 		cwd, err := os.Getwd()
 		if err != nil {
-			log.Errorf(context.Background(), "failed to get working directory for sessions watcher: %v", err)
+			slog.Error("failed to get working directory for sessions watcher", "error", err)
 			return
 		}
 
 		sessionsPath := filepath.Join(cwd, sessionsDir)
 		if err := os.MkdirAll(sessionsPath, 0755); err != nil {
-			log.Errorf(context.Background(), "failed to create sessions directory: %v", err)
+			slog.Error("failed to create sessions directory", "path", sessionsPath, "error", err)
 			return
 		}
 
 		s.sessionsWatcher = fswatch.NewWatcher(sessionsPath, 3, sessionFileFilter, s.handleSessionFileEvents)
 		if err := s.sessionsWatcher.Start(); err != nil {
-			log.Errorf(context.Background(), "failed to start sessions watcher: %v", err)
+			slog.Error("failed to start sessions watcher", "error", err)
 			return
 		}
 
-		log.Debugf(context.Background(), "started meta sessions watcher for %s", sessionsPath)
+		slog.Debug("started meta sessions watcher", "path", sessionsPath)
 	})
 
 	return s.watcherInitErr

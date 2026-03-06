@@ -17,11 +17,11 @@ import (
 
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 	"golang.org/x/net/html"
+	"log/slog"
 )
 
 const (
@@ -390,7 +390,7 @@ func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListRes
 	fileResources, err := s.listFileResources(ctx)
 	if err != nil {
 		// Log but don't fail - still return todo resources
-		log.Errorf(ctx, "failed to list file resources: %v", err)
+		slog.Error("failed to list file resources", "error", err)
 	} else {
 		resources = append(resources, fileResources...)
 	}

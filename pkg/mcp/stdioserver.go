@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
+	"log/slog"
 )
 
 type StdioServer struct {
@@ -40,7 +40,7 @@ func (s *StdioServer) Start(ctx context.Context, in io.ReadCloser, out io.WriteC
 		if s.envProvider != nil {
 			env, err := s.envProvider()
 			if err != nil {
-				log.Errorf(ctx, "failed to reload environment: %v", err)
+				slog.Error("failed to reload environment", "error", err)
 			} else {
 				session.session.SetEnv(env)
 			}
@@ -50,10 +50,10 @@ func (s *StdioServer) Start(ctx context.Context, in io.ReadCloser, out io.WriteC
 		if errors.Is(err, ErrNoResponse) {
 			return
 		} else if err != nil {
-			log.Errorf(ctx, "failed to exchange message: %v", err)
+			slog.Error("failed to exchange message", "error", err)
 		}
 		if err := s.stdio.Send(ctx, resp); err != nil {
-			log.Errorf(ctx, "failed to send message in reply to %v: %v", msg.ID, err)
+			slog.Error("failed to send message in reply", "message_id", msg.ID, "error", err)
 		}
 	}); err != nil {
 		return fmt.Errorf("failed to start stdio: %w", err)

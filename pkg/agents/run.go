@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"log/slog"
+
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/schema"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
@@ -585,7 +586,7 @@ func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execut
 
 			result, compactErr := a.compact(ctx, completionRequest, run.Request.Input, prevCompacted)
 			if compactErr != nil {
-				log.Errorf(ctx, "compaction failed, continuing without: %v", compactErr)
+				slog.Error("compaction failed, continuing without", "error", compactErr)
 			} else if result != nil {
 				completionRequest.Input = result.compactedInput
 				run.CompactedMessages = result.archivedMessages

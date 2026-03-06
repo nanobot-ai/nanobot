@@ -9,7 +9,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
+	"log/slog"
+
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
@@ -74,7 +75,7 @@ func truncateToolResult(ctx context.Context, toolName, callID string, msg *types
 	writeErr := writeFullResult(content, filePath)
 	truncated := buildTruncatedContent(content, maxToolResultSize, filePath)
 	if writeErr != nil {
-		log.Errorf(ctx, "failed to write truncated tool result to %s: %v", filePath, writeErr)
+		slog.Error("failed to write truncated tool result", "path", filePath, "error", writeErr)
 
 		noticePart := mcp.Content{
 			Type: "text",

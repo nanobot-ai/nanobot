@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
+	"log/slog"
 )
 
 type Collector struct {
@@ -88,7 +88,7 @@ func (c *Collector) runPersistenceLoop(flushInterval time.Duration) {
 		}
 
 		if err := c.persistAuditLogs(); err != nil {
-			log.Errorf(context.Background(), "Failed to persist audit log: %v", err)
+			slog.Error("failed to persist audit log", "error", err)
 		}
 
 		if closed {

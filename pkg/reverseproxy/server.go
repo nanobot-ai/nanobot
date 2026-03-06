@@ -16,7 +16,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
+	"log/slog"
 )
 
 // TLSServer represents a TLS server with mTLS authentication
@@ -187,7 +187,7 @@ func (s *TLSServer) Start(ctx context.Context) (int, error) {
 					return
 				default:
 				}
-				log.Errorf(ctx, "Failed to accept connection: %v", err)
+				slog.Error("failed to accept connection", "error", err)
 				continue
 			}
 
@@ -207,7 +207,7 @@ func (s *TLSServer) handleConnection(ctx context.Context, clientConn net.Conn) {
 	targetAddr := fmt.Sprintf("localhost:%d", s.targetPort)
 	targetConn, err := net.Dial("tcp", targetAddr)
 	if err != nil {
-		log.Errorf(ctx, "Failed to connect to target %s: %v", targetAddr, err)
+		slog.Error("failed to connect to target", "target_addr", targetAddr, "error", err)
 		return
 	}
 	defer func() {
@@ -222,7 +222,7 @@ func (s *TLSServer) handleConnection(ctx context.Context, clientConn net.Conn) {
 	go func() {
 		_, err := io.Copy(targetConn, clientConn)
 		if err != nil && !errors.Is(err, io.EOF) {
-			log.Errorf(ctx, "Error copying from client to target: %v", err)
+			slog.Error("error copying from client to target", "error", err)
 		}
 		close(clientClosed)
 	}()
@@ -231,7 +231,7 @@ func (s *TLSServer) handleConnection(ctx context.Context, clientConn net.Conn) {
 	go func() {
 		_, err := io.Copy(clientConn, targetConn)
 		if err != nil && !errors.Is(err, io.EOF) {
-			log.Errorf(ctx, "Error copying from target to client: %v", err)
+			slog.Error("error copying from target to client", "error", err)
 		}
 		close(targetClosed)
 	}()

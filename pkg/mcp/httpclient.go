@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"log/slog"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/log"
@@ -140,14 +142,14 @@ func (s *HTTPClient) Close(deleteSession bool) {
 			defer cancel()
 			req, err := s.newRequest(ctx, http.MethodDelete, nil)
 			if err != nil {
-				log.Errorf(ctx, "failed to create close request: %v", err)
+				slog.Error("failed to create close request", "error", err)
 				return
 			}
 
 			resp, err := httpClient.Do(req)
 			if err != nil {
 				// Best effort
-				log.Errorf(ctx, "failed to send close request: %v", err)
+				slog.Error("failed to send close request", "error", err)
 				return
 			}
 			resp.Body.Close()
@@ -384,9 +386,9 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID st
 			if !ok {
 				if err := messages.err(); err != nil {
 					if errors.Is(err, context.Canceled) {
-						log.Debugf(ctx, "context canceled reading SSE message: %v", messages.err())
+						slog.Debug("context canceled reading SSE message", "error", err)
 					} else {
-						log.Errorf(ctx, "failed to read SSE message: %v", messages.err())
+						slog.Error("failed to read SSE message", "error", err)
 					}
 				}
 
@@ -439,7 +441,7 @@ func (s *HTTPClient) Start(ctx context.Context, handler WireHandler) error {
 		go func() {
 			err := s.ensureSSE(ctx, nil, "")
 			if err != nil {
-				log.Errorf(ctx, "failed to re-initialize SSE: %v", err)
+				slog.Error("failed to re-initialize SSE", "error", err)
 			}
 		}()
 	}
@@ -499,7 +501,7 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 
 	go func() {
 		if err = s.ensureSSE(ctx, nil, ""); err != nil {
-			log.Errorf(context.Background(), "failed to initialize SSE: %v", err)
+			slog.Error("failed to initialize SSE", "error", err)
 		}
 	}()
 
@@ -626,7 +628,7 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 		// If not, then keep going. It will reconnect, if necessary.
 		go func() {
 			if err := <-errChan; err != nil {
-				log.Errorf(ctx, "%v", err)
+				slog.Error("sse error", "error", err)
 			}
 		}()
 	}
@@ -829,7 +831,7 @@ func (s *HTTPClient) exchangeToken(ctx context.Context, subjectToken string) (st
 	// If the response status code is not OK, then continue without a token.
 	// Maybe OAuth will work.
 	if resp.StatusCode != http.StatusOK {
-		log.Debugf(ctx, "Token exchange endpoint: %s returned %d", s.tokenExchangeEndpoint, resp.StatusCode)
+		slog.Debug("token exchange endpoint returned non-200 status", "endpoint", s.tokenExchangeEndpoint, "status_code", resp.StatusCode)
 		return "", nil
 	}
 

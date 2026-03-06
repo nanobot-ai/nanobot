@@ -6,7 +6,8 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
+	"log/slog"
+
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 )
 
@@ -119,14 +120,14 @@ func (sm *SubscriptionManager) SendResourceUpdatedNotification(uri string) {
 
 	paramsBytes, err := json.Marshal(params)
 	if err != nil {
-		log.Errorf(sm.ctx, "failed to marshal notification params: %v", err)
+		slog.Error("failed to marshal notification params", "error", err)
 		return
 	}
 	notification.Params = paramsBytes
 
 	for _, session := range sessionsToNotify {
 		if err := session.Send(sm.ctx, notification); err != nil {
-			log.Errorf(sm.ctx, "failed to send resource updated notification: %v", err)
+			slog.Error("failed to send resource updated notification", "error", err)
 		}
 	}
 }
@@ -147,7 +148,7 @@ func (sm *SubscriptionManager) SendListChangedNotification() {
 
 	for _, session := range sessions {
 		if err := session.Send(sm.ctx, notification); err != nil && !errors.Is(err, mcp.ErrNoReader) {
-			log.Errorf(sm.ctx, "failed to send list_changed notification: %v", err)
+			slog.Error("failed to send list_changed notification", "error", err)
 		}
 	}
 }

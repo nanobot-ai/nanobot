@@ -13,7 +13,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
+	"log/slog"
+
 	"github.com/nanobot-ai/nanobot/pkg/supervise"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 	"github.com/nanobot-ai/nanobot/pkg/version"
@@ -201,14 +202,14 @@ func buildImage(ctx context.Context, baseImage string, config Command) (string, 
 
 	var cmd *exec.Cmd
 	if isGit {
-		log.Infof(ctx, "Downloading source: %s", source)
+		slog.Info("downloading source", "source", source)
 		cmd = exec.CommandContext(ctx, "docker", "build", "-q", "-")
 		cmd.Stdin = dockerFileToTar(fmt.Sprintf(`FROM %s
 USER %d:%d
 WORKDIR /mcp
 ADD %s /mcp`, baseImage, uid, gid, source))
 	} else {
-		log.Infof(ctx, "Copying source: %s", filepath.Join(config.Source.Repo, config.Source.SubPath))
+		slog.Info("copying source", "source", filepath.Join(config.Source.Repo, config.Source.SubPath))
 		srcPath := config.Source.SubPath
 		if srcPath == "" {
 			srcPath = "."
@@ -225,7 +226,7 @@ COPY %s /mcp`, baseImage, uid, gid, srcPath))
 	}
 
 	id := strings.TrimSpace(string(out))
-	log.Infof(ctx, "Image: %s", id)
+	slog.Info("built image", "image", id)
 	return id, nil
 }
 
@@ -249,7 +250,7 @@ func dockerFileToTar(dockerfile string) io.Reader {
 }
 
 func buildBaseImage(ctx context.Context, config Command) (string, error) {
-	log.Infof(ctx, "Building base image")
+	slog.Info("building base image")
 	f, err := os.CreateTemp("", "nanobot-dockerfile-*.id")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file for dockerfile: %w", err)

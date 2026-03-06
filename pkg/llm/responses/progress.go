@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 
+	"log/slog"
+
 	llmProgress "github.com/nanobot-ai/nanobot/pkg/llm/progress"
 	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -41,7 +43,7 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 			body = strings.TrimSpace(body)
 			data := []byte(body)
 			if err := json.Unmarshal(data, &event); err != nil {
-				log.Errorf(ctx, "failed to decode event: %v: %s", err, body)
+				slog.Error("failed to decode event", "error", err, "body", body)
 				continue
 			}
 

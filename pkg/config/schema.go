@@ -1,12 +1,13 @@
 package config
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
+	"os"
 	"sync"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
+	"log/slog"
+
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"sigs.k8s.io/yaml"
 )
@@ -23,7 +24,8 @@ func getSchema() *jsonschema.Schema {
 		var err error
 		schema, err = initSchema()
 		if err != nil {
-			log.Fatalf(context.Background(), "error initializing schema: %v", err)
+			slog.Error("error initializing schema", "error", err)
+			os.Exit(1)
 		}
 	})
 	return schema

@@ -2,8 +2,8 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,7 +14,6 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/confirm"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
-	"github.com/nanobot-ai/nanobot/pkg/printer"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/spf13/cobra"
@@ -163,8 +162,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		return fmt.Errorf("failed to read config from %q: %w", r.n.ConfigPath, err)
 	}
 
-	cfg, _ := json.MarshalIndent(once.Redacted(), "", "  ")
-	printer.Prefix("config", string(cfg))
+	slog.Info("config", "json", once.Redacted())
 
 	var auditLogCollector *auditlogs.Collector
 	if r.AuditLogSendURL != "" {

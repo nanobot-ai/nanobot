@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"log/slog"
+
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
 	"github.com/nanobot-ai/nanobot/pkg/log"
@@ -119,7 +121,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 
 		var chunk StreamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-			log.Errorf(ctx, "failed to decode streaming chunk: %v: %s", err, data)
+			slog.Error("failed to decode streaming chunk", "error", err, "data", data)
 			continue
 		}
 

@@ -5,11 +5,11 @@ import (
 	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/version"
+	"log/slog"
 )
 
 type Server struct {
@@ -99,7 +99,7 @@ func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.Ini
 
 	// Start watchers lazily
 	if err := s.ensureWatchers(); err != nil {
-		log.Errorf(ctx, "failed to start meta watchers: %v", err)
+		slog.Error("failed to start meta watchers", "error", err)
 	}
 
 	return &mcp.InitializeResult{

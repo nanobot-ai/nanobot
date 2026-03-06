@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"log/slog"
+
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/envvar"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 )
 
@@ -213,7 +214,7 @@ func toHandler(opts ClientOption) MessageHandler {
 				}
 				err = msg.Reply(ctx, resp)
 				if err != nil {
-					log.Errorf(ctx, "failed to reply to sampling/createMessage: %v", err)
+					slog.Error("failed to reply to sampling/createMessage", "error", err)
 				}
 			}()
 		} else if msg.Method == "elicitation/create" && opts.OnElicit != nil {
@@ -236,7 +237,7 @@ func toHandler(opts ClientOption) MessageHandler {
 				if resp.Action != "handled" {
 					err = msg.Reply(ctx, resp)
 					if err != nil {
-						log.Errorf(ctx, "failed to reply to elicitation/create: %v", err)
+						slog.Error("failed to reply to elicitation/create", "error", err)
 					}
 				}
 			}()
@@ -257,11 +258,11 @@ func toHandler(opts ClientOption) MessageHandler {
 			}
 		} else if strings.HasPrefix(msg.Method, "notifications/") && opts.OnNotify != nil {
 			if err := opts.OnNotify(ctx, msg); err != nil && !errors.Is(err, ErrNoReader) {
-				log.Errorf(ctx, "failed to handle notification: %v", err)
+				slog.Error("failed to handle notification", "error", err)
 			}
 		} else if opts.OnMessage != nil {
 			if err := opts.OnMessage(ctx, msg); err != nil && !errors.Is(err, ErrNoReader) {
-				log.Errorf(ctx, "failed to handle message: %v", err)
+				slog.Error("failed to handle message", "error", err)
 			}
 		}
 	})
@@ -274,7 +275,7 @@ func waitForURL(ctx context.Context, serverName, baseURL string) error {
 
 	for i := range 120 {
 		if i%20 == 0 {
-			log.Infof(ctx, "Waiting for server %s at %s to be ready...", serverName, baseURL)
+			slog.Info("waiting for server to be ready", "server", serverName, "url", baseURL)
 		}
 		resp, err := http.Get(baseURL)
 		if err != nil {
@@ -285,7 +286,7 @@ func waitForURL(ctx context.Context, serverName, baseURL string) error {
 			}
 		} else {
 			_ = resp.Body.Close()
-			log.Infof(ctx, "Server %s at %s is ready", serverName, baseURL)
+			slog.Info("server is ready", "server", serverName, "url", baseURL)
 			return nil
 		}
 	}

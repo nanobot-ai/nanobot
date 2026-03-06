@@ -8,8 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"log/slog"
+
 	"github.com/fsnotify/fsnotify"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 )
 
 const debounceTimeout = 100 * time.Millisecond
@@ -172,7 +173,7 @@ func (w *Watcher) addWatchRecursive(dir string, currentDepth int) error {
 				subDir := filepath.Join(dir, entry.Name())
 				if err := w.addWatchRecursive(subDir, currentDepth+1); err != nil {
 					// Log but continue - don't fail the whole watch setup for one subdir
-					log.Errorf(context.Background(), "failed to watch subdirectory %s: %v", subDir, err)
+					slog.Error("failed to watch subdirectory", "path", subDir, "error", err)
 				}
 			}
 		}
@@ -232,7 +233,7 @@ func (w *Watcher) watchLoop() {
 				if depth >= 0 && depth <= w.maxDepth {
 					if w.filter == nil || w.filter(relPath, info) {
 						if err := w.addWatchRecursive(event.Name, depth); err != nil {
-							log.Errorf(w.ctx, "failed to watch new directory %s: %v", event.Name, err)
+							slog.Error("failed to watch new directory", "path", event.Name, "error", err)
 						}
 						// Send list_changed since new directory means new potential files
 						w.handler([]Event{{Path: relPath, Type: EventCreate}})
@@ -300,7 +301,7 @@ func (w *Watcher) watchLoop() {
 			if !ok {
 				return
 			}
-			log.Errorf(w.ctx, "file watcher error: %v", err)
+			slog.Error("file watcher error", "error", err)
 
 		case <-ticker.C:
 			// Process debounced events
