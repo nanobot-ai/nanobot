@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -89,7 +90,8 @@ func (n *Nanobot) DSN() string {
 		if s == "XDG_CONFIG_HOME" {
 			userConfigDir, err := os.UserConfigDir()
 			if err != nil {
-				log.Fatalf(context.Background(), "Failed to get user config directory: %v", err)
+				slog.Error("Failed to get user config directory", "error", err)
+				os.Exit(1)
 			}
 			return userConfigDir
 		}
@@ -97,7 +99,8 @@ func (n *Nanobot) DSN() string {
 	})
 
 	if err := ensureDirectoryForDSN(dsn); err != nil {
-		log.Fatalf(context.Background(), "Failed to ensure directory for state file %s: %v", dsn, err)
+		slog.Error("Failed to ensure directory for state file", "dsn", dsn, "error", err)
+		os.Exit(1)
 	}
 
 	return dsn
@@ -116,16 +119,12 @@ func (n *Nanobot) PersistentPre(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	if n.Debug {
-		log.DebugLog = true
-	}
-
 	if n.Trace {
 		log.EnableProgress = true
-		log.DebugLog = true
 	}
 
-	log.EnableMessages = n.Debug || n.Trace
+	log.ConfigureSlog(n.Debug, n.Trace)
+	log.EnableMessages = log.EnableMessages || n.Debug || n.Trace
 
 	for _, sub := range cmd.Commands() {
 		if sub.Name() == "help" {
@@ -320,11 +319,11 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 		_ = s.Shutdown(ctx)
 	})
 
-	log.Infof(ctx, "Starting server on http://%s\n", address)
+	slog.Info("Starting server", "url", "http://"+address)
 	err = s.ListenAndServe()
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
-	log.Debugf(ctx, "Server stopped: %v", err)
+	slog.Debug("Server stopped", "error", err)
 	return err
 }

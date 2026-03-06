@@ -12,8 +12,9 @@ import (
 	"strings"
 	"sync"
 
+	"log/slog"
+
 	"github.com/nanobot-ai/nanobot/pkg/envvar"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp/sandbox"
 	"github.com/nanobot-ai/nanobot/pkg/supervise"
 	"github.com/nanobot-ai/nanobot/pkg/system"
@@ -180,7 +181,7 @@ func (r *Runner) doRun(ctx context.Context, serverName string, config Server, cm
 		wg.Wait()
 		err := cmd.Wait()
 		if err != nil {
-			log.Errorf(ctx, "Command %s exited with error: %v\n", serverName, err)
+			slog.Error("command exited with error", "server", serverName, "error", err)
 		}
 		r.lock.Lock()
 		delete(r.running, serverName)
@@ -211,7 +212,7 @@ func (r *Runner) doStream(ctx context.Context, serverName string, cmd *sandbox.C
 	go func() {
 		sandbox.PipeOut(ctx, stderrPipe, serverName)
 		if err := cmd.Wait(); err != nil {
-			log.Errorf(ctx, "Command %s exited with error: %v\n", serverName, err)
+			slog.Error("command exited with error", "server", serverName, "error", err)
 		}
 	}()
 

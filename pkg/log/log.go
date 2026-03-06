@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"regexp"
 	"slices"
 	"strings"
-
-	"github.com/nanobot-ai/nanobot/pkg/printer"
 )
 
 var (
@@ -17,10 +16,24 @@ var (
 	EnableMessages    = slices.Contains(debugs, "messages")
 	EnableProgress    = slices.Contains(debugs, "progress")
 	EnableUI          = slices.Contains(debugs, "ui")
-	DebugLog          = slices.Contains(debugs, "log")
 	Base64Replace     = regexp.MustCompile(`((;base64,|")[a-zA-Z0-9+/=]{60})[a-zA-Z0-9+/=]+"`)
 	Base64Replacement = []byte(`$1..."`)
 )
+
+func init() {
+	ConfigureSlog(false, false)
+}
+
+func ConfigureSlog(debug, trace bool) {
+	level := slog.LevelInfo
+	if slices.Contains(debugs, "trace") || slices.Contains(debugs, "log") || debug || trace {
+		level = slog.LevelDebug
+	}
+
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: level,
+	})))
+}
 
 func Messages(_ context.Context, server string, out bool, data []byte) {
 	if !EnableUI && server == "nanobot.ui" {
@@ -38,30 +51,11 @@ func Messages(_ context.Context, server string, out bool, data []byte) {
 	if !out {
 		prefixFmt = "<-(%s)"
 	}
+
 	data = Base64Replace.ReplaceAll(data, Base64Replacement)
-	printer.Prefix(fmt.Sprintf(prefixFmt, server), strings.ReplaceAll(strings.TrimSpace(string(data)), "\n", " ")+"\n")
+	slog.Info("mcp message", "prefix", fmt.Sprintf(prefixFmt, server), "payload", strings.ReplaceAll(strings.TrimSpace(string(data)), "\n", " "))
 }
 
 func StderrMessages(_ context.Context, server, line string) {
-	printer.Prefix(fmt.Sprintf("<-(%s:stderr)", server), line+"\n")
-}
-
-func Errorf(_ context.Context, format string, args ...any) {
-	printer.Prefix("error", fmt.Sprintf(format+"\n", args...))
-}
-
-func Infof(_ context.Context, format string, args ...any) {
-	printer.Prefix("info", fmt.Sprintf(format+"\n", args...))
-}
-
-func Fatalf(_ context.Context, format string, args ...any) {
-	printer.Prefix("fatal", fmt.Sprintf(format+"\n", args...))
-	os.Exit(1)
-}
-
-func Debugf(_ context.Context, format string, args ...any) {
-	if !DebugLog {
-		return
-	}
-	printer.Prefix("debug", fmt.Sprintf(format+"\n", args...))
+	slog.Info("mcp stderr", "server", server, "stream", "stderr", "line", strings.TrimRight(line, "\n"))
 }

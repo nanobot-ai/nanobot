@@ -12,10 +12,10 @@ import (
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/schema"
 	"github.com/nanobot-ai/nanobot/pkg/types"
+	"log/slog"
 )
 
 const (
@@ -720,12 +720,12 @@ func (d *Data) BuildResourceMappings(ctx context.Context, refs []string) (types.
 
 		c, err := d.runtime.GetClient(ctx, toolRef.Server)
 		if err != nil {
-			log.Errorf(ctx, "failed to get client for server %s while building resource mappings, skipping: %v", toolRef, err)
+			slog.Error("failed to get client while building resource mappings, skipping", "server", toolRef.Server, "error", err)
 			continue
 		}
 		resources, err := c.ListResources(ctx)
 		if err != nil {
-			log.Errorf(ctx, "failed to get resources for server %q while building resource mappings, skipping: %v", toolRef, err)
+			slog.Error("failed to get resources while building resource mappings, skipping", "server", toolRef.Server, "error", err)
 			continue
 		}
 
@@ -751,18 +751,18 @@ func (d *Data) BuildResourceTemplateMappings(ctx context.Context, refs []string)
 
 		c, err := d.runtime.GetClient(ctx, toolRef.Server)
 		if err != nil {
-			log.Errorf(ctx, "failed to get client for server %s while building resource template mappings, skipping: %v", toolRef, err)
+			slog.Error("failed to get client while building resource template mappings, skipping", "server", toolRef.Server, "error", err)
 			continue
 		}
 		resources, err := c.ListResourceTemplates(ctx)
 		if err != nil {
-			log.Errorf(ctx, "failed to get resource templates for server %s while building resource template mappings, skipping: %v", toolRef, err)
+			slog.Error("failed to get resource templates while building resource template mappings, skipping", "server", toolRef.Server, "error", err)
 		}
 
 		for _, resource := range resources.ResourceTemplates {
 			re, err := uriToRegexp(resource.URITemplate)
 			if err != nil {
-				log.Errorf(ctx, "failed to convert uri to regexp: %v", err)
+				slog.Error("failed to convert uri to regexp", "error", err)
 				continue
 			}
 			resourceTemplateMappings[toolRef.PublishedName(resource.URITemplate)] = types.TargetMapping[types.TemplateMatch]{

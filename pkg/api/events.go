@@ -8,7 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
+	"log/slog"
+
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -255,7 +256,7 @@ func Events(rw http.ResponseWriter, req *http.Request) error {
 	go func() {
 		// Transform chat messages into SSE events
 		if err := printHistory(&wl, f, req, subClient, ids); err != nil {
-			log.Errorf(req.Context(), "failed to print history: %v", err)
+			slog.Error("failed to print history", "error", err)
 		}
 	}()
 

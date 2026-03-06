@@ -13,8 +13,9 @@ import (
 	"sync"
 	"time"
 
+	"log/slog"
+
 	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 	"github.com/tidwall/gjson"
@@ -663,7 +664,7 @@ func (h *HTTPServer) checkTools(ctx context.Context) error {
 func (h *HTTPServer) getEnv(req *http.Request) map[string]string {
 	env, err := h.baseEnv()
 	if err != nil {
-		log.Errorf(req.Context(), "failed to reload environment: %v", err)
+		slog.Error("failed to reload environment", "error", err)
 		env = make(map[string]string)
 	}
 	token, ok := strings.CutPrefix(req.Header.Get("Authorization"), "Bearer ")

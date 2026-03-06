@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
+	"log/slog"
 )
 
 var (
@@ -115,7 +115,7 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 			"Authorization": "Bearer " + apiKey,
 		}
 	} else {
-		log.Infof(ctx, "MCP_API_KEY environment variable is not set, auth will fallback to OAuth")
+		slog.Info("MCP_API_KEY environment variable is not set, auth will fallback to OAuth")
 	}
 
 	// Create the new server config
@@ -145,7 +145,7 @@ func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (m
 	// Best-effort: try to list the server's tools so the LLM knows their real names
 	tools, err := listServerTools(ctx, params.URL, headers)
 	if err != nil {
-		log.Debugf(ctx, "failed to list tools for MCP server %q: %v", params.Name, err)
+		slog.Debug("failed to list tools for MCP server", "server", params.Name, "error", err)
 		result["message"] = fmt.Sprintf("Successfully added MCP server '%s'. The server's tools will be available in the next agent turn.", params.Name)
 	} else {
 		toolList := make([]string, 0, len(tools))

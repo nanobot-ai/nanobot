@@ -7,7 +7,8 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
+	"log/slog"
+
 	"github.com/nanobot-ai/nanobot/pkg/reverseproxy"
 	"github.com/nanobot-ai/nanobot/pkg/supervise"
 	"github.com/nanobot-ai/nanobot/pkg/version"
@@ -95,7 +96,7 @@ func startReversePort(ctx context.Context, targetContainerName string, port int,
 		}()
 		wg.Wait()
 		if err := cmd.Wait(); err != nil {
-			log.Errorf(ctx, "Reverse proxy container for port %d exited with error: %v\n", port, err)
+			slog.Error("reverse proxy container exited with error", "port", port, "error", err)
 		}
 	}()
 	return nil

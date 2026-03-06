@@ -14,7 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
+	"log/slog"
+
 	"golang.org/x/oauth2"
 )
 
@@ -53,8 +54,8 @@ func (o *oauth) loadFromStorage(ctx context.Context, connectURL string) *http.Cl
 	// Read the token config from storage to see if we have valid auth
 	conf, tok, err := o.tokenStorage.GetTokenConfig(ctx, connectURL)
 	if err != nil {
-		log.Infof(ctx, "failed to read token config: %v", err)
-		log.Infof(ctx, "continuing with authentication")
+		slog.Info("failed to read token config", "error", err)
+		slog.Info("continuing with authentication")
 	}
 
 	if conf != nil && tok != nil {
@@ -252,7 +253,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 
 	if o.tokenStorage != nil {
 		if err = o.tokenStorage.SetTokenConfig(ctx, connectURL, conf, tok); err != nil {
-			log.Infof(ctx, "failed to save token config: %v", err)
+			slog.Info("failed to save token config", "error", err)
 		}
 	}
 

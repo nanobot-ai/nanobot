@@ -7,14 +7,15 @@ import (
 	"maps"
 	"slices"
 
+	"log/slog"
+
 	"github.com/nanobot-ai/nanobot/pkg/expr"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 )
 
 func ReplaceString(envs map[string]string, str string) string {
 	r, err := expr.EvalString(context.TODO(), envs, nil, str)
 	if err != nil {
-		log.Errorf(context.TODO(), "failed to evaluate expression %s: %v", str, err)
+		slog.Error("failed to evaluate expression", "expression", str, "error", err)
 		return str
 	}
 	return r

@@ -9,11 +9,11 @@ import (
 	"sync"
 
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
-	"github.com/nanobot-ai/nanobot/pkg/log"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 	"gopkg.in/yaml.v3"
+	"log/slog"
 )
 
 const (
@@ -104,7 +104,7 @@ func (s *Server) initialize(ctx context.Context, msg mcp.Message, params mcp.Ini
 
 	// Start watcher when first session initializes
 	if err := s.ensureWatcher(); err != nil {
-		log.Errorf(ctx, "failed to start file watcher: %v", err)
+		slog.Error("failed to start file watcher", "error", err)
 	}
 
 	return &mcp.InitializeResult{
@@ -165,7 +165,7 @@ func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListR
 
 		meta, err := parseWorkflowFrontmatter(string(contentBytes))
 		if err != nil {
-			log.Debugf(ctx, "failed to parse frontmatter for workflow %s: %v", entry.Name(), err)
+			slog.Debug("failed to parse frontmatter for workflow", "workflow", entry.Name(), "error", err)
 		}
 
 		resourceMeta := make(map[string]any)
@@ -207,7 +207,7 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 	content := string(contentBytes)
 	meta, err := parseWorkflowFrontmatter(content)
 	if err != nil {
-		log.Debugf(ctx, "failed to parse frontmatter for workflow %s: %v", workflowName, err)
+		slog.Debug("failed to parse frontmatter for workflow", "workflow", workflowName, "error", err)
 	}
 
 	resourceMeta := make(map[string]any)
@@ -282,7 +282,7 @@ func (s *Server) ensureWatcher() error {
 			return
 		}
 
-		log.Debugf(context.Background(), "started workflow watcher for %s", workflowsPath)
+		slog.Debug("started workflow watcher", "path", workflowsPath)
 	})
 
 	return s.watcherInitErr

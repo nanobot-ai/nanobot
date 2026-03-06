@@ -20,7 +20,6 @@ require (
 	golang.org/x/image v0.36.0
 	golang.org/x/net v0.49.0
 	golang.org/x/oauth2 v0.30.0
-	golang.org/x/term v0.39.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/postgres v1.6.0

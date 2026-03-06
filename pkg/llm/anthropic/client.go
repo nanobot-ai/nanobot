@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"log/slog"
+
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
 	"github.com/nanobot-ai/nanobot/pkg/log"
@@ -112,7 +114,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 		var delta DeltaEvent
 		body = strings.TrimSpace(body)
 		if err := json.Unmarshal([]byte(body), &delta); err != nil {
-			log.Errorf(ctx, "failed to decode event: %v: %s", err, body)
+			slog.Error("failed to decode event", "error", err, "body", body)
 			continue
 		}
 		contentIndex := len(resp.Content) - 1

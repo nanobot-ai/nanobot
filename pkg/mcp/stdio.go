@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 
+	"log/slog"
+
 	"github.com/nanobot-ai/nanobot/pkg/log"
 )
 
@@ -105,7 +107,7 @@ func (s *Stdio) start(ctx context.Context, handler WireHandler) error {
 		log.Messages(ctx, s.server, false, []byte(text))
 		var msg Message
 		if err := json.Unmarshal([]byte(text), &msg); err != nil {
-			log.Errorf(ctx, "failed to unmarshal message: %v", err)
+			slog.Error("failed to unmarshal message", "error", err)
 			continue
 		}
 		go handler(ctx, msg)
