@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/url"
 	"slices"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/expr"
@@ -196,6 +198,8 @@ func (s *Server) handleListPrompts(ctx context.Context, msg mcp.Message, _ mcp.L
 }
 
 func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mcp.CallToolRequest) error {
+	start := time.Now()
+
 	toolMappings, err := s.data.ToolMapping(ctx)
 	if err != nil {
 		return err
@@ -214,6 +218,12 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 		}
 	}
 
+	slog.Debug("mcp server dispatching tool call",
+		"mcp_tool_name", payload.Name,
+		"target_server", toolMapping.MCPServer,
+		"target_tool_name", toolMapping.TargetName,
+		"request_id", mcp.MessageIDString(msg.ID))
+
 	result, err := s.runtime.Call(ctx, toolMapping.MCPServer, toolMapping.TargetName, payload.Arguments, tools.CallOptions{
 		ProgressToken: msg.ProgressToken(),
 		LogData: map[string]any{
@@ -224,7 +234,13 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 	if err != nil {
 		return err
 	}
-
+	slog.Debug("mcp server completed tool call",
+		"mcp_tool_name", payload.Name,
+		"target_server", toolMapping.MCPServer,
+		"target_tool_name", toolMapping.TargetName,
+		"request_id", mcp.MessageIDString(msg.ID),
+		"is_error", result.IsError,
+		"duration_ms", time.Since(start).Milliseconds())
 	mcpResult := mcp.CallToolResult{
 		StructuredContent: result.StructuredContent,
 		IsError:           result.IsError,

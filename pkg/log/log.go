@@ -12,13 +12,30 @@ import (
 )
 
 var (
-	debugs            = strings.Split(os.Getenv("NANOBOT_DEBUG"), ",")
-	EnableMessages    = slices.Contains(debugs, "messages")
-	EnableProgress    = slices.Contains(debugs, "progress")
-	EnableUI          = slices.Contains(debugs, "ui")
+	debugs            = parseDebugTokens(os.Getenv("NANOBOT_DEBUG"))
+	EnableMessages    = hasDebugToken("messages")
+	EnableProgress    = hasDebugToken("progress")
+	EnableUI          = hasDebugToken("ui")
 	Base64Replace     = regexp.MustCompile(`((;base64,|")[a-zA-Z0-9+/=]{60})[a-zA-Z0-9+/=]+"`)
 	Base64Replacement = []byte(`$1..."`)
 )
+
+func parseDebugTokens(raw string) []string {
+	parts := strings.Split(raw, ",")
+	tokens := make([]string, 0, len(parts))
+	for _, part := range parts {
+		token := strings.ToLower(strings.TrimSpace(part))
+		if token == "" || slices.Contains(tokens, token) {
+			continue
+		}
+		tokens = append(tokens, token)
+	}
+	return tokens
+}
+
+func hasDebugToken(token string) bool {
+	return slices.Contains(debugs, strings.ToLower(strings.TrimSpace(token)))
+}
 
 func init() {
 	ConfigureSlog(false, false)
@@ -26,7 +43,7 @@ func init() {
 
 func ConfigureSlog(debug, trace bool) {
 	level := slog.LevelInfo
-	if slices.Contains(debugs, "trace") || slices.Contains(debugs, "log") || debug || trace {
+	if len(debugs) > 0 || debug || trace {
 		level = slog.LevelDebug
 	}
 
@@ -42,7 +59,7 @@ func Messages(_ context.Context, server string, out bool, data []byte) {
 
 	if EnableProgress && bytes.Contains(data, []byte(`"notifications/progress"`)) {
 	} else if EnableMessages && !bytes.Contains(data, []byte(`"notifications/progress"`)) {
-	} else if slices.Contains(debugs, server) {
+	} else if hasDebugToken(server) {
 	} else {
 		return
 	}
@@ -53,7 +70,7 @@ func Messages(_ context.Context, server string, out bool, data []byte) {
 	}
 
 	data = Base64Replace.ReplaceAll(data, Base64Replacement)
-	slog.Info("mcp message", "prefix", fmt.Sprintf(prefixFmt, server), "payload", strings.ReplaceAll(strings.TrimSpace(string(data)), "\n", " "))
+	slog.Debug("mcp message", "prefix", fmt.Sprintf(prefixFmt, server), "payload", strings.ReplaceAll(strings.TrimSpace(string(data)), "\n", " "))
 }
 
 func StderrMessages(_ context.Context, server, line string) {

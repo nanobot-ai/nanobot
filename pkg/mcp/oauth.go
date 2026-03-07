@@ -63,15 +63,21 @@ func (o *oauth) loadFromStorage(ctx context.Context, connectURL string) *http.Cl
 		tok, err = ts.Token()
 		if err == nil && tok.Valid() {
 			o.currentToken = *tok
+			slog.Info("loaded oauth token from storage", "connect_url", connectURL)
 			return oauth2.NewClient(ctx, ts)
 		}
+
+		slog.Info("stored oauth token is not usable, re-authentication required", "connect_url", connectURL)
 	}
 
 	return nil
 }
 
 func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, authenticateHeader string) (*http.Client, error) {
+	slog.Info("starting oauth flow", "server", c.serverName, "connect_url", connectURL)
+
 	if httpClient := o.loadFromStorage(ctx, connectURL); httpClient != nil {
+		slog.Info("oauth flow skipped, using stored token", "server", c.serverName, "connect_url", connectURL)
 		return httpClient, nil
 	}
 
@@ -97,6 +103,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 		u.Path = "/.well-known/oauth-protected-resource"
 		resourceMetadataURL = u.String()
 	}
+	slog.Info("fetching protected resource metadata", "server", c.serverName, "url", resourceMetadataURL)
 
 	// Get the protected resource metadata
 	protectedResourceResp, err := o.metadataClient.Get(resourceMetadataURL)
@@ -121,10 +128,12 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	if scope == "" {
 		scope = strings.Join(protectedResourceMetadata.ScopesSupported, " ")
 	}
+	slog.Info("resolved oauth scope for server", "server", c.serverName, "scope", scope)
 
 	if len(protectedResourceMetadata.AuthorizationServers) == 0 {
 		protectedResourceMetadata.AuthorizationServers = []string{fmt.Sprintf("%s://%s", u.Scheme, u.Host)}
 	}
+	slog.Info("resolved authorization server", "server", c.serverName, "authorization_server", protectedResourceMetadata.AuthorizationServers[0])
 
 	authorizationServerMetadata, err := o.getAuthServerMetadata(protectedResourceMetadata.AuthorizationServers[0])
 	if err != nil {
@@ -146,9 +155,13 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 		lookupErr  error
 	)
 	clientInfo.ClientID, clientInfo.ClientSecret, lookupErr = o.clientLookup.Lookup(ctx, protectedResourceMetadata.AuthorizationServers[0])
+	if lookupErr == nil && clientInfo.ClientID != "" && clientInfo.ClientSecret != "" {
+		slog.Info("using static oauth client credentials", "server", c.serverName, "authorization_server", protectedResourceMetadata.AuthorizationServers[0])
+	}
 
 	// If we didn't get a result from the lookup, register a client dynamically.
 	if lookupErr != nil || clientInfo.ClientID == "" || clientInfo.ClientSecret == "" {
+		slog.Info("registering oauth client dynamically", "server", c.serverName, "registration_endpoint", authorizationServerMetadata.RegistrationEndpoint)
 		req, err := http.NewRequest(http.MethodPost, authorizationServerMetadata.RegistrationEndpoint, bytes.NewReader(b))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create registration request: %w", err)
@@ -175,6 +188,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse client registration response: %w", err)
 			}
+			slog.Info("oauth client registration succeeded", "server", c.serverName, "registration_endpoint", authorizationServerMetadata.RegistrationEndpoint)
 		}
 	}
 
@@ -224,12 +238,15 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	}
 
 	authURL := conf.AuthCodeURL(state, authCodeURLOpts...)
+	slog.Info("handing oauth authorization url to callback handler", "server", c.serverName, "auth_host", authEndpoint.Host)
 	handled, err := o.callbackHandler.HandleAuthURL(ctx, c.displayName, authURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to handle auth url %s: %w", authURL, err)
 	} else if !handled {
+		slog.Info("oauth authorization url was not handled", "server", c.serverName)
 		return nil, nil
 	}
+	slog.Info("waiting for oauth callback", "server", c.serverName)
 
 	var cb CallbackPayload
 	select {
@@ -237,9 +254,11 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 		return nil, ctx.Err()
 	case cb = <-ch:
 		if cb.Error != "" {
+			slog.Warn("oauth callback returned error", "server", c.serverName, "error", cb.Error, "description", cb.ErrorDescription)
 			return nil, fmt.Errorf("authorization failed: %s, %s", cb.Error, cb.ErrorDescription)
 		}
 		if cb.Code == "" {
+			slog.Warn("oauth callback missing authorization code", "server", c.serverName)
 			return nil, fmt.Errorf("authorization failed: no code returned")
 		}
 	}
@@ -248,12 +267,15 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	if err != nil {
 		return nil, fmt.Errorf("failed to exchange code for token: %w", err)
 	}
+	slog.Info("oauth code exchange succeeded", "server", c.serverName)
 
 	o.currentToken = *tok
 
 	if o.tokenStorage != nil {
 		if err = o.tokenStorage.SetTokenConfig(ctx, connectURL, conf, tok); err != nil {
 			slog.Info("failed to save token config", "error", err)
+		} else {
+			slog.Info("saved oauth token config", "server", c.serverName, "connect_url", connectURL)
 		}
 	}
 

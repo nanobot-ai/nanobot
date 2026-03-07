@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-
 	"log/slog"
 )
 
@@ -37,6 +36,13 @@ func (s *StdioServer) Start(ctx context.Context, in io.ReadCloser, out io.WriteC
 	s.stdio = NewStdio("proxy", nil, in, out, func() {})
 
 	if err = s.stdio.Start(ctx, func(ctx context.Context, msg Message) {
+		if slog.Default().Enabled(ctx, slog.LevelDebug) {
+			slog.Debug("mcp stdio server received message",
+				"method", msg.Method,
+				"request_id", MessageIDString(msg.ID),
+				"call_identifier", getMessageName(&msg))
+		}
+
 		if s.envProvider != nil {
 			env, err := s.envProvider()
 			if err != nil {

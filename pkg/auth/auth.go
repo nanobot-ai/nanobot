@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -33,8 +34,10 @@ type Auth struct {
 
 func Wrap(ctx context.Context, env map[string]string, auth Auth, dsn, healthzPath string, next http.Handler) (http.Handler, error) {
 	if auth.OAuthClientID == "" {
+		slog.Info("auth middleware disabled, oauth client ID not configured")
 		return next, nil
 	}
+	slog.Info("auth middleware enabled", "healthz_path", healthzPath)
 
 	next, err := setupContext(auth, next)
 	if err != nil {
@@ -53,6 +56,7 @@ func Wrap(ctx context.Context, env map[string]string, auth Auth, dsn, healthzPat
 		if err != nil {
 			return nil, fmt.Errorf("failed to create oauth proxy: %w", err)
 		}
+		slog.Info("oauth proxy created")
 
 		if healthzPath != "" {
 			return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
@@ -128,6 +132,7 @@ func setupContext(auth Auth, next http.Handler) (http.Handler, error) {
 			if token, _ := info.Props["access_token"].(string); token != "" {
 				ctx = mcp.WithToken(ctx, token)
 			}
+			slog.Debug("oauth token info applied to request context", "user_id", user.ID, "request_path", req.URL.Path)
 			req = req.WithContext(ctx)
 		}
 		next.ServeHTTP(rw, req)
@@ -140,6 +145,7 @@ func mcpProxy(auth Auth, dsn string, next http.Handler) (http.Handler, error) {
 	if !strings.Contains(dsn, "postgres") {
 		dsn = strings.TrimSuffix(dsn, ".db") + "_auth.db"
 	}
+	slog.Info("initializing oauth proxy")
 
 	proxy, err := proxy.NewOAuthProxy(&proxytypes.Config{
 		DatabaseDSN:          dsn,

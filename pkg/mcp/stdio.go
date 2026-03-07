@@ -7,11 +7,10 @@ import (
 	"fmt"
 	"io"
 	log2 "log"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"sync"
-
-	"log/slog"
 
 	"github.com/nanobot-ai/nanobot/pkg/log"
 )
@@ -65,6 +64,14 @@ func (s *Stdio) Send(ctx context.Context, req Message) error {
 		return fmt.Errorf("stdin is closed")
 	}
 
+	if slog.Default().Enabled(ctx, slog.LevelDebug) {
+		slog.Debug("mcp stdio send",
+			"server", s.server,
+			"method", req.Method,
+			"request_id", MessageIDString(req.ID),
+			"call_identifier", getMessageName(&req))
+	}
+
 	log.Messages(ctx, s.server, true, data)
 	_, err = s.stdin.Write(append(data, '\n'))
 	return err
@@ -109,6 +116,13 @@ func (s *Stdio) start(ctx context.Context, handler WireHandler) error {
 		if err := json.Unmarshal([]byte(text), &msg); err != nil {
 			slog.Error("failed to unmarshal message", "error", err)
 			continue
+		}
+		if slog.Default().Enabled(ctx, slog.LevelDebug) {
+			slog.Debug("mcp stdio receive",
+				"server", s.server,
+				"method", msg.Method,
+				"request_id", MessageIDString(msg.ID),
+				"call_identifier", getMessageName(&msg))
 		}
 		go handler(ctx, msg)
 	}
