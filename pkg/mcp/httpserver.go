@@ -7,13 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
-
-	"log/slog"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
@@ -190,9 +189,11 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request, aud
 		http.Error(rw, "Session ID is required", http.StatusBadRequest)
 		return
 	}
+	slog.Debug("mcp server opening event stream", "session_id", id, "path", req.URL.Path)
 
 	session, ok, err := h.sessions.Acquire(req.Context(), h.MessageHandler, id)
 	if err != nil {
+		slog.Error("mcp server failed to acquire session for event stream", "session_id", id, "error", err)
 		http.Error(rw, "Failed to load session: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -237,6 +238,7 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request, aud
 				f.Flush()
 			}
 		case <-done:
+			slog.Debug("mcp server event stream closed", "session_id", id)
 			return
 		}
 	}
@@ -273,8 +275,10 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	req = req.WithContext(withRequest(req))
+	start := time.Now()
 	// Determine audit log method and session ID based on HTTP method
 	sessionID := h.sessions.ExtractID(req)
+	slog.Debug("mcp server received http request", "http_method", req.Method, "path", req.URL.Path, "session_id", sessionID)
 	var auditMethod string
 	switch req.Method {
 	case http.MethodGet:
@@ -284,6 +288,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	case http.MethodPost:
 		// Will be set to msg.Method after decoding the message
 	default:
+		slog.Warn("mcp server rejected unsupported http method", "http_method", req.Method, "path", req.URL.Path)
 		http.Error(rw, `{"http_error": "Unsupported HTTP method"}`, http.StatusMethodNotAllowed)
 		return
 	}
@@ -305,6 +310,12 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 			auditLog.ResponseHeaders = responseHeaders
 			auditLog.ProcessingTimeMs = time.Since(auditLog.CreatedAt).Milliseconds()
 			h.auditLogCollector.CollectMCPAuditEntry(auditLog)
+			slog.Debug("mcp server completed http request",
+				"http_method", req.Method,
+				"path", req.URL.Path,
+				"session_id", sessionID,
+				"status_code", recorder.statusCode,
+				"duration_ms", time.Since(start).Milliseconds())
 		}()
 	}
 
@@ -335,6 +346,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	if req.Method != http.MethodPost {
+		slog.Warn("mcp server rejected method", "http_method", req.Method, "path", req.URL.Path)
 		http.Error(rw, `{"http_error": "Method not allowed"}`, http.StatusMethodNotAllowed)
 		return
 	}
@@ -350,16 +362,17 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	var msg Message
 	if err := json.Unmarshal(auditLog.RequestBody, &msg); err != nil {
+		slog.Warn("mcp server failed to decode request body", "path", req.URL.Path, "error", err)
 		http.Error(rw, `{"http_error": "Failed to decode message"}`, http.StatusBadRequest)
 		return
 	}
 
 	auditLog.CallType = msg.Method
 	if msg.ID != nil {
-		auditLog.RequestID = fmt.Sprintf("%v", msg.ID)
+		auditLog.RequestID = MessageIDString(msg.ID)
 	}
 
-	// Gather method-specific information
+	// Gather method-specific information.
 	switch msg.Method {
 	case "resources/read":
 		auditLog.CallIdentifier = gjson.GetBytes(msg.Params, "uri").String()
@@ -367,6 +380,11 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		auditLog.CallIdentifier = gjson.GetBytes(msg.Params, "name").String()
 	default:
 	}
+	slog.Debug("mcp server received message",
+		"method", msg.Method,
+		"request_id", MessageIDString(msg.ID),
+		"call_identifier", auditLog.CallIdentifier,
+		"session_id", sessionID)
 
 	defer func() {
 		if auditLog.ResponseStatus == 0 {
@@ -377,15 +395,24 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		auditLog.ResponseHeaders = responseHeaders
 		auditLog.ProcessingTimeMs = time.Since(auditLog.CreatedAt).Milliseconds()
 		h.auditLogCollector.CollectMCPAuditEntry(auditLog)
+		slog.Debug("mcp server completed message",
+			"method", msg.Method,
+			"request_id", MessageIDString(msg.ID),
+			"call_identifier", auditLog.CallIdentifier,
+			"session_id", auditLog.SessionID,
+			"status_code", recorder.statusCode,
+			"duration_ms", time.Since(start).Milliseconds())
 	}()
 
 	if sessionID != "" {
 		streamingSession, ok, err := h.sessions.Acquire(ctx, h.MessageHandler, sessionID)
 		if err != nil {
+			slog.Error("mcp server failed to acquire session", "session_id", sessionID, "error", err)
 			http.Error(rw, `{"http_error": "Failed to load session"}`, http.StatusInternalServerError)
 			return
 		}
 		if !ok {
+			slog.Warn("mcp server session not found", "session_id", sessionID)
 			http.Error(rw, `{"http_error": "Session not found"}`, http.StatusNotFound)
 			return
 		}
@@ -407,9 +434,11 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 			rw.WriteHeader(http.StatusAccepted)
 			return
 		} else if errors.As(err, &AuthRequiredErr{}) {
+			slog.Info("mcp server request requires auth", "method", msg.Method, "session_id", sessionID)
 			respondWithUnauthorized(rw, req)
 			return
 		} else if err != nil {
+			slog.Error("mcp server failed to handle message", "method", msg.Method, "request_id", MessageIDString(msg.ID), "session_id", sessionID, "error", err)
 			response = Message{
 				JSONRPC: msg.JSONRPC,
 				ID:      msg.ID,
@@ -433,6 +462,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	if msg.Method != "initialize" {
+		slog.Warn("mcp server rejected non-initialize message without session", "method", msg.Method, "request_id", MessageIDString(msg.ID))
 		http.Error(rw, fmt.Sprintf(`{"http_error": "Method not %q allowed"}`, msg.Method), http.StatusMethodNotAllowed)
 		return
 	}
@@ -453,13 +483,16 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	resp, err := session.Exchange(ctx, msg)
 	if err != nil {
 		if errors.As(err, &AuthRequiredErr{}) {
+			slog.Info("mcp server initialize requires auth", "request_id", MessageIDString(msg.ID))
 			respondWithUnauthorized(rw, req)
 			return
 		}
+		slog.Error("mcp server failed to initialize session", "request_id", MessageIDString(msg.ID), "error", err)
 		session.Close(true)
 		http.Error(rw, fmt.Sprintf(`{"http_error": "Failed to handle message: %v"}`, err), http.StatusInternalServerError)
 		return
 	} else if resp.Error != nil && errors.As(resp.Error, &AuthRequiredErr{}) {
+		slog.Info("mcp server initialize response requires auth", "request_id", MessageIDString(msg.ID))
 		respondWithUnauthorized(rw, req)
 		return
 	}
@@ -469,6 +502,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	auditLog.SessionID = session.ID()
 
 	if err := h.sessions.Store(ctx, session.ID(), session); err != nil {
+		slog.Error("mcp server failed to persist session", "session_id", session.ID(), "error", err)
 		session.Close(true)
 		http.Error(rw, fmt.Sprintf(`{"http_error": "Failed to store session: %v"}`, err), http.StatusInternalServerError)
 		return
@@ -496,6 +530,9 @@ func respondWithUnauthorized(rw http.ResponseWriter, req *http.Request) {
 		}
 	}
 	resourceMetadata := strings.TrimSuffix(fmt.Sprintf("%s://%s/.well-known/oauth-protected-resource/%s", scheme, host, strings.TrimPrefix(req.URL.Path, "/")), "/")
+	slog.Info("mcp server responding unauthorized",
+		"path", req.URL.Path,
+		"resource_metadata", resourceMetadata)
 
 	rw.Header().Set("WWW-Authenticate",
 		strings.TrimSuffix(

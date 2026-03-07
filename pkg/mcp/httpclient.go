@@ -8,14 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
-
-	"log/slog"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -126,6 +125,9 @@ func (s *HTTPClient) SessionID() string {
 }
 
 func (s *HTTPClient) Close(deleteSession bool) {
+	sessionID := s.SessionID()
+	slog.Info("mcp client closing", "server", s.serverName, "session_id", sessionID, "delete_session", deleteSession)
+
 	if deleteSession {
 		s.initializeLock.RLock()
 		sessionID := s.sessionID
@@ -249,6 +251,11 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID st
 		return nil
 	}
 
+	slog.Info("mcp client connecting event stream",
+		"server", s.serverName,
+		"session_id", s.SessionID(),
+		"last_event_id", lastEventID)
+
 	// Start the SSE stream with the managed context.
 	req, err := s.newRequest(s.ctx, http.MethodGet, nil)
 	if err != nil {
@@ -309,6 +316,10 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID st
 	}
 
 	s.needReconnect = false
+	slog.Info("mcp client event stream connected",
+		"server", s.serverName,
+		"session_id", s.SessionID(),
+		"status_code", resp.StatusCode)
 
 	gotResponse := make(chan error, 1)
 	go func() (err error, send bool) {
@@ -435,6 +446,7 @@ func (s *HTTPClient) Start(ctx context.Context, handler WireHandler) error {
 
 	if httpClient := s.oauthHandler.loadFromStorage(s.ctx, s.baseURL); httpClient != nil {
 		s.httpClient = httpClient
+		slog.Info("mcp client loaded oauth token from storage", "server", s.serverName)
 	}
 
 	if s.sessionID != nil {
@@ -450,6 +462,10 @@ func (s *HTTPClient) Start(ctx context.Context, handler WireHandler) error {
 }
 
 func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
+	slog.Info("mcp client initializing",
+		"server", s.serverName,
+		"request_id", MessageIDString(msg.ID))
+
 	req, err := s.newRequest(ctx, http.MethodPost, msg)
 	if err != nil {
 		return err
@@ -498,6 +514,10 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 	s.sessionID = &sessionID
 	s.initializeRequest = &msg
 	s.initializeLock.Unlock()
+	slog.Info("mcp client initialized",
+		"server", s.serverName,
+		"session_id", sessionID,
+		"status_code", resp.StatusCode)
 
 	go func() {
 		if err = s.ensureSSE(ctx, nil, ""); err != nil {
@@ -525,6 +545,11 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 
 	// Check for an authentication-required error and put the user through the OAuth process.
 	if oauthErr, ok := errors.AsType[AuthRequiredErr](err); ok {
+		slog.Info("mcp client authentication required",
+			"server", s.serverName,
+			"method", msg.Method,
+			"request_id", MessageIDString(msg.ID))
+
 		// If there is an existing token, it doesn't work, so delete it.
 		if err := s.oauthHandler.tokenStorage.DeleteTokenConfig(ctx, s.baseURL); err != nil {
 			return fmt.Errorf("failed to delete token config: %w", err)
@@ -547,6 +572,12 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 	// Check for a session-not-found error and re-initialize.
 	var sessionNotFoundErr SessionNotFoundErr
 	if errors.As(err, &sessionNotFoundErr) && sessionNotFoundErr.SessionID != "" {
+		slog.Info("mcp client session not found, reinitializing",
+			"server", s.serverName,
+			"session_id", sessionNotFoundErr.SessionID,
+			"method", msg.Method,
+			"request_id", MessageIDString(msg.ID))
+
 		s.initializeLock.Lock()
 		s.sessionID = nil
 		s.initializeLock.Unlock()
@@ -561,6 +592,12 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 	for unwrappedErr != nil {
 		// Continually unwrap the errors until we find one that starts with oauth2:
 		if strings.HasPrefix(unwrappedErr.Error(), "oauth2:") {
+			slog.Warn("mcp client oauth2 transport error, retrying unauthenticated",
+				"server", s.serverName,
+				"method", msg.Method,
+				"request_id", MessageIDString(msg.ID),
+				"error", unwrappedErr)
+
 			// If we do find an error that starts with "oauth2:" then there was an issue with the oauth2 HTTP client.
 			// Reset the HTTP client to the default and try again. Using the default client will give us the unauthenticated
 			// error that we need to continue the process.
@@ -638,6 +675,15 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 		return err
 	}
 
+	if slog.Default().Enabled(ctx, slog.LevelDebug) {
+		slog.Debug("mcp client sending request",
+			"server", s.serverName,
+			"method", msg.Method,
+			"request_id", MessageIDString(msg.ID),
+			"call_identifier", getMessageName(&msg),
+			"session_id", req.Header.Get(SessionIDHeader))
+	}
+
 	s.clientLock.RLock()
 	httpClient := s.httpClient
 	s.clientLock.RUnlock()
@@ -650,6 +696,11 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		streamingErrorMessage, _ := io.ReadAll(resp.Body)
+		slog.Warn("mcp client request unauthorized",
+			"server", s.serverName,
+			"method", msg.Method,
+			"request_id", MessageIDString(msg.ID),
+			"status_code", resp.StatusCode)
 		return AuthRequiredErr{
 			ProtectedResourceValue: resp.Header.Get("WWW-Authenticate"),
 			Err:                    fmt.Errorf("failed to send message: %s: %s", resp.Status, streamingErrorMessage),
@@ -658,6 +709,12 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 
 	if resp.StatusCode == http.StatusNotFound {
 		streamingErrorMessage, _ := io.ReadAll(resp.Body)
+		slog.Warn("mcp client request session not found",
+			"server", s.serverName,
+			"method", msg.Method,
+			"request_id", MessageIDString(msg.ID),
+			"session_id", req.Header.Get(SessionIDHeader),
+			"status_code", resp.StatusCode)
 		return SessionNotFoundErr{
 			SessionID: req.Header.Get(SessionIDHeader),
 			Err:       fmt.Errorf("failed to send message: %s: %s", resp.Status, streamingErrorMessage),
@@ -666,8 +723,19 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 		streamingErrorMessage, _ := io.ReadAll(resp.Body)
+		slog.Error("mcp client request failed",
+			"server", s.serverName,
+			"method", msg.Method,
+			"request_id", MessageIDString(msg.ID),
+			"status_code", resp.StatusCode)
 		return fmt.Errorf("failed to send message: %s: %s", resp.Status, streamingErrorMessage)
 	}
+
+	slog.Debug("mcp client request accepted",
+		"server", s.serverName,
+		"method", msg.Method,
+		"request_id", MessageIDString(msg.ID),
+		"status_code", resp.StatusCode)
 
 	if s.sse || resp.StatusCode == http.StatusAccepted {
 		return nil
@@ -804,6 +872,10 @@ func (s *HTTPClient) exchangeToken(ctx context.Context, subjectToken string) (st
 	if isJWT(subjectToken) {
 		subjectTokenType = tokenTypeJWT
 	}
+	slog.Info("mcp client token exchange requested",
+		"server", s.serverName,
+		"token_type", subjectTokenType,
+		"endpoint", s.tokenExchangeEndpoint)
 	data.Set("subject_token_type", subjectTokenType)
 	data.Set("requested_token_type", "urn:ietf:params:oauth:token-type:access_token")
 	data.Set("resource", s.baseURL)
