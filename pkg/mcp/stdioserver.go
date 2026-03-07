@@ -37,6 +37,11 @@ func (s *StdioServer) Start(ctx context.Context, in io.ReadCloser, out io.WriteC
 	s.stdio = NewStdio("proxy", nil, in, out, func() {})
 
 	if err = s.stdio.Start(ctx, func(ctx context.Context, msg Message) {
+		slog.Debug("mcp stdio server received message",
+			"method", msg.Method,
+			"request_id", MessageIDString(msg.ID),
+			"call_identifier", getMessageName(&msg))
+
 		if s.envProvider != nil {
 			env, err := s.envProvider()
 			if err != nil {
@@ -54,6 +59,10 @@ func (s *StdioServer) Start(ctx context.Context, in io.ReadCloser, out io.WriteC
 		}
 		if err := s.stdio.Send(ctx, resp); err != nil {
 			slog.Error("failed to send message in reply", "message_id", msg.ID, "error", err)
+		} else {
+			slog.Debug("mcp stdio server sent response",
+				"method", msg.Method,
+				"request_id", MessageIDString(msg.ID))
 		}
 	}); err != nil {
 		return fmt.Errorf("failed to start stdio: %w", err)

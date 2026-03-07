@@ -53,7 +53,7 @@ func Messages(_ context.Context, server string, out bool, data []byte) {
 	}
 
 	data = Base64Replace.ReplaceAll(data, Base64Replacement)
-	slog.Info("mcp message", "prefix", fmt.Sprintf(prefixFmt, server), "payload", strings.ReplaceAll(strings.TrimSpace(string(data)), "\n", " "))
+	slog.Debug("mcp message", "prefix", fmt.Sprintf(prefixFmt, server), "payload", strings.ReplaceAll(strings.TrimSpace(string(data)), "\n", " "))
 }
 
 func StderrMessages(_ context.Context, server, line string) {

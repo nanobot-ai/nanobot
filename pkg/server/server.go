@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/url"
 	"slices"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/expr"
@@ -53,6 +55,26 @@ func NewServer(runtime *runtime.Runtime, config types.ConfigFactory, manager *se
 }
 
 type handler func(ctx context.Context, msg mcp.Message) (bool, error)
+
+func messageCallIdentifier(msg mcp.Message) string {
+	var name string
+	switch msg.Method {
+	case "resources/read", "resources/subscribe", "resources/unsubscribe":
+		_ = json.Unmarshal(msg.Params, &struct {
+			URI *string `json:"uri,omitempty"`
+		}{
+			URI: &name,
+		})
+	case "tools/call", "prompts/get":
+		_ = json.Unmarshal(msg.Params, &struct {
+			Name *string `json:"name,omitempty"`
+		}{
+			Name: &name,
+		})
+	default:
+	}
+	return name
+}
 
 func handle[T any](method string, handler func(ctx context.Context, req mcp.Message, payload T) error) handler {
 	return func(ctx context.Context, msg mcp.Message) (bool, error) {
@@ -196,6 +218,8 @@ func (s *Server) handleListPrompts(ctx context.Context, msg mcp.Message, _ mcp.L
 }
 
 func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mcp.CallToolRequest) error {
+	start := time.Now()
+
 	toolMappings, err := s.data.ToolMapping(ctx)
 	if err != nil {
 		return err
@@ -214,6 +238,12 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 		}
 	}
 
+	slog.Debug("mcp server dispatching tool call",
+		"mcp_tool_name", payload.Name,
+		"target_server", toolMapping.MCPServer,
+		"target_tool_name", toolMapping.TargetName,
+		"request_id", mcp.MessageIDString(msg.ID))
+
 	result, err := s.runtime.Call(ctx, toolMapping.MCPServer, toolMapping.TargetName, payload.Arguments, tools.CallOptions{
 		ProgressToken: msg.ProgressToken(),
 		LogData: map[string]any{
@@ -224,6 +254,13 @@ func (s *Server) handleCallTool(ctx context.Context, msg mcp.Message, payload mc
 	if err != nil {
 		return err
 	}
+	slog.Debug("mcp server completed tool call",
+		"mcp_tool_name", payload.Name,
+		"target_server", toolMapping.MCPServer,
+		"target_tool_name", toolMapping.TargetName,
+		"request_id", mcp.MessageIDString(msg.ID),
+		"is_error", result.IsError,
+		"duration_ms", time.Since(start).Milliseconds())
 
 	mcpResult := mcp.CallToolResult{
 		StructuredContent: result.StructuredContent,
@@ -461,12 +498,44 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 }
 
 func (s *Server) onMessage(ctx context.Context, msg mcp.Message) {
+	start := time.Now()
+	currentSession := mcp.SessionFromContext(ctx)
+	sessionID := ""
+	if currentSession != nil {
+		sessionID = currentSession.ID()
+	}
+	callIdentifier := messageCallIdentifier(msg)
+	var (
+		outcome = "handled"
+		logErr  error
+	)
+	slog.Debug("mcp server handling message",
+		"method", msg.Method,
+		"request_id", mcp.MessageIDString(msg.ID),
+		"call_identifier", callIdentifier,
+		"session_id", sessionID)
+	defer func() {
+		durationMS := time.Since(start).Milliseconds()
+		slog.Debug("mcp server message handled",
+			"outcome", outcome,
+			"method", msg.Method,
+			"request_id", mcp.MessageIDString(msg.ID),
+			"call_identifier", callIdentifier,
+			"session_id", sessionID,
+			"duration_ms", durationMS,
+			"error", logErr)
+	}()
+
 	if err := s.data.Sync(ctx, s.config); err != nil {
+		outcome = "sync_failed"
+		logErr = err
 		msg.SendError(ctx, err)
 		return
 	}
 
-	mcp.SessionFromContext(ctx).Set(session.ManagerSessionKey, s.manager)
+	if currentSession != nil {
+		currentSession.Set(session.ManagerSessionKey, s.manager)
+	}
 
 	for _, h := range s.handlers {
 		ok, err := h(ctx, msg)
@@ -474,15 +543,21 @@ func (s *Server) onMessage(ctx context.Context, msg mcp.Message) {
 			// Check if the error was due to client-initiated cancellation
 			if cancelErr, ok := errors.AsType[*mcp.RequestCancelledError](context.Cause(mcp.UserContext(ctx))); ok {
 				// Send a proper cancellation error response
+				outcome = "cancelled"
+				logErr = cancelErr
 				msg.SendError(ctx, mcp.ErrRPCRequestCancelled.WithMessage("%s", cancelErr.Reason))
 			} else {
+				outcome = "handler_error"
+				logErr = err
 				msg.SendError(ctx, err)
 			}
 			return
 		} else if ok {
+			outcome = "handled"
 			return
 		}
 	}
 
+	outcome = "method_not_found"
 	msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage("%s", msg.Method))
 }

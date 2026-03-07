@@ -65,6 +65,12 @@ func (s *Stdio) Send(ctx context.Context, req Message) error {
 		return fmt.Errorf("stdin is closed")
 	}
 
+	slog.Debug("mcp stdio send",
+		"server", s.server,
+		"method", req.Method,
+		"request_id", MessageIDString(req.ID),
+		"call_identifier", getMessageName(&req))
+
 	log.Messages(ctx, s.server, true, data)
 	_, err = s.stdin.Write(append(data, '\n'))
 	return err
@@ -110,6 +116,11 @@ func (s *Stdio) start(ctx context.Context, handler WireHandler) error {
 			slog.Error("failed to unmarshal message", "error", err)
 			continue
 		}
+		slog.Debug("mcp stdio receive",
+			"server", s.server,
+			"method", msg.Method,
+			"request_id", MessageIDString(msg.ID),
+			"call_identifier", getMessageName(&msg))
 		go handler(ctx, msg)
 	}
 	return buf.Err()
