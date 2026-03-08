@@ -86,9 +86,6 @@ func TestEnsureAnthropicToolSearchTool(t *testing.T) {
 		if got := tool.Attributes["type"]; got != anthropicToolSearchToolType {
 			t.Fatalf("tool search type = %v, want %q", got, anthropicToolSearchToolType)
 		}
-		if got := tool.Attributes["tool_search_type"]; got != "bm25_search" {
-			t.Fatalf("tool search mode = %v, want %q", got, "bm25_search")
-		}
 	}
 
 	if found != 1 {
@@ -112,6 +109,11 @@ func TestAddToolsDefersExternalToolsForAnthropicSearch(t *testing.T) {
 					Name:        "search_code",
 					Description: "Search code in a repository.",
 					InputSchema: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}}}`),
+					Meta: map[string]any{
+						"ui": map[string]any{
+							"visibility": []string{"app"},
+						},
+					},
 				},
 			},
 		}},

@@ -59,6 +59,9 @@ func (s *Server) getObotConfiguredMCPServers(ctx context.Context) (DynamicMCPSer
 	}
 
 	if cachedServers, cachedDescriptions, ok := getCachedObotConfiguredMCPServers(session); ok {
+		slog.Info("using cached Obot configured MCP servers",
+			"count", len(cachedServers),
+			"server_names", dynamicMCPServerNames(cachedServers))
 		return cachedServers, cachedDescriptions, nil
 	}
 
@@ -66,6 +69,11 @@ func (s *Server) getObotConfiguredMCPServers(ctx context.Context) (DynamicMCPSer
 	apiBaseURL := obotAPIBaseURL(envMap)
 	userToken := obotUserToken(envMap)
 	if apiBaseURL == "" || userToken == "" {
+		if apiBaseURL != "" || userToken != "" {
+			slog.Info("Obot configured MCP server import disabled",
+				"has_api_base_url", apiBaseURL != "",
+				"has_user_token", userToken != "")
+		}
 		return nil, nil, nil
 	}
 
@@ -74,6 +82,11 @@ func (s *Server) getObotConfiguredMCPServers(ctx context.Context) (DynamicMCPSer
 	if err != nil {
 		return nil, nil, err
 	}
+
+	slog.Info("loaded Obot configured MCP servers",
+		"api_base_url", apiBaseURL,
+		"count", len(servers),
+		"server_names", dynamicMCPServerNames(servers))
 
 	session.Set(obotConfiguredMCPServersSessionKey, obotConfiguredMCPServersCache{
 		ExpiresAt:          time.Now().Add(obotConfiguredMCPServersCacheTTL),
@@ -154,8 +167,20 @@ func fetchObotConfiguredMCPServers(ctx context.Context, apiBaseURL, userToken, m
 	}
 
 	if len(result) == 0 {
+		slog.Info("fetched Obot MCP server inventory",
+			"configured_count", len(configuredServers.Items),
+			"instance_count", len(serverInstances.Items),
+			"catalog_count", len(allServers.Items),
+			"imported_count", 0)
 		return nil, nil, nil
 	}
+
+	slog.Info("fetched Obot MCP server inventory",
+		"configured_count", len(configuredServers.Items),
+		"instance_count", len(serverInstances.Items),
+		"catalog_count", len(allServers.Items),
+		"imported_count", len(result),
+		"imported_server_names", dynamicMCPServerNames(result))
 
 	return result, descriptions, nil
 }
@@ -327,4 +352,17 @@ func logObotConfiguredServerError(err error) {
 		return
 	}
 	slog.Debug("failed to load configured MCP servers from Obot", "error", err)
+}
+
+func dynamicMCPServerNames(servers DynamicMCPServers) []string {
+	if len(servers) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(servers))
+	for name := range servers {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
 }

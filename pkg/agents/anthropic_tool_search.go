@@ -1,20 +1,48 @@
 package agents
 
 import (
+	"context"
 	"maps"
 	"strings"
 
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
 const (
-	anthropicToolSearchToolName = "anthropic_tool_search"
-	anthropicToolSearchToolType = "tool_search_20251119"
+	anthropicToolSearchToolName = "tool_search_tool_bm25"
+	anthropicToolSearchToolType = "tool_search_tool_bm25_20251119"
 )
 
 func supportsAnthropicToolSearch(model string) bool {
 	model = strings.ToLower(strings.TrimSpace(model))
 	return strings.HasPrefix(model, "claude-opus-4") || strings.HasPrefix(model, "claude-sonnet-4")
+}
+
+func resolveAnthropicToolSearchModel(ctx context.Context, model string) string {
+	model = strings.TrimSpace(model)
+	if model != "" && model != "default" && model != "mini" {
+		return model
+	}
+
+	session := mcp.SessionFromContext(ctx)
+	if session == nil {
+		return model
+	}
+
+	envMap := session.GetEnvMap()
+	switch model {
+	case "mini":
+		if value := strings.TrimSpace(envMap["NANOBOT_DEFAULT_MINI_MODEL"]); value != "" {
+			return value
+		}
+	case "", "default":
+		if value := strings.TrimSpace(envMap["NANOBOT_DEFAULT_MODEL"]); value != "" {
+			return value
+		}
+	}
+
+	return model
 }
 
 func shouldDeferAnthropicTool(mapping types.TargetMapping[types.TargetTool]) bool {
@@ -52,8 +80,7 @@ func ensureAnthropicToolSearchTool(req *types.CompletionRequest) {
 	req.Tools = append(req.Tools, types.ToolUseDefinition{
 		Name: anthropicToolSearchToolName,
 		Attributes: map[string]any{
-			"type":             anthropicToolSearchToolType,
-			"tool_search_type": "bm25_search",
+			"type": anthropicToolSearchToolType,
 		},
 	})
 }

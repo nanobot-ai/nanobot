@@ -90,8 +90,7 @@ func TestToRequestSupportsToolSearchAndDeferredTools(t *testing.T) {
 			{
 				Name: "anthropic_tool_search",
 				Attributes: map[string]any{
-					"type":             "tool_search_20251119",
-					"tool_search_type": "bm25_search",
+					"type": "tool_search_tool_bm25_20251119",
 				},
 			},
 		},
@@ -111,11 +110,8 @@ func TestToRequestSupportsToolSearchAndDeferredTools(t *testing.T) {
 	if !strings.Contains(payload, `"defer_loading":true`) {
 		t.Fatalf("expected defer_loading flag in payload: %s", payload)
 	}
-	if !strings.Contains(payload, `"type":"tool_search_20251119"`) {
+	if !strings.Contains(payload, `"type":"tool_search_tool_bm25_20251119"`) {
 		t.Fatalf("expected tool search tool type in payload: %s", payload)
-	}
-	if !strings.Contains(payload, `"tool_search_type":"bm25_search"`) {
-		t.Fatalf("expected BM25 tool search configuration in payload: %s", payload)
 	}
 }
 

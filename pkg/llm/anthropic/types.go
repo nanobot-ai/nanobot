@@ -128,9 +128,11 @@ func (c CustomTool) MarshalJSON() ([]byte, error) {
 		if err := json.Unmarshal(data, &base); err != nil {
 			return nil, err
 		}
+		isCustomTool := c.Type == "" || c.Type == "custom"
 		var toRemove []string
-		if c.Attributes["type"] != "" && c.Attributes["type"] != "custom" {
+		if toolType, ok := c.Attributes["type"].(string); ok && toolType != "" && toolType != "custom" {
 			toRemove = append(toRemove, "description", "input_schema")
+			isCustomTool = false
 		}
 		for k, v := range c.Attributes {
 			if l, ok := v.([]any); k == "remove" && ok {
@@ -147,6 +149,25 @@ func (c CustomTool) MarshalJSON() ([]byte, error) {
 		}
 		for _, k := range toRemove {
 			delete(base, k)
+		}
+		if isCustomTool {
+			if _, ok := base["input_schema"]; !ok {
+				if len(c.InputSchema) > 0 {
+					var schema any
+					if err := json.Unmarshal(c.InputSchema, &schema); err != nil {
+						return nil, err
+					}
+					base["input_schema"] = schema
+				} else {
+					base["input_schema"] = map[string]any{
+						"type":       "object",
+						"properties": map[string]any{},
+					}
+				}
+			}
+			if c.Description != "" {
+				base["description"] = c.Description
+			}
 		}
 		return json.Marshal(base)
 	}
