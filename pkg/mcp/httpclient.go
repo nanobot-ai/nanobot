@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/log"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -34,6 +36,75 @@ func isJWT(token string) bool {
 	parser := jwt.NewParser()
 	_, _, err := parser.ParseUnverified(token, jwt.MapClaims{})
 	return err == nil
+}
+
+type cachedTokenExchange struct {
+	mu      sync.Mutex
+	entries map[string]cachedTokenExchangeEntry
+	group   singleflight.Group
+}
+
+type cachedTokenExchangeEntry struct {
+	accessToken string
+	expiresAt   time.Time
+}
+
+var globalTokenExchangeCache = &cachedTokenExchange{
+	entries: map[string]cachedTokenExchangeEntry{},
+}
+
+func (c *cachedTokenExchange) get(key string, now time.Time) (string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	entry, ok := c.entries[key]
+	if !ok {
+		return "", false
+	}
+	if !entry.expiresAt.IsZero() && !now.Before(entry.expiresAt) {
+		delete(c.entries, key)
+		return "", false
+	}
+	return entry.accessToken, true
+}
+
+func (c *cachedTokenExchange) set(key, accessToken string, expiresAt time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries[key] = cachedTokenExchangeEntry{
+		accessToken: accessToken,
+		expiresAt:   expiresAt,
+	}
+}
+
+func tokenExchangeCacheKey(endpoint, resource, subjectTokenType, subjectToken, clientID, clientSecret string) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		endpoint,
+		resource,
+		subjectTokenType,
+		subjectToken,
+		clientID,
+		clientSecret,
+	}, "\x00")))
+	return fmt.Sprintf("%x", sum[:])
+}
+
+func tokenExchangeExpiresAt(now time.Time, expiresIn int) (time.Time, bool) {
+	if expiresIn <= 0 {
+		return time.Time{}, false
+	}
+
+	ttl := time.Duration(expiresIn) * time.Second
+	if ttl <= time.Minute {
+		return time.Time{}, false
+	}
+
+	expiresAt := now.Add(ttl - time.Minute)
+	if !expiresAt.After(now) {
+		return time.Time{}, false
+	}
+
+	return expiresAt, true
 }
 
 type HTTPClient struct {
@@ -862,67 +933,87 @@ func (s *HTTPClient) exchangeToken(ctx context.Context, subjectToken string) (st
 		return "", nil
 	}
 
-	// Build the token exchange request according to RFC 8693
-	data := url.Values{}
-	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
-	data.Set("subject_token", subjectToken)
-
-	// Detect token type based on format
 	subjectTokenType := tokenTypeAPIKey
 	if isJWT(subjectToken) {
 		subjectTokenType = tokenTypeJWT
 	}
-	slog.Info("mcp client token exchange requested",
-		"server", s.serverName,
-		"token_type", subjectTokenType,
-		"endpoint", s.tokenExchangeEndpoint)
-	data.Set("subject_token_type", subjectTokenType)
-	data.Set("requested_token_type", "urn:ietf:params:oauth:token-type:access_token")
-	data.Set("resource", s.baseURL)
 
-	// Create the HTTP request
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.tokenExchangeEndpoint, strings.NewReader(data.Encode()))
+	cacheKey := tokenExchangeCacheKey(
+		s.tokenExchangeEndpoint,
+		s.baseURL,
+		subjectTokenType,
+		subjectToken,
+		s.tokenExchangeClientID,
+		s.tokenExchangeClientSecret,
+	)
+	if accessToken, ok := globalTokenExchangeCache.get(cacheKey, time.Now()); ok {
+		return accessToken, nil
+	}
+
+	result, err, _ := globalTokenExchangeCache.group.Do(cacheKey, func() (any, error) {
+		if accessToken, ok := globalTokenExchangeCache.get(cacheKey, time.Now()); ok {
+			return accessToken, nil
+		}
+
+		data := url.Values{}
+		data.Set("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
+		data.Set("subject_token", subjectToken)
+		data.Set("subject_token_type", subjectTokenType)
+		data.Set("requested_token_type", "urn:ietf:params:oauth:token-type:access_token")
+		data.Set("resource", s.baseURL)
+
+		slog.Info("mcp client token exchange requested",
+			"server", s.serverName,
+			"token_type", subjectTokenType,
+			"endpoint", s.tokenExchangeEndpoint)
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.tokenExchangeEndpoint, strings.NewReader(data.Encode()))
+		if err != nil {
+			return "", fmt.Errorf("failed to create token exchange request: %w", err)
+		}
+
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if s.tokenExchangeClientID != "" || s.tokenExchangeClientSecret != "" {
+			req.SetBasicAuth(s.tokenExchangeClientID, s.tokenExchangeClientSecret)
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("failed to call token exchange endpoint: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			slog.Debug("token exchange endpoint returned non-200 status", "endpoint", s.tokenExchangeEndpoint, "status_code", resp.StatusCode)
+			return "", nil
+		}
+
+		var tokenResp struct {
+			AccessToken     string `json:"access_token"`
+			IssuedTokenType string `json:"issued_token_type"`
+			TokenType       string `json:"token_type"`
+			ExpiresIn       int    `json:"expires_in"`
+			Scope           string `json:"scope"`
+			RefreshToken    string `json:"refresh_token"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+			return "", fmt.Errorf("failed to parse token exchange response: %w", err)
+		}
+
+		if tokenResp.AccessToken == "" {
+			return "", fmt.Errorf("token exchange response missing access_token")
+		}
+
+		if expiresAt, ok := tokenExchangeExpiresAt(time.Now(), tokenResp.ExpiresIn); ok {
+			globalTokenExchangeCache.set(cacheKey, tokenResp.AccessToken, expiresAt)
+		}
+
+		return tokenResp.AccessToken, nil
+	})
 	if err != nil {
-		return "", fmt.Errorf("failed to create token exchange request: %w", err)
+		return "", err
 	}
 
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	// Add HTTP Basic authentication if client credentials are configured
-	if s.tokenExchangeClientID != "" || s.tokenExchangeClientSecret != "" {
-		req.SetBasicAuth(s.tokenExchangeClientID, s.tokenExchangeClientSecret)
-	}
-
-	// Make the request
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to call token exchange endpoint: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// If the response status code is not OK, then continue without a token.
-	// Maybe OAuth will work.
-	if resp.StatusCode != http.StatusOK {
-		slog.Debug("token exchange endpoint returned non-200 status", "endpoint", s.tokenExchangeEndpoint, "status_code", resp.StatusCode)
-		return "", nil
-	}
-
-	// Parse successful response
-	var tokenResp struct {
-		AccessToken     string `json:"access_token"`
-		IssuedTokenType string `json:"issued_token_type"`
-		TokenType       string `json:"token_type"`
-		ExpiresIn       int    `json:"expires_in"`
-		Scope           string `json:"scope"`
-		RefreshToken    string `json:"refresh_token"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", fmt.Errorf("failed to parse token exchange response: %w", err)
-	}
-
-	if tokenResp.AccessToken == "" {
-		return "", fmt.Errorf("token exchange response missing access_token")
-	}
-
-	return tokenResp.AccessToken, nil
+	accessToken, _ := result.(string)
+	return accessToken, nil
 }
