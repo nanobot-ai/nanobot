@@ -25,6 +25,9 @@ type Client struct {
 	Config
 }
 
+const advancedToolUseBeta = "advanced-tool-use-2025-11-20"
+const toolSearchServerToolType = "tool_search_20251119"
+
 type Config struct {
 	APIKey  string
 	BaseURL string
@@ -84,6 +87,9 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 	}
 	for key, value := range c.Headers {
 		httpReq.Header.Set(key, value)
+	}
+	if requiresAdvancedToolUseBeta(req) {
+		appendAnthropicBetaHeader(httpReq.Header, advancedToolUseBeta)
 	}
 
 	httpResp, err := http.DefaultClient.Do(httpReq)
@@ -241,4 +247,31 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 	}
 
 	return &resp, nil
+}
+
+func requiresAdvancedToolUseBeta(req Request) bool {
+	for _, tool := range req.Tools {
+		if tool.Type == toolSearchServerToolType {
+			return true
+		}
+		if value, ok := tool.Attributes["defer_loading"].(bool); ok && value {
+			return true
+		}
+	}
+	return false
+}
+
+func appendAnthropicBetaHeader(header http.Header, beta string) {
+	existing := header.Get("anthropic-beta")
+	if existing == "" {
+		header.Set("anthropic-beta", beta)
+		return
+	}
+
+	for _, value := range strings.Split(existing, ",") {
+		if strings.TrimSpace(value) == beta {
+			return
+		}
+	}
+	header.Set("anthropic-beta", existing+","+beta)
 }

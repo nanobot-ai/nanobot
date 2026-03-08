@@ -37,7 +37,8 @@ type Usage struct {
 }
 
 type ServerToolUse struct {
-	WebSearchRequests int `json:"web_search_requests"`
+	ToolSearchRequests int `json:"tool_search_requests,omitempty"`
+	WebSearchRequests  int `json:"web_search_requests,omitempty"`
 }
 
 type ToolChoice struct {
@@ -67,9 +68,9 @@ type Content struct {
 	Name  string         `json:"name,omitempty"`
 
 	// Type = tool_result
-	ToolUseID string    `json:"tool_use_id,omitempty"`
-	Content   []Content `json:"content,omitempty"`
-	IsError   bool      `json:"is_error,omitempty"`
+	ToolUseID  string          `json:"tool_use_id,omitempty"`
+	RawContent json.RawMessage `json:"content,omitempty"`
+	IsError    bool            `json:"is_error,omitempty"`
 }
 
 type ContentSource struct {

@@ -100,6 +100,11 @@ Do NOT put workflow files in the session directory.
 
 		// Configure MCP search server if environment variables are set
 		if agent.Name != "nanobot.summary" && session != nil {
+			existingServers := map[string]struct{}{
+				"nanobot.system":         {},
+				"nanobot.workflows":      {},
+				"nanobot.workflow-tools": {},
+			}
 			envMap := session.GetEnvMap()
 			if searchURL := envMap["MCP_SERVER_SEARCH_URL"]; searchURL != "" {
 				mcpServer := types.AgentConfigHookMCPServer{
@@ -114,6 +119,7 @@ Do NOT put workflow files in the session directory.
 				}
 
 				params.MCPServers["mcp-server-search"] = mcpServer
+				existingServers["mcp-server-search"] = struct{}{}
 
 				// Also add to the agent's MCP server list so tools get fetched
 				agent.Tools = append(agent.Tools, "mcp-server-search")
@@ -121,14 +127,15 @@ Do NOT put workflow files in the session directory.
 
 			var dynamicServers DynamicMCPServers
 			if session.Get(DynamicMCPServersSessionKey, &dynamicServers) {
-				for name, server := range dynamicServers {
-					// Skip dynamic servers that would overwrite existing MCP server definitions
-					if _, exists := params.MCPServers[name]; exists {
-						continue
-					}
-					params.MCPServers[name] = server
-					agent.MCPServers = append(agent.MCPServers, name)
-				}
+				_ = mergeSessionMCPServers(agent, params.MCPServers, dynamicServers, nil, existingServers)
+			}
+
+			importedServers, descriptions, err := s.getObotConfiguredMCPServers(ctx)
+			if err != nil {
+				logObotConfiguredServerError(err)
+			} else {
+				addedDescriptions := mergeSessionMCPServers(agent, params.MCPServers, importedServers, descriptions, existingServers)
+				appendConnectedMCPServerInstructions(agent, addedDescriptions)
 			}
 		}
 	}

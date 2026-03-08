@@ -40,6 +40,8 @@ func New(completer types.Completer, registry *tools.Service) *Agents {
 
 func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, agent *types.Agent, opts []types.CompletionOptions) (types.ToolMappings, error) {
 	opt := complete.Complete(opts...)
+	anthropicToolSearchEnabled := supportsAnthropicToolSearch(req.Model)
+	deferredToolsAdded := false
 
 	if opt.ToolChoice != nil {
 		switch opt.ToolChoice.Mode {
@@ -77,15 +79,26 @@ func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, age
 		if !types.IsModelTool(tool.Tool) {
 			continue
 		}
+		attributes := maps.Clone(agent.ToolExtensions[toolMapping.Target.Name])
+		if anthropicToolSearchEnabled && shouldDeferAnthropicTool(toolMapping) {
+			attributes = withAnthropicDeferredLoading(attributes)
+			deferredToolsAdded = true
+		}
 		req.Tools = append(req.Tools, types.ToolUseDefinition{
 			Name:        key,
 			Parameters:  schema.ValidateAndFixToolSchema(tool.InputSchema),
 			Description: tool.Description,
-			Attributes:  agent.ToolExtensions[toolMapping.Target.Name],
+			Attributes:  attributes,
 		})
 	}
 
 	for _, tool := range opt.Tools {
+		var attributes map[string]any
+		if anthropicToolSearchEnabled && types.IsModelTool(tool) {
+			attributes = withAnthropicDeferredLoading(nil)
+			deferredToolsAdded = true
+		}
+
 		toolMappings[tool.Name] = types.TargetMapping[types.TargetTool]{
 			Target: types.TargetTool{
 				Tool:     tool,
@@ -96,7 +109,12 @@ func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, age
 			Name:        tool.Name,
 			Parameters:  schema.ValidateAndFixToolSchema(tool.InputSchema),
 			Description: tool.Description,
+			Attributes:  attributes,
 		})
+	}
+
+	if anthropicToolSearchEnabled && deferredToolsAdded {
+		ensureAnthropicToolSearchTool(req)
 	}
 
 	return toolMappings, nil
