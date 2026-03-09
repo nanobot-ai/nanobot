@@ -26,6 +26,17 @@ func WithSession(ctx context.Context, s *Session) context.Context {
 	return context.WithValue(ctx, sessionKey, s)
 }
 
+// DetachContext preserves request-scoped values such as trace, session, user,
+// and request ID while removing cancellation. Use it for async or follow-up
+// work that must outlive the inbound request without falling back to the
+// session root context and losing the active trace.
+func DetachContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return context.WithoutCancel(ctx)
+}
+
 type tokenKey struct{}
 
 func WithToken(ctx context.Context, token string) context.Context {

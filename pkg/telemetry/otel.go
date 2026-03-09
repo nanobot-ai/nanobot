@@ -28,10 +28,17 @@ func (o *Otel) Shutdown(ctx context.Context) error {
 }
 
 func New(ctx context.Context) (o *Otel, err error) {
-	resource, err := resource.New(ctx, resource.WithAttributes(
-		attribute.String("service.name", "nanobot"),
+	resourceAttrs := []attribute.KeyValue{
 		attribute.String("service.version", version.Get().String()),
-	))
+	}
+	if strings.TrimSpace(os.Getenv("OTEL_SERVICE_NAME")) == "" {
+		resourceAttrs = append(resourceAttrs, attribute.String("service.name", "nanobot"))
+	}
+
+	resource, err := resource.New(ctx,
+		resource.WithFromEnv(),
+		resource.WithAttributes(resourceAttrs...),
+	)
 	if err != nil {
 		return nil, err
 	}

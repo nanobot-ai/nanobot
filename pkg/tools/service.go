@@ -348,7 +348,7 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 	}
 
 	if serverFactory != nil {
-		serverSession, err := mcp.NewExistingServerSession(session.Context(), mcp.SessionState{}, serverFactory(name))
+		serverSession, err := mcp.NewExistingServerSession(mcp.DetachContext(ctx), mcp.SessionState{}, serverFactory(name))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create meta server session: %w", err)
 		}
@@ -558,7 +558,7 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 		}
 	}
 
-	sessionCtx := session.Context()
+	sessionCtx := mcp.DetachContext(ctx)
 	token := mcp.TokenFromContext(ctx)
 	if token != "" {
 		sessionCtx = mcp.WithToken(sessionCtx, token)
