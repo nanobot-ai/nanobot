@@ -19,6 +19,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/log"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 const (
@@ -92,7 +94,7 @@ func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, ses
 	}
 
 	return &HTTPClient{
-		httpClient:        http.DefaultClient,
+		httpClient:        instrumentHTTPClient(http.DefaultClient),
 		oauthHandler:      newOAuth(opts.CallbackHandler, opts.ClientCredLookup, opts.TokenStorage, opts.OAuthClientName, opts.OAuthRedirectURL),
 		baseURL:           config.BaseURL,
 		messageURL:        config.BaseURL,
@@ -112,6 +114,19 @@ func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, ses
 
 func (s *HTTPClient) SetOAuthCallbackHandler(handler CallbackHandler) {
 	s.oauthHandler.callbackHandler = handler
+}
+
+func instrumentHTTPClient(base *http.Client) *http.Client {
+	if base == nil {
+		base = http.DefaultClient
+	}
+	cloned := *base
+	transport := cloned.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	cloned.Transport = otelhttp.NewTransport(transport)
+	return &cloned
 }
 
 func (s *HTTPClient) SessionID() string {
@@ -190,6 +205,11 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 		u = s.baseURL
 	}
 
+	ctx, err := ensureOutboundTraceContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	req, err := http.NewRequestWithContext(ctx, method, u, body)
 	if err != nil {
 		return nil, err
@@ -229,6 +249,8 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+
+	mcpTracePropagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
 
 	return req, nil
 }
