@@ -467,7 +467,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID st
 			}
 			if !ok {
 				if err := messages.err(); err != nil {
-					if errors.Is(err, context.Canceled) {
+					if errors.Is(err, context.Canceled) || s.ctx.Err() != nil {
 						slog.Debug("context canceled reading SSE message", "error", err)
 					} else {
 						slog.Error("failed to read SSE message", "error", err)
