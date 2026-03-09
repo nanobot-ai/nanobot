@@ -1,0 +1,345 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  GO_VERSION: "1.25"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: oauth_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Set Go toolchain
+        run: go env -w GOTOOLCHAIN=go1.25.0+auto
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.4.0
+          args: --timeout=5m --tests=false
+
+      - name: Run tests
+        env:
+          TEST_DATABASE_DSN: "postgres://test:test@localhost:5432/oauth_test?sslmode=disable"
+        run: |
+          go test -v -short ./...
+          go test -v -race ./...
+
+  build-linux:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Linux builds
+          - goos: linux
+            goarch: amd64
+            name: linux-amd64
+          - goos: linux
+            goarch: arm64
+            name: linux-arm64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Get version
+        id: version
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+        run: |
+          # Install cross-compilation tools for CGO (needed for SQLite)
+          if [ "${{ matrix.goos }}" = "linux" ]; then
+            if [ "${{ matrix.goarch }}" = "arm64" ]; then
+              sudo apt-get update
+              sudo apt-get install -y gcc-aarch64-linux-gnu
+              export CC=aarch64-linux-gnu-gcc
+            fi
+          elif [ "${{ matrix.goos }}" = "darwin" ]; then
+            # For macOS, we'll use a different approach with osxcross or build on macOS runners
+            echo "Building for macOS..."
+          fi
+
+          mkdir -p dist
+          binary_name="mcp-oauth-proxy-${{ matrix.name }}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            binary_name="${binary_name}.exe"
+          fi
+
+          go build -o "dist/${binary_name}" \
+            -ldflags="-X main.version=${{ steps.version.outputs.VERSION }} -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -s -w" \
+            .
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.name }}
+          path: dist/
+          retention-days: 1
+
+  build-macos:
+    needs: test
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - goarch: amd64
+            name: darwin-amd64
+          - goarch: arm64
+            name: darwin-arm64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Get version
+        id: version
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build binary
+        env:
+          GOOS: darwin
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+        run: |
+          mkdir -p dist
+          binary_name="mcp-oauth-proxy-${{ matrix.name }}"
+
+          go build -o "dist/${binary_name}" \
+            -ldflags="-X main.version=${{ steps.version.outputs.VERSION }} -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -s -w" \
+            .
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.name }}
+          path: dist/
+          retention-days: 1
+
+  create-universal-macos:
+    needs: build-macos
+    runs-on: macos-latest
+    steps:
+      - name: Get version
+        id: version
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Download macOS binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: binary-darwin-*
+          path: ./binaries/
+
+      - name: Create universal binary
+        run: |
+          mkdir -p dist
+
+          # Find the actual binary files
+          amd64_binary=$(find ./binaries -name "*darwin-amd64*" -type f | head -1)
+          arm64_binary=$(find ./binaries -name "*darwin-arm64*" -type f | head -1)
+
+          echo "AMD64 binary: $amd64_binary"
+          echo "ARM64 binary: $arm64_binary"
+
+          # Create universal binary
+          lipo -create \
+            "$amd64_binary" \
+            "$arm64_binary" \
+            -output "dist/mcp-oauth-proxy-darwin-universal"
+
+      - name: Upload universal binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-darwin-universal
+          path: dist/
+          retention-days: 1
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/mcp-oauth-proxy
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=${{ steps.version.outputs.VERSION }}
+            BUILD_TIME=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+
+  release:
+    needs: [build-linux, build-macos, create-universal-macos, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          path: ./artifacts/
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          find ./artifacts -type f -name "mcp-oauth-proxy-*" -exec cp {} release/ \;
+
+          # Create checksums
+          cd release
+          sha256sum * > checksums.txt
+
+          # List files for verification
+          echo "Release files:"
+          ls -la
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          cat << 'EOF' > CHANGELOG.md
+          ## What's Changed in ${{ steps.version.outputs.VERSION }}
+
+          ### 🚀 Features
+          - Cross-platform release with native binaries for Linux and macOS
+          - Multi-architecture Docker images for Linux (AMD64 and ARM64)
+
+          ### 📦 Binary Downloads
+          - **Linux AMD64**: `mcp-oauth-proxy-${{ steps.version.outputs.VERSION }}-linux-amd64`
+          - **Linux ARM64**: `mcp-oauth-proxy-${{ steps.version.outputs.VERSION }}-linux-arm64`
+          - **macOS Universal**: `mcp-oauth-proxy-${{ steps.version.outputs.VERSION }}-darwin-universal` (Intel + Apple Silicon)
+          - **macOS AMD64**: `mcp-oauth-proxy-${{ steps.version.outputs.VERSION }}-darwin-amd64` (Intel)
+          - **macOS ARM64**: `mcp-oauth-proxy-${{ steps.version.outputs.VERSION }}-darwin-arm64` (Apple Silicon)
+
+          ### 🐳 Docker Images
+          - **Tagged Release**: `ghcr.io/${{ github.repository_owner }}/mcp-oauth-proxy:${{ steps.version.outputs.VERSION }}`
+          - **Latest**: `ghcr.io/${{ github.repository_owner }}/mcp-oauth-proxy:latest`
+          - **Platforms**: linux/amd64, linux/arm64
+
+          ### 🔍 Verification
+          All binaries can be verified using the included `checksums.txt` file.
+
+          ### 🛠️ Installation
+
+          **Binary Installation:**
+          1. Download the appropriate binary for your platform
+          2. Make it executable: `chmod +x mcp-oauth-proxy-*`
+          3. Move to your PATH: `mv mcp-oauth-proxy-* /usr/local/bin/mcp-oauth-proxy`
+
+          **Docker Installation:**
+          ```bash
+          docker pull ghcr.io/${{ github.repository_owner }}/mcp-oauth-proxy:${{ steps.version.outputs.VERSION }}
+          # or
+          docker pull ghcr.io/${{ github.repository_owner }}/mcp-oauth-proxy:latest
+          ```
+
+          **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ steps.version.outputs.VERSION }}
+          EOF
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.version.outputs.VERSION }}
+          name: Release ${{ steps.version.outputs.VERSION }}
+          bodyFile: CHANGELOG.md
+          artifacts: "release/*"
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          generateReleaseNotes: true
+          allowUpdates: true

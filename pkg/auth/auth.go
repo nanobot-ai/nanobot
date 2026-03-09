@@ -15,7 +15,11 @@ import (
 	"github.com/obot-platform/mcp-oauth-proxy/pkg/oauth/validate"
 	"github.com/obot-platform/mcp-oauth-proxy/pkg/proxy"
 	proxytypes "github.com/obot-platform/mcp-oauth-proxy/pkg/types"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
+
+var authTracer = otel.Tracer("nanobot/auth")
 
 type Auth struct {
 	OAuthClientID        string   `usage:"OAuth client ID"`
@@ -43,6 +47,7 @@ func Wrap(ctx context.Context, env map[string]string, auth Auth, dsn, healthzPat
 	if err != nil {
 		return nil, err
 	}
+	next = tracedHandler("auth.downstream", next)
 
 	if auth.OAuthClientID != "" {
 		if auth.OAuthClientSecret == "" {
@@ -65,14 +70,22 @@ func Wrap(ctx context.Context, env map[string]string, auth Auth, dsn, healthzPat
 					return
 				}
 
-				proxy.ServeHTTP(rw, req)
+				tracedHandler("auth.proxy", proxy).ServeHTTP(rw, req)
 			}), nil
 		}
 
-		return proxy, nil
+		return tracedHandler("auth.proxy", proxy), nil
 	}
 
 	return next, nil
+}
+
+func tracedHandler(name string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		ctx, span := authTracer.Start(req.Context(), name, trace.WithSpanKind(trace.SpanKindInternal))
+		defer span.End()
+		next.ServeHTTP(rw, req.WithContext(ctx))
+	})
 }
 
 func userFromHeaders(next http.Handler) http.Handler {
@@ -112,6 +125,10 @@ func setupContext(auth Auth, next http.Handler) (http.Handler, error) {
 		return userFromHeaders(next), nil
 	}
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		ctx, span := authTracer.Start(req.Context(), "auth.setup_context", trace.WithSpanKind(trace.SpanKindInternal))
+		defer span.End()
+		req = req.WithContext(ctx)
+
 		info := validate.GetTokenInfo(req)
 		if info != nil {
 			var user mcp.User

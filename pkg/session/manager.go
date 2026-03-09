@@ -15,8 +15,14 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
+
+var sessionTracer = otel.Tracer("nanobot/session")
 
 func NewManager(dsn string) (*Manager, error) {
 	store, err := NewStoreFromDSN(dsn)
@@ -84,6 +90,10 @@ func (m *Manager) Store(ctx context.Context, id string, session *mcp.ServerSessi
 		return nil
 	}
 
+	ctx, span := sessionTracer.Start(ctx, "session.store", trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(attribute.String("session.id", id)))
+	defer span.End()
+
 	var accountID string
 	session.GetSession().Get(types.AccountIDSessionKey, &accountID)
 
@@ -93,26 +103,41 @@ func (m *Manager) Store(ctx context.Context, id string, session *mcp.ServerSessi
 		stored = m.newRecord(id, accountID)
 		create = true
 	} else if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
 	if stored.AccountID != accountID {
-		return fmt.Errorf("session %s not found for account %s", id, accountID)
+		err := fmt.Errorf("session %s not found for account %s", id, accountID)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	if err := m.saveAttributesToRecord(stored, session); err != nil {
-		return fmt.Errorf("failed to save attributes to session record: %w", err)
+		err = fmt.Errorf("failed to save attributes to session record: %w", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	state, err := session.GetSession().State()
 	if err != nil {
-		return fmt.Errorf("failed to get session state: %w", err)
+		err = fmt.Errorf("failed to get session state: %w", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 	stored.State = *(*State)(state)
 
 	if create {
+		span.SetAttributes(attribute.Bool("session.create", true))
 		if err := m.DB.Create(ctx, stored); err != nil {
-			return fmt.Errorf("failed to create session record: %w", err)
+			err = fmt.Errorf("failed to create session record: %w", err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		m.liveSessionsLock.Lock()
@@ -133,12 +158,16 @@ func (m *Manager) Store(ctx context.Context, id string, session *mcp.ServerSessi
 		}
 		m.liveSessionsLock.Unlock()
 	} else {
+		span.SetAttributes(attribute.Bool("session.create", false))
 		if err := m.DB.Update(ctx, stored); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
 	}
 
 	m.loadAttributesFromRecord(stored, session)
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 

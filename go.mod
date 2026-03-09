@@ -27,6 +27,8 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
+replace github.com/obot-platform/mcp-oauth-proxy => ./third_party/mcp-oauth-proxy
+
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/JohannesKaufmann/dom v0.2.0 // indirect
