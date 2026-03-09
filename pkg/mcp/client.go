@@ -14,10 +14,12 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/envvar"
 	"github.com/nanobot-ai/nanobot/pkg/version"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type Client struct {
 	Session       *Session
+	serverName    string
 	toolOverrides ToolOverrides
 }
 
@@ -366,6 +368,7 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 
 	c := &Client{
 		Session:       session,
+		serverName:    serverName,
 		toolOverrides: config.ToolOverrides,
 	}
 
@@ -406,6 +409,13 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 }
 
 func (c *Client) Initialize(ctx context.Context, param InitializeRequest) (result InitializeResult, err error) {
+	ctx, span := startOutboundSpan(ctx, "mcp.initialize",
+		attribute.String("mcp.server.name", c.serverName),
+	)
+	defer func() {
+		finishOutboundSpan(span, err)
+	}()
+
 	err = c.Session.Exchange(ctx, "initialize", param, &result)
 	if err == nil {
 		err = c.Session.Send(ctx, Message{
@@ -416,67 +426,106 @@ func (c *Client) Initialize(ctx context.Context, param InitializeRequest) (resul
 }
 
 func (c *Client) ReadResource(ctx context.Context, uri string) (*ReadResourceResult, error) {
+	ctx, span := startOutboundSpan(ctx, "mcp.resources.read",
+		attribute.String("mcp.server.name", c.serverName),
+		attribute.String("mcp.resource.uri", uri),
+	)
 	var result ReadResourceResult
 	err := c.Session.Exchange(ctx, "resources/read", ReadResourceRequest{
 		URI: uri,
 	}, &result)
+	finishOutboundSpan(span, err)
 	return &result, err
 }
 
 func (c *Client) ListResourceTemplates(ctx context.Context) (*ListResourceTemplatesResult, error) {
+	ctx, span := startOutboundSpan(ctx, "mcp.resources.templates.list",
+		attribute.String("mcp.server.name", c.serverName),
+	)
 	var result ListResourceTemplatesResult
 	if c.Session.InitializeResult.Capabilities.Resources == nil {
+		finishOutboundSpan(span, nil)
 		return &result, nil
 	}
 	err := c.Session.Exchange(ctx, "resources/templates/list", struct{}{}, &result)
+	finishOutboundSpan(span, err)
 	return &result, err
 }
 
 func (c *Client) ListResources(ctx context.Context) (*ListResourcesResult, error) {
+	ctx, span := startOutboundSpan(ctx, "mcp.resources.list",
+		attribute.String("mcp.server.name", c.serverName),
+	)
 	var result ListResourcesResult
 	if c.Session.InitializeResult.Capabilities.Resources == nil {
+		finishOutboundSpan(span, nil)
 		return &result, nil
 	}
 	err := c.Session.Exchange(ctx, "resources/list", struct{}{}, &result)
+	finishOutboundSpan(span, err)
 	return &result, err
 }
 
 func (c *Client) SubscribeResource(ctx context.Context, uri string) (*SubscribeResult, error) {
+	ctx, span := startOutboundSpan(ctx, "mcp.resources.subscribe",
+		attribute.String("mcp.server.name", c.serverName),
+		attribute.String("mcp.resource.uri", uri),
+	)
 	var result SubscribeResult
 	err := c.Session.Exchange(ctx, "resources/subscribe", SubscribeRequest{
 		URI: uri,
 	}, &result)
+	finishOutboundSpan(span, err)
 	return &result, err
 }
 
 func (c *Client) UnsubscribeResource(ctx context.Context, uri string) (*UnsubscribeResult, error) {
+	ctx, span := startOutboundSpan(ctx, "mcp.resources.unsubscribe",
+		attribute.String("mcp.server.name", c.serverName),
+		attribute.String("mcp.resource.uri", uri),
+	)
 	var result UnsubscribeResult
 	err := c.Session.Exchange(ctx, "resources/unsubscribe", UnsubscribeRequest{
 		URI: uri,
 	}, &result)
+	finishOutboundSpan(span, err)
 	return &result, err
 }
 
 func (c *Client) ListPrompts(ctx context.Context) (*ListPromptsResult, error) {
+	ctx, span := startOutboundSpan(ctx, "mcp.prompts.list",
+		attribute.String("mcp.server.name", c.serverName),
+	)
 	var prompts ListPromptsResult
 	if c.Session.InitializeResult.Capabilities.Prompts == nil {
+		finishOutboundSpan(span, nil)
 		return &prompts, nil
 	}
 	err := c.Session.Exchange(ctx, "prompts/list", struct{}{}, &prompts)
+	finishOutboundSpan(span, err)
 	return &prompts, err
 }
 
 func (c *Client) GetPrompt(ctx context.Context, name string, args map[string]string) (*GetPromptResult, error) {
+	ctx, span := startOutboundSpan(ctx, "mcp.prompts.get",
+		attribute.String("mcp.server.name", c.serverName),
+		attribute.String("mcp.prompt.name", name),
+	)
 	var result GetPromptResult
 	err := c.Session.Exchange(ctx, "prompts/get", GetPromptRequest{
 		Name:      name,
 		Arguments: args,
 	}, &result)
+	finishOutboundSpan(span, err)
 	return &result, err
 }
 
 func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
+	ctx, span := startOutboundSpan(ctx, "mcp.tools.list",
+		attribute.String("mcp.server.name", c.serverName),
+	)
 	if c.Session.InitializeResult.Capabilities.Tools == nil {
+		finishOutboundSpan(span, nil)
 		return &ListToolsResult{}, nil
 	}
 
@@ -502,12 +551,17 @@ func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 		tools.Tools = filtered
 	}
 
+	finishOutboundSpan(span, err)
 	return &tools, err
 }
 
 func (c *Client) Ping(ctx context.Context) (*PingResult, error) {
+	ctx, span := startOutboundSpan(ctx, "mcp.ping",
+		attribute.String("mcp.server.name", c.serverName),
+	)
 	var result PingResult
 	err := c.Session.Exchange(ctx, "ping", struct{}{}, &result)
+	finishOutboundSpan(span, err)
 	return &result, err
 }
 
@@ -533,6 +587,14 @@ func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOp
 		}
 	}
 
+	ctx, span := startOutboundSpan(ctx, "mcp.tools.call",
+		attribute.String("mcp.server.name", c.serverName),
+		attribute.String("mcp.tool.name", tool),
+	)
+	defer func() {
+		finishOutboundSpan(span, err)
+	}()
+
 	err = c.Session.Exchange(ctx, "tools/call", struct {
 		Name      string         `json:"name"`
 		Arguments any            `json:"arguments,omitempty"`
@@ -554,7 +616,13 @@ func (c *Client) SetLogLevel(ctx context.Context, level string) error {
 		return nil
 	}
 
-	return c.Session.Exchange(ctx, "logging/setLevel", SetLogLevelRequest{
+	ctx, span := startOutboundSpan(ctx, "mcp.logging.set_level",
+		attribute.String("mcp.server.name", c.serverName),
+		attribute.String("mcp.logging.level", level),
+	)
+	err := c.Session.Exchange(ctx, "logging/setLevel", SetLogLevelRequest{
 		Level: level,
 	}, &SetLogLevelResult{})
+	finishOutboundSpan(span, err)
+	return err
 }

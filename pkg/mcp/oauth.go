@@ -38,9 +38,9 @@ func newOAuth(callbackHandler CallbackHandler, clientLookup ClientCredLookup, to
 		clientName:      clientName,
 		redirectURL:     redirectURL,
 		callbackHandler: callbackHandler,
-		metadataClient: &http.Client{
+		metadataClient: instrumentHTTPClient(&http.Client{
 			Timeout: 5 * time.Second,
-		},
+		}),
 		clientLookup: clientLookup,
 		tokenStorage: tokenStorage,
 	}
