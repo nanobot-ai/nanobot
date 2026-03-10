@@ -91,7 +91,7 @@ func (s *Server) installArtifact(ctx context.Context, params installArtifactPara
 	}
 
 	// All artifacts are currently workflows.
-	targetDir := filepath.Join(".", workflowsDir, fm.Name)
+	targetDir := filepath.Join(".", skillformat.WorkflowsDir, fm.Name)
 
 	// If the workflow already exists, ask the user for confirmation before overwriting.
 	if _, err := os.Stat(targetDir); err == nil {

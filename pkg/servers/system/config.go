@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -74,7 +75,7 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 			if err != nil {
 				return params, fmt.Errorf("failed to get working directory: %w", err)
 			}
-			absWorkflowDir := filepath.Join(cwd, "workflows")
+			absWorkflowDir := filepath.Join(cwd, skillformat.WorkflowsDir)
 
 			agent.Instructions.Instructions += fmt.Sprintf(`
 

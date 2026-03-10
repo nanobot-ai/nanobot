@@ -14,6 +14,9 @@ import (
 // SkillMainFile is the filename for the main skill definition file in a skill directory.
 const SkillMainFile = "SKILL.md"
 
+// WorkflowsDir is the directory name where workflow files are stored.
+const WorkflowsDir = "workflows"
+
 // Frontmatter represents the YAML frontmatter of a SKILL.md file,
 // following the Agent Skills specification.
 type Frontmatter struct {

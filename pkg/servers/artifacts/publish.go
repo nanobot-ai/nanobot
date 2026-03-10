@@ -14,7 +14,6 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 )
 
-const workflowsDir = "workflows"
 
 type publishArtifactParams struct {
 	WorkflowName string `json:"workflowName"`
@@ -37,7 +36,7 @@ func (s *Server) publishArtifact(ctx context.Context, params publishArtifactPara
 		return nil, err
 	}
 
-	workflowDir := filepath.Join(".", workflowsDir, params.WorkflowName)
+	workflowDir := filepath.Join(".", skillformat.WorkflowsDir, params.WorkflowName)
 	mainFile := filepath.Join(workflowDir, skillformat.SkillMainFile)
 
 	content, err := os.ReadFile(mainFile)

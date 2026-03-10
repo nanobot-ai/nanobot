@@ -18,10 +18,7 @@ import (
 	"log/slog"
 )
 
-const (
-	workflowsDir = "workflows"
-	sessionsDir  = "sessions"
-)
+const sessionsDir = "sessions"
 
 // resourcesList returns all resources (workflows + cross-session files).
 func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
@@ -67,7 +64,7 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 		if workflowName == "" {
 			return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow name is required")
 		}
-		workflowPath := filepath.Join(".", workflowsDir, workflowName, skillformat.SkillMainFile)
+		workflowPath := filepath.Join(".", skillformat.WorkflowsDir, workflowName, skillformat.SkillMainFile)
 		if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
 			return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
 		}
@@ -77,7 +74,7 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 			return nil, mcp.ErrRPCInvalidParams.WithMessage("%v", decodeErr)
 		}
 		cleanPath := filepath.Clean(relPath)
-		if strings.HasPrefix(cleanPath, workflowsDir+string(filepath.Separator)) {
+		if strings.HasPrefix(cleanPath, skillformat.WorkflowsDir+string(filepath.Separator)) {
 			// Workflow supporting file — verify it exists
 			if _, statErr := os.Stat(filepath.Join(".", cleanPath)); os.IsNotExist(statErr) {
 				return nil, mcp.ErrRPCInvalidParams.WithMessage("file not found: %s", request.URI)
@@ -105,7 +102,7 @@ func (s *Server) resourcesUnsubscribe(ctx context.Context, _ mcp.Message, reques
 
 // listWorkflowResources reads the workflows/ directory and returns workflow resources.
 func (s *Server) listWorkflowResources(ctx context.Context) ([]mcp.Resource, error) {
-	workflowsPath := filepath.Join(".", workflowsDir)
+	workflowsPath := filepath.Join(".", skillformat.WorkflowsDir)
 
 	entries, err := os.ReadDir(workflowsPath)
 	if err != nil {
@@ -193,7 +190,7 @@ func (s *Server) readWorkflowResource(ctx context.Context, uri string) (*mcp.Rea
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow name is required")
 	}
 
-	workflowPath := filepath.Join(".", workflowsDir, workflowName, skillformat.SkillMainFile)
+	workflowPath := filepath.Join(".", skillformat.WorkflowsDir, workflowName, skillformat.SkillMainFile)
 	contentBytes, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", uri)
@@ -402,7 +399,7 @@ func (s *Server) readFileResource(ctx context.Context, uri string) (*mcp.ReadRes
 	cleanPath := filepath.Clean(relPath)
 
 	// Workflow supporting files don't need session access verification
-	if !strings.HasPrefix(cleanPath, workflowsDir+string(filepath.Separator)) {
+	if !strings.HasPrefix(cleanPath, skillformat.WorkflowsDir+string(filepath.Separator)) {
 		if err := s.verifyFileResourceAccess(ctx, relPath); err != nil {
 			return nil, err
 		}
@@ -460,7 +457,7 @@ func (s *Server) readFileResource(ctx context.Context, uri string) (*mcp.ReadRes
 func (s *Server) ensureWatchers() error {
 	s.watcherOnce.Do(func() {
 		// Watch workflows directory
-		workflowsPath := filepath.Join(".", workflowsDir)
+		workflowsPath := filepath.Join(".", skillformat.WorkflowsDir)
 		if err := os.MkdirAll(workflowsPath, 0755); err != nil {
 			s.watcherInitErr = fmt.Errorf("failed to create workflows directory: %w", err)
 			return
@@ -517,7 +514,7 @@ func (s *Server) handleWorkflowEvents(events []fswatch.Event) {
 				s.subscriptions.SendResourceUpdatedNotification(workflowURI)
 				s.subscriptions.AutoUnsubscribe(workflowURI)
 			} else if len(parts) == 2 {
-				fileURI := fileuri.Encode(filepath.Join(workflowsDir, event.Path))
+				fileURI := fileuri.Encode(filepath.Join(skillformat.WorkflowsDir, event.Path))
 				s.subscriptions.SendResourceUpdatedNotification(fileURI)
 				s.subscriptions.AutoUnsubscribe(fileURI)
 			}
@@ -528,7 +525,7 @@ func (s *Server) handleWorkflowEvents(events []fswatch.Event) {
 			if isMainFile {
 				s.subscriptions.SendResourceUpdatedNotification(workflowURI)
 			} else if len(parts) == 2 {
-				fileURI := fileuri.Encode(filepath.Join(workflowsDir, event.Path))
+				fileURI := fileuri.Encode(filepath.Join(skillformat.WorkflowsDir, event.Path))
 				s.subscriptions.SendResourceUpdatedNotification(fileURI)
 			}
 		}

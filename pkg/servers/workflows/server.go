@@ -19,9 +19,6 @@ import (
 	"log/slog"
 )
 
-const (
-	workflowsDir = "workflows"
-)
 
 type Server struct {
 	watcher        *fswatch.Watcher
@@ -108,7 +105,7 @@ func parseWorkflowURI(uri string) (string, error) {
 }
 
 func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
-	workflowsPath := filepath.Join(".", workflowsDir)
+	workflowsPath := filepath.Join(".", skillformat.WorkflowsDir)
 
 	entries, err := os.ReadDir(workflowsPath)
 	if err != nil {
@@ -198,7 +195,7 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.R
 		return nil, err
 	}
 
-	workflowPath := filepath.Join(".", workflowsDir, workflowName, skillformat.SkillMainFile)
+	workflowPath := filepath.Join(".", skillformat.WorkflowsDir, workflowName, skillformat.SkillMainFile)
 	contentBytes, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
@@ -244,7 +241,7 @@ func (s *Server) readWorkflowFile(uri string) (*mcp.ReadResourceResult, error) {
 	cleanPath := filepath.Clean(relPath)
 
 	// Validate the path is under workflows/ and has no traversal
-	if !strings.HasPrefix(cleanPath, workflowsDir+string(filepath.Separator)) {
+	if !strings.HasPrefix(cleanPath, skillformat.WorkflowsDir+string(filepath.Separator)) {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("file not in workflows directory: %s", uri)
 	}
 	for _, segment := range strings.Split(cleanPath, string(filepath.Separator)) {
@@ -298,7 +295,7 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 			return nil, mcp.ErrRPCInvalidParams.WithMessage("%v", err)
 		}
 		cleanPath := filepath.Clean(relPath)
-		if !strings.HasPrefix(cleanPath, workflowsDir+string(filepath.Separator)) {
+		if !strings.HasPrefix(cleanPath, skillformat.WorkflowsDir+string(filepath.Separator)) {
 			return nil, mcp.ErrRPCInvalidParams.WithMessage("file not in workflows directory: %s", request.URI)
 		}
 		if _, err := os.Stat(filepath.Join(".", cleanPath)); os.IsNotExist(err) {
@@ -309,7 +306,7 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 		if err != nil {
 			return nil, err
 		}
-		workflowPath := filepath.Join(".", workflowsDir, workflowName, skillformat.SkillMainFile)
+		workflowPath := filepath.Join(".", skillformat.WorkflowsDir, workflowName, skillformat.SkillMainFile)
 		if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
 			return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
 		}
@@ -329,7 +326,7 @@ func (s *Server) resourcesUnsubscribe(ctx context.Context, msg mcp.Message, requ
 // ensureWatcher starts the file watcher if it hasn't been started yet
 func (s *Server) ensureWatcher() error {
 	s.watcherOnce.Do(func() {
-		workflowsPath := filepath.Join(".", workflowsDir)
+		workflowsPath := filepath.Join(".", skillformat.WorkflowsDir)
 
 		// Ensure the workflows directory exists
 		if err := os.MkdirAll(workflowsPath, 0755); err != nil {
@@ -368,7 +365,7 @@ func (s *Server) handleFileEvents(events []fswatch.Event) {
 				s.subscriptions.SendResourceUpdatedNotification(workflowURI)
 				s.subscriptions.AutoUnsubscribe(workflowURI)
 			} else if len(parts) == 2 {
-				fileURI := fileuri.Encode(filepath.Join(workflowsDir, event.Path))
+				fileURI := fileuri.Encode(filepath.Join(skillformat.WorkflowsDir, event.Path))
 				s.subscriptions.SendResourceUpdatedNotification(fileURI)
 				s.subscriptions.AutoUnsubscribe(fileURI)
 			}
@@ -381,7 +378,7 @@ func (s *Server) handleFileEvents(events []fswatch.Event) {
 			if isMainFile {
 				s.subscriptions.SendResourceUpdatedNotification(workflowURI)
 			} else if len(parts) == 2 {
-				fileURI := fileuri.Encode(filepath.Join(workflowsDir, event.Path))
+				fileURI := fileuri.Encode(filepath.Join(skillformat.WorkflowsDir, event.Path))
 				s.subscriptions.SendResourceUpdatedNotification(fileURI)
 			}
 		}

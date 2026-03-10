@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 )
@@ -89,7 +90,7 @@ func (s *ToolsServer) deleteWorkflow(_ context.Context, data struct {
 		return "", fmt.Errorf("failed to parse workflow URI: %w", err)
 	}
 
-	workflowPath := filepath.Join(".", workflowsDir, workflowName)
+	workflowPath := filepath.Join(".", skillformat.WorkflowsDir, workflowName)
 	if err := os.RemoveAll(workflowPath); err != nil {
 		return "", fmt.Errorf("failed to delete workflow: %w", err)
 	}
