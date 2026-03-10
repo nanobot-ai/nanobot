@@ -1,0 +1,29 @@
+version: "3.8"
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: oauth_proxy
+      POSTGRES_USER: oauth_user
+      POSTGRES_PASSWORD: oauth_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # oauth-proxy:
+  #   build: .
+  #   environment:
+  #     DATABASE_DSN: "postgres://oauth_user:oauth_password@postgres:5432/oauth_proxy?sslmode=disable"
+  #     SCOPES_SUPPORTED: "openid,profile,email"
+  #     OAUTH_CLIENT_ID: "your-oauth-client-id"
+  #     OAUTH_CLIENT_SECRET: "your-oauth-client-secret"
+  #     OAUTH_AUTHORIZE_URL: "https://your-oauth-provider.com/oauth/authorize"
+  #     MCP_SERVER_URL: "http://localhost:3000"
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     - postgres
+
+volumes:
+  postgres_data:

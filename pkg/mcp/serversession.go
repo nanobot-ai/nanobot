@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 
+	"go.opentelemetry.io/otel/codes"
+
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
@@ -197,6 +199,9 @@ func (s *serverWire) SessionID() string {
 }
 
 func (s *serverWire) exchange(ctx context.Context, msg Message) (Message, error) {
+	ctx, span := startInboundMessageSpan(ctx, msg, s.sessionID)
+	defer span.End()
+
 	if msg.ID == nil {
 		s.handler(ctx, msg)
 		return Message{}, ErrNoResponse
@@ -212,12 +217,20 @@ func (s *serverWire) exchange(ctx context.Context, msg Message) (Message, error)
 
 	select {
 	case <-ctx.Done():
+		recordInboundMessageSpanError(span, ctx.Err())
 		return Message{}, ctx.Err()
 	case <-s.ctx.Done():
+		recordInboundMessageSpanError(span, s.ctx.Err())
 		return Message{}, s.ctx.Err()
 	case m, ok := <-ch:
 		if !ok {
+			recordInboundMessageSpanError(span, ErrNoResponse)
 			return Message{}, ErrNoResponse
+		}
+		if m.Error != nil {
+			recordInboundMessageSpanError(span, m.Error)
+		} else {
+			span.SetStatus(codes.Ok, "")
 		}
 		return m, nil
 	}

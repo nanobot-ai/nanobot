@@ -96,11 +96,12 @@ func (s *Server) describeSession(ctx context.Context, args any) {
 	session = session.Parent
 	session.Get(types.DescriptionSessionKey, &description)
 	if description == "" && s.agentName != "nanobot.summary" {
-		go func() {
+		bgctx := mcp.DetachContext(ctx)
+		go func(ctx context.Context) {
 			// TODO - the fmt.sprintf creates a message that looks like this:
 			// Generate a short title for the a thread that starts with the following user message(s): map[attachments:[] prompt:connect to gmail mcp and list my inbox emails]
 			// We can be better about that, but this is working and good enough
-			ret, err := s.runtime.Call(session.Context(), "nanobot.summary", "nanobot.summary",
+			ret, err := s.runtime.Call(ctx, "nanobot.summary", "nanobot.summary",
 				fmt.Sprintf("Generate a short title for a cht thread that starts with the following user message(s): %s. "+
 					"ONLY RESPOND WITH THE TITLE AND NOTHING ELSE. Your response will be directly used to title the thread.", args))
 			if err != nil {
@@ -113,6 +114,6 @@ func (s *Server) describeSession(ctx context.Context, args any) {
 					break
 				}
 			}
-		}()
+		}(bgctx)
 	}
 }

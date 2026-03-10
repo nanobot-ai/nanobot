@@ -1,0 +1,147 @@
+name: Tests
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: oauth_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Set Go toolchain
+        run: go env -w GOTOOLCHAIN=go1.25.0+auto
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.4.0
+          args: --timeout=5m --tests=false
+
+      - name: Run unit tests (PostgreSQL)
+        run: go test -v -short ./...
+
+      - name: Run integration tests (PostgreSQL)
+        env:
+          TEST_DATABASE_DSN: "postgres://test:test@localhost:5432/oauth_test?sslmode=disable"
+        run: go test -v -run "TestIntegration" ./...
+
+      - name: Run all tests with race detection (PostgreSQL)
+        env:
+          TEST_DATABASE_DSN: "postgres://test:test@localhost:5432/oauth_test?sslmode=disable"
+        run: go test -v -race ./...
+
+      - name: Run tests with coverage (PostgreSQL)
+        env:
+          TEST_DATABASE_DSN: "postgres://test:test@localhost:5432/oauth_test?sslmode=disable"
+        run: go test -v -coverprofile=coverage-postgres.out ./...
+
+      - name: Generate coverage report (PostgreSQL)
+        run: go tool cover -html=coverage-postgres.out -o coverage-postgres.html
+
+      - name: Upload coverage to Codecov (PostgreSQL)
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage-postgres.out
+          flags: postgres-tests
+          name: codecov-postgres
+          fail_ci_if_error: false
+
+      - name: Upload coverage report as artifact (PostgreSQL)
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-postgres
+          path: coverage-postgres.html
+          retention-days: 30
+
+  test-sqlite:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Set Go toolchain
+        run: go env -w GOTOOLCHAIN=go1.25.0+auto
+
+      - name: Run unit tests (SQLite)
+        run: go test -v -short ./...
+
+      - name: Run integration tests (SQLite)
+        run: go test -v -run "TestIntegration" ./...
+
+      - name: Run integration tests with SQLite fallback
+        env:
+          DATABASE_DSN: ""
+        run: go test -v -run "TestIntegration" ./...
+
+      - name: Run all tests with race detection (SQLite)
+        run: go test -v -race ./...
+
+      - name: Run tests with coverage (SQLite)
+        run: go test -v -coverprofile=coverage-sqlite.out ./...
+
+      - name: Generate coverage report (SQLite)
+        run: go tool cover -html=coverage-sqlite.out -o coverage-sqlite.html
+
+      - name: Upload coverage to Codecov (SQLite)
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage-sqlite.out
+          flags: sqlite-tests
+          name: codecov-sqlite
+          fail_ci_if_error: false
+
+      - name: Upload coverage report as artifact (SQLite)
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-sqlite
+          path: coverage-sqlite.html
+          retention-days: 30
+
+      - name: Run SQLite-specific database tests
+        run: go test -v ./pkg/db -run TestSQLiteDatabase
+
+      - name: Run all database tests with SQLite
+        run: go test -v ./pkg/db
+
+      - name: Test SQLite fallback behavior
+        run: |
+          # Test that the application uses SQLite when DATABASE_DSN is not set
+          unset DATABASE_DSN
+          go test -v ./pkg/db -run TestSQLiteDatabase

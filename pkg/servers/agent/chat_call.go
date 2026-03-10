@@ -200,9 +200,8 @@ func (c chatCall) Invoke(ctx context.Context, msg mcp.Message, payload mcp.CallT
 	async := msg.Meta()[types.AsyncMetaKey]
 	if (async == "true" || async == true) && msg.ProgressToken() != nil {
 		nctx := types.NanobotContext(ctx)
-		session := mcp.SessionFromContext(ctx)
 
-		ctx := mcp.WithRequestID(session.Context(), mcp.RequestIDFromContext(ctx))
+		ctx := mcp.WithRequestID(mcp.DetachContext(ctx), mcp.RequestIDFromContext(ctx))
 		mcp.SessionFromContext(ctx).Go(types.WithNanobotContext(ctx, nctx), msg, func(ctx context.Context, m mcp.Message) {
 			_, _ = c.chatInvoke(ctx, m, payload)
 		})

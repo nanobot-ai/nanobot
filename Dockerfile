@@ -10,6 +10,7 @@ WORKDIR /build
 
 # Copy go mod files first for better caching
 COPY go.mod go.sum ./
+COPY third_party/mcp-oauth-proxy/go.mod third_party/mcp-oauth-proxy/go.sum ./third_party/mcp-oauth-proxy/
 RUN go mod download
 
 # Copy source code

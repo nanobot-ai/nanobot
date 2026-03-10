@@ -27,9 +27,11 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
 	"github.com/nanobot-ai/nanobot/pkg/server"
 	"github.com/nanobot-ai/nanobot/pkg/session"
+	"github.com/nanobot-ai/nanobot/pkg/telemetry"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"sigs.k8s.io/yaml"
 )
 
@@ -64,6 +66,8 @@ type Nanobot struct {
 	State                   string            `usage:"Path to the state file" default:"./nanobot.db"`
 	ConfigPath              string            `usage:"Path to nanobot configuration file or directory" default:".nanobot/" name:"config" short:"c"`
 	ExcludeBuiltInAgents    bool              `usage:"Exclude built-in agents from the configuration"`
+
+	otel *telemetry.Otel
 }
 
 func ensureDirectoryForDSN(dsn string) error {
@@ -125,6 +129,19 @@ func (n *Nanobot) PersistentPre(cmd *cobra.Command, _ []string) error {
 
 	log.ConfigureSlog(n.Debug, n.Trace)
 	log.EnableMessages = log.EnableMessages || n.Debug || n.Trace
+
+	if n.otel == nil {
+		otel, err := telemetry.New(cmd.Context())
+		if err != nil {
+			return fmt.Errorf("failed to initialize OTel: %w", err)
+		}
+		n.otel = otel
+		cobra.OnFinalize(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = n.otel.Shutdown(ctx)
+		})
+	}
 
 	for _, sub := range cmd.Commands() {
 		if sub.Name() == "help" {
@@ -310,7 +327,7 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 
 	s := &http.Server{
 		Addr:    address,
-		Handler: api.Cors(handler),
+		Handler: otelhttp.NewHandler(api.Cors(handler), "nanobot/http"),
 	}
 
 	context.AfterFunc(ctx, func() {

@@ -765,8 +765,9 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 			cause := context.Cause(ctx)
 			if cancelErr, ok := errors.AsType[*RequestCancelledError](cause); ok {
 				// Forward cancellation notification to the downstream server
-				// Use the session context since the current context is cancelled
-				_ = s.SendPayload(s.Context(), "notifications/cancelled", CancelledNotification{
+				// Detach from request cancellation so the downstream notification
+				// can still be sent while preserving request-scoped values.
+				_ = s.SendPayload(DetachContext(ctx), "notifications/cancelled", CancelledNotification{
 					RequestID: req.ID,
 					Reason:    cancelErr.Reason,
 				})
