@@ -19,7 +19,6 @@ import (
 	"log/slog"
 )
 
-
 type Server struct {
 	watcher        *fswatch.Watcher
 	subscriptions  *fswatch.SubscriptionManager

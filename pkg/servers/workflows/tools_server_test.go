@@ -11,7 +11,6 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/skillformat"
-	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
 func TestRecordWorkflowRun_DeduplicatesURI(t *testing.T) {
@@ -70,7 +69,7 @@ func TestDeleteWorkflow_RemovesDirectory(t *testing.T) {
 	restore := withWorkingDir(t, tempDir)
 	defer restore()
 
-	workflowDir := filepath.Join(tempDir, workflowsDir, "to-delete")
+	workflowDir := filepath.Join(tempDir, skillformat.WorkflowsDir, "to-delete")
 	if err := os.MkdirAll(workflowDir, 0755); err != nil {
 		t.Fatalf("failed to create workflow directory: %v", err)
 	}

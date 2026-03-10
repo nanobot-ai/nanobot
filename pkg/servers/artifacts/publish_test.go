@@ -28,7 +28,7 @@ func withWorkingDir(t *testing.T, dir string) func() {
 
 func createTestWorkflow(t *testing.T, baseDir, name string, files map[string]string) {
 	t.Helper()
-	dir := filepath.Join(baseDir, workflowsDir, name)
+	dir := filepath.Join(baseDir, skillformat.WorkflowsDir, name)
 	for relPath, content := range files {
 		fullPath := filepath.Join(dir, relPath)
 		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
@@ -50,7 +50,7 @@ func TestCreateZIP(t *testing.T) {
 		"scripts/analyze.py":      "print('hello')\n",
 	})
 
-	workflowDir := filepath.Join(tempDir, workflowsDir, "my-wf")
+	workflowDir := filepath.Join(tempDir, skillformat.WorkflowsDir, "my-wf")
 	zipData, err := createZIP(workflowDir)
 	if err != nil {
 		t.Fatalf("createZIP() error: %v", err)

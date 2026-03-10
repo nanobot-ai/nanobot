@@ -14,7 +14,6 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 )
 
-
 type publishArtifactParams struct {
 	WorkflowName string `json:"workflowName"`
 }
