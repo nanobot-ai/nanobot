@@ -14,6 +14,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
 	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
+	"github.com/nanobot-ai/nanobot/pkg/servers/artifacts"
 	"github.com/nanobot-ai/nanobot/pkg/servers/meta"
 	"github.com/nanobot-ai/nanobot/pkg/servers/system"
 	"github.com/nanobot-ai/nanobot/pkg/servers/workflows"
@@ -113,6 +114,10 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 
 	registry.AddServer("nanobot.workflow-tools", func(string) mcp.MessageHandler {
 		return workflows.NewToolsServer()
+	})
+
+	registry.AddServer("nanobot.artifacts", func(string) mcp.MessageHandler {
+		return artifacts.NewServer()
 	})
 
 	return r, nil
