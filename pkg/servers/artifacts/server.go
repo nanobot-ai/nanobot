@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	obotconfig "github.com/nanobot-ai/nanobot/pkg/servers/obot"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 )
 
@@ -67,22 +68,9 @@ type obotConfig struct {
 }
 
 func getObotConfig(ctx context.Context) (obotConfig, error) {
-	session := mcp.SessionFromContext(ctx)
-	if session == nil {
-		return obotConfig{}, fmt.Errorf("no session found")
+	cfg, err := obotconfig.GetConfig(ctx)
+	if err != nil {
+		return obotConfig{}, fmt.Errorf("%w — artifact tools require an Obot platform connection", err)
 	}
-
-	envMap := session.GetEnvMap()
-
-	baseURL := envMap["OBOT_URL"]
-	if baseURL == "" {
-		return obotConfig{}, fmt.Errorf("OBOT_URL is not configured — artifact tools require an Obot platform connection")
-	}
-
-	var authHeader string
-	if apiKey := envMap["MCP_API_KEY"]; apiKey != "" {
-		authHeader = "Bearer " + apiKey
-	}
-
-	return obotConfig{baseURL: baseURL, authHeader: authHeader}, nil
+	return obotConfig{baseURL: cfg.BaseURL, authHeader: cfg.AuthHeader}, nil
 }

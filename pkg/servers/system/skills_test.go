@@ -2,10 +2,13 @@ package system
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 )
 
 // testdataDir returns the absolute path to the testdata directory
@@ -16,6 +19,26 @@ func testdataDir(t *testing.T, subdir string) string {
 		t.Fatal("failed to get caller info")
 	}
 	return filepath.Join(filepath.Dir(filename), "testdata", subdir)
+}
+
+func writeDirectorySkill(t *testing.T, configDir, name, description, body string) {
+	t.Helper()
+
+	content, err := skillformat.FormatSkillMD(skillformat.Frontmatter{
+		Name:        name,
+		Description: description,
+	}, body)
+	if err != nil {
+		t.Fatalf("failed to format SKILL.md: %v", err)
+	}
+
+	skillDir := filepath.Join(configDir, "skills", name)
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, skillformat.SkillMainFile), []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
 }
 
 func TestListSkills(t *testing.T) {
@@ -293,6 +316,105 @@ func TestGetSkillFallsBackToBuiltin(t *testing.T) {
 	}
 	if !strings.Contains(content, "Workflows are for repeatable tasks") {
 		t.Error("content should contain built-in workflows skill content")
+	}
+}
+
+func TestListSkillsIncludesDirectorySkill(t *testing.T) {
+	configDir := t.TempDir()
+	writeDirectorySkill(t, configDir, "dir-skill", "Directory skill description", "\n# Directory Skill\n")
+
+	server := NewServer(configDir)
+	result, err := server.listSkills(context.Background(), struct{}{})
+	if err != nil {
+		t.Fatalf("listSkills() failed: %v", err)
+	}
+
+	skillsByName := make(map[string]Skill)
+	for _, skill := range result.Skills {
+		skillsByName[skill.Name] = skill
+	}
+
+	skill, ok := skillsByName["dir-skill"]
+	if !ok {
+		t.Fatal("expected dir-skill to be listed")
+	}
+	if skill.DisplayName != "Dir Skill" {
+		t.Fatalf("display name = %q, want %q", skill.DisplayName, "Dir Skill")
+	}
+	if skill.Description != "Directory skill description" {
+		t.Fatalf("description = %q", skill.Description)
+	}
+}
+
+func TestDirectorySkillOverridesFlatSkill(t *testing.T) {
+	configDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(configDir, "skills"), 0o755); err != nil {
+		t.Fatalf("failed to create skills dir: %v", err)
+	}
+	flatSkill := `---
+name: Legacy Conflict
+description: Flat skill description
+---
+
+# Flat
+`
+	if err := os.WriteFile(filepath.Join(configDir, "skills", "conflict.md"), []byte(flatSkill), 0o644); err != nil {
+		t.Fatalf("failed to write flat skill: %v", err)
+	}
+	writeDirectorySkill(t, configDir, "conflict", "Directory skill description", "\n# Directory\n")
+
+	server := NewServer(configDir)
+	result, err := server.listSkills(context.Background(), struct{}{})
+	if err != nil {
+		t.Fatalf("listSkills() failed: %v", err)
+	}
+
+	var conflict Skill
+	for _, skill := range result.Skills {
+		if skill.Name == "conflict" {
+			conflict = skill
+			break
+		}
+	}
+	if conflict.Name == "" {
+		t.Fatal("expected conflict skill to be listed")
+	}
+	if conflict.Description != "Directory skill description" {
+		t.Fatalf("description = %q, want directory skill description", conflict.Description)
+	}
+
+	content, err := server.getSkill(context.Background(), GetSkillParams{Name: "conflict"})
+	if err != nil {
+		t.Fatalf("getSkill() failed: %v", err)
+	}
+	if !strings.Contains(content, "# Directory") {
+		t.Fatal("expected getSkill to return directory skill content")
+	}
+}
+
+func TestInvalidDirectorySkillFailsClosed(t *testing.T) {
+	configDir := t.TempDir()
+	skillDir := filepath.Join(configDir, "skills", "broken")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, skillformat.SkillMainFile), []byte("---\nname: wrong-name\ndescription: Broken\n---\n"), 0o644); err != nil {
+		t.Fatalf("failed to write invalid SKILL.md: %v", err)
+	}
+
+	server := NewServer(configDir)
+	result, err := server.listSkills(context.Background(), struct{}{})
+	if err != nil {
+		t.Fatalf("listSkills() failed: %v", err)
+	}
+	for _, skill := range result.Skills {
+		if skill.Name == "broken" {
+			t.Fatal("did not expect invalid directory skill to be listed")
+		}
+	}
+
+	if _, err := server.getSkill(context.Background(), GetSkillParams{Name: "broken"}); err == nil {
+		t.Fatal("expected invalid directory skill lookup to fail")
 	}
 }
 

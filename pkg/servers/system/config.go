@@ -58,6 +58,12 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 
 					skillsPrompt.WriteString("\nWhen you need to connect to a new MCP server, load the **mcp-cli** skill for instructions on configuring and using MCP servers.\n")
 
+					if session := mcp.SessionFromContext(ctx); session != nil {
+						if envMap := session.GetEnvMap(); envMap["OBOT_URL"] != "" {
+							skillsPrompt.WriteString("\nWhen you need a new skill that is not already installed, use the searchSkills tool to search Obot.\n")
+						}
+					}
+
 					// Append to agent instructions
 					agent.Instructions.Instructions += skillsPrompt.String()
 				}
@@ -65,6 +71,13 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 				// Make workflow and artifact tools available to agents with skills permission.
 				agent.Tools = append(agent.Tools, "nanobot.workflow-tools")
 				agent.Tools = append(agent.Tools, "nanobot.artifacts")
+
+				session := mcp.SessionFromContext(ctx)
+				if session != nil {
+					if envMap := session.GetEnvMap(); envMap["OBOT_URL"] != "" {
+						agent.Tools = append(agent.Tools, "nanobot.skills")
+					}
+				}
 			}
 		}
 
@@ -100,6 +113,11 @@ Do NOT put workflow files in the session directory.
 		params.MCPServers["nanobot.artifacts"] = types.AgentConfigHookMCPServer{}
 
 		session := mcp.SessionFromContext(ctx)
+		if session != nil {
+			if envMap := session.GetEnvMap(); envMap["OBOT_URL"] != "" && agent.Permissions != nil && agent.Permissions.IsAllowed("skills") {
+				params.MCPServers["nanobot.skills"] = types.AgentConfigHookMCPServer{}
+			}
+		}
 
 		// Configure MCP search server if environment variables are set
 		if agent.Name != "nanobot.summary" && session != nil {
