@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/version"
 )
 
@@ -50,17 +49,6 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 }
 
 func (s *Server) initialize(ctx context.Context, _ mcp.Message, params mcp.InitializeRequest) (*mcp.InitializeResult, error) {
-	if types.IsUISession(ctx) {
-		return &mcp.InitializeResult{
-			ProtocolVersion: params.ProtocolVersion,
-			Capabilities:    mcp.ServerCapabilities{},
-			ServerInfo: mcp.ServerInfo{
-				Name:    version.Name,
-				Version: version.Get().String(),
-			},
-		}, nil
-	}
-
 	return &mcp.InitializeResult{
 		ProtocolVersion: params.ProtocolVersion,
 		Capabilities: mcp.ServerCapabilities{

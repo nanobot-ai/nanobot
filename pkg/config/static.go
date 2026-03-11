@@ -25,13 +25,20 @@ var UI = types.Config{
 	},
 	Publish: types.Publish{
 		MCPServers: []string{"nanobot.meta", "nanobot.workflows"},
-		Tools:      []string{"nanobot.workflow-tools/deleteWorkflow", "nanobot.system/uploadFile", "nanobot.system/deleteFile"},
-		Resources:  []string{"nanobot.system"},
+		Tools: []string{
+			"nanobot.workflow-tools/deleteWorkflow",
+			"nanobot.system/uploadFile",
+			"nanobot.system/deleteFile",
+			"nanobot.artifacts/publishArtifact",
+			"nanobot.artifacts/installArtifact",
+		},
+		Resources: []string{"nanobot.system"},
 	},
 	MCPServers: map[string]mcp.Server{
 		"nanobot.meta":           {},
 		"nanobot.workflows":      {},
 		"nanobot.workflow-tools": {},
 		"nanobot.system":         {},
+		"nanobot.artifacts":      {},
 	},
 }
