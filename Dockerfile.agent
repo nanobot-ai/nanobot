@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     jq \
     gzip \
+    unzip \
     xz-utils \
     coreutils \
     findutils \
