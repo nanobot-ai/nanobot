@@ -2,7 +2,8 @@
 set -euo pipefail
 
 NANOBOT_HOME=/home/nanobot
-NANOBOT_PATH="${NANOBOT_HOME}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+BOOTSTRAP_PATH="${NANOBOT_HOME}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+RUNTIME_PATH="${NANOBOT_HOME}/.local/bin:/usr/local/libexec:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 DISPLAY_NUM=99
 VNC_PORT=5900
 WEBSOCKET_PORT=6080
@@ -98,14 +99,15 @@ start_browser_stack() {
 
 if [ "$(id -u)" = "0" ]; then
 	prepare_runtime_dirs
+
 	exec runuser -u nanobot -- env \
 		HOME="${NANOBOT_HOME}" \
-		PATH="${NANOBOT_PATH}" \
+		PATH="${BOOTSTRAP_PATH}" \
 		/usr/local/bin/nanobot "$@"
 fi
 
 export HOME="${NANOBOT_HOME}"
-export PATH="${NANOBOT_PATH}"
+export PATH="${RUNTIME_PATH}"
 
 mkdir -p "${NANOBOT_HOME}/.nanobot/state" "${NANOBOT_HOME}/sessions"
 
