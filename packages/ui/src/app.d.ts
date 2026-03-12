@@ -2,6 +2,11 @@
 // for information about these interfaces
 import type { ChatService } from '$lib/chat.svelte';
 
+declare module '@novnc/novnc/lib/rfb.js' {
+	const RFB: any;
+	export default RFB;
+}
+
 declare global {
 	namespace App {
 		// interface Error {}

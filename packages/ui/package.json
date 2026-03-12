@@ -46,6 +46,7 @@
 	"dependencies": {
 		"@lucide/svelte": "^0.540.0",
 		"@mcp-ui/client": "^5.9.0",
+		"@novnc/novnc": "^1.4.0",
 		"daisyui": "^5.1.10",
 		"highlight.js": "^11.11.1",
 		"marked": "^16.4.2",
