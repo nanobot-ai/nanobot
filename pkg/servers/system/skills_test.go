@@ -53,9 +53,9 @@ func TestListSkills(t *testing.T) {
 		t.Fatal("listSkills() returned nil result")
 	}
 
-	// We should have at least the 3 skills we know about
-	if len(result.Skills) < 3 {
-		t.Errorf("expected at least 3 skills, got %d", len(result.Skills))
+	// We should have at least the 2 skills we know about
+	if len(result.Skills) < 2 {
+		t.Errorf("expected at least 2 skills, got %d", len(result.Skills))
 	}
 
 	// Verify the skills have names, display names, and descriptions
@@ -74,7 +74,7 @@ func TestListSkills(t *testing.T) {
 	}
 
 	// Check for expected skills
-	expectedSkills := []string{"python-scripts", "workflows", "mcp-cli"}
+	expectedSkills := []string{"python-scripts", "workflows"}
 	for _, expected := range expectedSkills {
 		if !skillNames[expected] {
 			t.Errorf("should have %s skill", expected)
@@ -169,8 +169,8 @@ func TestListSkillsMissingDirectory(t *testing.T) {
 	}
 
 	// Should still have built-in skills
-	if len(result.Skills) < 3 {
-		t.Errorf("should have at least 3 built-in skills, got %d", len(result.Skills))
+	if len(result.Skills) < 2 {
+		t.Errorf("should have at least 2 built-in skills, got %d", len(result.Skills))
 	}
 }
 
@@ -188,8 +188,8 @@ func TestListSkillsEmptyDirectory(t *testing.T) {
 	}
 
 	// Should still have built-in skills
-	if len(result.Skills) < 3 {
-		t.Errorf("should have at least 3 built-in skills, got %d", len(result.Skills))
+	if len(result.Skills) < 2 {
+		t.Errorf("should have at least 2 built-in skills, got %d", len(result.Skills))
 	}
 }
 
@@ -220,12 +220,6 @@ func TestGetSkill(t *testing.T) {
 			skillName:     "workflows",
 			expectError:   false,
 			shouldContain: "name: workflows",
-		},
-		{
-			name:          "get mcp-cli skill",
-			skillName:     "mcp-cli",
-			expectError:   false,
-			shouldContain: "name: mcp-cli",
 		},
 		{
 			name:        "nonexistent skill",

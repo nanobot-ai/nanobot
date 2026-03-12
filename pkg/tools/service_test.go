@@ -1,9 +1,11 @@
 package tools
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -109,5 +111,35 @@ func TestConvertToSampleRequestRejectsInvalidAttachmentURL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "only data URI and file:/// URIs are supported") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+type testMCPToolServer struct {
+	tools mcp.ServerTools
+}
+
+func (t testMCPToolServer) OnMessage(ctx context.Context, msg mcp.Message) {
+	switch msg.Method {
+	case "initialize":
+		mcp.Invoke(ctx, msg, func(_ context.Context, _ mcp.Message, req mcp.InitializeRequest) (*mcp.InitializeResult, error) {
+			return &mcp.InitializeResult{
+				ProtocolVersion: req.ProtocolVersion,
+				Capabilities: mcp.ServerCapabilities{
+					Tools: &mcp.ToolsServerCapability{},
+				},
+				ServerInfo: mcp.ServerInfo{
+					Name:    "test",
+					Version: "1.0.0",
+				},
+			}, nil
+		})
+	case "notifications/initialized":
+		return
+	case "tools/list":
+		mcp.Invoke(ctx, msg, t.tools.List)
+	case "tools/call":
+		mcp.Invoke(ctx, msg, t.tools.Call)
+	default:
+		msg.SendError(ctx, mcp.ErrRPCMethodNotFound.WithMessage("unknown method %s", msg.Method))
 	}
 }

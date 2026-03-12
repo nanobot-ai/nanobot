@@ -773,11 +773,14 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 	if err != nil {
 		return nil, err
 	}
-	return &types.CallResult{
+
+	ret = &types.CallResult{
 		StructuredContent: mcpCallResult.StructuredContent,
 		Content:           mcpCallResult.Content,
 		IsError:           mcpCallResult.IsError,
-	}, nil
+	}
+
+	return ret, nil
 }
 
 type ListToolsOptions struct {

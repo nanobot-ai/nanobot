@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/servers/obotmcp"
 	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
@@ -27,7 +28,7 @@ var allowedPermsToTools = map[string][]string{
 }
 
 func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (types.AgentConfigHook, error) {
-	if agent := params.Agent; agent != nil {
+	if agent := params.Agent; agent != nil && agent.Name != "nanobot.summary" {
 		for _, perm := range agent.Permissions.Allowed(maps.Keys(allowedPermsToTools)) {
 			for _, tool := range allowedPermsToTools[perm] {
 				agent.Tools = append(agent.Tools, "nanobot.system/"+tool)
@@ -56,14 +57,11 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 						skillsPrompt.WriteString("\n")
 					}
 
-					skillsPrompt.WriteString("\nWhen you need to connect to a new MCP server, load the **mcp-cli** skill for instructions on configuring and using MCP servers.\n")
-
 					if session := mcp.SessionFromContext(ctx); session != nil {
 						if envMap := session.GetEnvMap(); envMap["OBOT_URL"] != "" {
 							skillsPrompt.WriteString("\nWhen you need a new skill that is not already installed, use the searchSkills tool to search Obot.\n")
 						}
 					}
-
 					// Append to agent instructions
 					agent.Instructions.Instructions += skillsPrompt.String()
 				}
@@ -109,13 +107,12 @@ Do NOT put skill files in the session directory or workflow directory.
 		}
 
 		if params.MCPServers == nil {
-			params.MCPServers = make(map[string]types.AgentConfigHookMCPServer, 3)
+			params.MCPServers = make(map[string]types.AgentConfigHookMCPServer, 4)
 		}
 		params.MCPServers["nanobot.system"] = types.AgentConfigHookMCPServer{}
 		params.MCPServers["nanobot.workflows"] = types.AgentConfigHookMCPServer{}
 		params.MCPServers["nanobot.workflow-tools"] = types.AgentConfigHookMCPServer{}
 		params.MCPServers["nanobot.artifacts"] = types.AgentConfigHookMCPServer{}
-
 		session := mcp.SessionFromContext(ctx)
 		if session != nil {
 			if envMap := session.GetEnvMap(); envMap["OBOT_URL"] != "" && agent.Permissions != nil && agent.Permissions.IsAllowed("skills") {
@@ -123,39 +120,7 @@ Do NOT put skill files in the session directory or workflow directory.
 			}
 		}
 
-		// Configure MCP search server if environment variables are set
-		if agent.Name != "nanobot.summary" && session != nil {
-			envMap := session.GetEnvMap()
-			if searchURL := envMap["MCP_SERVER_SEARCH_URL"]; searchURL != "" {
-				mcpServer := types.AgentConfigHookMCPServer{
-					URL: searchURL,
-				}
-
-				// Add authentication header if API key is provided
-				if apiKey := envMap["MCP_SERVER_SEARCH_API_KEY"]; apiKey != "" {
-					mcpServer.Headers = map[string]string{
-						"Authorization": "Bearer " + apiKey,
-					}
-				}
-
-				params.MCPServers["mcp-server-search"] = mcpServer
-
-				// Also add to the agent's MCP server list so tools get fetched
-				agent.Tools = append(agent.Tools, "mcp-server-search")
-			}
-
-			var dynamicServers DynamicMCPServers
-			if session.Get(DynamicMCPServersSessionKey, &dynamicServers) {
-				for name, server := range dynamicServers {
-					// Skip dynamic servers that would overwrite existing MCP server definitions
-					if _, exists := params.MCPServers[name]; exists {
-						continue
-					}
-					params.MCPServers[name] = server
-					agent.MCPServers = append(agent.MCPServers, name)
-				}
-			}
-		}
+		obotmcp.ConfigureIntegration(ctx, s.configDir, agent, &params)
 	}
 
 	return params, nil

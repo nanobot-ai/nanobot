@@ -483,12 +483,11 @@ func (s *Server) bash(ctx context.Context, params BashParams) (string, error) {
 	cmd := exec.CommandContext(cmdCtx, "bash", "-c", params.Command)
 	cmd.Dir = workdir
 
-	// Inject MCP_API_KEY from session environment if available
-	if session := mcp.SessionFromContext(ctx); session != nil {
-		if apiKey := session.GetEnvMap()["MCP_API_KEY"]; apiKey != "" {
-			cmd.Env = append(os.Environ(), "MCP_API_KEY="+apiKey)
-		}
+	env, err := s.augmentBashEnvForObotMCPIntegration(ctx, params.Command)
+	if err != nil {
+		return "", err
 	}
+	cmd.Env = env
 
 	output, err := cmd.CombinedOutput()
 
