@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     jq \
     gzip \
+    unzip \
     xz-utils \
     coreutils \
     findutils \
@@ -48,6 +49,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-venv \
     && rm -rf /var/lib/apt/lists/*
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/ms-playwright
 RUN python3 -m venv /opt/playwright-venv \
