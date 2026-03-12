@@ -19,6 +19,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/log"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -28,6 +29,8 @@ const (
 	tokenTypeJWT    = "urn:ietf:params:oauth:token-type:jwt"
 	tokenTypeAPIKey = "urn:obot:token-type:api-key"
 )
+
+var defaultInstrumentedHTTPClient = instrumentHTTPClient(http.DefaultClient)
 
 // isJWT checks if the given token appears to be a JWT by validating its structure.
 func isJWT(token string) bool {
@@ -92,7 +95,7 @@ func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, ses
 	}
 
 	return &HTTPClient{
-		httpClient:        http.DefaultClient,
+		httpClient:        instrumentHTTPClient(http.DefaultClient),
 		oauthHandler:      newOAuth(opts.CallbackHandler, opts.ClientCredLookup, opts.TokenStorage, opts.OAuthClientName, opts.OAuthRedirectURL),
 		baseURL:           config.BaseURL,
 		messageURL:        config.BaseURL,
@@ -112,6 +115,22 @@ func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, ses
 
 func (s *HTTPClient) SetOAuthCallbackHandler(handler CallbackHandler) {
 	s.oauthHandler.callbackHandler = handler
+}
+
+func instrumentHTTPClient(base *http.Client) *http.Client {
+	if base == nil {
+		base = http.DefaultClient
+	}
+	cloned := *base
+	transport := cloned.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	if _, ok := transport.(*otelhttp.Transport); ok {
+		return &cloned
+	}
+	cloned.Transport = otelhttp.NewTransport(transport)
+	return &cloned
 }
 
 func (s *HTTPClient) SessionID() string {
@@ -445,7 +464,7 @@ func (s *HTTPClient) Start(ctx context.Context, handler WireHandler) error {
 	s.handler = handler
 
 	if httpClient := s.oauthHandler.loadFromStorage(s.ctx, s.baseURL); httpClient != nil {
-		s.httpClient = httpClient
+		s.httpClient = instrumentHTTPClient(httpClient)
 		slog.Info("mcp client loaded oauth token from storage", "server", s.serverName)
 	}
 
@@ -562,7 +581,7 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 		}
 
 		s.clientLock.Lock()
-		s.httpClient = httpClient
+		s.httpClient = instrumentHTTPClient(httpClient)
 		s.clientLock.Unlock()
 
 		// Make the call to send instead of Send so we don't get stuck in an authentication loop.
@@ -603,7 +622,7 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 			// error that we need to continue the process.
 
 			s.clientLock.Lock()
-			s.httpClient = http.DefaultClient
+			s.httpClient = instrumentHTTPClient(http.DefaultClient)
 			s.clientLock.Unlock()
 
 			// Use the exported Send method here so that we catch the AuthRequiredErr above on the recursed call.
@@ -894,7 +913,7 @@ func (s *HTTPClient) exchangeToken(ctx context.Context, subjectToken string) (st
 	}
 
 	// Make the request
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultInstrumentedHTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to call token exchange endpoint: %w", err)
 	}
