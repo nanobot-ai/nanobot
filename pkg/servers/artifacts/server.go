@@ -21,7 +21,9 @@ func NewServer() *Server {
 				"Reads the workflow directory, validates the SKILL.md, creates a ZIP, and uploads it.",
 			s.publishArtifact),
 		mcp.NewServerTool("searchArtifacts",
-			"Search the Obot registry for published artifacts (workflows) by keyword query.",
+			"Search the Obot registry for published artifacts (workflows) by keyword query. "+
+				"This searches the REMOTE registry only — it does NOT find locally installed workflows. "+
+				"To find installed workflows, read the local `workflows/` directory instead.",
 			s.searchArtifacts),
 		mcp.NewServerTool("installArtifact",
 			"Download and install a published artifact from the Obot registry into the local workspace.",
