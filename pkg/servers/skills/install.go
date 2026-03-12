@@ -12,8 +12,6 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 )
 
-const skillsDir = "skills"
-
 type installSkillParams struct {
 	SkillID string `json:"skillID"`
 }
@@ -63,7 +61,7 @@ func (s *Server) installSkill(ctx context.Context, params installSkillParams) (*
 		return nil, fmt.Errorf("skill archive name %q does not match indexed skill name %q", fm.Name, skill.Name)
 	}
 
-	targetDir := filepath.Join(".", skillsDir, skill.Name)
+	targetDir := filepath.Join(s.configDir, "skills", skill.Name)
 	if _, err := os.Stat(targetDir); err == nil {
 		overwrite, err := s.confirmOverwrite(ctx, skill.Name)
 		if err != nil {

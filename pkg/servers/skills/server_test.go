@@ -82,17 +82,9 @@ func TestInstallSkill(t *testing.T) {
 	}))
 	defer server.Close()
 
-	workDir := t.TempDir()
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get cwd: %v", err)
-	}
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("failed to chdir: %v", err)
-	}
-	defer os.Chdir(cwd)
+	configDir := t.TempDir()
 
-	s := NewServer()
+	s := NewServer(configDir)
 	ctx := testContext(t, map[string]string{"OBOT_URL": server.URL})
 	result, err := s.installSkill(ctx, installSkillParams{SkillID: "sk1"})
 	if err != nil {
@@ -105,7 +97,7 @@ func TestInstallSkill(t *testing.T) {
 	if len(result.InstalledFiles) != 2 {
 		t.Fatalf("installedFiles = %v", result.InstalledFiles)
 	}
-	if _, err := os.Stat(filepath.Join(workDir, "skills", "postgres-helper", "SKILL.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(configDir, "skills", "postgres-helper", "SKILL.md")); err != nil {
 		t.Fatalf("expected installed SKILL.md: %v", err)
 	}
 }
@@ -138,17 +130,9 @@ func TestInstallSkillRejectsInvalidArchive(t *testing.T) {
 	}))
 	defer server.Close()
 
-	workDir := t.TempDir()
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get cwd: %v", err)
-	}
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("failed to chdir: %v", err)
-	}
-	defer os.Chdir(cwd)
+	configDir := t.TempDir()
 
-	s := NewServer()
+	s := NewServer(configDir)
 	ctx := testContext(t, map[string]string{"OBOT_URL": server.URL})
 	_, err = s.installSkill(ctx, installSkillParams{SkillID: "sk1"})
 	if err == nil {
@@ -179,24 +163,16 @@ func TestInstallSkillOverwriteCanceled(t *testing.T) {
 	}))
 	defer server.Close()
 
-	workDir := t.TempDir()
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get cwd: %v", err)
-	}
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("failed to chdir: %v", err)
-	}
-	defer os.Chdir(cwd)
-
-	if err := os.MkdirAll(filepath.Join("skills", "postgres-helper"), 0o755); err != nil {
+	configDir := t.TempDir()
+	skillDir := filepath.Join(configDir, "skills", "postgres-helper")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatalf("failed to create existing skill dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join("skills", "postgres-helper", "SKILL.md"), []byte("original"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("original"), 0o644); err != nil {
 		t.Fatalf("failed to write existing skill: %v", err)
 	}
 
-	s := NewServer()
+	s := NewServer(configDir)
 	s.confirmOverwrite = func(context.Context, string) (bool, error) {
 		return false, nil
 	}
@@ -210,7 +186,7 @@ func TestInstallSkillOverwriteCanceled(t *testing.T) {
 		t.Fatalf("unexpected message: %s", result.Message)
 	}
 
-	content, err := os.ReadFile(filepath.Join("skills", "postgres-helper", "SKILL.md"))
+	content, err := os.ReadFile(filepath.Join(skillDir, "SKILL.md"))
 	if err != nil {
 		t.Fatalf("failed to read existing skill: %v", err)
 	}

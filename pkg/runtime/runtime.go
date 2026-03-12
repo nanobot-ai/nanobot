@@ -122,7 +122,7 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 	})
 
 	registry.AddServer("nanobot.skills", func(string) mcp.MessageHandler {
-		return skills.NewServer()
+		return skills.NewServer(opt.ConfigDir)
 	})
 
 	return r, nil

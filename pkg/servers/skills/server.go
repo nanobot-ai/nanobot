@@ -9,13 +9,15 @@ import (
 )
 
 type Server struct {
+	configDir        string
 	tools            mcp.ServerTools
 	newClient        func(context.Context) (*obotClient, error)
 	confirmOverwrite func(context.Context, string) (bool, error)
 }
 
-func NewServer() *Server {
+func NewServer(configDir string) *Server {
 	s := &Server{
+		configDir:        configDir,
 		newClient:        newClient,
 		confirmOverwrite: defaultConfirmOverwrite,
 	}
