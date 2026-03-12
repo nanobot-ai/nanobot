@@ -23,7 +23,7 @@ prepare_runtime_dirs() {
 	mkdir -p /data "${NANOBOT_HOME}/.nanobot/state" "${NANOBOT_HOME}/sessions"
 	mkdir -p /tmp/.X11-unix
 	chmod 1777 /tmp/.X11-unix
-	chown -R nanobot:nanobot /data "${NANOBOT_HOME}/.nanobot" "${NANOBOT_HOME}/sessions"
+	chown -R nanobot:nanobot /data "${NANOBOT_HOME}"
 }
 
 configure_fluxbox() {
