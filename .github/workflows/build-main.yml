@@ -73,3 +73,22 @@ jobs:
             org.opencontainers.image.version=main
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=Nanobot CLI
+
+      - name: Build and push agent Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.agent
+          platforms: linux/amd64,linux/arm64
+          push: true
+          target: release
+          tags: |
+            ghcr.io/nanobot-ai/nanobot-agent:main
+            ghcr.io/nanobot-ai/nanobot-agent:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.title=nanobot-agent
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=main
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=Nanobot agent image with browser automation support

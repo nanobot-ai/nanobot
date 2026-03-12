@@ -85,6 +85,36 @@ dockers:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--label=org.opencontainers.image.description=Nanobot CLI"
     goarch: arm64
+  - image_templates:
+      - "ghcr.io/nanobot-ai/nanobot-agent:v{{ .Version }}-amd64"
+      - "ghcr.io/nanobot-ai/nanobot-agent:latest-amd64"
+    dockerfile: Dockerfile.agent
+    use: buildx
+    build_flag_templates:
+      - "--target=release"
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title=nanobot-agent"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.description=Nanobot agent image with browser automation support"
+    goarch: amd64
+  - image_templates:
+      - "ghcr.io/nanobot-ai/nanobot-agent:v{{ .Version }}-arm64"
+      - "ghcr.io/nanobot-ai/nanobot-agent:latest-arm64"
+    dockerfile: Dockerfile.agent
+    use: buildx
+    build_flag_templates:
+      - "--target=release"
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title=nanobot-agent"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.description=Nanobot agent image with browser automation support"
+    goarch: arm64
 docker_manifests:
   - name_template: "ghcr.io/nanobot-ai/nanobot:v{{ .Version }}"
     image_templates:
@@ -94,6 +124,14 @@ docker_manifests:
     image_templates:
       - "ghcr.io/nanobot-ai/nanobot:latest-amd64"
       - "ghcr.io/nanobot-ai/nanobot:latest-arm64"
+  - name_template: "ghcr.io/nanobot-ai/nanobot-agent:v{{ .Version }}"
+    image_templates:
+      - "ghcr.io/nanobot-ai/nanobot-agent:v{{ .Version }}-amd64"
+      - "ghcr.io/nanobot-ai/nanobot-agent:v{{ .Version }}-arm64"
+  - name_template: "ghcr.io/nanobot-ai/nanobot-agent:latest"
+    image_templates:
+      - "ghcr.io/nanobot-ai/nanobot-agent:latest-amd64"
+      - "ghcr.io/nanobot-ai/nanobot-agent:latest-arm64"
 brews:
   - name: nanobot
     description: "Nanobot cli"

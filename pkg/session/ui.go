@@ -14,6 +14,8 @@ import (
 	"github.com/nanobot-ai/nanobot/packages/ui"
 )
 
+var browserProxy = newBrowserProxy()
+
 func getCookieID(req *http.Request) string {
 	cookie, err := req.Cookie("nanobot-session-id")
 	if err == nil {
@@ -24,6 +26,11 @@ func getCookieID(req *http.Request) string {
 
 func UISession(next http.Handler, sessionStore *Manager, apiHandler http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/browser" || strings.HasPrefix(req.URL.Path, "/browser/") {
+			browserProxy.ServeHTTP(rw, req)
+			return
+		}
+
 		if !strings.Contains(strings.ToLower(req.UserAgent()), "mozilla") {
 			next.ServeHTTP(rw, req)
 			return

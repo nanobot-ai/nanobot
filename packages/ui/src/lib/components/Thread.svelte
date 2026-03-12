@@ -1,7 +1,8 @@
 <script lang="ts">
-import { ChevronDown, Upload } from "@lucide/svelte";
+import { ChevronDown, Monitor, Upload } from "@lucide/svelte";
 import Elicitation from "$lib/components/Elicitation.svelte";
 import Prompt from "$lib/components/Prompt.svelte";
+import BrowserViewer from "$lib/components/BrowserViewer.svelte";
 import type {
 	Agent,
 	Attachment,
@@ -73,6 +74,37 @@ let showScrollButton = $state(false);
 let previousLastMessageId = $state<string | null>(null);
 const hasMessages = $derived(messages && messages.length > 0);
 let selectedPrompt = $state<string | undefined>();
+let showBrowserViewer = $state(false);
+let browserViewerWidth = $state(50); // percentage
+let isResizing = $state(false);
+
+function startResize(e: MouseEvent) {
+	isResizing = true;
+	e.preventDefault();
+}
+
+function stopResize() {
+	isResizing = false;
+}
+
+function resize(e: MouseEvent) {
+	if (!isResizing) return;
+	const container = e.currentTarget as HTMLElement;
+	if (!container) return;
+
+	const rect = container.getBoundingClientRect();
+	const newWidth = ((rect.right - e.clientX) / rect.width) * 100;
+
+	// Constrain between 20% and 80%
+	browserViewerWidth = Math.max(20, Math.min(80, newWidth));
+}
+
+$effect(() => {
+	if (isResizing) {
+		window.addEventListener("mouseup", stopResize);
+		return () => window.removeEventListener("mouseup", stopResize);
+	}
+});
 
 // Split elicitations: question type renders inline, others render as modal
 const questionElicitation = $derived(
@@ -127,7 +159,7 @@ let dragCounter = 0;
 function handleDragEnter(e: DragEvent) {
 	e.preventDefault();
 	dragCounter++;
-	if (e.dataTransfer?.types.includes('Files')) {
+	if (e.dataTransfer?.types.includes("Files")) {
 		isDragging = true;
 	}
 }
@@ -158,7 +190,8 @@ async function handleDrop(e: DragEvent) {
 </script>
 
 <div
-	class="flex h-dvh w-full flex-col md:relative peer-[.workspace]:md:w-1/4"
+	class="relative flex h-dvh w-full flex-row md:relative peer-[.workspace]:md:w-1/4"
+	onmousemove={resize}
 	ondragenter={handleDragEnter}
 	ondragleave={handleDragLeave}
 	ondragover={handleDragOver}
@@ -178,83 +211,115 @@ async function handleDrop(e: DragEvent) {
 		</div>
 	{/if}
 
-	<!-- Messages area - full height scrollable with bottom padding for floating input -->
-	<div class="w-full overflow-y-auto" bind:this={messagesContainer} onscroll={handleScroll}>
-		<div class="mx-auto max-w-4xl">
-			<!-- Prompts section - show when prompts available and no messages -->
-			{#if prompts && prompts.length > 0}
-				<div class="mb-6">
-					<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-						{#each prompts as prompt (prompt.name)}
-							{#if selectedPrompt === prompt.name}
-								<Prompt
-									{prompt}
-									onSend={async (m) => {
-										selectedPrompt = undefined;
-										if (onSendMessage) {
-											return await onSendMessage(m);
-										}
-									}}
-									onCancel={() => (selectedPrompt = undefined)}
-									open
-								/>
-							{/if}
-						{/each}
-					</div>
-				</div>
-			{/if}
-
-			<Messages {messages} onSend={onSendMessage} {isLoading} {agent} {onReadResource} />
-		</div>
-	</div>
-
-	<!-- Message input - centered when no messages, bottom when messages exist -->
-	<div
-		class="absolute right-0 bottom-0 left-0 flex flex-col transition-all duration-500 ease-in-out {hasMessages
-			? 'bg-base-100/80 backdrop-blur-sm'
-			: 'md:-translate-y-1/2 [@media(min-height:900px)]:md:top-1/2 [@media(min-height:900px)]:md:bottom-auto'}"
-	>
-		<!-- Scroll to bottom button -->
-		{#if showScrollButton && hasMessages}
+	<!-- Chat area -->
+	<div class="relative flex flex-col" style="width: {showBrowserViewer ? `${100 - browserViewerWidth}%` : '100%'}">
+		<!-- Header with browser viewer toggle -->
+		<div class="flex items-center justify-end border-b border-base-300 bg-base-100 px-4 py-2">
 			<button
-				class="btn mx-auto btn-circle border-base-300 bg-base-100 shadow-lg btn-md active:translate-y-0.5"
-				onclick={scrollToBottom}
-				aria-label="Scroll to bottom"
+				class="btn btn-ghost btn-sm"
+				onclick={() => (showBrowserViewer = !showBrowserViewer)}
+				title="Toggle browser view"
 			>
-				<ChevronDown class="size-5" />
+				<Monitor size={16} />
+				Browser
 			</button>
-		{/if}
-		<div class="mx-auto w-full max-w-4xl">
-			{#if questionElicitation}
-				{#key questionElicitation.id}
-					<Elicitation
-						elicitation={questionElicitation}
-						open
-						onresult={(result) => {
-							onElicitationResult?.(questionElicitation, result);
-						}}
-					/>
-				{/key}
+		</div>
+
+		<!-- Messages area - full height scrollable with bottom padding for floating input -->
+		<div class="w-full flex-1 overflow-y-auto" bind:this={messagesContainer} onscroll={handleScroll}>
+			<div class="mx-auto max-w-4xl">
+				<!-- Prompts section - show when prompts available and no messages -->
+				{#if prompts && prompts.length > 0}
+					<div class="mb-6">
+						<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+							{#each prompts as prompt (prompt.name)}
+								{#if selectedPrompt === prompt.name}
+									<Prompt
+										{prompt}
+										onSend={async (m) => {
+											selectedPrompt = undefined;
+											if (onSendMessage) {
+												return await onSendMessage(m);
+											}
+										}}
+										onCancel={() => (selectedPrompt = undefined)}
+										open
+									/>
+								{/if}
+							{/each}
+						</div>
+					</div>
+				{/if}
+
+				<Messages {messages} onSend={onSendMessage} {isLoading} {agent} {onReadResource} />
+			</div>
+		</div>
+
+		<!-- Message input - centered when no messages, bottom when messages exist -->
+		<div
+			class="absolute right-0 bottom-0 left-0 flex flex-col transition-all duration-500 ease-in-out {hasMessages
+				? 'bg-base-100/80 backdrop-blur-sm'
+				: 'md:-translate-y-1/2 [@media(min-height:900px)]:md:top-1/2 [@media(min-height:900px)]:md:bottom-auto'}"
+		>
+			<!-- Scroll to bottom button -->
+			{#if showScrollButton && hasMessages}
+				<button
+					class="btn mx-auto btn-circle border-base-300 bg-base-100 shadow-lg btn-md active:translate-y-0.5"
+					onclick={scrollToBottom}
+					aria-label="Scroll to bottom"
+				>
+					<ChevronDown class="size-5" />
+				</button>
 			{/if}
-			<MessageInput
-				placeholder={`Type your message...${prompts && prompts.length > 0 ? ' or / for prompts' : ''}`}
-				onSend={onSendMessage}
-				{resources}
-				{messages}
-				{agents}
-				{selectedAgentId}
-				{onAgentChange}
-				onPrompt={(p) => (selectedPrompt = p)}
-				{onFileUpload}
-				disabled={isLoading}
-				{prompts}
-				{cancelUpload}
-				{uploadingFiles}
-				{uploadedFiles}
-				{onCancel}
-			/>
+			<div class="mx-auto w-full max-w-4xl">
+				{#if questionElicitation}
+					{#key questionElicitation.id}
+						<Elicitation
+							elicitation={questionElicitation}
+							open
+							onresult={(result) => {
+								onElicitationResult?.(questionElicitation, result);
+							}}
+						/>
+					{/key}
+				{/if}
+				<MessageInput
+					placeholder={`Type your message...${prompts && prompts.length > 0 ? ' or / for prompts' : ''}`}
+					onSend={onSendMessage}
+					{resources}
+					{messages}
+					{agents}
+					{selectedAgentId}
+					{onAgentChange}
+					onPrompt={(p) => (selectedPrompt = p)}
+					{onFileUpload}
+					disabled={isLoading}
+					{prompts}
+					{cancelUpload}
+					{uploadingFiles}
+					{uploadedFiles}
+					{onCancel}
+				/>
+			</div>
 		</div>
 	</div>
+
+	<!-- Resize handle -->
+	{#if showBrowserViewer}
+		<div
+			class="w-1 cursor-col-resize bg-base-300 transition-colors hover:bg-primary"
+			onmousedown={startResize}
+			role="separator"
+			aria-label="Resize browser viewer"
+		></div>
+	{/if}
+
+	<!-- Browser viewer pane -->
+	{#if showBrowserViewer}
+		<div class="flex flex-col" style="width: {browserViewerWidth}%">
+			<BrowserViewer bind:visible={showBrowserViewer} />
+		</div>
+	{/if}
 
 	<!-- Modal elicitations (OAuth, generic form) -->
 	{#if modalElicitation}
