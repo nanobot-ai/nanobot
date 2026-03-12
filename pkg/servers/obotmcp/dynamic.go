@@ -1,15 +1,15 @@
-package system
+package obotmcp
 
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
-	"log/slog"
 )
 
 var (
@@ -54,6 +54,7 @@ type RemoveMCPServerParams struct {
 }
 
 func (s *Server) addMCPServer(ctx context.Context, params AddMCPServerParams) (map[string]any, error) {
+	// TODO Once we feel fully committed to the mcp-cli approach, remove all the logic related to dynamic servers.
 	if params.URL == "" {
 		return nil, mcp.ErrRPCInvalidParams.WithMessage("url is required")
 	}

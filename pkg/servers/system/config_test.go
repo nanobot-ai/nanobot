@@ -95,7 +95,7 @@ func TestConfigSkillsPermissionIncludesSkillDetails(t *testing.T) {
 	instructions := result.Agent.Instructions.Instructions
 
 	// Check for specific skills we know exist
-	expectedSkills := []string{"python-scripts", "workflows", "mcp-cli"}
+	expectedSkills := []string{"python-scripts", "workflows"}
 	for _, skillName := range expectedSkills {
 		if !strings.Contains(instructions, skillName) {
 			t.Errorf("expected skill '%s' to be listed in instructions", skillName)
@@ -412,7 +412,23 @@ func TestConfigHook_MCPServerSearch(t *testing.T) {
 			}
 
 			if !tt.shouldExist {
+				for _, tool := range result.Agent.Tools {
+					if tool == "nanobot.obot-mcp-cli/refreshMCPServerConfig" {
+						t.Errorf("refreshMCPServerConfig should not be added without MCP_SERVER_SEARCH_URL")
+					}
+				}
 				return
+			}
+
+			foundRefresh := false
+			for _, tool := range result.Agent.Tools {
+				if tool == "nanobot.obot-mcp-cli/refreshMCPServerConfig" {
+					foundRefresh = true
+					break
+				}
+			}
+			if !foundRefresh {
+				t.Error("expected refreshMCPServerConfig tool when MCP_SERVER_SEARCH_URL is configured")
 			}
 
 			// Verify URL
