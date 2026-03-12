@@ -161,7 +161,9 @@ export class SimpleClient {
 					method: "initialize",
 					params: {
 						protocolVersion: "2024-11-05",
-						capabilities: {},
+						capabilities: {
+							elicitation: {},
+						},
 						clientInfo: {
 							name: "nanobot-ui",
 							version: "0.0.1",

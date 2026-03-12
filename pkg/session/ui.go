@@ -111,9 +111,11 @@ func UISession(next http.Handler, sessionStore *Manager, apiHandler http.Handler
 				if strings.Contains(req.URL.Path, "immutable") {
 					serveGzipAndCached(req, rw, uiFS)
 				} else {
+					setNoCacheHeaders(rw)
 					http.FileServer(http.FS(uiFS)).ServeHTTP(rw, req)
 				}
 			} else {
+				setNoCacheHeaders(rw)
 				http.ServeFileFS(rw, req, uiFS, "fallback.html")
 			}
 		} else {
@@ -125,6 +127,12 @@ func UISession(next http.Handler, sessionStore *Manager, apiHandler http.Handler
 
 func isSecureRequest(req *http.Request) bool {
 	return req.TLS != nil || req.Header.Get("X-Forwarded-Proto") == "https"
+}
+
+func setNoCacheHeaders(rw http.ResponseWriter) {
+	rw.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0")
+	rw.Header().Set("Pragma", "no-cache")
+	rw.Header().Set("Expires", "0")
 }
 
 func serveGzipAndCached(req *http.Request, rw http.ResponseWriter, fs fs.FS) {
