@@ -190,9 +190,11 @@ Users may ask to run a workflow at any time — not just immediately after desig
 
 **IMPORTANT:** If the user asks you to *create* a workflow, do NOT auto-execute it after writing the file. Present it for review and offer to run it. But if the user asks you to *run* an existing workflow, go ahead — that's an explicit request.
 
+**IMPORTANT:** Installed workflows live on the local filesystem in the `workflows/` directory. When running a workflow, ALWAYS load it from `workflows/<name>/SKILL.md`. Do NOT use `searchArtifacts` to find workflows to run — that tool searches the remote Obot registry for published artifacts, not locally installed workflows.
+
 When the user asks you to run a workflow:
 
-1. Load the workflow from `workflows/<name>/SKILL.md`.
+1. Load the workflow from `workflows/<name>/SKILL.md`. If you're unsure which workflows are available, list the `workflows/` directory.
 2. Use TodoWrite to create a todo for each workflow step before you begin. This is your execution plan — the user will follow along.
 3. **Present the execution plan to the user.** After creating the todos, present a brief summary of what will be executed and ask the user to confirm before proceeding. For example: "I've planned the following steps: [list steps]. Does this look good to proceed?"
 4. **Wait for user approval.** Do not begin execution until the user confirms.
@@ -268,10 +270,11 @@ To publish a workflow, use the `publishArtifact` tool:
 4. The first publish creates version 1. Subsequent publishes of the same workflow create new versions (v2, v3, etc.).
 5. Published workflows start as **private**. The user can change visibility to public in the Obot UI.
 
-### Searching
+### Searching the Registry
 
-To find published workflows from other users, use `searchArtifacts`:
+To find published workflows from other users in the **remote Obot registry**, use `searchArtifacts`:
 - Search by keyword: `searchArtifacts({ "query": "code review", "artifactType": "workflow" })`
+- This is for discovering NEW workflows to install — not for finding workflows already on your local filesystem.
 
 ### Installing
 
