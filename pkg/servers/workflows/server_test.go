@@ -94,6 +94,18 @@ func TestResourcesList(t *testing.T) {
 	if testWf.Meta["createdAt"] != "2026-01-15T09:00:00Z" {
 		t.Errorf("test-workflow Meta[createdAt] = %q", testWf.Meta["createdAt"])
 	}
+	if testWf.Meta["author"] != "testuser" {
+		t.Errorf("test-workflow Meta[author] = %q, want 'testuser'", testWf.Meta["author"])
+	}
+	if testWf.Meta["description"] != "This is a test workflow for unit testing purposes." {
+		t.Errorf("test-workflow Meta[description] = %q", testWf.Meta["description"])
+	}
+	if testWf.Meta["license"] != "MIT" {
+		t.Errorf("test-workflow Meta[license] = %q, want 'MIT'", testWf.Meta["license"])
+	}
+	if testWf.Meta["compatibility"] != "nanobot >= 0.1.0" {
+		t.Errorf("test-workflow Meta[compatibility] = %q, want 'nanobot >= 0.1.0'", testWf.Meta["compatibility"])
+	}
 
 	anotherWf := resourceMap["another"]
 	if anotherWf.Description != "Another workflow for testing multiple workflow listing." {
@@ -182,8 +194,11 @@ func TestResourcesRead(t *testing.T) {
 			shouldContain: "## Inputs",
 			expectName:    "test-workflow",
 			expectMeta: map[string]string{
-				"name":      "test-workflow",
-				"createdAt": "2026-01-15T09:00:00Z",
+				"name":          "test-workflow",
+				"createdAt":     "2026-01-15T09:00:00Z",
+				"author":        "testuser",
+				"license":       "MIT",
+				"compatibility": "nanobot >= 0.1.0",
 			},
 		},
 		{
