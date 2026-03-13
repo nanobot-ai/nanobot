@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+
+	obotconfig "github.com/nanobot-ai/nanobot/pkg/servers/obot"
 )
 
 type searchArtifactsParams struct {
@@ -53,9 +55,7 @@ func (s *Server) searchArtifacts(ctx context.Context, params searchArtifactsPara
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	if cfg.authHeader != "" {
-		req.Header.Set("Authorization", cfg.authHeader)
-	}
+	obotconfig.ApplyAuth(req, obotconfig.Config{AuthHeader: cfg.authHeader})
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

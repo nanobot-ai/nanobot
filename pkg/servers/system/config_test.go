@@ -436,3 +436,72 @@ func TestConfigHook_MCPServerSearch(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigSkillsPermissionAddsNanobotSkillsWithObotURL(t *testing.T) {
+	server := NewServer("")
+	ctx := context.Background()
+	session := mcp.NewEmptySession(ctx)
+	session.Set(mcp.SessionEnvMapKey, map[string]string{
+		"OBOT_URL": "https://obot.example.com",
+	})
+	ctx = mcp.WithSession(ctx, session)
+
+	agent := &types.HookAgent{
+		Name: "test-agent",
+		Permissions: createPermissions(t, map[string]string{
+			"skills": "allow",
+		}),
+		MCPServers: []string{},
+	}
+
+	result, err := server.config(ctx, types.AgentConfigHook{Agent: agent})
+	if err != nil {
+		t.Fatalf("config() failed: %v", err)
+	}
+
+	if _, ok := result.MCPServers["nanobot.skills"]; !ok {
+		t.Fatal("expected nanobot.skills MCP server to be injected")
+	}
+
+	found := false
+	for _, tool := range result.Agent.Tools {
+		if tool == "nanobot.skills" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected nanobot.skills to be added to agent tools")
+	}
+}
+
+func TestConfigSkillsPermissionSkipsNanobotSkillsWithoutObotURL(t *testing.T) {
+	server := NewServer("")
+	ctx := context.Background()
+	session := mcp.NewEmptySession(ctx)
+	session.Set(mcp.SessionEnvMapKey, map[string]string{})
+	ctx = mcp.WithSession(ctx, session)
+
+	agent := &types.HookAgent{
+		Name: "test-agent",
+		Permissions: createPermissions(t, map[string]string{
+			"skills": "allow",
+		}),
+		MCPServers: []string{},
+	}
+
+	result, err := server.config(ctx, types.AgentConfigHook{Agent: agent})
+	if err != nil {
+		t.Fatalf("config() failed: %v", err)
+	}
+
+	if _, ok := result.MCPServers["nanobot.skills"]; ok {
+		t.Fatal("did not expect nanobot.skills MCP server without OBOT_URL")
+	}
+
+	for _, tool := range result.Agent.Tools {
+		if tool == "nanobot.skills" {
+			t.Fatal("did not expect nanobot.skills tool without OBOT_URL")
+		}
+	}
+}

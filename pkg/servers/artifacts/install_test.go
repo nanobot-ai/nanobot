@@ -3,13 +3,12 @@ package artifacts
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/nanobot-ai/nanobot/pkg/servers/installzip"
 	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 )
 
@@ -47,16 +46,7 @@ func createTestZIP(t *testing.T, fm skillformat.Frontmatter, body string, files 
 	return buf.Bytes()
 }
 
-func skipIfWindows(t *testing.T) {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("unzip not available on Windows")
-	}
-}
-
 func TestExtractZIP(t *testing.T) {
-	skipIfWindows(t)
-
 	fm := skillformat.Frontmatter{
 		Name:        "test-wf",
 		Description: "A test workflow.",
@@ -66,9 +56,9 @@ func TestExtractZIP(t *testing.T) {
 	})
 
 	targetDir := filepath.Join(t.TempDir(), "extracted")
-	installed, err := extractZIP(context.Background(), zipData, targetDir)
+	installed, err := installzip.Extract(zipData, targetDir)
 	if err != nil {
-		t.Fatalf("extractZIP() error: %v", err)
+		t.Fatalf("installzip.Extract() error: %v", err)
 	}
 
 	if len(installed) != 2 {
@@ -85,8 +75,6 @@ func TestExtractZIP(t *testing.T) {
 }
 
 func TestExtractZIP_NestedDirectories(t *testing.T) {
-	skipIfWindows(t)
-
 	fm := skillformat.Frontmatter{
 		Name:        "nested-wf",
 		Description: "A nested workflow.",
@@ -97,9 +85,9 @@ func TestExtractZIP_NestedDirectories(t *testing.T) {
 	})
 
 	targetDir := filepath.Join(t.TempDir(), "extracted")
-	installed, err := extractZIP(context.Background(), zipData, targetDir)
+	installed, err := installzip.Extract(zipData, targetDir)
 	if err != nil {
-		t.Fatalf("extractZIP() error: %v", err)
+		t.Fatalf("installzip.Extract() error: %v", err)
 	}
 
 	if len(installed) != 3 {
@@ -116,8 +104,6 @@ func TestExtractZIP_NestedDirectories(t *testing.T) {
 }
 
 func TestExtractZIP_IncludesSkillMD(t *testing.T) {
-	skipIfWindows(t)
-
 	fm := skillformat.Frontmatter{
 		Name:        "with-skill",
 		Description: "A workflow with SKILL.md.",
@@ -125,9 +111,9 @@ func TestExtractZIP_IncludesSkillMD(t *testing.T) {
 	zipData := createTestZIP(t, fm, "# Test\n", nil)
 
 	targetDir := filepath.Join(t.TempDir(), "extracted")
-	installed, err := extractZIP(context.Background(), zipData, targetDir)
+	installed, err := installzip.Extract(zipData, targetDir)
 	if err != nil {
-		t.Fatalf("extractZIP() error: %v", err)
+		t.Fatalf("installzip.Extract() error: %v", err)
 	}
 
 	var foundSkill bool
@@ -152,9 +138,9 @@ func TestReadFrontmatterFromZIP(t *testing.T) {
 	}
 	zipData := createTestZIP(t, fm, "# Test\n", nil)
 
-	got, err := readFrontmatterFromZIP(zipData)
+	got, err := installzip.ReadFrontmatter(zipData)
 	if err != nil {
-		t.Fatalf("readFrontmatterFromZIP() error: %v", err)
+		t.Fatalf("installzip.ReadFrontmatter() error: %v", err)
 	}
 	if got.Name != "read-test" {
 		t.Errorf("name = %q, want %q", got.Name, "read-test")
@@ -171,7 +157,7 @@ func TestReadFrontmatterFromZIP_MissingSKILLMD(t *testing.T) {
 	fw.Write([]byte("hello"))
 	w.Close()
 
-	_, err := readFrontmatterFromZIP(buf.Bytes())
+	_, err := installzip.ReadFrontmatter(buf.Bytes())
 	if err == nil {
 		t.Fatal("expected error for missing SKILL.md")
 	}
@@ -187,14 +173,14 @@ func TestReadFrontmatterFromZIP_InvalidFrontmatter(t *testing.T) {
 	fw.Write([]byte("---\nbad yaml: [\n---\n"))
 	w.Close()
 
-	_, err := readFrontmatterFromZIP(buf.Bytes())
+	_, err := installzip.ReadFrontmatter(buf.Bytes())
 	if err == nil {
 		t.Fatal("expected error for invalid frontmatter")
 	}
 }
 
 func TestReadFrontmatterFromZIP_InvalidZIP(t *testing.T) {
-	_, err := readFrontmatterFromZIP([]byte("not a zip"))
+	_, err := installzip.ReadFrontmatter([]byte("not a zip"))
 	if err == nil {
 		t.Fatal("expected error for invalid ZIP")
 	}

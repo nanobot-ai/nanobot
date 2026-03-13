@@ -16,6 +16,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
 	"github.com/nanobot-ai/nanobot/pkg/servers/artifacts"
 	"github.com/nanobot-ai/nanobot/pkg/servers/meta"
+	"github.com/nanobot-ai/nanobot/pkg/servers/skills"
 	"github.com/nanobot-ai/nanobot/pkg/servers/system"
 	"github.com/nanobot-ai/nanobot/pkg/servers/workflows"
 	"github.com/nanobot-ai/nanobot/pkg/session"
@@ -97,7 +98,7 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 	}
 
 	registry.AddServer("nanobot.meta", func(string) mcp.MessageHandler {
-		return meta.NewServer(sessiondata.NewData(r))
+		return meta.NewServer(sessiondata.NewData(r), opt.ConfigDir)
 	})
 
 	registry.AddServer("nanobot.agent", func(name string) mcp.MessageHandler {
@@ -118,6 +119,10 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 
 	registry.AddServer("nanobot.artifacts", func(string) mcp.MessageHandler {
 		return artifacts.NewServer()
+	})
+
+	registry.AddServer("nanobot.skills", func(string) mcp.MessageHandler {
+		return skills.NewServer(opt.ConfigDir)
 	})
 
 	return r, nil

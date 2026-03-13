@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/servers/system/skills"
+	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 	"gopkg.in/yaml.v3"
 )
 
@@ -107,7 +109,7 @@ func (s *Server) listSkills(ctx context.Context, _ struct{}) (*SkillList, error)
 		userSkillsDir := filepath.Join(s.configDir, "skills")
 		entries, err := os.ReadDir(userSkillsDir)
 		if err == nil {
-			// Directory exists, read skills from it
+			// Load flat legacy skills first.
 			for _, entry := range entries {
 				if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
 					continue
@@ -133,6 +135,22 @@ func (s *Server) listSkills(ctx context.Context, _ struct{}) (*SkillList, error)
 					Description: frontmatter["description"],
 				}
 			}
+
+			// Directory-based Agent Skills override both flat user skills and built-ins.
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
+
+				skill, present, err := loadDirectorySkill(userSkillsDir, entry.Name())
+				if err != nil {
+					delete(skillMap, entry.Name())
+					continue
+				}
+				if present {
+					skillMap[skill.Name] = skill
+				}
+			}
 		}
 		// If directory doesn't exist or can't be read, silently continue
 	}
@@ -153,27 +171,65 @@ func (s *Server) getSkill(ctx context.Context, params GetSkillParams) (string, e
 		return "", mcp.ErrRPCInvalidParams.WithMessage("skill name is required")
 	}
 
-	// Normalize the name - add .md extension if not present
-	skillName := params.Name
-	if !strings.HasSuffix(skillName, ".md") {
-		skillName = skillName + ".md"
-	}
+	skillName := strings.TrimSuffix(params.Name, ".md")
 
-	// First, try to read from user skills directory (if configured)
 	if s.configDir != "" {
-		userSkillPath := filepath.Join(s.configDir, "skills", skillName)
+		userSkillsDir := filepath.Join(s.configDir, "skills")
+
+		dirSkillPath := filepath.Join(userSkillsDir, skillName, skillformat.SkillMainFile)
+		if info, err := os.Stat(filepath.Join(userSkillsDir, skillName)); err == nil && info.IsDir() {
+			content, err := os.ReadFile(dirSkillPath)
+			if err != nil {
+				return "", mcp.ErrRPCInvalidParams.WithMessage("skill '%s' not found", params.Name)
+			}
+
+			fm, _, err := skillformat.ParseAndValidateFrontmatter(string(content))
+			if err != nil {
+				return "", mcp.ErrRPCInvalidParams.WithMessage("skill '%s' not found", params.Name)
+			}
+			if err := skillformat.ValidateNameMatchesDir(fm.Name, skillName); err != nil {
+				return "", mcp.ErrRPCInvalidParams.WithMessage("skill '%s' not found", params.Name)
+			}
+
+			return string(content), nil
+		}
+
+		userSkillPath := filepath.Join(userSkillsDir, skillName+".md")
 		content, err := os.ReadFile(userSkillPath)
 		if err == nil {
 			return string(content), nil
 		}
-		// If file doesn't exist or can't be read, fall through to embedded skills
 	}
 
-	// Fall back to embedded skills
-	content, err := fs.ReadFile(skills.Skills, skillName)
+	content, err := fs.ReadFile(skills.Skills, skillName+".md")
 	if err != nil {
 		return "", mcp.ErrRPCInvalidParams.WithMessage("skill '%s' not found", params.Name)
 	}
 
 	return string(content), nil
+}
+
+func loadDirectorySkill(userSkillsDir, dirName string) (Skill, bool, error) {
+	skillPath := filepath.Join(userSkillsDir, dirName, skillformat.SkillMainFile)
+	content, err := os.ReadFile(skillPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return Skill{}, true, fmt.Errorf("missing %s", skillformat.SkillMainFile)
+		}
+		return Skill{}, true, err
+	}
+
+	fm, _, err := skillformat.ParseAndValidateFrontmatter(string(content))
+	if err != nil {
+		return Skill{}, true, err
+	}
+	if err := skillformat.ValidateNameMatchesDir(fm.Name, dirName); err != nil {
+		return Skill{}, true, err
+	}
+
+	return Skill{
+		Name:        fm.Name,
+		DisplayName: skillformat.DisplayName(fm.Name),
+		Description: fm.Description,
+	}, true, nil
 }

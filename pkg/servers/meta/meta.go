@@ -15,16 +15,19 @@ import (
 type Server struct {
 	tools           mcp.ServerTools
 	data            *sessiondata.Data
+	configDir       string
 	subscriptions   *fswatch.SubscriptionManager
 	workflowWatcher *fswatch.Watcher
+	skillWatcher    *fswatch.Watcher
 	sessionsWatcher *fswatch.Watcher
 	watcherOnce     sync.Once
 	watcherInitErr  error
 }
 
-func NewServer(data *sessiondata.Data) *Server {
+func NewServer(data *sessiondata.Data, configDir string) *Server {
 	s := &Server{
 		data:          data,
+		configDir:     configDir,
 		subscriptions: fswatch.NewSubscriptionManager(context.Background()),
 	}
 
@@ -42,6 +45,11 @@ func (s *Server) Close() error {
 	var errs []error
 	if s.workflowWatcher != nil {
 		if err := s.workflowWatcher.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if s.skillWatcher != nil {
+		if err := s.skillWatcher.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
