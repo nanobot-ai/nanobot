@@ -9,10 +9,12 @@ The `browser-use` command provides fast, persistent browser automation. It maint
 
 `browser-use` is already installed in the dedicated Nanobot agent image. Use the built-in CLI directly.
 
+When using this skill, default to `--browser chromium --headed` unless the user explicitly wants headless/background execution. Headed mode is the safer default because it keeps the browser visible in BrowserView and makes manual intervention possible.
+
 ## Quick Start
 
 ```bash
-browser-use open https://example.com           # Navigate to URL
+browser-use --browser chromium --headed open https://example.com  # Navigate to URL
 browser-use state                              # Get page elements with indices
 browser-use click 5                            # Click element by index
 browser-use type "Hello World"                 # Type text
@@ -22,7 +24,7 @@ browser-use close                              # Close browser
 
 ## Core Workflow
 
-1. **Navigate**: `browser-use open <url>` - Opens URL (starts browser if needed)
+1. **Navigate**: `browser-use --browser chromium --headed open <url>` - Opens URL (starts browser if needed)
 2. **Inspect**: `browser-use state` - Returns clickable elements with indices
 3. **Interact**: Use indices from state to interact (`browser-use click 5`, `browser-use input 3 "text"`)
 4. **Verify**: `browser-use state` or `browser-use screenshot` to confirm actions
@@ -31,12 +33,12 @@ browser-use close                              # Close browser
 ## Browser Modes
 
 ```bash
-browser-use --browser chromium open <url>      # Default: headless Chromium
-browser-use --browser chromium --headed open <url>  # Visible Chromium window
+browser-use --browser chromium --headed open <url>  # Recommended default: visible Chromium window
+browser-use --browser chromium open <url>      # Headless Chromium for explicit background runs
 browser-use --browser real open <url>          # User's Chrome with login sessions
 ```
 
-- **chromium**: Fast, isolated, headless by default
+- **chromium**: Fast, isolated, and should usually be run with `--headed`
 - **real**: Uses your Chrome with cookies, extensions, logged-in sessions
 
 ## Browser Viewing with VNC
@@ -59,14 +61,14 @@ The Nanobot UI includes a browser viewer component that embeds VNC access. The b
 
 ### Using with browser-use
 
-**Always use `--headed` mode when you need VNC viewing:**
+**Default to `--headed` mode. It is required when you need VNC viewing:**
 
 ```bash
-# WITHOUT VNC (headless, fast, but user can't see it)
-browser-use --browser chromium open https://example.com
-
-# WITH VNC (visible in VNC viewer, user can interact)
+# RECOMMENDED DEFAULT (visible in VNC viewer, user can interact)
 browser-use --browser chromium --headed open https://example.com
+
+# HEADLESS ONLY WHEN EXPLICITLY APPROPRIATE (faster, but user can't see it)
+browser-use --browser chromium open https://example.com
 ```
 
 The `--headed` flag makes the browser visible on the VNC display (:99).
@@ -247,6 +249,7 @@ Each Chrome profile has its own cookies, history, and logged-in sessions. Choosi
 ## Usage Notes
 
 - Always run `browser-use state` before interacting so you have current element indices.
-- Prefer `--browser chromium --headed` when the user needs to see the browser or may need to step in.
+- Default to `--browser chromium --headed`.
+- Only omit `--headed` when the user explicitly wants headless/background execution or when visibility and manual takeover are clearly unnecessary.
 - Use `browser-use screenshot` or `browser-use state` to confirm each critical action.
 - Close the session with `browser-use close` when the browser task is complete.
