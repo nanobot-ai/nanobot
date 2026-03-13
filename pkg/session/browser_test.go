@@ -61,3 +61,17 @@ func TestBrowserNormalizeSize(t *testing.T) {
 		t.Fatalf("normalizeSize should round to 8px increments, got %dx%d", width, height)
 	}
 }
+
+func TestCountBrowserWindows(t *testing.T) {
+	t.Parallel()
+
+	output := `
+0x01200003  0 host google-chrome.Google-chrome  Google - Google Chrome for Testing
+0x01400004  0 host Navigator.firefox  Docs
+0x01600005  0 host chromium.Chromium  Slack - Chromium
+`
+
+	if got := countBrowserWindows(output); got != 2 {
+		t.Fatalf("countBrowserWindows() = %d, want 2", got)
+	}
+}
