@@ -149,6 +149,8 @@ Deployment to {{input.environment}} complete.
 
 **Output:** The `## Output` section defines the final result. If omitted, the last step's output is used.
 
+**File dependencies:** When a workflow depends on any files (scripts, templates, data files, configs, etc.), those files **must** be placed in the same directory as the workflow's `SKILL.md` file or in a subdirectory within it. Workflows are self-contained directories — files outside the workflow directory will not be available when the workflow is published, installed, or shared.
+
 ## Designing Workflows
 
 When asked to create a workflow, DO NOT start writing it immediately. Follow this process:
