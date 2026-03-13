@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -25,6 +27,11 @@ const (
 type browserResizeRequest struct {
 	Width  int `json:"width"`
 	Height int `json:"height"`
+}
+
+type browserStatusResponse struct {
+	Available   bool `json:"available"`
+	WindowCount int  `json:"windowCount"`
 }
 
 type browserProxyHandler struct {
@@ -69,10 +76,73 @@ func (h *browserProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Reques
 	case "/healthz":
 		rw.WriteHeader(http.StatusOK)
 		_, _ = rw.Write([]byte("ok"))
+	case "/status":
+		h.handleStatusStream(rw, req)
 	case "/resize":
 		h.handleResize(rw, req)
 	default:
 		h.proxy.ServeHTTP(rw, req)
+	}
+}
+
+func (h *browserProxyHandler) handleStatusStream(rw http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		rw.Header().Set("Allow", http.MethodGet)
+		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	flusher, ok := rw.(http.Flusher)
+	if !ok {
+		http.Error(rw, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	rw.Header().Set("Content-Type", "text/event-stream")
+	rw.Header().Set("Cache-Control", "no-cache")
+	rw.Header().Set("Connection", "keep-alive")
+	rw.Header().Set("X-Accel-Buffering", "no")
+
+	writeStatus := func(status browserStatusResponse) error {
+		payload, err := json.Marshal(status)
+		if err != nil {
+			return err
+		}
+
+		if _, err := fmt.Fprintf(rw, "event: status\ndata: %s\n\n", payload); err != nil {
+			return err
+		}
+		flusher.Flush()
+		return nil
+	}
+
+	lastStatus := h.currentStatus()
+	if err := writeStatus(lastStatus); err != nil {
+		return
+	}
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-req.Context().Done():
+			return
+		case <-ticker.C:
+			status := h.currentStatus()
+			if status == lastStatus {
+				if _, err := rw.Write([]byte(": keepalive\n\n")); err != nil {
+					return
+				}
+				flusher.Flush()
+				continue
+			}
+
+			if err := writeStatus(status); err != nil {
+				return
+			}
+			lastStatus = status
+		}
 	}
 }
 
@@ -146,6 +216,14 @@ func (h *browserProxyHandler) resize(width, height int) error {
 	return nil
 }
 
+func (h *browserProxyHandler) currentStatus() browserStatusResponse {
+	windowCount, _ := h.browserWindowCount()
+	return browserStatusResponse{
+		Available:   windowCount > 0,
+		WindowCount: windowCount,
+	}
+}
+
 func (h *browserProxyHandler) maximizeWindows() error {
 	listCmd := exec.Command("wmctrl", "-l")
 	listOutput, err := listCmd.Output()
@@ -169,6 +247,31 @@ func (h *browserProxyHandler) maximizeWindows() error {
 	}
 
 	return nil
+}
+
+func (h *browserProxyHandler) browserWindowCount() (int, error) {
+	output, err := exec.Command("wmctrl", "-lx").CombinedOutput()
+	if err != nil {
+		return 0, err
+	}
+
+	return countBrowserWindows(string(output)), nil
+}
+
+func countBrowserWindows(output string) int {
+	count := 0
+	for _, line := range strings.Split(output, "\n") {
+		lower := strings.ToLower(line)
+		if lower == "" {
+			continue
+		}
+
+		if strings.Contains(lower, "chromium") || strings.Contains(lower, "chrome") {
+			count++
+		}
+	}
+
+	return count
 }
 
 func parseResolution(value string) (int, int, error) {

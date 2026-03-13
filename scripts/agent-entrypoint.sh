@@ -38,6 +38,7 @@ session.screen0.tab.placement: TopLeft
 session.screen0.fullMaximization: true
 session.screen0.maxDisableMove: true
 session.screen0.maxDisableResize: true
+session.screen0.toolbar.height: 0
 EOF
 
 	cat > "${fluxbox_dir}/apps" <<'EOF'
@@ -68,7 +69,7 @@ start_browser_stack() {
 	configure_fluxbox
 
 	echo "Starting window manager (fluxbox)..."
-	fluxbox -rc "${HOME}/.nanobot/fluxbox/init" &
+	fluxbox -no-toolbar -rc "${HOME}/.nanobot/fluxbox/init" &
 
 	echo "Starting x11vnc on port ${VNC_PORT}..."
 	x11vnc -display ":${DISPLAY_NUM}" \

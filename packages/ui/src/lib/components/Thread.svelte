@@ -77,6 +77,15 @@ let selectedPrompt = $state<string | undefined>();
 let showBrowserViewer = $state(false);
 let browserViewerWidth = $state(50); // percentage
 let isResizing = $state(false);
+let browserAvailable = $state(false);
+
+function browserStatusUrl() {
+	if (typeof window === "undefined") {
+		return "/browser/status";
+	}
+
+	return new URL("/browser/status", window.location.origin).toString();
+}
 
 function startResize(e: MouseEvent) {
 	isResizing = true;
@@ -104,6 +113,33 @@ $effect(() => {
 		window.addEventListener("mouseup", stopResize);
 		return () => window.removeEventListener("mouseup", stopResize);
 	}
+});
+
+$effect(() => {
+	if (typeof window === "undefined") {
+		return;
+	}
+
+	const eventSource = new EventSource(browserStatusUrl());
+
+	const handleStatus = (event: Event) => {
+		try {
+			const data = JSON.parse((event as MessageEvent<string>).data) as { available?: boolean };
+			browserAvailable = !!data.available;
+			if (!browserAvailable) {
+				showBrowserViewer = false;
+			}
+		} catch {
+			// Ignore malformed status events and keep the last known state.
+		}
+	};
+
+	eventSource.addEventListener("status", handleStatus);
+
+	return () => {
+		eventSource.removeEventListener("status", handleStatus);
+		eventSource.close();
+	};
 });
 
 // Split elicitations: question type renders inline, others render as modal
@@ -213,17 +249,19 @@ async function handleDrop(e: DragEvent) {
 
 	<!-- Chat area -->
 	<div class="relative flex flex-col" style="width: {showBrowserViewer ? `${100 - browserViewerWidth}%` : '100%'}">
-		<!-- Header with browser viewer toggle -->
-		<div class="flex items-center justify-end border-b border-base-300 bg-base-100 px-4 py-2">
-			<button
-				class="btn btn-ghost btn-sm"
-				onclick={() => (showBrowserViewer = !showBrowserViewer)}
-				title="Toggle browser view"
-			>
-				<Monitor size={16} />
-				Browser
-			</button>
-		</div>
+		{#if browserAvailable}
+			<!-- Header with browser viewer toggle -->
+			<div class="flex items-center justify-end border-b border-base-300 bg-base-100 px-4 py-2">
+				<button
+					class="btn btn-ghost btn-sm"
+					onclick={() => (showBrowserViewer = !showBrowserViewer)}
+					title="Toggle browser view"
+				>
+					<Monitor size={16} />
+					Browser
+				</button>
+			</div>
+		{/if}
 
 		<!-- Messages area - full height scrollable with bottom padding for floating input -->
 		<div class="w-full flex-1 overflow-y-auto" bind:this={messagesContainer} onscroll={handleScroll}>
