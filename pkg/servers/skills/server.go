@@ -11,7 +11,6 @@ import (
 type Server struct {
 	configDir        string
 	tools            mcp.ServerTools
-	configDir        string
 	newClient        func(context.Context) (*obotClient, error)
 	confirmOverwrite func(context.Context, string) (bool, error)
 }
