@@ -89,6 +89,7 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 				return params, fmt.Errorf("failed to get working directory: %w", err)
 			}
 			absWorkflowDir := filepath.Join(cwd, skillformat.WorkflowsDir)
+			absSkillsDir := filepath.Join(cwd, s.configDir, "skills")
 
 			agent.Instructions.Instructions += fmt.Sprintf(`
 
@@ -101,7 +102,10 @@ This is where your files for this session live. The Bash tool defaults to this a
 
 Workflow files must always be stored in: %s
 Do NOT put workflow files in the session directory.
-`, absSessionDir, absWorkflowDir)
+
+Skill files are stored in: %s
+Do NOT put skill files in the session directory or workflow directory.
+`, absSessionDir, absWorkflowDir, absSkillsDir)
 		}
 
 		if params.MCPServers == nil {

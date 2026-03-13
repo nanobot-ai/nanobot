@@ -98,7 +98,7 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 	}
 
 	registry.AddServer("nanobot.meta", func(string) mcp.MessageHandler {
-		return meta.NewServer(sessiondata.NewData(r))
+		return meta.NewServer(sessiondata.NewData(r), opt.ConfigDir)
 	})
 
 	registry.AddServer("nanobot.agent", func(name string) mcp.MessageHandler {

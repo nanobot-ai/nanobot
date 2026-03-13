@@ -27,6 +27,8 @@ var UI = types.Config{
 		MCPServers: []string{"nanobot.meta", "nanobot.workflows"},
 		Tools: []string{
 			"nanobot.workflow-tools/deleteWorkflow",
+			"nanobot.skills/installSkill",
+			"nanobot.skills/deleteSkill",
 			"nanobot.system/uploadFile",
 			"nanobot.system/deleteFile",
 			"nanobot.artifacts/publishArtifact",
@@ -40,5 +42,6 @@ var UI = types.Config{
 		"nanobot.workflow-tools": {},
 		"nanobot.system":         {},
 		"nanobot.artifacts":      {},
+		"nanobot.skills":         {},
 	},
 }

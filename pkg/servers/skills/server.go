@@ -11,6 +11,7 @@ import (
 type Server struct {
 	configDir        string
 	tools            mcp.ServerTools
+	configDir        string
 	newClient        func(context.Context) (*obotClient, error)
 	confirmOverwrite func(context.Context, string) (bool, error)
 }
@@ -29,6 +30,9 @@ func NewServer(configDir string) *Server {
 		mcp.NewServerTool("installSkill",
 			"Download and install a skill from Obot into the local skills workspace.",
 			s.installSkill),
+		mcp.NewServerTool("deleteSkill",
+			"Delete an installed skill by its URI.",
+			s.deleteSkill),
 	)
 
 	return s

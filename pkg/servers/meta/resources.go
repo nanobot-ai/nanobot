@@ -10,12 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"log/slog"
+
 	"github.com/nanobot-ai/nanobot/pkg/fileuri"
 	"github.com/nanobot-ai/nanobot/pkg/fswatch"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/skillformat"
 	"github.com/nanobot-ai/nanobot/pkg/types"
-	"log/slog"
 )
 
 const sessionsDir = "sessions"
@@ -30,6 +31,14 @@ func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListRes
 		slog.Error("failed to list workflow resources", "error", err)
 	} else {
 		resources = append(resources, workflowResources...)
+	}
+
+	// Add skill resources
+	skillResources, err := s.listSkillResources()
+	if err != nil {
+		slog.Error("failed to list skill resources", "error", err)
+	} else {
+		resources = append(resources, skillResources...)
 	}
 
 	// Add cross-session file resources
@@ -47,6 +56,8 @@ func (s *Server) resourcesList(ctx context.Context, _ mcp.Message, _ mcp.ListRes
 func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, request mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 	if strings.HasPrefix(request.URI, "workflow:///") {
 		return s.readWorkflowResource(ctx, request.URI)
+	} else if strings.HasPrefix(request.URI, "skill:///") {
+		return s.readSkillResource(ctx, request.URI)
 	} else if strings.HasPrefix(request.URI, "file:///") {
 		return s.readFileResource(ctx, request.URI)
 	}
@@ -68,6 +79,19 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 		if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
 			return nil, mcp.ErrRPCInvalidParams.WithMessage("workflow not found: %s", request.URI)
 		}
+	} else if strings.HasPrefix(request.URI, "skill:///") {
+		skillName := strings.TrimPrefix(request.URI, "skill:///")
+		skillName = strings.TrimSuffix(skillName, ".md")
+		if skillName == "" {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("skill name is required")
+		}
+		if s.configDir == "" {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("skills not available: no config directory")
+		}
+		skillPath := filepath.Join(s.configDir, "skills", skillName, skillformat.SkillMainFile)
+		if _, err := os.Stat(skillPath); os.IsNotExist(err) {
+			return nil, mcp.ErrRPCInvalidParams.WithMessage("skill not found: %s", request.URI)
+		}
 	} else if strings.HasPrefix(request.URI, "file:///") {
 		relPath, decodeErr := fileuri.Decode(request.URI)
 		if decodeErr != nil {
@@ -77,6 +101,11 @@ func (s *Server) resourcesSubscribe(ctx context.Context, msg mcp.Message, reques
 		if strings.HasPrefix(cleanPath, skillformat.WorkflowsDir+string(filepath.Separator)) {
 			// Workflow supporting file — verify it exists
 			if _, statErr := os.Stat(filepath.Join(".", cleanPath)); os.IsNotExist(statErr) {
+				return nil, mcp.ErrRPCInvalidParams.WithMessage("file not found: %s", request.URI)
+			}
+		} else if s.configDir != "" && strings.HasPrefix(cleanPath, filepath.Clean(s.configDir)+string(filepath.Separator)) {
+			// Skill supporting file — verify it exists
+			if _, statErr := os.Stat(cleanPath); os.IsNotExist(statErr) {
 				return nil, mcp.ErrRPCInvalidParams.WithMessage("file not found: %s", request.URI)
 			}
 		} else {
@@ -398,8 +427,10 @@ func (s *Server) readFileResource(ctx context.Context, uri string) (*mcp.ReadRes
 
 	cleanPath := filepath.Clean(relPath)
 
-	// Workflow supporting files don't need session access verification
-	if !strings.HasPrefix(cleanPath, skillformat.WorkflowsDir+string(filepath.Separator)) {
+	// Workflow and skill supporting files don't need session access verification
+	isWorkflowFile := strings.HasPrefix(cleanPath, skillformat.WorkflowsDir+string(filepath.Separator))
+	isSkillFile := s.configDir != "" && strings.HasPrefix(cleanPath, filepath.Clean(s.configDir)+string(filepath.Separator)+"skills"+string(filepath.Separator))
+	if !isWorkflowFile && !isSkillFile {
 		if err := s.verifyFileResourceAccess(ctx, relPath); err != nil {
 			return nil, err
 		}
@@ -471,6 +502,21 @@ func (s *Server) ensureWatchers() error {
 		}
 
 		slog.Debug("started meta workflow watcher", "path", workflowsPath)
+
+		// Watch skills directory
+		if s.configDir != "" {
+			skillsPath := filepath.Join(s.configDir, "skills")
+			if err := os.MkdirAll(skillsPath, 0755); err != nil {
+				slog.Error("failed to create skills directory", "path", skillsPath, "error", err)
+			} else {
+				s.skillWatcher = fswatch.NewWatcher(skillsPath, 3, nil, s.handleSkillEvents)
+				if err := s.skillWatcher.Start(); err != nil {
+					slog.Error("failed to start skill watcher", "error", err)
+				} else {
+					slog.Debug("started meta skill watcher", "path", skillsPath)
+				}
+			}
+		}
 
 		// Watch sessions directory
 		cwd, err := os.Getwd()
@@ -549,4 +595,172 @@ func (s *Server) handleSessionFileEvents(events []fswatch.Event) {
 			s.subscriptions.SendResourceUpdatedNotification(uri)
 		}
 	}
+}
+
+// handleSkillEvents processes filesystem events from the skill watcher.
+func (s *Server) handleSkillEvents(events []fswatch.Event) {
+	for _, event := range events {
+		// Event paths are relative to the skills dir, e.g. "my-skill/SKILL.md"
+		// or "my-skill/scripts/helper.py"
+		parts := strings.SplitN(event.Path, string(filepath.Separator), 2)
+		skillName := parts[0]
+		skillURI := fmt.Sprintf("skill:///%s", skillName)
+
+		isMainFile := len(parts) == 2 && parts[1] == skillformat.SkillMainFile
+
+		switch event.Type {
+		case fswatch.EventDelete:
+			if isMainFile {
+				s.subscriptions.SendResourceUpdatedNotification(skillURI)
+				s.subscriptions.AutoUnsubscribe(skillURI)
+			} else if len(parts) == 2 {
+				fileURI := fileuri.Encode(filepath.Join(s.configDir, "skills", event.Path))
+				s.subscriptions.SendResourceUpdatedNotification(fileURI)
+				s.subscriptions.AutoUnsubscribe(fileURI)
+			}
+			s.subscriptions.SendListChangedNotification()
+		case fswatch.EventCreate:
+			s.subscriptions.SendListChangedNotification()
+		case fswatch.EventWrite:
+			if isMainFile {
+				s.subscriptions.SendResourceUpdatedNotification(skillURI)
+			} else if len(parts) == 2 {
+				fileURI := fileuri.Encode(filepath.Join(s.configDir, "skills", event.Path))
+				s.subscriptions.SendResourceUpdatedNotification(fileURI)
+			}
+		}
+	}
+}
+
+// listSkillResources reads the configDir/skills/ directory and returns skill resources.
+func (s *Server) listSkillResources() ([]mcp.Resource, error) {
+	if s.configDir == "" {
+		return nil, nil
+	}
+
+	skillsPath := filepath.Join(s.configDir, "skills")
+	entries, err := os.ReadDir(skillsPath)
+	if err != nil {
+		// Directory doesn't exist - return empty list
+		return nil, nil
+	}
+
+	var resources []mcp.Resource
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		skillDir := filepath.Join(skillsPath, name)
+
+		// Read the main skill file from the subdirectory
+		contentBytes, err := os.ReadFile(filepath.Join(skillDir, skillformat.SkillMainFile))
+		if err == nil {
+			fm, _, err := skillformat.ParseFrontmatter(string(contentBytes))
+			if err != nil {
+				slog.Debug("failed to parse frontmatter for skill", "skill", name, "error", err)
+			}
+
+			resourceMeta := make(map[string]any)
+			if fm.Name != "" {
+				resourceMeta["name"] = fm.Name
+				resourceMeta["displayName"] = skillformat.DisplayName(fm.Name)
+			}
+			if fm.Metadata["createdAt"] != "" {
+				resourceMeta["createdAt"] = fm.Metadata["createdAt"]
+			}
+
+			res := mcp.Resource{
+				URI:         fmt.Sprintf("skill:///%s", name),
+				Name:        name,
+				Description: fm.Description,
+				MimeType:    "text/markdown",
+			}
+			if len(resourceMeta) > 0 {
+				res.Meta = resourceMeta
+			}
+
+			resources = append(resources, res)
+		}
+
+		// List supporting files in the skill directory (even if SKILL.md doesn't exist yet)
+		_ = filepath.WalkDir(skillDir, func(path string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil || d.IsDir() {
+				return nil
+			}
+			if filepath.Base(path) == skillformat.SkillMainFile {
+				return nil
+			}
+			relPath, err := filepath.Rel(".", path)
+			if err != nil {
+				return nil
+			}
+			info, err := d.Info()
+			if err != nil {
+				return nil
+			}
+			mimeType := mime.TypeByExtension(filepath.Ext(relPath))
+			if mimeType == "" {
+				mimeType = "application/octet-stream"
+			}
+			resources = append(resources, mcp.Resource{
+				URI:      fileuri.Encode(relPath),
+				Name:     filepath.Base(relPath),
+				MimeType: mimeType,
+				Size:     info.Size(),
+			})
+			return nil
+		})
+	}
+
+	return resources, nil
+}
+
+// readSkillResource reads a specific skill by URI.
+func (s *Server) readSkillResource(_ context.Context, uri string) (*mcp.ReadResourceResult, error) {
+	skillName := strings.TrimPrefix(uri, "skill:///")
+	skillName = strings.TrimSuffix(skillName, ".md")
+	if skillName == "" {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("skill name is required")
+	}
+
+	if s.configDir == "" {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("skills not available: no config directory")
+	}
+
+	skillPath := filepath.Join(s.configDir, "skills", skillName, skillformat.SkillMainFile)
+	contentBytes, err := os.ReadFile(skillPath)
+	if err != nil {
+		return nil, mcp.ErrRPCInvalidParams.WithMessage("skill not found: %s", uri)
+	}
+
+	content := string(contentBytes)
+	fm, _, err := skillformat.ParseFrontmatter(content)
+	if err != nil {
+		slog.Debug("failed to parse frontmatter for skill", "skill", skillName, "error", err)
+	}
+
+	resourceMeta := make(map[string]any)
+	if fm.Name != "" {
+		resourceMeta["name"] = fm.Name
+		resourceMeta["displayName"] = skillformat.DisplayName(fm.Name)
+	}
+	if fm.Metadata["createdAt"] != "" {
+		resourceMeta["createdAt"] = fm.Metadata["createdAt"]
+	}
+
+	rc := mcp.ResourceContent{
+		URI:      uri,
+		Name:     skillName,
+		MIMEType: "text/markdown",
+		Text:     &content,
+	}
+	if len(resourceMeta) > 0 {
+		rc.Meta = resourceMeta
+	}
+
+	return &mcp.ReadResourceResult{
+		Contents: []mcp.ResourceContent{rc},
+	}, nil
 }
