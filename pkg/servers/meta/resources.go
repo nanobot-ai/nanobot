@@ -156,14 +156,7 @@ func (s *Server) listWorkflowResources(ctx context.Context) ([]mcp.Resource, err
 				slog.Debug("failed to parse frontmatter for workflow", "workflow", entry.Name(), "error", err)
 			}
 
-			resourceMeta := make(map[string]any)
-			if fm.Name != "" {
-				resourceMeta["name"] = fm.Name
-				resourceMeta["displayName"] = skillformat.DisplayName(fm.Name)
-			}
-			if fm.Metadata["createdAt"] != "" {
-				resourceMeta["createdAt"] = fm.Metadata["createdAt"]
-			}
+			resourceMeta := skillformat.FrontmatterToMeta(fm)
 
 			res := mcp.Resource{
 				URI:         fmt.Sprintf("workflow:///%s", name),
@@ -231,14 +224,7 @@ func (s *Server) readWorkflowResource(ctx context.Context, uri string) (*mcp.Rea
 		slog.Debug("failed to parse frontmatter for workflow", "workflow", workflowName, "error", err)
 	}
 
-	resourceMeta := make(map[string]any)
-	if fm.Name != "" {
-		resourceMeta["name"] = fm.Name
-		resourceMeta["displayName"] = skillformat.DisplayName(fm.Name)
-	}
-	if fm.Metadata["createdAt"] != "" {
-		resourceMeta["createdAt"] = fm.Metadata["createdAt"]
-	}
+	resourceMeta := skillformat.FrontmatterToMeta(fm)
 
 	rc := mcp.ResourceContent{
 		URI:      uri,

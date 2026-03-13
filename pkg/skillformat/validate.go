@@ -154,6 +154,33 @@ func FormatSkillMD(fm Frontmatter, body string) (string, error) {
 	return sb.String(), nil
 }
 
+// FrontmatterToMeta converts all Frontmatter fields into a map suitable for
+// the MCP Resource/ResourceContent _meta field. It includes the computed
+// DisplayName and flattens the Metadata sub-map entries into the top level.
+func FrontmatterToMeta(fm Frontmatter) map[string]any {
+	meta := make(map[string]any)
+	if fm.Name != "" {
+		meta["name"] = fm.Name
+		meta["displayName"] = DisplayName(fm.Name)
+	}
+	if fm.Description != "" {
+		meta["description"] = fm.Description
+	}
+	if fm.License != "" {
+		meta["license"] = fm.License
+	}
+	if fm.Compatibility != "" {
+		meta["compatibility"] = fm.Compatibility
+	}
+	if fm.AllowedTools != "" {
+		meta["allowedTools"] = fm.AllowedTools
+	}
+	for k, v := range fm.Metadata {
+		meta[k] = v
+	}
+	return meta
+}
+
 // DisplayName converts a skill slug (e.g., "code-review") to a
 // human-readable display name (e.g., "Code Review").
 func DisplayName(slug string) string {
