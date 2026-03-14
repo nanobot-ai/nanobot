@@ -25,6 +25,9 @@ type Client struct {
 	Config
 }
 
+const advancedToolUseBeta = "advanced-tool-use-2025-11-20"
+const toolSearchServerToolType = "tool_search_tool_bm25_20251119"
+
 type Config struct {
 	APIKey  string
 	BaseURL string
@@ -85,6 +88,21 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 	for key, value := range c.Headers {
 		httpReq.Header.Set(key, value)
 	}
+	if requiresAdvancedToolUseBeta(req) {
+		appendAnthropicBetaHeader(httpReq.Header, advancedToolUseBeta)
+	}
+
+	deferredToolCount, toolSearchToolCount, deferredToolNames, toolSearchToolNames := summarizeAnthropicRequestTools(req.Tools)
+	slog.Info("sending Anthropic request",
+		"agent", agentName,
+		"base_url", c.BaseURL,
+		"model", req.Model,
+		"tool_count", len(req.Tools),
+		"deferred_tool_count", deferredToolCount,
+		"sample_deferred_tool_names", limitStrings(deferredToolNames, 10),
+		"tool_search_tool_count", toolSearchToolCount,
+		"tool_search_tool_names", limitStrings(toolSearchToolNames, 10),
+		"anthropic_beta", httpReq.Header.Get("anthropic-beta"))
 
 	httpResp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
@@ -241,4 +259,52 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 	}
 
 	return &resp, nil
+}
+
+func requiresAdvancedToolUseBeta(req Request) bool {
+	for _, tool := range req.Tools {
+		if tool.Type == toolSearchServerToolType {
+			return true
+		}
+		if value, ok := tool.Attributes["defer_loading"].(bool); ok && value {
+			return true
+		}
+	}
+	return false
+}
+
+func appendAnthropicBetaHeader(header http.Header, beta string) {
+	existing := header.Get("anthropic-beta")
+	if existing == "" {
+		header.Set("anthropic-beta", beta)
+		return
+	}
+
+	for _, value := range strings.Split(existing, ",") {
+		if strings.TrimSpace(value) == beta {
+			return
+		}
+	}
+	header.Set("anthropic-beta", existing+","+beta)
+}
+
+func summarizeAnthropicRequestTools(tools []CustomTool) (deferredToolCount int, toolSearchToolCount int, deferredToolNames []string, toolSearchToolNames []string) {
+	for _, tool := range tools {
+		if value, ok := tool.Attributes["defer_loading"].(bool); ok && value {
+			deferredToolCount++
+			deferredToolNames = append(deferredToolNames, tool.Name)
+		}
+		if tool.Type == toolSearchServerToolType {
+			toolSearchToolCount++
+			toolSearchToolNames = append(toolSearchToolNames, tool.Name)
+		}
+	}
+	return
+}
+
+func limitStrings(values []string, limit int) []string {
+	if len(values) <= limit {
+		return values
+	}
+	return values[:limit]
 }

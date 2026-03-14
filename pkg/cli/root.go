@@ -219,6 +219,13 @@ func (n *Nanobot) loadEnv() (map[string]string, error) {
 		env["NANOBOT_MCP"] = "true"
 	}
 
+	if strings.TrimSpace(n.DefaultModel) != "" {
+		env["NANOBOT_DEFAULT_MODEL"] = n.DefaultModel
+	}
+	if strings.TrimSpace(n.DefaultMiniModel) != "" {
+		env["NANOBOT_DEFAULT_MINI_MODEL"] = n.DefaultMiniModel
+	}
+
 	for _, kv := range n.Env {
 		k, v, ok := strings.Cut(kv, "=")
 		if !ok {

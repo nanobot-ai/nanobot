@@ -73,12 +73,16 @@ func toRequest(req *types.CompletionRequest) (Request, error) {
 	}
 
 	for _, tool := range req.Tools {
-		result.Tools = append(result.Tools, CustomTool{
+		customTool := CustomTool{
 			Name:        tool.Name,
 			InputSchema: tool.Parameters,
 			Description: tool.Description,
 			Attributes:  tool.Attributes,
-		})
+		}
+		if toolType, ok := tool.Attributes["type"].(string); ok {
+			customTool.Type = toolType
+		}
+		result.Tools = append(result.Tools, customTool)
 	}
 
 	if req.ToolChoice != "" {
@@ -136,13 +140,17 @@ func toRequest(req *types.CompletionRequest) (Request, error) {
 				})
 			}
 			if input.ToolCallResult != nil {
+				toolResultContent, err := json.Marshal(contentToContent(input.ToolCallResult.Output.Content))
+				if err != nil {
+					return Request{}, fmt.Errorf("failed to marshal tool result content: %w", err)
+				}
 				result.Messages = append(result.Messages, Message{
 					Content: []Content{
 						{
-							Type:      "tool_result",
-							ToolUseID: input.ToolCallResult.CallID,
-							Content:   contentToContent(input.ToolCallResult.Output.Content),
-							IsError:   input.ToolCallResult.Output.IsError,
+							Type:       "tool_result",
+							ToolUseID:  input.ToolCallResult.CallID,
+							RawContent: toolResultContent,
+							IsError:    input.ToolCallResult.Output.IsError,
 						},
 					},
 					Role: "user",

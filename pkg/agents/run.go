@@ -40,6 +40,13 @@ func New(completer types.Completer, registry *tools.Service) *Agents {
 
 func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, agent *types.Agent, opts []types.CompletionOptions) (types.ToolMappings, error) {
 	opt := complete.Complete(opts...)
+	resolvedModel := resolveAnthropicToolSearchModel(ctx, req.Model)
+	anthropicToolSearchEnabled := supportsAnthropicToolSearch(resolvedModel)
+	deferredToolsAdded := false
+	deferredToolCount := 0
+	internalModelToolCount := 0
+	deferredToolNames := make([]string, 0, 10)
+	externalToolNames := make([]string, 0, min(10, len(opt.Tools)))
 
 	if opt.ToolChoice != nil {
 		switch opt.ToolChoice.Mode {
@@ -77,15 +84,38 @@ func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, age
 		if !types.IsModelTool(tool.Tool) {
 			continue
 		}
+		internalModelToolCount++
+		attributes := maps.Clone(agent.ToolExtensions[toolMapping.Target.Name])
+		if anthropicToolSearchEnabled && shouldDeferAnthropicTool(toolMapping) {
+			attributes = withAnthropicDeferredLoading(attributes)
+			deferredToolsAdded = true
+			deferredToolCount++
+			if len(deferredToolNames) < cap(deferredToolNames) {
+				deferredToolNames = append(deferredToolNames, key)
+			}
+		}
 		req.Tools = append(req.Tools, types.ToolUseDefinition{
 			Name:        key,
 			Parameters:  schema.ValidateAndFixToolSchema(tool.InputSchema),
 			Description: tool.Description,
-			Attributes:  agent.ToolExtensions[toolMapping.Target.Name],
+			Attributes:  attributes,
 		})
 	}
 
 	for _, tool := range opt.Tools {
+		if len(externalToolNames) < cap(externalToolNames) {
+			externalToolNames = append(externalToolNames, tool.Name)
+		}
+		var attributes map[string]any
+		if anthropicToolSearchEnabled {
+			attributes = withAnthropicDeferredLoading(nil)
+			deferredToolsAdded = true
+			deferredToolCount++
+			if len(deferredToolNames) < cap(deferredToolNames) {
+				deferredToolNames = append(deferredToolNames, tool.Name)
+			}
+		}
+
 		toolMappings[tool.Name] = types.TargetMapping[types.TargetTool]{
 			Target: types.TargetTool{
 				Tool:     tool,
@@ -96,8 +126,30 @@ func (a *Agents) addTools(ctx context.Context, req *types.CompletionRequest, age
 			Name:        tool.Name,
 			Parameters:  schema.ValidateAndFixToolSchema(tool.InputSchema),
 			Description: tool.Description,
+			Attributes:  attributes,
 		})
 	}
+
+	toolSearchInjected := false
+	if anthropicToolSearchEnabled && deferredToolsAdded {
+		ensureAnthropicToolSearchTool(req)
+		toolSearchInjected = true
+	}
+
+	slog.Info("assembled agent tools",
+		"agent", req.Agent,
+		"model", req.Model,
+		"resolved_model", resolvedModel,
+		"tool_include_context", opt.ToolIncludeContext,
+		"tool_source", opt.ToolSource,
+		"internal_model_tool_count", internalModelToolCount,
+		"external_tool_count", len(opt.Tools),
+		"sample_external_tool_names", externalToolNames,
+		"request_tool_count", len(req.Tools),
+		"anthropic_tool_search_enabled", anthropicToolSearchEnabled,
+		"deferred_tool_count", deferredToolCount,
+		"sample_deferred_tool_names", deferredToolNames,
+		"tool_search_injected", toolSearchInjected)
 
 	return toolMappings, nil
 }
