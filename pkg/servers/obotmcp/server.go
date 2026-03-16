@@ -18,11 +18,11 @@ func NewServer(configDir string) *Server {
 	}
 
 	s.tools = mcp.NewServerTools(
-		mcp.NewServerTool("refreshMCPServerConfig", `Refreshes the agent-scoped mcp-cli configuration from the user's currently connected Obot MCP servers.
+		mcp.NewServerTool("refreshMCPServerConfig", `Refreshes the mcp-cli configuration derived from the user's currently connected Obot MCP servers.
 
 Use this after connecting a new MCP server in Obot when you need it to appear immediately in mcp-cli instead of waiting for the local cache to expire.
 
-The refresh is agent-scoped and affects future mcp-cli commands for the current agent.`, s.refreshMCPServerConfig),
+The refresh affects future mcp-cli commands that use this configuration.`, s.refreshMCPServerConfig),
 	)
 
 	return s
