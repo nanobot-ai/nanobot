@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -52,11 +51,6 @@ func (c *Collector) CollectMCPAuditEntry(entry MCPAuditLog) {
 	if c == nil || entry.CallType == "" {
 		// If the call type is empty, then this is a response to a request.
 		// The audit log will be handled elsewhere.
-		return
-	}
-
-	if entry.ClientName == "nanobot-ui" && strings.HasPrefix(entry.CallIdentifier, "chat://") && entry.CallType == "resources/read" {
-		// These are spammy audit logs that we do not need to send, as they never contain useful information.
 		return
 	}
 
