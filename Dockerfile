@@ -40,6 +40,13 @@ RUN apk update && apk add --no-cache \
     uv \
     poppler-utils
 
+# Install Python via uv and symlink to PATH
+ENV UV_PYTHON_INSTALL_DIR=/opt/python
+RUN uv python install 3.13 && \
+    mkdir -p /usr/local/bin && \
+    ln -sf "$(uv python find)" /usr/local/bin/python3 && \
+    ln -sf /usr/local/bin/python3 /usr/local/bin/python
+
 # Install mcp-cli
 ARG TARGETARCH
 RUN ARCH=$(if [ "${TARGETARCH}" = "amd64" ]; then echo "x64"; else echo "${TARGETARCH}"; fi) && \
