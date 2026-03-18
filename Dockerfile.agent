@@ -22,7 +22,8 @@ RUN CI=true CGO_ENABLED=0 go generate ./... && go build -o nanobot .
 FROM debian:bookworm-slim AS runtime
 
 # Install bash, git, common utilities, and poppler-utils (provides pdftoppm
-# and pdfinfo, used by the built-in read tool to render PDF pages as images)
+# and pdfinfo, used by the built-in read tool to render PDF pages as images).
+# LibreOffice is used by skills to convert between file formats.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     git \
@@ -48,6 +49,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     websockify \
     python3 \
     python3-venv \
+    nodejs \
+    npm \
+    libreoffice-core \
+    libreoffice-writer \
+    libreoffice-calc \
+    libreoffice-impress \
+    ghostscript \
+    libheif-examples \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh
