@@ -90,6 +90,8 @@ dockers:
       - "ghcr.io/nanobot-ai/nanobot-agent:latest-amd64"
     dockerfile: Dockerfile.agent
     use: buildx
+    extra_files:
+      - scripts/agent-entrypoint.sh
     build_flag_templates:
       - "--target=release"
       - "--platform=linux/amd64"
@@ -105,6 +107,8 @@ dockers:
       - "ghcr.io/nanobot-ai/nanobot-agent:latest-arm64"
     dockerfile: Dockerfile.agent
     use: buildx
+    extra_files:
+      - scripts/agent-entrypoint.sh
     build_flag_templates:
       - "--target=release"
       - "--platform=linux/arm64"
