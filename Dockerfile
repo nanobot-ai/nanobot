@@ -43,7 +43,7 @@ RUN apk update && apk add --no-cache \
 # Install mcp-cli
 ARG TARGETARCH
 RUN ARCH=$(if [ "${TARGETARCH}" = "amd64" ]; then echo "x64"; else echo "${TARGETARCH}"; fi) && \
-    wget "https://github.com/obot-platform/mcp-cli/releases/download/v0.3.1/mcp-cli-linux-${ARCH}" && \
+    wget "https://github.com/obot-platform/mcp-cli/releases/download/v0.3.2/mcp-cli-linux-${ARCH}" && \
     mv mcp-cli-linux-${ARCH} /usr/bin/mcp-cli && \
     chmod +x /usr/bin/mcp-cli
 
