@@ -86,11 +86,16 @@ func (s *Server) publishArtifact(ctx context.Context, params publishArtifactPara
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
+	msg := fmt.Sprintf("Published %s v%d", apiResp.Name, apiResp.LatestVersion)
+	if apiResp.LatestVersion == 1 {
+		msg += ". This artifact is currently private. The user can change visibility to public in the Obot UI."
+	}
+
 	return &publishResult{
 		ID:      apiResp.ID,
 		Name:    apiResp.Name,
 		Version: apiResp.LatestVersion,
-		Message: fmt.Sprintf("Published %s v%d", apiResp.Name, apiResp.LatestVersion),
+		Message: msg,
 	}, nil
 }
 
