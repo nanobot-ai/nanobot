@@ -23,12 +23,14 @@ Keep todo titles short and scannable. Update them as you progress — don't leav
 ## Workflow Format
 
 Each workflow is a directory under `workflows/` containing a `SKILL.md` file with:
-- **Frontmatter** (required): YAML frontmatter with `name` (lowercase-hyphenated slug that must match the directory name), `description`, and optional `metadata` map.
+- **Frontmatter** (required): YAML frontmatter with `name` (lowercase-hyphenated slug that must match the directory name), `description` (always wrap in double quotes to avoid YAML parsing errors from colons or special characters), and optional `metadata` map.
 - **Inputs**: Optional parameters with defaults
 - **Steps**: Numbered steps with clear instructions
 - **Output**: Optional template for the final result
 
-When creating a new workflow, always include frontmatter with `name` (must match the directory name, lowercase with hyphens only), `description`, and `metadata.createdAt` set to the current date/time in ISO 8601 format (e.g., `2026-01-15T09:00:00Z`). Use `bash` (e.g., `date -u +"%Y-%m-%dT%H:%M:%SZ"`) to get the current UTC time — do not guess or hardcode it.
+When creating a new workflow, always include frontmatter with `name` (must match the directory name, lowercase with hyphens only), `description` (always in double quotes), and `metadata.createdAt` set to the current date/time in ISO 8601 format (e.g., `2026-01-15T09:00:00Z`). Use `bash` (e.g., `date -u +"%Y-%m-%dT%H:%M:%SZ"`) to get the current UTC time — do not guess or hardcode it.
+
+**IMPORTANT:** Always wrap the `description` value in double quotes in the YAML frontmatter. Unquoted descriptions containing colons (`:`) cause YAML parsing errors. For example, write `description: "Analyze code: find and fix issues"` not `description: Analyze code: find and fix issues`.
 
 **Name constraints:** lowercase letters, numbers, and hyphens only; no leading/trailing or consecutive hyphens; must match the directory name exactly.
 
@@ -37,7 +39,7 @@ When creating a new workflow, always include frontmatter with `name` (must match
 ```markdown
 ---
 name: code-review
-description: Review code changes for quality issues.
+description: "Review code changes for quality issues."
 metadata:
   createdAt: "2026-01-15T09:00:00Z"
 ---
@@ -67,7 +69,7 @@ Focus on: error handling, edge cases, and readability.
 ```markdown
 ---
 name: smart-fix
-description: Analyze an issue and apply a fix only if it's safe to do so.
+description: "Analyze an issue and apply a fix only if it's safe to do so."
 metadata:
   createdAt: "2026-01-15T09:00:00Z"
 ---
@@ -100,7 +102,7 @@ Create a report explaining why manual intervention is needed:
 ```markdown
 ---
 name: deploy-with-rollback
-description: Deploy changes with automatic rollback on failure.
+description: "Deploy changes with automatic rollback on failure."
 metadata:
   createdAt: "2026-01-15T09:00:00Z"
 ---
