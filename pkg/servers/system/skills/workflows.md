@@ -7,6 +7,17 @@ description: Load this skill for ANY request that mentions workflows, including 
 
 Workflows are directories in `workflows/` that codify repeatable processes. Each workflow is a directory containing a `SKILL.md` file (with YAML frontmatter) and any supporting files (scripts, assets, etc.). Each step's output can be referenced by later steps using `{{Step Name}}`.
 
+## Discovering Workflows
+
+There are two places workflows can exist:
+
+1. **Local workflows** — in the `workflows/` directory on the local filesystem. These are workflows the user has created or installed. List the `workflows/` directory to find these.
+2. **Shared/published workflows** — in the remote Obot registry. These are workflows other users have published (publicly or to the organization). Use `searchArtifacts` to find these.
+
+**When the user asks about "shared workflows", "public workflows", workflows from other users, or wants to discover/find/browse available workflows they haven't installed yet, ALWAYS use `searchArtifacts` to search the remote registry.** Do not just list the local `workflows/` directory — that only shows what is already installed locally.
+
+If the user asks to "list all workflows" or "show my workflows" without specifying shared/public, list the local `workflows/` directory. If they ask to "list shared workflows" or "find workflows", use `searchArtifacts`.
+
 ## When to Use Workflows
 
 Workflows are for repeatable tasks. If it's a one-time thing, just execute it directly.
@@ -276,9 +287,11 @@ To publish a workflow, use the `publishArtifact` tool:
 
 ### Searching the Registry
 
-To find published workflows from other users in the **remote Obot registry**, use `searchArtifacts`:
+To find published or shared workflows from other users in the **remote Obot registry**, use `searchArtifacts`:
 - Search by keyword: `searchArtifacts({ "query": "code review", "artifactType": "workflow" })`
-- This is for discovering NEW workflows to install — not for finding workflows already on your local filesystem.
+- List all shared workflows: `searchArtifacts({ "artifactType": "workflow" })` (empty query returns all visible artifacts)
+- This is for discovering shared, public, or published workflows — not for finding workflows already on your local filesystem.
+- **When a user asks about "shared workflows", this is the tool to use.**
 
 ### Installing
 
