@@ -480,6 +480,13 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	session.session.sessionManager = h.sessions
 	session.session.SetEnv(h.getEnv(req))
 
+	if desc := req.Header.Get("X-Nanobot-Description"); desc != "" {
+		session.session.Set("description", desc)
+	}
+	if taskURI := req.Header.Get("X-Nanobot-Task-URI"); taskURI != "" {
+		session.session.Set("taskURI", taskURI)
+	}
+
 	resp, err := session.Exchange(ctx, msg)
 	if err != nil {
 		if errors.As(err, &AuthRequiredErr{}) {

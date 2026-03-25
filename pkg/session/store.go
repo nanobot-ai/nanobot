@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/gormdsn"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -42,7 +45,7 @@ func NewStoreFromDSN(dsn string) (store *Store, err error) {
 		}
 	}()
 
-	if err := tx.AutoMigrate(&Session{}, &Token{}, &WorkflowRun{}); err != nil {
+	if err := tx.AutoMigrate(&Session{}, &Token{}, &WorkflowRun{}, &ScheduledTask{}); err != nil {
 		return nil, fmt.Errorf("failed to migrate schema: %w", err)
 	}
 
@@ -114,6 +117,103 @@ func (s *Store) FindByAccount(ctx context.Context, sessionType, accountID string
 		return nil, err
 	}
 	return sessions, nil
+}
+
+// GetScheduledTask returns a scheduled task by its task URI.
+func (s *Store) GetScheduledTask(ctx context.Context, taskURI string) (*ScheduledTask, error) {
+	var task ScheduledTask
+	err := s.db.WithContext(ctx).Where("task_uri = ?", taskURI).First(&task).Error
+	return &task, err
+}
+
+// ListScheduledTasks returns all scheduled tasks ordered newest-first.
+func (s *Store) ListScheduledTasks(ctx context.Context) ([]ScheduledTask, error) {
+	var tasks []ScheduledTask
+	err := s.db.WithContext(ctx).
+		Order("created_at desc").
+		Find(&tasks).Error
+	return tasks, err
+}
+
+// CreateScheduledTask inserts a new scheduled task record.
+func (s *Store) CreateScheduledTask(ctx context.Context, task *ScheduledTask) error {
+	return s.db.WithContext(ctx).Create(task).Error
+}
+
+// UpdateScheduledTask persists definition changes to an existing scheduled task.
+// Only writes configuration columns — never touches LastRunAt.
+func (s *Store) UpdateScheduledTask(ctx context.Context, task *ScheduledTask) error {
+	return s.db.WithContext(ctx).
+		Model(task).
+		Select("Name", "Prompt", "Schedule", "Timezone", "Enabled", "ExpiresAt", "NextRunAt").
+		Updates(task).Error
+}
+
+// RecordScheduledTaskRun records when a scheduled task last ran and when it will next run.
+func (s *Store) RecordScheduledTaskRun(ctx context.Context, taskURI string, lastRunAt time.Time, nextRunAt *time.Time) error {
+	return s.db.WithContext(ctx).
+		Model(&ScheduledTask{}).
+		Where("task_uri = ?", taskURI).
+		Updates(map[string]any{
+			"last_run_at": lastRunAt,
+			"next_run_at": nextRunAt,
+		}).Error
+}
+
+// DeleteScheduledTask deletes a scheduled task by its task URI.
+func (s *Store) DeleteScheduledTask(ctx context.Context, taskURI string) error {
+	return s.db.WithContext(ctx).
+		Where("task_uri = ?", taskURI).
+		Delete(&ScheduledTask{}).Error
+}
+
+// NextScheduledTaskURI builds the next stable task URI for the given name.
+func (s *Store) NextScheduledTaskURI(ctx context.Context, name string) (string, error) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	var (
+		base     strings.Builder
+		lastDash bool
+	)
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			base.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash && base.Len() > 0 {
+			base.WriteByte('-')
+			lastDash = true
+		}
+	}
+
+	slug := strings.Trim(base.String(), "-")
+	if slug == "" {
+		slug = "task"
+	}
+
+	prefix := "task:///"
+	var ids []string
+	err := s.db.WithContext(ctx).
+		Model(&ScheduledTask{}).
+		Where("task_uri = ? OR task_uri LIKE ?", prefix+slug, prefix+slug+"-%").
+		Pluck("task_uri", &ids).Error
+	if err != nil {
+		return "", err
+	}
+	if len(ids) == 0 {
+		return prefix + slug, nil
+	}
+
+	maxSuffix := 1
+	for _, id := range ids {
+		if suffix, ok := strings.CutPrefix(id, prefix+slug+"-"); ok {
+			if n, err := strconv.Atoi(suffix); err == nil && n > maxSuffix {
+				maxSuffix = n
+			}
+		}
+	}
+
+	return fmt.Sprintf("%s%s-%d", prefix, slug, maxSuffix+1), nil
 }
 
 // ListWorkflowURIs returns the URIs of the workflows that have been run in each of the given sessions.

@@ -290,6 +290,10 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 		ForceFetchToolList: opts.ForceFetchToolList,
 	})
 
+	if err := runt.StartTasks(ctx, sessionManager.DB); err != nil {
+		return err
+	}
+
 	if address == "stdio" {
 		stdio := mcp.NewStdioServer(envProvider, mcpServer)
 		if err := stdio.Start(ctx, os.Stdin, os.Stdout); err != nil {
@@ -342,6 +346,7 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 	context.AfterFunc(ctx, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+		_ = runt.Stop(ctx)
 		_ = s.Shutdown(ctx)
 	})
 

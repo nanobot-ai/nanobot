@@ -74,7 +74,7 @@ func TestListSkills(t *testing.T) {
 	}
 
 	// Check for expected skills
-	expectedSkills := []string{"python-scripts", "workflows"}
+	expectedSkills := []string{"python-scripts", "scheduled-tasks", "workflows"}
 	for _, expected := range expectedSkills {
 		if !skillNames[expected] {
 			t.Errorf("should have %s skill", expected)
@@ -216,6 +216,12 @@ func TestGetSkill(t *testing.T) {
 			shouldContain: "name: python-scripts",
 		},
 		{
+			name:          "get scheduled tasks skill",
+			skillName:     "scheduled-tasks",
+			expectError:   false,
+			shouldContain: "name: scheduled-tasks",
+		},
+		{
 			name:          "get workflows skill",
 			skillName:     "workflows",
 			expectError:   false,
@@ -310,6 +316,30 @@ func TestGetSkillFallsBackToBuiltin(t *testing.T) {
 	}
 	if !strings.Contains(content, "Workflows are for repeatable tasks") {
 		t.Error("content should contain built-in workflows skill content")
+	}
+}
+
+func TestGetScheduledTasksSkillIncludesTimezoneAndCronGuidance(t *testing.T) {
+	server := NewServer("")
+	ctx := context.Background()
+
+	content, err := server.getSkill(ctx, GetSkillParams{Name: "scheduled-tasks"})
+	if err != nil {
+		t.Fatalf("getSkill() failed: %v", err)
+	}
+
+	expectedSnippets := []string{
+		"If you do not know the user's timezone, collect it before creating the task.",
+		"Unless the user asks for a different timezone, new scheduled tasks should use the user's current timezone.",
+		"`45 2 * * *`",
+		"`20 23 * * 1,2,3,4`",
+		"`45 2 22,24 * *`",
+		"`45 2 26 3 *` with expiration `2026-03-26`",
+	}
+	for _, snippet := range expectedSnippets {
+		if !strings.Contains(content, snippet) {
+			t.Errorf("content should contain %q", snippet)
+		}
 	}
 }
 

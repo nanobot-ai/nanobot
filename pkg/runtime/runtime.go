@@ -19,6 +19,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/servers/obotmcp"
 	"github.com/nanobot-ai/nanobot/pkg/servers/skills"
 	"github.com/nanobot-ai/nanobot/pkg/servers/system"
+	"github.com/nanobot-ai/nanobot/pkg/servers/tasks"
 	"github.com/nanobot-ai/nanobot/pkg/servers/workflows"
 	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
@@ -28,8 +29,9 @@ import (
 
 type Runtime struct {
 	*tools.Service
-	llmConfig llm.Config
-	opt       Options
+	llmConfig  llm.Config
+	opt        Options
+	taskServer *tasks.Server
 }
 
 type Options struct {
@@ -45,6 +47,7 @@ type Options struct {
 	TokenExchangeClientSecret string
 	AuditLogCollector         *auditlogs.Collector
 	ConfigDir                 string
+	LoopbackURL               string
 }
 
 func (o Options) Merge(other Options) (result Options) {
@@ -60,6 +63,7 @@ func (o Options) Merge(other Options) (result Options) {
 	result.TokenExchangeClientSecret = complete.Last(o.TokenExchangeClientSecret, other.TokenExchangeClientSecret)
 	result.AuditLogCollector = complete.Last(o.AuditLogCollector, other.AuditLogCollector)
 	result.ConfigDir = complete.Last(o.ConfigDir, other.ConfigDir)
+	result.LoopbackURL = complete.Last(o.LoopbackURL, other.LoopbackURL)
 	return
 }
 
@@ -130,7 +134,32 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 		return obotmcp.NewServer(opt.ConfigDir)
 	})
 
+	if opt.LoopbackURL != "" {
+		taskServer := tasks.NewServer(opt.LoopbackURL)
+		r.taskServer = taskServer
+		registry.AddServer("nanobot.tasks", func(string) mcp.MessageHandler {
+			return taskServer
+		})
+	}
+
 	return r, nil
+}
+
+// StartTasks loads persisted scheduled tasks and starts their cron jobs.
+func (r *Runtime) StartTasks(ctx context.Context, db *session.Store) error {
+	if r.taskServer != nil {
+		return r.taskServer.Start(ctx, db)
+	}
+	return nil
+}
+
+// Stop drains background work (e.g. scheduled task goroutines) and waits up to
+// the ctx deadline.
+func (r *Runtime) Stop(ctx context.Context) error {
+	if r.taskServer != nil {
+		return r.taskServer.Stop(ctx)
+	}
+	return nil
 }
 
 func (r *Runtime) WithTempSession(ctx context.Context, config *types.Config) context.Context {

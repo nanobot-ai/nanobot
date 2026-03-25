@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
@@ -59,6 +60,7 @@ type Session struct {
 	SessionID   string        `json:"sessionId" gorm:"uniqueIndex;not null"`
 	Description string        `json:"description,omitempty"`
 	AccountID   string        `json:"accountId,omitempty"`
+	TaskURI     string        `json:"taskURI,omitempty" gorm:"index"`
 	State       State         `json:"state" gorm:"type:json"`
 	Config      ConfigWrapper `json:"config,omitempty" gorm:"type:json"`
 	Cwd         string        `json:"cwd,omitempty"`
@@ -75,4 +77,18 @@ type Token struct {
 	AccountID string `json:"accountID,omitempty"`
 	URL       string `json:"url,omitempty"`
 	Data      string `json:"data,omitempty"`
+}
+
+// ScheduledTask is the persisted definition for a scheduled chat run.
+type ScheduledTask struct {
+	gorm.Model
+	TaskURI   string     `json:"taskURI" gorm:"uniqueIndex;not null"`
+	Name      string     `json:"name"`
+	Prompt    string     `json:"prompt" gorm:"type:text"`
+	Schedule  string     `json:"schedule"`
+	Timezone  string     `json:"timezone"`
+	Enabled   bool       `json:"enabled" gorm:"not null"`
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	LastRunAt *time.Time `json:"lastRunAt,omitempty"`
+	NextRunAt *time.Time `json:"nextRunAt,omitempty" gorm:"index"`
 }

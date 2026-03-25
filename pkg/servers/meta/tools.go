@@ -106,6 +106,7 @@ func chatFromSession(s *session.Session, currentAccountID string, workflowURIs [
 		Title:        s.Description,
 		Created:      s.CreatedAt,
 		ReadOnly:     s.AccountID != currentAccountID,
+		TaskURI:      s.TaskURI,
 		WorkflowURIs: workflowURIs,
 	}
 }

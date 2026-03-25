@@ -62,11 +62,6 @@ type Session struct {
 	requestIDToProgressToken     map[any]map[any]struct{}
 }
 
-type worker struct {
-	ctx    context.Context
-	cancel context.CancelCauseFunc
-}
-
 type filterRegistration struct {
 	filter MessageFilter
 	id     int

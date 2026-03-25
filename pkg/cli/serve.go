@@ -128,6 +128,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		TokenExchangeClientID:     r.Auth.OAuthClientID,
 		TokenExchangeClientSecret: r.Auth.OAuthClientSecret,
 		ConfigDir:                 r.n.ConfigPath,
+		LoopbackURL:               "http://" + r.ListenAddress + "/mcp/chat",
 	}
 
 	cfgFactory := types.ConfigFactory(func(ctx context.Context, profiles string) (types.Config, error) {

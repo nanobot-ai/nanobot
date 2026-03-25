@@ -23,6 +23,7 @@ const (
 	DefaultAgentSessionKey          = "defaultAgent"
 	AccountIDSessionKey             = "accountID"
 	DescriptionSessionKey           = "description"
+	TaskURISessionKey               = "taskURI"
 	ResourceSubscriptionsSessionKey = "resourceSubscriptions"
 	PublicURLSessionKey             = "publicURL"
 )

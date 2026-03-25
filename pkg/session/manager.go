@@ -65,17 +65,21 @@ func (m *Manager) newRecord(id, accountID string) *Session {
 func (m *Manager) loadAttributesFromRecord(stored *Session, session *mcp.ServerSession) {
 	session.GetSession().Set(types.DescriptionSessionKey, stored.Description)
 	session.GetSession().Set(types.AccountIDSessionKey, stored.AccountID)
+	session.GetSession().Set(types.TaskURISessionKey, stored.TaskURI)
 }
 
 func (m *Manager) saveAttributesToRecord(stored *Session, session *mcp.ServerSession) error {
 	var (
-		config types.Config
+		config  types.Config
+		taskURI string
 	)
 
 	session.GetSession().Get(types.DescriptionSessionKey, &stored.Description)
 	session.GetSession().Get(types.ConfigSessionKey, &config)
+	session.GetSession().Get(types.TaskURISessionKey, &taskURI)
 
 	stored.Config = ConfigWrapper(config)
+	stored.TaskURI = taskURI
 	return nil
 }
 
