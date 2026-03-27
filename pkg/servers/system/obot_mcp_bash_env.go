@@ -8,7 +8,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/servers/obotmcp"
 )
 
-const mcpCLIClientName = "MCP_CLIENT_NAME=Obot Agent MCP cli"
+const mcpCLIClientName = "MCP_CLIENT_NAME=Obot Agent mcp-cli"
 
 // obotMCPBashEnvVars returns Obot MCP-related environment variables for bash commands.
 // When the command appears to invoke mcp-cli, it may also prepare or refresh the
