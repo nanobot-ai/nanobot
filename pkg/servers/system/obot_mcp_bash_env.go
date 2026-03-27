@@ -8,6 +8,8 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/servers/obotmcp"
 )
 
+const mcpCLIClientName = "MCP_CLIENT_NAME=Obot Agent mcp-cli"
+
 // obotMCPBashEnvVars returns Obot MCP-related environment variables for bash commands.
 // When the command appears to invoke mcp-cli, it may also prepare or refresh the
 // agent-scoped mcp-cli config so MCP_CONFIG_PATH can be set correctly.
@@ -37,6 +39,7 @@ func (s *Server) obotMCPBashEnvVars(ctx context.Context, command string) ([]stri
 	if configPath != "" {
 		env = append(env, "MCP_CONFIG_PATH="+configPath)
 	}
+	env = append(env, mcpCLIClientName)
 
 	return env, nil
 }
