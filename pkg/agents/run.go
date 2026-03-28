@@ -450,6 +450,12 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 			return nil, err
 		}
 
+		// If the LLM proxy replaced the user message due to a policy violation,
+		// update the stored input to reflect the replacement.
+		if currentRun.Response != nil && currentRun.Response.InputReplacement != "" && currentRun.PopulatedRequest != nil {
+			replaceLastUserMessage(currentRun.PopulatedRequest, currentRun.Response.InputReplacement)
+		}
+
 		if isChat {
 			session.Set(previousExecutionKey, currentRun)
 		}
@@ -479,6 +485,22 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 		previousRun = currentRun
 		currentRun = &types.Execution{
 			Request: req.Reset(),
+		}
+	}
+}
+
+func replaceLastUserMessage(req *types.CompletionRequest, replacement string) {
+	for i := len(req.Input) - 1; i >= 0; i-- {
+		if req.Input[i].Role == "user" {
+			req.Input[i].Items = []types.CompletionItem{
+				{
+					Content: &mcp.Content{
+						Type: "text",
+						Text: replacement,
+					},
+				},
+			}
+			return
 		}
 	}
 }

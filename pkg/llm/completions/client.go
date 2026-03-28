@@ -60,15 +60,20 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 	}
 
 	ts := time.Now()
-	resp, err := c.complete(ctx, completionRequest.Agent, req, opts...)
+	resp, inputReplacement, err := c.complete(ctx, completionRequest.Agent, req, opts...)
 	if err != nil {
 		return nil, err
 	}
 
-	return toResponse(resp, ts)
+	cr, err := toResponse(resp, ts)
+	if err != nil {
+		return nil, err
+	}
+	cr.InputReplacement = inputReplacement
+	return cr, nil
 }
 
-func (c *Client) complete(ctx context.Context, agentName string, req Request, opts ...types.CompletionOptions) (*Response, error) {
+func (c *Client) complete(ctx context.Context, agentName string, req Request, opts ...types.CompletionOptions) (*Response, string, error) {
 	var (
 		opt = complete.Complete(opts...)
 	)
@@ -80,7 +85,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 	log.Messages(ctx, "completions-api", true, data)
 	httpReq, err := http.NewRequestWithContext(mcp.UserContext(ctx), http.MethodPost, c.BaseURL+"/chat/completions", bytes.NewBuffer(data))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	for key, value := range c.Headers {
 		httpReq.Header.Set(key, value)
@@ -88,13 +93,15 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 
 	httpResp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer httpResp.Body.Close()
 
+	inputReplacement := httpResp.Header.Get("X-Obot-Message-Policy-Replacement")
+
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
-		return nil, fmt.Errorf("failed to get response from OpenAI Chat Completions API: %s %q", httpResp.Status, string(body))
+		return nil, "", fmt.Errorf("failed to get response from OpenAI Chat Completions API: %s %q", httpResp.Status, string(body))
 	}
 
 	var (
@@ -309,10 +316,10 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 				log.Messages(ctx, "completions-api", false, respData)
 			}
 
-			return &resp, nil
+			return &resp, inputReplacement, nil
 		}
 
-		return nil, fmt.Errorf("failed to read streaming response: %w", err)
+		return nil, "", fmt.Errorf("failed to read streaming response: %w", err)
 	}
 
 	// Convert tool calls map to slice
@@ -328,5 +335,5 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 		log.Messages(ctx, "completions-api", false, respData)
 	}
 
-	return &resp, nil
+	return &resp, inputReplacement, nil
 }

@@ -261,6 +261,10 @@ type CompletionResponse struct {
 	HasMore          bool      `json:"hasMore,omitempty"`
 	Error            string    `json:"error,omitempty"`
 	ProgressToken    any       `json:"progressToken,omitempty"`
+
+	// InputReplacement, if set, indicates the last user message was replaced
+	// by the LLM proxy due to a policy violation. The value is the replacement text.
+	InputReplacement string `json:"inputReplacement,omitempty"`
 }
 
 func (c *CompletionResponse) Serialize() (any, error) {
@@ -296,9 +300,10 @@ type CallResult struct {
 }
 
 type AsyncCallResult struct {
-	IsError       bool          `json:"isError"`
-	Content       []mcp.Content `json:"content,omitzero"`
-	InProgress    bool          `json:"inProgress,omitempty"`
-	ToolName      string        `json:"toolName,omitempty"`
-	ProgressToken any           `json:"progressToken,omitempty"`
+	IsError          bool          `json:"isError"`
+	Content          []mcp.Content `json:"content,omitzero"`
+	InProgress       bool          `json:"inProgress,omitempty"`
+	ToolName         string        `json:"toolName,omitempty"`
+	ProgressToken    any           `json:"progressToken,omitempty"`
+	InputReplacement string        `json:"inputReplacement,omitempty"`
 }

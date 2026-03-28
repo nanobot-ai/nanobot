@@ -61,16 +61,20 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 	}
 
 	ts := time.Now()
-	resp, err := c.complete(ctx, completionRequest.Agent, req, opts...)
+	resp, inputReplacement, err := c.complete(ctx, completionRequest.Agent, req, opts...)
 	if err != nil {
 		return nil, err
 	}
 
-	return toResponse(resp, ts)
-
+	cr, err := toResponse(resp, ts)
+	if err != nil {
+		return nil, err
+	}
+	cr.InputReplacement = inputReplacement
+	return cr, nil
 }
 
-func (c *Client) complete(ctx context.Context, agentName string, req Request, opts ...types.CompletionOptions) (*Response, error) {
+func (c *Client) complete(ctx context.Context, agentName string, req Request, opts ...types.CompletionOptions) (*Response, string, error) {
 	opt := complete.Complete(opts...)
 
 	req.Stream = true
@@ -80,7 +84,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 
 	httpReq, err := http.NewRequestWithContext(mcp.UserContext(ctx), http.MethodPost, c.BaseURL+"/messages", bytes.NewBuffer(data))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	for key, value := range c.Headers {
 		httpReq.Header.Set(key, value)
@@ -88,13 +92,15 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 
 	httpResp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer httpResp.Body.Close()
 
+	inputReplacement := httpResp.Header.Get("X-Obot-Message-Policy-Replacement")
+
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
-		return nil, fmt.Errorf("failed to get response from Anthropic API: %s %q", httpResp.Status, string(body))
+		return nil, "", fmt.Errorf("failed to get response from Anthropic API: %s %q", httpResp.Status, string(body))
 	}
 
 	var (
@@ -168,7 +174,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 			if contentIndex >= 0 && partialJSON != "" {
 				args := map[string]any{}
 				if err := json.Unmarshal([]byte(partialJSON), &args); err != nil {
-					return nil, fmt.Errorf("failed to unmarshal function call arguments: %w", err)
+					return nil, "", fmt.Errorf("failed to unmarshal function call arguments: %w", err)
 				}
 				resp.Content[contentIndex].Input = args
 			}
@@ -190,7 +196,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 				Delta: &resp,
 			})
 			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal message delta: %w", err)
+				return nil, "", fmt.Errorf("failed to unmarshal message delta: %w", err)
 			}
 		case "message_stop":
 			// nothing to do, but here for completeness
@@ -231,7 +237,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 					},
 				},
 			}, opt.ProgressToken)
-			return &resp, nil
+			return &resp, inputReplacement, nil
 		}
 	}
 
@@ -240,5 +246,5 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 		log.Messages(ctx, "anthropic-api", false, respData)
 	}
 
-	return &resp, nil
+	return &resp, inputReplacement, nil
 }
