@@ -265,6 +265,11 @@ type CompletionResponse struct {
 	// InputReplacement, if set, indicates the last user message was replaced
 	// by the LLM proxy due to a policy violation. The value is the replacement text.
 	InputReplacement string `json:"inputReplacement,omitempty"`
+
+	// ToolCallPolicyViolation, if set, indicates that the LLM's tool calls were blocked
+	// by the proxy due to a policy violation. The value is the explanation to return as
+	// error tool_results instead of executing the tools.
+	ToolCallPolicyViolation string `json:"toolCallPolicyViolation,omitempty"`
 }
 
 func (c *CompletionResponse) Serialize() (any, error) {

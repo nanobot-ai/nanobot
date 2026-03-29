@@ -16,7 +16,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-func progressResponse(ctx context.Context, agentName, modelName string, resp *http.Response, progressToken any) (response Response, seen bool, err error) {
+func progressResponse(ctx context.Context, agentName, modelName string, resp *http.Response, progressToken any) (response Response, seen bool, toolCallPolicyViolation string, err error) {
 	lines := bufio.NewScanner(resp.Body)
 	defer resp.Body.Close()
 
@@ -39,8 +39,20 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 		}
 		switch strings.TrimSpace(header) {
 		case "data":
-			var event Progress
 			body = strings.TrimSpace(body)
+
+			// Check for tool call policy violation marker from the proxy.
+			if strings.HasPrefix(body, `{"obot_tool_call_policy_violation"`) {
+				var v struct {
+					Violation string `json:"obot_tool_call_policy_violation"`
+				}
+				if err := json.Unmarshal([]byte(body), &v); err == nil {
+					toolCallPolicyViolation = v.Violation
+				}
+				continue
+			}
+
+			var event Progress
 			data := []byte(body)
 			if err := json.Unmarshal(data, &event); err != nil {
 				slog.Error("failed to decode event", "error", err, "body", body)

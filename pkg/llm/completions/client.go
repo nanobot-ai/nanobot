@@ -60,7 +60,7 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 	}
 
 	ts := time.Now()
-	resp, inputReplacement, err := c.complete(ctx, completionRequest.Agent, req, opts...)
+	resp, inputReplacement, toolCallPolicyViolation, err := c.complete(ctx, completionRequest.Agent, req, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -70,10 +70,11 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 		return nil, err
 	}
 	cr.InputReplacement = inputReplacement
+	cr.ToolCallPolicyViolation = toolCallPolicyViolation
 	return cr, nil
 }
 
-func (c *Client) complete(ctx context.Context, agentName string, req Request, opts ...types.CompletionOptions) (*Response, string, error) {
+func (c *Client) complete(ctx context.Context, agentName string, req Request, opts ...types.CompletionOptions) (*Response, string, string, error) {
 	var (
 		opt = complete.Complete(opts...)
 	)
@@ -85,7 +86,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 	log.Messages(ctx, "completions-api", true, data)
 	httpReq, err := http.NewRequestWithContext(mcp.UserContext(ctx), http.MethodPost, c.BaseURL+"/chat/completions", bytes.NewBuffer(data))
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	for key, value := range c.Headers {
 		httpReq.Header.Set(key, value)
@@ -93,7 +94,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 
 	httpResp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	defer httpResp.Body.Close()
 
@@ -101,14 +102,15 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
-		return nil, "", fmt.Errorf("failed to get response from OpenAI Chat Completions API: %s %q", httpResp.Status, string(body))
+		return nil, "", "", fmt.Errorf("failed to get response from OpenAI Chat Completions API: %s %q", httpResp.Status, string(body))
 	}
 
 	var (
-		lines       = bufio.NewScanner(httpResp.Body)
-		resp        Response
-		initialized = false
-		toolCalls   = make(map[int]*ToolCall)
+		lines                   = bufio.NewScanner(httpResp.Body)
+		resp                    Response
+		initialized             = false
+		toolCalls               = make(map[int]*ToolCall)
+		toolCallPolicyViolation string
 	)
 
 	for lines.Scan() {
@@ -124,6 +126,17 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 
 		if data == "[DONE]" {
 			break
+		}
+
+		// Check for tool call policy violation marker from the proxy.
+		if strings.HasPrefix(data, `{"obot_tool_call_policy_violation"`) {
+			var v struct {
+				Violation string `json:"obot_tool_call_policy_violation"`
+			}
+			if err := json.Unmarshal([]byte(data), &v); err == nil {
+				toolCallPolicyViolation = v.Violation
+			}
+			continue
 		}
 
 		var chunk StreamChunk
@@ -316,10 +329,10 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 				log.Messages(ctx, "completions-api", false, respData)
 			}
 
-			return &resp, inputReplacement, nil
+			return &resp, inputReplacement, toolCallPolicyViolation, nil
 		}
 
-		return nil, "", fmt.Errorf("failed to read streaming response: %w", err)
+		return nil, "", "", fmt.Errorf("failed to read streaming response: %w", err)
 	}
 
 	// Convert tool calls map to slice
@@ -335,5 +348,5 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 		log.Messages(ctx, "completions-api", false, respData)
 	}
 
-	return &resp, inputReplacement, nil
+	return &resp, inputReplacement, toolCallPolicyViolation, nil
 }

@@ -13,6 +13,65 @@ import (
 )
 
 func (a *Agents) toolCalls(ctx context.Context, run *types.Execution, opts []types.CompletionOptions) {
+	// If the proxy blocked tool calls due to a policy violation, return error
+	// tool_results for each call instead of executing them. This keeps the
+	// conversation history valid (every tool_use gets a tool_result).
+	if run.Response != nil && run.Response.ToolCallPolicyViolation != "" {
+		opt := complete.Complete(opts...)
+		for _, output := range run.Response.Output.Items {
+			if output.ToolCall == nil || run.ToolOutputs[output.ToolCall.CallID].Done {
+				continue
+			}
+
+			tcResult := &types.ToolCallResult{
+				CallID: output.ToolCall.CallID,
+				Output: types.CallResult{
+					Content: []mcp.Content{
+						{
+							Type: "text",
+							Text: run.Response.ToolCallPolicyViolation,
+						},
+					},
+					IsError: true,
+				},
+			}
+
+			if opt.ProgressToken != nil {
+				_ = mcp.SessionFromContext(ctx).SendPayload(ctx, "notifications/progress", mcp.NotificationProgressRequest{
+					ProgressToken: opt.ProgressToken,
+					Meta: map[string]any{
+						types.CompletionProgressMetaKey: types.CompletionProgress{
+							MessageID: run.Response.Output.ID,
+							Item: types.CompletionItem{
+								ID:             output.ID,
+								ToolCall:       output.ToolCall,
+								ToolCallResult: tcResult,
+							},
+						},
+					},
+				})
+			}
+
+			if run.ToolOutputs == nil {
+				run.ToolOutputs = make(map[string]types.ToolOutput)
+			}
+
+			run.ToolOutputs[output.ToolCall.CallID] = types.ToolOutput{
+				Output: types.Message{
+					Role: "user",
+					Items: []types.CompletionItem{
+						{
+							ID:             output.ID,
+							ToolCallResult: tcResult,
+						},
+					},
+				},
+				Done: true,
+			}
+		}
+		return
+	}
+
 	for _, output := range run.Response.Output.Items {
 		functionCall := output.ToolCall
 
