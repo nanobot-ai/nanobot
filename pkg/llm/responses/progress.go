@@ -30,9 +30,8 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 	}
 
 	var (
-		accumulatedText string
-		accumulatedArgs string
-		outputs         []ResponseOutput
+		accumulatedText, accumulatedArgs strings.Builder
+		outputs                          []ResponseOutput
 	)
 	for lines.Scan() {
 		line := lines.Text()
@@ -90,7 +89,7 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 					}
 				}
 			case "response.function_call_arguments.delta":
-				accumulatedArgs += event.Delta
+				accumulatedArgs.WriteString(event.Delta)
 				progress.Item.ToolCall.Arguments = event.Delta
 				llmProgress.Send(ctx, &progress, progressToken)
 			case "response.output_item.done":
@@ -102,7 +101,7 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 							ID:        event.Item.ID,
 							CallID:    event.Item.CallID,
 							Name:      event.Item.Name,
-							Arguments: accumulatedArgs,
+							Arguments: accumulatedArgs.String(),
 						},
 					})
 				case "message":
@@ -111,13 +110,13 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 							ID:   event.Item.ID,
 							Role: event.Item.Role,
 							Content: []MessageContent{
-								{OutputText: &OutputText{Text: accumulatedText}},
+								{OutputText: &OutputText{Text: accumulatedText.String()}},
 							},
 						},
 					})
 				}
-				accumulatedText = ""
-				accumulatedArgs = ""
+				accumulatedText.Reset()
+				accumulatedArgs.Reset()
 
 				// Send progress notification
 				if progress.Item.ID != "" {
@@ -129,7 +128,7 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 				}
 				progress.Item = types.CompletionItem{}
 			case "response.output_text.delta":
-				accumulatedText += event.Delta
+				accumulatedText.WriteString(event.Delta)
 				if progress.Item.Content != nil {
 					progress.Item.Content.Text = event.Delta
 					llmProgress.Send(ctx, &progress, progressToken)
@@ -190,12 +189,13 @@ func progressResponse(ctx context.Context, agentName, modelName string, resp *ht
 
 			if response.Output[outputIndex].Message.Content[contentIndex].OutputText != nil {
 				if response.Output[outputIndex].Message.Content[contentIndex].OutputText.Text != "" {
-					accumulatedText = response.Output[outputIndex].Message.Content[contentIndex].OutputText.Text
+					accumulatedText.Reset()
+					accumulatedText.WriteString(response.Output[outputIndex].Message.Content[contentIndex].OutputText.Text)
 				}
-				response.Output[outputIndex].Message.Content[contentIndex].OutputText.Text = accumulatedText + errorText
+				response.Output[outputIndex].Message.Content[contentIndex].OutputText.Text = accumulatedText.String() + errorText
 			} else {
 				response.Output[outputIndex].Message.Content[contentIndex].OutputText = &OutputText{
-					Text: accumulatedText + errorText,
+					Text: accumulatedText.String() + errorText,
 				}
 			}
 

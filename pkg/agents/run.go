@@ -384,17 +384,13 @@ func (a *Agents) handleUIAction(ctx context.Context, config types.Config, req ty
 func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts ...types.CompletionOptions) (_ *types.CompletionResponse, err error) {
 	var (
 		previousExecutionKey = types.PreviousExecutionKey
-		session              = mcp.SessionFromContext(ctx)
+		session              = mcp.SessionFromContext(ctx).Root()
 		isChat               = session != nil
 		previousRun          *types.Execution
 		currentRun           = &types.Execution{}
 		baseConfig           = types.ConfigFromContext(ctx)
 		startID              = ""
 	)
-
-	for session != nil && session.Parent != nil {
-		session = session.Parent
-	}
 
 	if len(req.Input) > 0 {
 		startID = req.Input[0].ID

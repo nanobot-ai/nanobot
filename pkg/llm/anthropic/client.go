@@ -107,8 +107,8 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 	var (
 		lines                   = bufio.NewScanner(httpResp.Body)
 		resp                    Response
-		partialJSON             = ""
 		toolCallPolicyViolation string
+		partialJSON             strings.Builder
 	)
 
 	for lines.Scan() {
@@ -142,7 +142,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 		case "message_start":
 			resp = delta.Message
 		case "content_block_start":
-			partialJSON = ""
+			partialJSON.Reset()
 			resp.Content = append(resp.Content, delta.ContentBlock)
 		case "content_block_delta":
 			switch delta.Delta.Type {
@@ -165,7 +165,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 					}, opt.ProgressToken)
 				}
 			case "input_json_delta":
-				partialJSON += delta.Delta.PartialJSON
+				partialJSON.WriteString(delta.Delta.PartialJSON)
 				if contentIndex >= 0 {
 					progress.Send(ctx, &types.CompletionProgress{
 						Model:     resp.Model,
@@ -185,9 +185,9 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 				}
 			}
 		case "content_block_stop":
-			if contentIndex >= 0 && partialJSON != "" {
+			if contentIndex >= 0 && partialJSON.Len() > 0 {
 				args := map[string]any{}
-				if err := json.Unmarshal([]byte(partialJSON), &args); err != nil {
+				if err := json.Unmarshal([]byte(partialJSON.String()), &args); err != nil {
 					return nil, "", "", fmt.Errorf("failed to unmarshal function call arguments: %w", err)
 				}
 				resp.Content[contentIndex].Input = args
