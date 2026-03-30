@@ -169,6 +169,9 @@ func (s *Server) resourcesList(ctx context.Context, msg mcp.Message, _ mcp.ListR
 				Name:     filepath.Base(relPath),
 				MimeType: mimeType,
 				Size:     info.Size(),
+				Annotations: &mcp.Annotations{
+					LastModified: info.ModTime(),
+				},
 			})
 			return nil
 		})
