@@ -248,6 +248,18 @@ func (c chatCall) chatInvoke(ctx context.Context, msg mcp.Message, payload mcp.C
 		return nil, err
 	}
 
+	// If the LLM proxy replaced the user message due to a policy violation,
+	// copy InputReplacement from the execution into the progress response so
+	// that the frontend receives it via the SSE event stream.
+	var run types.Execution
+	if session.Get(types.PreviousExecutionKey, &run) && run.Response != nil && run.Response.InputReplacement != "" {
+		var progress types.CompletionResponse
+		if session.Get(progressSessionKey, &progress) {
+			progress.InputReplacement = run.Response.InputReplacement
+			session.Set(progressSessionKey, &progress)
+		}
+	}
+
 	mcpResult := mcp.CallToolResult{
 		StructuredContent: result.StructuredContent,
 		IsError:           result.IsError,

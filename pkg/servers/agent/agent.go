@@ -141,11 +141,12 @@ func (s *Server) readProgress(ctx context.Context) (ret []mcp.ResourceContent, _
 	}
 
 	data, err := json.Marshal(types.AsyncCallResult{
-		IsError:       callResult.IsError,
-		Content:       callResult.Content,
-		InProgress:    progress.HasMore,
-		ToolName:      types.AgentTool + callResult.Agent,
-		ProgressToken: progress.ProgressToken,
+		IsError:          callResult.IsError,
+		Content:          callResult.Content,
+		InProgress:       progress.HasMore,
+		ToolName:         types.AgentTool + callResult.Agent,
+		ProgressToken:    progress.ProgressToken,
+		InputReplacement: progress.InputReplacement,
 	})
 	if err != nil {
 		return nil, err

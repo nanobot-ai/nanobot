@@ -191,6 +191,13 @@ func printProgressURI(wl *sync.Mutex, rw flusher, req *http.Request, client *mcp
 		}
 
 		if !callResult.InProgress {
+			if callResult.InputReplacement != "" {
+				if err := writeEvent(wl, rw, nil, "input-replaced", map[string]string{
+					"replacement": callResult.InputReplacement,
+				}); err != nil {
+					return err
+				}
+			}
 			if err := writeEvent(wl, rw, nil, "chat-done", nil); err != nil {
 				return err
 			}

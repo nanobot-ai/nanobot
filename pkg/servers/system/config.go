@@ -121,7 +121,24 @@ Do NOT put skill files in the session directory or workflow directory.
 		}
 
 		obotmcp.ConfigureIntegration(ctx, agent, &params)
+
+		if session := mcp.SessionFromContext(ctx); session != nil {
+			if envMap := session.GetEnvMap(); envMap["OBOT_URL"] != "" {
+				agent.Instructions.Instructions += messagePolicyPrompt
+			}
+		}
 	}
 
 	return params, nil
 }
+
+const messagePolicyPrompt = `
+
+## Message Policies
+
+Your messages are subject to administrator-configured content policies. These policies are enforced automatically and may block certain requests or tool calls.
+
+- If a user message in the conversation history is prefixed with "[policy-violation]", it means the user's original message was blocked by a content policy. The text after the prefix is the explanation of the violation.
+- If a tool call returns an error due to a policy violation, it means the tool call was blocked by a content policy.
+
+When a policy violation occurs, do not attempt to help the user rephrase, reword, or otherwise work around the policy. Do not suggest alternative approaches that would circumvent the intent of the policy. Simply inform the user that their request could not be completed due to a content policy.`
