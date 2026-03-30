@@ -421,13 +421,15 @@ func (s *Server) resourcesRead(ctx context.Context, _ mcp.Message, req mcp.ReadR
 	}, nil
 }
 
-func (s *Server) resourcesSubscribe(_ context.Context, msg mcp.Message, req mcp.SubscribeRequest) (*mcp.SubscribeResult, error) {
-	s.Subscribe(msg.Session.Root().ID(), msg.Session.Root(), req.URI)
+func (s *Server) resourcesSubscribe(ctx context.Context, _ mcp.Message, req mcp.SubscribeRequest) (*mcp.SubscribeResult, error) {
+	session := mcp.SessionFromContext(ctx).Root()
+	s.Subscribe(session.ID(), session, req.URI)
 	return &mcp.SubscribeResult{}, nil
 }
 
 func (s *Server) resourcesUnsubscribe(ctx context.Context, _ mcp.Message, req mcp.UnsubscribeRequest) (*mcp.UnsubscribeResult, error) {
-	s.Unsubscribe(mcp.SessionFromContext(ctx).Root().ID(), req.URI)
+	session := mcp.SessionFromContext(ctx).Root()
+	s.Unsubscribe(session.ID(), req.URI)
 	return &mcp.UnsubscribeResult{}, nil
 }
 
