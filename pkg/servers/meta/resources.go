@@ -196,6 +196,9 @@ func (s *Server) listWorkflowResources(ctx context.Context) ([]mcp.Resource, err
 				Name:     filepath.Base(relPath),
 				MimeType: mimeType,
 				Size:     info.Size(),
+				Annotations: &mcp.Annotations{
+					LastModified: info.ModTime(),
+				},
 			})
 			return nil
 		})
