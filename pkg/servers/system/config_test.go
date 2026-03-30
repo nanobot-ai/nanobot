@@ -95,7 +95,7 @@ func TestConfigSkillsPermissionIncludesSkillDetails(t *testing.T) {
 	instructions := result.Agent.Instructions.Instructions
 
 	// Check for specific skills we know exist
-	expectedSkills := []string{"python-scripts", "workflows"}
+	expectedSkills := []string{"python-scripts", "scheduled-tasks", "workflows"}
 	for _, skillName := range expectedSkills {
 		if !strings.Contains(instructions, skillName) {
 			t.Errorf("expected skill '%s' to be listed in instructions", skillName)
@@ -314,6 +314,7 @@ func TestConfigAddsToolsForPermissions(t *testing.T) {
 		"nanobot.system/read",
 		"nanobot.system/write",
 		"nanobot.system/getSkill",
+		"nanobot.tasks",
 		"nanobot.workflow-tools",
 	}
 	for _, tool := range expectedTools {
@@ -331,6 +332,9 @@ func TestConfigAddsToolsForPermissions(t *testing.T) {
 
 	if _, ok := result.MCPServers["nanobot.workflow-tools"]; !ok {
 		t.Error("expected 'nanobot.workflow-tools' to be present in MCPServers")
+	}
+	if _, ok := result.MCPServers["nanobot.tasks"]; !ok {
+		t.Error("expected 'nanobot.tasks' to be present in MCPServers")
 	}
 }
 

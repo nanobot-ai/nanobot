@@ -69,6 +69,7 @@ func (s *Server) config(ctx context.Context, params types.AgentConfigHook) (type
 				// Make workflow and artifact tools available to agents with skills permission.
 				agent.Tools = append(agent.Tools, "nanobot.workflow-tools")
 				agent.Tools = append(agent.Tools, "nanobot.artifacts")
+				agent.Tools = append(agent.Tools, "nanobot.tasks")
 
 				session := mcp.SessionFromContext(ctx)
 				if session != nil {
@@ -113,6 +114,7 @@ Do NOT put skill files in the session directory or workflow directory.
 		params.MCPServers["nanobot.workflows"] = types.AgentConfigHookMCPServer{}
 		params.MCPServers["nanobot.workflow-tools"] = types.AgentConfigHookMCPServer{}
 		params.MCPServers["nanobot.artifacts"] = types.AgentConfigHookMCPServer{}
+		params.MCPServers["nanobot.tasks"] = types.AgentConfigHookMCPServer{}
 		session := mcp.SessionFromContext(ctx)
 		if session != nil {
 			if envMap := session.GetEnvMap(); envMap["OBOT_URL"] != "" && agent.Permissions != nil && agent.Permissions.IsAllowed("skills") {

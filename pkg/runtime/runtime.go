@@ -19,6 +19,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/servers/obotmcp"
 	"github.com/nanobot-ai/nanobot/pkg/servers/skills"
 	"github.com/nanobot-ai/nanobot/pkg/servers/system"
+	"github.com/nanobot-ai/nanobot/pkg/servers/tasks"
 	"github.com/nanobot-ai/nanobot/pkg/servers/workflows"
 	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
@@ -28,8 +29,9 @@ import (
 
 type Runtime struct {
 	*tools.Service
-	llmConfig llm.Config
-	opt       Options
+	llmConfig  llm.Config
+	opt        Options
+	taskServer *tasks.Server
 }
 
 type Options struct {
@@ -40,11 +42,13 @@ type Options struct {
 	TokenStorage              mcp.TokenStorage
 	OAuthRedirectURL          string
 	DSN                       string
+	Store                     *session.Store
 	TokenExchangeEndpoint     string
 	TokenExchangeClientID     string
 	TokenExchangeClientSecret string
 	AuditLogCollector         *auditlogs.Collector
 	ConfigDir                 string
+	LoopbackURL               string
 }
 
 func (o Options) Merge(other Options) (result Options) {
@@ -55,17 +59,22 @@ func (o Options) Merge(other Options) (result Options) {
 	result.OAuthRedirectURL = complete.Last(o.OAuthRedirectURL, other.OAuthRedirectURL)
 	result.TokenStorage = complete.Last(o.TokenStorage, other.TokenStorage)
 	result.DSN = complete.Last(o.DSN, other.DSN)
+	result.Store = complete.Last(o.Store, other.Store)
 	result.TokenExchangeEndpoint = complete.Last(o.TokenExchangeEndpoint, other.TokenExchangeEndpoint)
 	result.TokenExchangeClientID = complete.Last(o.TokenExchangeClientID, other.TokenExchangeClientID)
 	result.TokenExchangeClientSecret = complete.Last(o.TokenExchangeClientSecret, other.TokenExchangeClientSecret)
 	result.AuditLogCollector = complete.Last(o.AuditLogCollector, other.AuditLogCollector)
 	result.ConfigDir = complete.Last(o.ConfigDir, other.ConfigDir)
+	result.LoopbackURL = complete.Last(o.LoopbackURL, other.LoopbackURL)
 	return
 }
 
-func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
+func NewRuntime(ctx context.Context, cfg llm.Config, opts ...Options) (*Runtime, error) {
 	opt := complete.Complete(opts...)
 
+	if opt.TokenStorage == nil && opt.Store != nil {
+		opt.TokenStorage = opt.Store
+	}
 	if opt.TokenStorage == nil && opt.DSN != "" {
 		var err error
 		opt.TokenStorage, err = session.NewStoreFromDSN(opt.DSN)
@@ -129,6 +138,17 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 	registry.AddServer("nanobot.obot-mcp-cli", func(string) mcp.MessageHandler {
 		return obotmcp.NewServer(opt.ConfigDir)
 	})
+
+	if opt.LoopbackURL != "" && opt.Store != nil {
+		taskServer, err := tasks.NewServer(ctx, opt.Store, opt.LoopbackURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to start task server: %w", err)
+		}
+		r.taskServer = taskServer
+		registry.AddServer("nanobot.tasks", func(string) mcp.MessageHandler {
+			return taskServer
+		})
+	}
 
 	return r, nil
 }

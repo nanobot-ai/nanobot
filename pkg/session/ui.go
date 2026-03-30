@@ -16,14 +16,6 @@ import (
 
 var browserProxy = newBrowserProxy()
 
-func getCookieID(req *http.Request) string {
-	cookie, err := req.Cookie("nanobot-session-id")
-	if err == nil {
-		return cookie.Value
-	}
-	return ""
-}
-
 func UISession(next http.Handler, sessionStore *Manager, apiHandler http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		if req.URL.Path == "/browser" || strings.HasPrefix(req.URL.Path, "/browser/") {
@@ -123,10 +115,6 @@ func UISession(next http.Handler, sessionStore *Manager, apiHandler http.Handler
 			httputil.NewSingleHostReverseProxy(url).ServeHTTP(rw, req)
 		}
 	})
-}
-
-func isSecureRequest(req *http.Request) bool {
-	return req.TLS != nil || req.Header.Get("X-Forwarded-Proto") == "https"
 }
 
 func setNoCacheHeaders(rw http.ResponseWriter) {
