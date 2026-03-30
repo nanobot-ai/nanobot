@@ -35,7 +35,7 @@ func (t *Targets) Customize(cmd *cobra.Command) {
 
 func (t *Targets) Run(cmd *cobra.Command, args []string) error {
 	log.EnableMessages = false
-	r, err := t.n.GetRuntime()
+	r, err := t.n.GetRuntime(cmd.Context())
 	if err != nil {
 		return err
 	}

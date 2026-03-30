@@ -15,6 +15,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/runtime"
+	"github.com/nanobot-ai/nanobot/pkg/session"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -171,16 +172,21 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		defer auditLogCollector.Close()
 	}
 
-	runtime, err := r.n.GetRuntime(runtimeOpt, runtime.Options{
+	store, err := session.NewStoreFromDSN(r.n.DSN())
+	if err != nil {
+		return fmt.Errorf("failed to create session store: %w", err)
+	}
+
+	runtime, err := r.n.GetRuntime(cmd.Context(), runtimeOpt, runtime.Options{
 		OAuthRedirectURL:  "http://" + strings.Replace(r.ListenAddress, "127.0.0.1", "localhost", 1) + "/oauth/callback",
-		DSN:               r.n.DSN(),
+		Store:             store,
 		AuditLogCollector: auditLogCollector,
 	})
 	if err != nil {
 		return err
 	}
 
-	return r.n.runMCP(cmd.Context(), cfgFactory, runtime, callbackHandler, auditLogCollector, mcpOpts{
+	return r.n.runMCP(cmd.Context(), cfgFactory, runtime, callbackHandler, auditLogCollector, store, mcpOpts{
 		Auth:               auth.Auth(r.Auth),
 		ListenAddress:      r.ListenAddress,
 		HealthzPath:        r.HealthzPath,

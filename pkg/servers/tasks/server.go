@@ -65,7 +65,6 @@ type Server struct {
 	loopbackURL string
 	ctx         context.Context
 	cancel      context.CancelFunc
-	startOnce   sync.Once
 	wg          sync.WaitGroup
 	mu          sync.Mutex
 	jobs        map[string]*job
@@ -76,14 +75,15 @@ type job struct {
 	cancel     context.CancelFunc
 }
 
-// NewServer creates the task server. The DB and scheduler are initialized later
-// via Start.
-func NewServer(loopbackURL string) *Server {
+// NewServer creates the task server, sets the DB, and loads persisted tasks.
+func NewServer(ctx context.Context, db *session.Store, loopbackURL string) (*Server, error) {
 	s := &Server{
-		SubscriptionManager: fswatch.NewSubscriptionManager(context.Background()),
+		SubscriptionManager: fswatch.NewSubscriptionManager(ctx),
 		loopbackURL:         loopbackURL,
 		jobs:                make(map[string]*job),
+		db:                  db,
 	}
+	s.ctx, s.cancel = context.WithCancel(ctx)
 	s.tools = mcp.NewServerTools(
 		mcp.NewServerTool("listScheduledTasks", "List scheduled tasks", s.listTasks),
 		mcp.NewServerTool("createScheduledTask", "Create a scheduled task", s.createTask),
@@ -91,46 +91,24 @@ func NewServer(loopbackURL string) *Server {
 		mcp.NewServerTool("deleteScheduledTask", "Delete a scheduled task", s.deleteTask),
 		mcp.NewServerTool("startScheduledTask", "Start a scheduled task now", s.startTask),
 	)
-	return s
-}
 
-// Start sets the DB and loads persisted tasks.
-func (s *Server) Start(ctx context.Context, db *session.Store) error {
-	var err error
-	s.startOnce.Do(func() {
-		s.ctx, s.cancel = context.WithCancel(ctx)
-		s.db = db
+	tasks, err := db.ListScheduledTasks(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-		var tasks []session.ScheduledTask
-		tasks, err = db.ListScheduledTasks(ctx)
-		if err != nil {
-			return
+	for _, task := range tasks {
+		if task.Enabled {
+			s.scheduleTask(task.TaskURI)
 		}
+	}
 
-		for _, task := range tasks {
-			if task.Enabled {
-				s.scheduleTask(task.TaskURI)
-			}
-		}
+	context.AfterFunc(ctx, func() {
+		s.cancel()
+		s.wg.Wait()
 	})
 
-	return err
-}
-
-// Stop shuts down all scheduled goroutines, waiting up to the ctx deadline.
-func (s *Server) Stop(ctx context.Context) error {
-	s.cancel()
-	done := make(chan struct{})
-	go func() {
-		s.wg.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return s, nil
 }
 
 // OnMessage dispatches MCP messages.
@@ -158,23 +136,21 @@ func (s *Server) OnMessage(ctx context.Context, msg mcp.Message) {
 	}
 }
 
-func (s *Server) listTasks(ctx context.Context, _ struct{}) (struct {
+type listTasksResult struct {
 	Tasks []taskResult `json:"tasks"`
-}, error) {
-	var zero struct {
-		Tasks []taskResult `json:"tasks"`
-	}
+}
+
+func (s *Server) listTasks(ctx context.Context, _ struct{}) (*listTasksResult, error) {
+	var result listTasksResult
 	tasks, err := s.db.ListScheduledTasks(ctx)
 	if err != nil {
-		return zero, err
+		return &result, err
 	}
-	results := make([]taskResult, 0, len(tasks))
+	result.Tasks = make([]taskResult, 0, len(tasks))
 	for _, t := range tasks {
-		results = append(results, toResult(t))
+		result.Tasks = append(result.Tasks, toResult(t))
 	}
-	return struct {
-		Tasks []taskResult `json:"tasks"`
-	}{Tasks: results}, nil
+	return &result, nil
 }
 
 func (s *Server) createTask(ctx context.Context, params struct {

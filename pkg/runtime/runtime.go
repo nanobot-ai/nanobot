@@ -42,6 +42,7 @@ type Options struct {
 	TokenStorage              mcp.TokenStorage
 	OAuthRedirectURL          string
 	DSN                       string
+	Store                     *session.Store
 	TokenExchangeEndpoint     string
 	TokenExchangeClientID     string
 	TokenExchangeClientSecret string
@@ -58,6 +59,7 @@ func (o Options) Merge(other Options) (result Options) {
 	result.OAuthRedirectURL = complete.Last(o.OAuthRedirectURL, other.OAuthRedirectURL)
 	result.TokenStorage = complete.Last(o.TokenStorage, other.TokenStorage)
 	result.DSN = complete.Last(o.DSN, other.DSN)
+	result.Store = complete.Last(o.Store, other.Store)
 	result.TokenExchangeEndpoint = complete.Last(o.TokenExchangeEndpoint, other.TokenExchangeEndpoint)
 	result.TokenExchangeClientID = complete.Last(o.TokenExchangeClientID, other.TokenExchangeClientID)
 	result.TokenExchangeClientSecret = complete.Last(o.TokenExchangeClientSecret, other.TokenExchangeClientSecret)
@@ -67,9 +69,12 @@ func (o Options) Merge(other Options) (result Options) {
 	return
 }
 
-func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
+func NewRuntime(ctx context.Context, cfg llm.Config, opts ...Options) (*Runtime, error) {
 	opt := complete.Complete(opts...)
 
+	if opt.TokenStorage == nil && opt.Store != nil {
+		opt.TokenStorage = opt.Store
+	}
 	if opt.TokenStorage == nil && opt.DSN != "" {
 		var err error
 		opt.TokenStorage, err = session.NewStoreFromDSN(opt.DSN)
@@ -134,8 +139,11 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 		return obotmcp.NewServer(opt.ConfigDir)
 	})
 
-	if opt.LoopbackURL != "" {
-		taskServer := tasks.NewServer(opt.LoopbackURL)
+	if opt.LoopbackURL != "" && opt.Store != nil {
+		taskServer, err := tasks.NewServer(ctx, opt.Store, opt.LoopbackURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to start task server: %w", err)
+		}
 		r.taskServer = taskServer
 		registry.AddServer("nanobot.tasks", func(string) mcp.MessageHandler {
 			return taskServer
@@ -143,23 +151,6 @@ func NewRuntime(cfg llm.Config, opts ...Options) (*Runtime, error) {
 	}
 
 	return r, nil
-}
-
-// StartTasks loads persisted scheduled tasks and starts their cron jobs.
-func (r *Runtime) StartTasks(ctx context.Context, db *session.Store) error {
-	if r.taskServer != nil {
-		return r.taskServer.Start(ctx, db)
-	}
-	return nil
-}
-
-// Stop drains background work (e.g. scheduled task goroutines) and waits up to
-// the ctx deadline.
-func (r *Runtime) Stop(ctx context.Context) error {
-	if r.taskServer != nil {
-		return r.taskServer.Stop(ctx)
-	}
-	return nil
 }
 
 func (r *Runtime) WithTempSession(ctx context.Context, config *types.Config) context.Context {

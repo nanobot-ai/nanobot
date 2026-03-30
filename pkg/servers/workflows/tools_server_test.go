@@ -16,10 +16,11 @@ import (
 func TestRecordWorkflowRun_DeduplicatesURI(t *testing.T) {
 	s := NewToolsServer()
 	ctx := t.Context()
-	manager, err := session.NewManager("sqlite::memory:")
+	store, err := session.NewStoreFromDSN("sqlite::memory:")
 	if err != nil {
-		t.Fatalf("failed to create session manager: %v", err)
+		t.Fatalf("failed to create session store: %v", err)
 	}
+	manager := session.NewManager(store)
 
 	if err := manager.DB.Create(ctx, &session.Session{
 		SessionID: "test-session",

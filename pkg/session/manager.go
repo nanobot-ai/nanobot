@@ -18,12 +18,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func NewManager(dsn string) (*Manager, error) {
-	store, err := NewStoreFromDSN(dsn)
-	if err != nil {
-		return nil, err
-	}
-
+func NewManager(store *Store) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Manager{
 		ctx:          ctx,
@@ -31,7 +26,7 @@ func NewManager(dsn string) (*Manager, error) {
 		DB:           store,
 		root:         &Session{},
 		liveSessions: make(map[string]liveSession),
-	}, nil
+	}
 }
 
 type Manager struct {

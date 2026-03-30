@@ -13,14 +13,14 @@ import (
 func testServer(t *testing.T) *Server {
 	t.Helper()
 
-	manager, err := session.NewManager(fmt.Sprintf("sqlite:file:%s?mode=memory&cache=shared",
+	store, err := session.NewStoreFromDSN(fmt.Sprintf("sqlite:file:%s?mode=memory&cache=shared",
 		strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())))
 	if err != nil {
-		t.Fatalf("failed to create session manager: %v", err)
+		t.Fatalf("failed to create session store: %v", err)
 	}
 
-	srv := NewServer("")
-	if err := srv.Start(t.Context(), manager.DB); err != nil {
+	srv, err := NewServer(t.Context(), store, "")
+	if err != nil {
 		t.Fatalf("failed to start: %v", err)
 	}
 

@@ -235,8 +235,8 @@ func (n *Nanobot) ReadConfig(ctx context.Context, cfgPath string, includeDefault
 	return cfg, err
 }
 
-func (n *Nanobot) GetRuntime(opts ...runtime.Options) (*runtime.Runtime, error) {
-	return runtime.NewRuntime(n.llmConfig(), opts...)
+func (n *Nanobot) GetRuntime(ctx context.Context, opts ...runtime.Options) (*runtime.Runtime, error) {
+	return runtime.NewRuntime(ctx, n.llmConfig(), opts...)
 }
 
 func (n *Nanobot) Run(cmd *cobra.Command, _ []string) error {
@@ -251,7 +251,7 @@ type mcpOpts struct {
 	StartUI            bool
 }
 
-func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, auditLogCollector *auditlogs.Collector, opts mcpOpts) error {
+func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, auditLogCollector *auditlogs.Collector, store *session.Store, opts mcpOpts) error {
 	envProvider := func() (map[string]string, error) {
 		return n.loadEnv()
 	}
@@ -281,18 +281,11 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 		return fmt.Errorf("https:// is not supported, use http:// instead")
 	}
 
-	sessionManager, err := session.NewManager(n.DSN())
-	if err != nil {
-		return err
-	}
+	sessionManager := session.NewManager(store)
 
 	var mcpServer mcp.MessageHandler = server.NewServer(runt, config, sessionManager, server.Options{
 		ForceFetchToolList: opts.ForceFetchToolList,
 	})
-
-	if err := runt.StartTasks(ctx, sessionManager.DB); err != nil {
-		return err
-	}
 
 	if address == "stdio" {
 		stdio := mcp.NewStdioServer(envProvider, mcpServer)
@@ -346,7 +339,6 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 	context.AfterFunc(ctx, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_ = runt.Stop(ctx)
 		_ = s.Shutdown(ctx)
 	})
 
