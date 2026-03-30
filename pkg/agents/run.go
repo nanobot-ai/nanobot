@@ -440,7 +440,7 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 			return nil, err
 		}
 
-		ctx := types.WithConfig(ctx, config)
+		ctx = types.WithConfig(ctx, config)
 
 		if err := a.run(ctx, config, currentRun, previousRun, opts); err != nil {
 			return nil, err

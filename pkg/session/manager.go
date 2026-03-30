@@ -188,6 +188,11 @@ func (m *Manager) Acquire(ctx context.Context, server mcp.MessageHandler, id str
 			return nil, false, nil
 		}
 
+		if live.cancel != nil {
+			live.cancel()
+			live.cancel = nil
+		}
+
 		live.count++
 		m.liveSessions[id] = live
 		m.liveSessionsLock.Unlock()
@@ -208,6 +213,10 @@ func (m *Manager) Acquire(ctx context.Context, server mcp.MessageHandler, id str
 	live, ok = m.liveSessions[id]
 	if ok {
 		serverSession.Close(false)
+		if live.cancel != nil {
+			live.cancel()
+			live.cancel = nil
+		}
 		live.count++
 		m.liveSessions[id] = live
 		m.liveSessionsLock.Unlock()

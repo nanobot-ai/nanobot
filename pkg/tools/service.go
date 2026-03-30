@@ -239,16 +239,6 @@ func (c *clientFactory) get(envHash string) (*mcp.Client, error) {
 	return c.client, nil
 }
 
-func (c *clientFactory) Close(deleteSession bool) {
-	c.clientLock.Lock()
-	defer c.clientLock.Unlock()
-	if c.client != nil {
-		c.client.Close(deleteSession)
-		c.client = nil
-	}
-	c.envHash = ""
-}
-
 func (c *clientFactory) Serialize() (any, error) {
 	if c.client == nil || c.client.Session.ID() == "" {
 		return nil, nil

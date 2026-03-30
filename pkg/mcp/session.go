@@ -370,7 +370,7 @@ func (s *Session) copyInto(out, in any) bool {
 		return true
 	}
 
-	if dstVal.Type().Kind() == reflect.Ptr && srcVal.Type().AssignableTo(dstVal.Type().Elem()) {
+	if dstVal.Type().Kind() == reflect.Pointer && srcVal.Type().AssignableTo(dstVal.Type().Elem()) {
 		dstVal.Elem().Set(srcVal)
 		return true
 	}
@@ -815,8 +815,13 @@ func newSession(ctx context.Context, wire Wire, handler MessageHandler, session 
 		s.InitializeRequest = session.InitializeRequest
 		s.InitializeResult = session.InitializeResult
 	}
-	withSession := WithSession(ctx, s)
-	s.ctx, s.cancel = context.WithCancelCause(withSession)
+	if s.Parent != nil {
+		go func() {
+			s.Parent.Wait()
+			s.Close(false)
+		}()
+	}
+	s.ctx, s.cancel = context.WithCancelCause(WithSession(ctx, s))
 
 	if err := wire.Start(s.ctx, s.onWire); err != nil {
 		return nil, err
