@@ -491,17 +491,31 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 
 func replaceLastUserMessage(req *types.CompletionRequest, replacement string) {
 	for i := len(req.Input) - 1; i >= 0; i-- {
-		if req.Input[i].Role == "user" {
-			req.Input[i].Items = []types.CompletionItem{
-				{
-					Content: &mcp.Content{
-						Type: "text",
-						Text: replacement,
-					},
-				},
-			}
-			return
+		if req.Input[i].Role != "user" {
+			continue
 		}
+		// Only replace user messages that contain text content, not tool_result
+		// messages (which also have role "user"). This matches the proxy behavior
+		// in obot which only evaluates policies against text user messages.
+		hasText := false
+		for _, item := range req.Input[i].Items {
+			if item.Content != nil {
+				hasText = true
+				break
+			}
+		}
+		if !hasText {
+			continue
+		}
+		req.Input[i].Items = []types.CompletionItem{
+			{
+				Content: &mcp.Content{
+					Type: "text",
+					Text: replacement,
+				},
+			},
+		}
+		return
 	}
 }
 
