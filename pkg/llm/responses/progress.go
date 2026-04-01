@@ -18,6 +18,10 @@ import (
 
 func progressResponse(ctx context.Context, agentName, modelName string, resp *http.Response, progressToken any) (response Response, seen bool, toolCallPolicyViolation string, err error) {
 	lines := bufio.NewScanner(resp.Body)
+	// Increase max scanner token size from 64 KiB to 1 MiB. The Responses API sends
+	// a response.completed event with the full response as a single SSE data: line,
+	// which can exceed 64 KiB and cause "bufio.Scanner: token too long" errors.
+	lines.Buffer(make([]byte, 0, 4096), 1024*1024)
 	defer resp.Body.Close()
 
 	progress := types.CompletionProgress{
