@@ -243,9 +243,7 @@ func (s *Server) readFileResource(ctx context.Context, uri string) (*mcp.ReadRes
 		Name:     filepath.Base(relPath),
 		MIMEType: mimeType,
 	}
-	if _, isImage := types.ImageMimeTypes[mimeType]; isImage {
-		rc.Blob = new(base64.StdEncoding.EncodeToString(content))
-	} else if _, isPDF := types.PDFMimeTypes[mimeType]; isPDF {
+	if types.ResourceContentUseBlob(mimeType, content) {
 		rc.Blob = new(base64.StdEncoding.EncodeToString(content))
 	} else {
 		rc.Text = new(string(content))

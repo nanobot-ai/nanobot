@@ -260,10 +260,7 @@ func (s *Server) readWorkflowFile(uri string) (*mcp.ReadResourceResult, error) {
 		MIMEType: mimeType,
 	}
 
-	if _, isImage := types.ImageMimeTypes[mimeType]; isImage {
-		blob := base64.StdEncoding.EncodeToString(contentBytes)
-		rc.Blob = &blob
-	} else if _, isPDF := types.PDFMimeTypes[mimeType]; isPDF {
+	if types.ResourceContentUseBlob(mimeType, contentBytes) {
 		blob := base64.StdEncoding.EncodeToString(contentBytes)
 		rc.Blob = &blob
 	} else {
