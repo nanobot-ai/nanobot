@@ -53,6 +53,7 @@ type Nanobot struct {
 	DefaultModel         string   `usage:"Default model to use for completions" default:"gpt-4.1" env:"NANOBOT_DEFAULT_MODEL" name:"default-model"`
 	DefaultMiniModel     string   `usage:"Default model to use for things like thread summaries" default:"gpt-4.1" env:"NANOBOT_DEFAULT_MINI_MODEL" name:"default-mini-model"`
 	DefaultProvider      string   `usage:"Default provider name to use when agents do not specify one" env:"NANOBOT_DEFAULT_PROVIDER" name:"default-provider"`
+	DefaultMiniProvider  string   `usage:"Default provider name to use for mini model requests" env:"NANOBOT_DEFAULT_MINI_PROVIDER" name:"default-mini-provider"`
 	MaxConcurrency       int      `usage:"The maximum number of concurrent tasks in a parallel loop" default:"10" hidden:"true"`
 	Chdir                string   `usage:"Change directory to this path before running the nanobot" default:"." short:"C"`
 	State                string   `usage:"Path to the state file" default:"./nanobot.db"`
@@ -162,7 +163,8 @@ func (n *Nanobot) llmConfig() llm.Config {
 	return llm.Config{
 		DefaultModel:     n.DefaultModel,
 		DefaultMiniModel: n.DefaultMiniModel,
-		DefaultProvider:  n.DefaultProvider,
+		DefaultProvider:     n.DefaultProvider,
+		DefaultMiniProvider: n.DefaultMiniProvider,
 		// Built-in default providers for backwards compatibility.
 		// These are overridden by any providers defined in the YAML config.
 		Providers: map[string]llm.ProviderConfig{
