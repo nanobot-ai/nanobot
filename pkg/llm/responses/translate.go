@@ -94,7 +94,7 @@ func toSamplingMessageFromOutputMessage(output *Message) (result []types.Complet
 func toRequest(completion *types.CompletionRequest) (req Request, _ error) {
 	req = Request{
 		Model: completion.Model,
-		Store: &[]bool{false}[0],
+		Store: new(false),
 	}
 
 	if reasoningPrefix.MatchString(req.Model) {
@@ -103,12 +103,12 @@ func toRequest(completion *types.CompletionRequest) (req Request, _ error) {
 		if completion.Reasoning != nil && completion.Reasoning.Summary != "" {
 			req.Reasoning.Summary = &completion.Reasoning.Summary
 		} else {
-			req.Reasoning.Summary = &[]string{"auto"}[0]
+			req.Reasoning.Summary = new("auto")
 		}
 		if completion.Reasoning != nil && completion.Reasoning.Effort != "" {
 			req.Reasoning.Effort = &completion.Reasoning.Effort
 		} else {
-			req.Reasoning.Effort = &[]string{"medium"}[0]
+			req.Reasoning.Effort = new("medium")
 		}
 	}
 

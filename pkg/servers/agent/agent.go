@@ -111,7 +111,7 @@ func messagesToResourceContents(messages []types.Message) ([]mcp.ResourceContent
 		contents = append(contents, mcp.ResourceContent{
 			URI:      fmt.Sprintf(types.MessageURI, msg.ID),
 			MIMEType: types.MessageMimeType,
-			Text:     &[]string{string(data)}[0],
+			Text:     new(string(data)),
 		})
 	}
 	return contents, nil
@@ -156,7 +156,7 @@ func (s *Server) readProgress(ctx context.Context) (ret []mcp.ResourceContent, _
 		{
 			URI:      types.ProgressURI,
 			MIMEType: types.ToolResultMimeType,
-			Text:     &[]string{string(data)}[0],
+			Text:     new(string(data)),
 		},
 	}
 	for _, content := range callResult.Content {
@@ -189,7 +189,7 @@ func (s *Server) readPendingElicitation(ctx context.Context) ([]mcp.ResourceCont
 		{
 			URI:      types.ElicitationURI,
 			MIMEType: types.ElicitationMimeType,
-			Text:     &[]string{string(data)}[0],
+			Text:     new(string(data)),
 		},
 	}, nil
 }

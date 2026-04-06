@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -424,14 +425,7 @@ func TestConfigHook_MCPServerSearch(t *testing.T) {
 				return
 			}
 
-			foundRefresh := false
-			for _, tool := range result.Agent.Tools {
-				if tool == "nanobot.obot-mcp-cli/refreshMCPServerConfig" {
-					foundRefresh = true
-					break
-				}
-			}
-			if !foundRefresh {
+			if !slices.Contains(result.Agent.Tools, "nanobot.obot-mcp-cli/refreshMCPServerConfig") {
 				t.Error("expected refreshMCPServerConfig tool when MCP_SERVER_SEARCH_URL is configured")
 			}
 
