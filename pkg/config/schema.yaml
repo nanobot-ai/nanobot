@@ -451,13 +451,11 @@ definitions:
         description: |
           The name of the LLM model to use for this agent. If no model is specified the
           agent will use the global nanobot model.
-      dialect:
+      provider:
         type: string
-        enum: [AnthropicMessages, OpenResponses]
         description: |
-          The LLM API dialect to use for this agent. Use "AnthropicMessages" for the
-          Anthropic Messages API, or "OpenResponses" for the OpenAI Responses API
-          (default). If not set, the global default dialect is used.
+          The name of the provider to use for this agent, as defined in the top-level
+          "providers" configuration. If not set, the global default provider is used.
       instructions:
         description: |
           Instructions that will be used by the LLM to guide the agent's behavior.
@@ -754,6 +752,25 @@ properties:
     description: |
       A map of hooks that will be executed at various stages of the Nanobot lifecycle.
       This is useful for customizing the behavior of the Nanobot at the global level.
+  providers:
+    type: object
+    description: |
+      A map of named LLM providers. Each provider specifies the API dialect and
+      references environment variable names (not values) for credentials, keeping
+      secrets out of the config file.
+    additionalProperties:
+      type: object
+      properties:
+        dialect:
+          type: string
+          enum: [AnthropicMessages, OpenResponses]
+          description: The LLM API dialect this provider uses.
+        apiKeyEnv:
+          type: string
+          description: Name of the environment variable holding the API key.
+        baseURLEnv:
+          type: string
+          description: Name of the environment variable holding the base URL.
   agents:
     type: object
     description: |

@@ -208,7 +208,7 @@ func (a *Agents) populateRequest(ctx context.Context, config types.Config, run *
 	}
 
 	req.Model = agent.Model
-	req.Dialect = agent.Dialect
+	req.Provider = agent.Provider
 
 	toolMapping, err := a.addTools(ctx, &req, &agent, opts)
 	if err != nil {

@@ -69,11 +69,18 @@ func CurrentAgent(ctx context.Context) string {
 	return currentAgent
 }
 
+type Provider struct {
+	Dialect    Dialect `json:"dialect,omitempty"`
+	APIKeyEnv  string  `json:"apiKeyEnv,omitempty"`
+	BaseURLEnv string  `json:"baseURLEnv,omitempty"`
+}
+
 type Config struct {
 	Auth             *Auth                 `json:"auth,omitempty"`
 	Extends          StringList            `json:"extends,omitempty"`
 	Env              map[string]EnvDef     `json:"env,omitempty"`
 	Publish          Publish               `json:"publish,omitzero"`
+	Providers        map[string]Provider   `json:"providers,omitempty"`
 	Agents           map[string]Agent      `json:"agents,omitempty"`
 	MCPServers       map[string]mcp.Server `json:"mcpServers,omitempty"`
 	Profiles         map[string]Config     `json:"profiles,omitempty"`

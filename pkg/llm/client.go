@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
-	"strconv"
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -19,19 +18,27 @@ import (
 
 var _ types.Completer = (*Client)(nil)
 
+// ProviderConfig holds the configuration for a named LLM provider.
+// APIKey and BaseURL are environment variable names whose values are resolved
+// at request time from the session environment.
+type ProviderConfig struct {
+	Dialect types.Dialect
+	APIKey  string // env var name
+	BaseURL string // env var name
+	Headers map[string]string
+}
+
 type Config struct {
 	DefaultModel, DefaultMiniModel string
-	DefaultDialect                 types.Dialect
-	Responses                      responses.Config
-	Anthropic                      anthropic.Config
+	DefaultProvider                string
+	Providers                      map[string]ProviderConfig
 }
 
 func NewClient(cfg Config) *Client {
 	return &Client{
-		useCompletions:   cfg.Responses.ChatCompletionAPI,
 		defaultModel:     cfg.DefaultModel,
 		defaultMiniModel: cfg.DefaultMiniModel,
-		defaultDialect:   cfg.DefaultDialect,
+		defaultProvider:  cfg.DefaultProvider,
 		cfg:              cfg,
 	}
 }
@@ -39,8 +46,7 @@ func NewClient(cfg Config) *Client {
 type Client struct {
 	defaultModel     string
 	defaultMiniModel string
-	defaultDialect   types.Dialect
-	useCompletions   bool
+	defaultProvider  string
 	cfg              Config
 }
 
@@ -86,8 +92,8 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 	if req.Model == "mini" {
 		req.Model = dynamic.DefaultMiniModel
 	}
-	if req.Dialect == "" {
-		req.Dialect = dynamic.DefaultDialect
+	if req.Provider == "" {
+		req.Provider = dynamic.DefaultProvider
 	}
 
 	opt := complete.Complete(opts...)
@@ -105,28 +111,39 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 		}
 	}
 
-	if req.Dialect == types.DialectAnthropicMessages {
-		return anthropic.NewClient(dynamic.Anthropic).Complete(ctx, req, opts...)
+	providerCfg := dynamic.Providers[req.Provider]
+	switch providerCfg.Dialect {
+	case types.DialectAnthropicMessages:
+		return anthropic.NewClient(anthropic.Config{
+			APIKey:  providerCfg.APIKey,
+			BaseURL: providerCfg.BaseURL,
+			Headers: providerCfg.Headers,
+		}).Complete(ctx, req, opts...)
+	default: // DialectOpenResponses or ""
+		return responses.NewClient(responses.Config{
+			APIKey:  providerCfg.APIKey,
+			BaseURL: providerCfg.BaseURL,
+			Headers: providerCfg.Headers,
+		}).Complete(ctx, req, opts...)
 	}
-	return responses.NewClient(dynamic.Responses).Complete(ctx, req, opts...)
 }
 
 func (c Client) dynamicConfig(ctx context.Context) Config {
 	cfg := Config{
 		DefaultModel:     c.defaultModel,
 		DefaultMiniModel: c.defaultMiniModel,
-		DefaultDialect:   c.defaultDialect,
-		Responses: responses.Config{
-			ChatCompletionAPI: c.useCompletions,
-			APIKey:            c.cfg.Responses.APIKey,
-			BaseURL:           c.cfg.Responses.BaseURL,
-			Headers:           maps.Clone(c.cfg.Responses.Headers),
-		},
-		Anthropic: anthropic.Config{
-			APIKey:  c.cfg.Anthropic.APIKey,
-			BaseURL: c.cfg.Anthropic.BaseURL,
-			Headers: maps.Clone(c.cfg.Anthropic.Headers),
-		},
+		DefaultProvider:  c.defaultProvider,
+		Providers:        map[string]ProviderConfig{},
+	}
+
+	// Start with built-in/static provider refs (env var names)
+	for name, p := range c.cfg.Providers {
+		cfg.Providers[name] = ProviderConfig{
+			Dialect: p.Dialect,
+			APIKey:  p.APIKey,
+			BaseURL: p.BaseURL,
+			Headers: maps.Clone(p.Headers),
+		}
 	}
 
 	session := mcp.SessionFromContext(ctx)
@@ -135,38 +152,41 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 	}
 
 	env := session.GetEnvMap()
+
+	// Overlay providers defined in the YAML config for this session
+	typesConfig := types.ConfigFromContext(ctx)
+	for name, p := range typesConfig.Providers {
+		cfg.Providers[name] = ProviderConfig{
+			Dialect: p.Dialect,
+			APIKey:  p.APIKeyEnv,
+			BaseURL: p.BaseURLEnv,
+		}
+	}
+
+	// Override shared settings from env
 	if v := strings.TrimSpace(env["NANOBOT_DEFAULT_MODEL"]); v != "" {
 		cfg.DefaultModel = v
 	}
 	if v := strings.TrimSpace(env["NANOBOT_DEFAULT_MINI_MODEL"]); v != "" {
 		cfg.DefaultMiniModel = v
 	}
-	if v := strings.TrimSpace(env["NANOBOT_DEFAULT_DIALECT"]); v != "" {
-		cfg.DefaultDialect = types.DialectFromString(v)
-	}
-	if v := strings.TrimSpace(env["OPENAI_API_KEY"]); v != "" {
-		cfg.Responses.APIKey = v
-	}
-	if v := strings.TrimSpace(env["OPENAI_BASE_URL"]); v != "" {
-		cfg.Responses.BaseURL = v
-	}
-	if v := strings.TrimSpace(env["OPENAI_CHAT_COMPLETION_API"]); v != "" {
-		if b, err := strconv.ParseBool(v); err == nil {
-			cfg.Responses.ChatCompletionAPI = b
-		}
-	}
-	if hdrs := parseHeaderEnv(env["OPENAI_HEADERS"]); len(hdrs) > 0 {
-		cfg.Responses.Headers = hdrs
+	if v := strings.TrimSpace(env["NANOBOT_DEFAULT_PROVIDER"]); v != "" {
+		cfg.DefaultProvider = v
 	}
 
-	if v := strings.TrimSpace(env["ANTHROPIC_API_KEY"]); v != "" {
-		cfg.Anthropic.APIKey = v
-	}
-	if v := strings.TrimSpace(env["ANTHROPIC_BASE_URL"]); v != "" {
-		cfg.Anthropic.BaseURL = v
-	}
-	if hdrs := parseHeaderEnv(env["ANTHROPIC_HEADERS"]); len(hdrs) > 0 {
-		cfg.Anthropic.Headers = hdrs
+	// Resolve env var names to actual values for each provider
+	for name, p := range cfg.Providers {
+		resolved := ProviderConfig{
+			Dialect: p.Dialect,
+			Headers: maps.Clone(p.Headers),
+		}
+		if p.APIKey != "" {
+			resolved.APIKey = strings.TrimSpace(env[p.APIKey])
+		}
+		if p.BaseURL != "" {
+			resolved.BaseURL = strings.TrimSpace(env[p.BaseURL])
+		}
+		cfg.Providers[name] = resolved
 	}
 
 	return cfg
