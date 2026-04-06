@@ -16,7 +16,7 @@ type contextKey struct{}
 type internalLLMRequestTypeKey struct{}
 
 const (
-	InternalLLMRequestTypeHeader = "X-Obot-Internal-Request-Type"
+	InternalLLMRequestTypeHeader = "X-Nanobot-Internal-Request-Type"
 	ThreadTitleRequestType       = "nanobot.summary.thread_title"
 )
 
