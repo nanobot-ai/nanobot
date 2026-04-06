@@ -54,6 +54,7 @@ type Nanobot struct {
 	EmptyEnv                bool              `usage:"Do not load environment variables from the environment by default"`
 	DefaultModel            string            `usage:"Default model to use for completions" default:"gpt-4.1" env:"NANOBOT_DEFAULT_MODEL" name:"default-model"`
 	DefaultMiniModel        string            `usage:"Default model to use for things like thread summaries" default:"gpt-4.1" env:"NANOBOT_DEFAULT_MINI_MODEL" name:"default-mini-model"`
+	DefaultDialect          string            `usage:"Default LLM dialect (AnthropicMessages, OpenResponses)" env:"NANOBOT_DEFAULT_DIALECT" name:"default-dialect"`
 	OpenAIAPIKey            string            `usage:"OpenAI API key" env:"OPENAI_API_KEY" name:"openai-api-key"`
 	OpenAIBaseURL           string            `usage:"OpenAI API URL" env:"OPENAI_BASE_URL" name:"openai-base-url"`
 	OpenAIHeaders           map[string]string `usage:"OpenAI API headers" env:"OPENAI_HEADERS" name:"openai-headers"`
@@ -170,6 +171,7 @@ func (n *Nanobot) llmConfig() llm.Config {
 	return llm.Config{
 		DefaultModel:     n.DefaultModel,
 		DefaultMiniModel: n.DefaultMiniModel,
+		DefaultDialect:   types.DialectFromString(n.DefaultDialect),
 		Responses: responses.Config{
 			APIKey:            n.OpenAIAPIKey,
 			BaseURL:           n.OpenAIBaseURL,

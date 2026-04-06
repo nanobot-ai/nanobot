@@ -451,6 +451,13 @@ definitions:
         description: |
           The name of the LLM model to use for this agent. If no model is specified the
           agent will use the global nanobot model.
+      dialect:
+        type: string
+        enum: [AnthropicMessages, OpenResponses]
+        description: |
+          The LLM API dialect to use for this agent. Use "AnthropicMessages" for the
+          Anthropic Messages API, or "OpenResponses" for the OpenAI Responses API
+          (default). If not set, the global default dialect is used.
       instructions:
         description: |
           Instructions that will be used by the LLM to guide the agent's behavior.

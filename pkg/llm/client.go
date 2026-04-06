@@ -10,7 +10,6 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/llm/anthropic"
-	"github.com/nanobot-ai/nanobot/pkg/llm/completions"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
 	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -22,6 +21,7 @@ var _ types.Completer = (*Client)(nil)
 
 type Config struct {
 	DefaultModel, DefaultMiniModel string
+	DefaultDialect                 types.Dialect
 	Responses                      responses.Config
 	Anthropic                      anthropic.Config
 }
@@ -31,6 +31,7 @@ func NewClient(cfg Config) *Client {
 		useCompletions:   cfg.Responses.ChatCompletionAPI,
 		defaultModel:     cfg.DefaultModel,
 		defaultMiniModel: cfg.DefaultMiniModel,
+		defaultDialect:   cfg.DefaultDialect,
 		cfg:              cfg,
 	}
 }
@@ -38,6 +39,7 @@ func NewClient(cfg Config) *Client {
 type Client struct {
 	defaultModel     string
 	defaultMiniModel string
+	defaultDialect   types.Dialect
 	useCompletions   bool
 	cfg              Config
 }
@@ -84,6 +86,9 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 	if req.Model == "mini" {
 		req.Model = dynamic.DefaultMiniModel
 	}
+	if req.Dialect == "" {
+		req.Dialect = dynamic.DefaultDialect
+	}
 
 	opt := complete.Complete(opts...)
 	if opt.ProgressToken != nil && len(req.Input) > 0 {
@@ -100,15 +105,8 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 		}
 	}
 
-	if strings.HasPrefix(req.Model, "claude") {
+	if req.Dialect == types.DialectAnthropicMessages {
 		return anthropic.NewClient(dynamic.Anthropic).Complete(ctx, req, opts...)
-	}
-	if dynamic.Responses.ChatCompletionAPI {
-		return completions.NewClient(completions.Config{
-			APIKey:  dynamic.Responses.APIKey,
-			BaseURL: dynamic.Responses.BaseURL,
-			Headers: maps.Clone(dynamic.Responses.Headers),
-		}).Complete(ctx, req, opts...)
 	}
 	return responses.NewClient(dynamic.Responses).Complete(ctx, req, opts...)
 }
@@ -117,6 +115,7 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 	cfg := Config{
 		DefaultModel:     c.defaultModel,
 		DefaultMiniModel: c.defaultMiniModel,
+		DefaultDialect:   c.defaultDialect,
 		Responses: responses.Config{
 			ChatCompletionAPI: c.useCompletions,
 			APIKey:            c.cfg.Responses.APIKey,
@@ -141,6 +140,9 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 	}
 	if v := strings.TrimSpace(env["NANOBOT_DEFAULT_MINI_MODEL"]); v != "" {
 		cfg.DefaultMiniModel = v
+	}
+	if v := strings.TrimSpace(env["NANOBOT_DEFAULT_DIALECT"]); v != "" {
+		cfg.DefaultDialect = types.DialectFromString(v)
 	}
 	if v := strings.TrimSpace(env["OPENAI_API_KEY"]); v != "" {
 		cfg.Responses.APIKey = v
