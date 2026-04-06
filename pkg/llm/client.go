@@ -95,6 +95,13 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 	if req.Provider == "" {
 		req.Provider = dynamic.DefaultProvider
 	}
+	if req.Provider == "" {
+		if strings.HasPrefix(req.Model, "claude") {
+			req.Provider = "anthropic"
+		} else {
+			req.Provider = "openai"
+		}
+	}
 
 	opt := complete.Complete(opts...)
 	if opt.ProgressToken != nil && len(req.Input) > 0 {
