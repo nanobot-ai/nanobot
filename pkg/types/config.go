@@ -70,9 +70,9 @@ func CurrentAgent(ctx context.Context) string {
 }
 
 type Provider struct {
-	Dialect    Dialect `json:"dialect,omitempty"`
-	APIKeyEnv  string  `json:"apiKeyEnv,omitempty"`
-	BaseURLEnv string  `json:"baseURLEnv,omitempty"`
+	Dialect Dialect `json:"dialect,omitempty"`
+	APIKey  string  `json:"apiKey,omitempty"`
+	BaseURL string  `json:"baseURL,omitempty"`
 }
 
 type Config struct {

@@ -166,13 +166,13 @@ func (n *Nanobot) llmConfig() llm.Config {
 		Providers: map[string]llm.ProviderConfig{
 			"openai": {
 				Dialect: types.DialectOpenResponses,
-				APIKey:  "OPENAI_API_KEY",
-				BaseURL: "OPENAI_BASE_URL",
+				APIKey:  "${OPENAI_API_KEY}",
+				BaseURL: "${OPENAI_BASE_URL}",
 			},
 			"anthropic": {
 				Dialect: types.DialectAnthropicMessages,
-				APIKey:  "ANTHROPIC_API_KEY",
-				BaseURL: "ANTHROPIC_BASE_URL",
+				APIKey:  "${ANTHROPIC_API_KEY}",
+				BaseURL: "${ANTHROPIC_BASE_URL}",
 			},
 		},
 	}

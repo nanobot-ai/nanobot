@@ -762,12 +762,16 @@ properties:
           type: string
           enum: [AnthropicMessages, OpenResponses]
           description: The LLM API dialect this provider uses.
-        apiKeyEnv:
+        apiKey:
           type: string
-          description: Name of the environment variable holding the API key.
-        baseURLEnv:
+          description: |
+            The API key for this provider. Supports ${VAR} syntax to reference
+            environment variables (e.g. "${ANTHROPIC_API_KEY}").
+        baseURL:
           type: string
-          description: Name of the environment variable holding the base URL.
+          description: |
+            The base URL for this provider's API endpoint. Supports ${VAR} syntax
+            to reference environment variables (e.g. "${OPENAI_BASE_URL}").
   agents:
     type: object
     description: |

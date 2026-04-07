@@ -1,8 +1,10 @@
 package llm
 
 import (
+	"context"
 	"testing"
 
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -51,5 +53,46 @@ func TestResolveProvider(t *testing.T) {
 				t.Errorf("provider: got %q, want %q", gotProvider, tt.wantProvider)
 			}
 		})
+	}
+}
+
+func TestDynamicConfigProviderResolution(t *testing.T) {
+	session := mcp.NewEmptySession(context.Background())
+	session.SetEnv(map[string]string{
+		"MY_API_KEY":  "sk-test-12345",
+		"MY_BASE_URL": "https://api.example.com/v1",
+	})
+
+	client := NewClient(Config{
+		Providers: map[string]ProviderConfig{
+			"literal": {
+				Dialect: types.DialectOpenResponses,
+				APIKey:  "sk-literal-key",
+				BaseURL: "https://literal.example.com/v1",
+			},
+			"from-env": {
+				Dialect: types.DialectAnthropicMessages,
+				APIKey:  "${MY_API_KEY}",
+				BaseURL: "${MY_BASE_URL}",
+			},
+		},
+	})
+
+	dynamic := client.dynamicConfig(session.Context())
+
+	literal := dynamic.Providers["literal"]
+	if literal.APIKey != "sk-literal-key" {
+		t.Errorf("literal APIKey: got %q, want %q", literal.APIKey, "sk-literal-key")
+	}
+	if literal.BaseURL != "https://literal.example.com/v1" {
+		t.Errorf("literal BaseURL: got %q, want %q", literal.BaseURL, "https://literal.example.com/v1")
+	}
+
+	fromEnv := dynamic.Providers["from-env"]
+	if fromEnv.APIKey != "sk-test-12345" {
+		t.Errorf("from-env APIKey: got %q, want %q", fromEnv.APIKey, "sk-test-12345")
+	}
+	if fromEnv.BaseURL != "https://api.example.com/v1" {
+		t.Errorf("from-env BaseURL: got %q, want %q", fromEnv.BaseURL, "https://api.example.com/v1")
 	}
 }

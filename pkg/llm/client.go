@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
+	"github.com/nanobot-ai/nanobot/pkg/envvar"
 	"github.com/nanobot-ai/nanobot/pkg/llm/anthropic"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
 	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
@@ -168,8 +169,8 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 	for name, p := range typesConfig.Providers {
 		cfg.Providers[name] = ProviderConfig{
 			Dialect: p.Dialect,
-			APIKey:  p.APIKeyEnv,
-			BaseURL: p.BaseURLEnv,
+			APIKey:  p.APIKey,
+			BaseURL: p.BaseURL,
 		}
 	}
 
@@ -180,19 +181,15 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 	if v := strings.TrimSpace(env["NANOBOT_DEFAULT_MINI_MODEL"]); v != "" {
 		cfg.DefaultMiniModel = v
 	}
-	// Resolve env var names to actual values for each provider
+
+	// Resolve ${VAR} references in provider config using the session env
 	for name, p := range cfg.Providers {
-		resolved := ProviderConfig{
+		cfg.Providers[name] = ProviderConfig{
 			Dialect: p.Dialect,
-			Headers: maps.Clone(p.Headers),
+			APIKey:  envvar.ReplaceString(env, p.APIKey),
+			BaseURL: envvar.ReplaceString(env, p.BaseURL),
+			Headers: envvar.ReplaceMap(env, p.Headers),
 		}
-		if p.APIKey != "" {
-			resolved.APIKey = strings.TrimSpace(env[p.APIKey])
-		}
-		if p.BaseURL != "" {
-			resolved.BaseURL = strings.TrimSpace(env[p.BaseURL])
-		}
-		cfg.Providers[name] = resolved
 	}
 
 	return cfg
