@@ -165,7 +165,7 @@ func (n *Nanobot) llmConfig() llm.Config {
 		// These are overridden by any providers defined in the YAML config.
 		LLMProviders: map[string]llm.LLMProviderConfig{
 			"openai": {
-				Dialect: types.DialectOpenResponses,
+				Dialect: types.DialectOpenAIResponses,
 				APIKey:  "${OPENAI_API_KEY}",
 				BaseURL: "${OPENAI_BASE_URL}",
 			},

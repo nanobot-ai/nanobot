@@ -760,8 +760,10 @@ properties:
       properties:
         dialect:
           type: string
-          enum: [AnthropicMessages, OpenResponses]
-          description: The LLM API dialect this provider uses.
+          enum: [AnthropicMessages, OpenAIResponses, OpenResponses]
+          description: |
+            The LLM API dialect this provider uses. This informs the agent on how to
+            make the API request.
         apiKey:
           type: string
           description: |

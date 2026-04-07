@@ -130,7 +130,10 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 			BaseURL: providerCfg.BaseURL,
 			Headers: providerCfg.Headers,
 		}).Complete(ctx, req, opts...)
-	default: // DialectOpenResponses or ""
+	case types.DialectOpenAIResponses, types.DialectOpenResponses:
+		// same as default
+		fallthrough
+	default:
 		return responses.NewClient(responses.Config{
 			APIKey:  providerCfg.APIKey,
 			BaseURL: providerCfg.BaseURL,

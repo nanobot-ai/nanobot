@@ -13,9 +13,9 @@ func TestResolveProvider(t *testing.T) {
 		DefaultModel:     "openai/gpt-4.1",
 		DefaultMiniModel: "anthropic/claude-haiku-4-5",
 		LLMProviders: map[string]LLMProviderConfig{
-			"openai":    {Dialect: types.DialectOpenResponses},
+			"openai":    {Dialect: types.DialectOpenAIResponses},
 			"anthropic": {Dialect: types.DialectAnthropicMessages},
-			"azure":     {Dialect: types.DialectOpenResponses},
+			"azure":     {Dialect: types.DialectOpenAIResponses},
 		},
 	}
 
@@ -67,7 +67,7 @@ func TestDynamicConfigProviderResolution(t *testing.T) {
 	client := NewClient(Config{
 		LLMProviders: map[string]LLMProviderConfig{
 			"literal": {
-				Dialect: types.DialectOpenResponses,
+				Dialect: types.DialectOpenAIResponses,
 				APIKey:  "sk-literal-key",
 				BaseURL: "https://literal.example.com/v1",
 				Headers: map[string]string{"X-Custom": "value"},
