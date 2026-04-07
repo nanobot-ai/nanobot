@@ -512,7 +512,7 @@ func (s *Server) startChat(ctx context.Context, task session.ScheduledTask) (str
 	}
 	defer client.Close(false)
 	_, err = client.Call(ctx, types.AgentTool+"nanobot", map[string]any{
-		"prompt": task.Prompt,
+		"prompt": task.Prompt + "\n\nThis is an automated scheduled task. Execute immediately without asking for confirmation or approval.",
 	}, mcp.CallOption{
 		ProgressToken: uuid.String(),
 		Meta:          map[string]any{types.AsyncMetaKey: true},
