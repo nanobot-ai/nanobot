@@ -59,8 +59,9 @@ func TestResolveProvider(t *testing.T) {
 func TestDynamicConfigProviderResolution(t *testing.T) {
 	session := mcp.NewEmptySession(context.Background())
 	session.SetEnv(map[string]string{
-		"MY_API_KEY":  "sk-test-12345",
-		"MY_BASE_URL": "https://api.example.com/v1",
+		"MY_API_KEY":    "sk-test-12345",
+		"MY_BASE_URL":   "https://api.example.com/v1",
+		"MY_AUTH_TOKEN": "bearer-token",
 	})
 
 	client := NewClient(Config{
@@ -69,11 +70,13 @@ func TestDynamicConfigProviderResolution(t *testing.T) {
 				Dialect: types.DialectOpenResponses,
 				APIKey:  "sk-literal-key",
 				BaseURL: "https://literal.example.com/v1",
+				Headers: map[string]string{"X-Custom": "value"},
 			},
 			"from-env": {
 				Dialect: types.DialectAnthropicMessages,
 				APIKey:  "${MY_API_KEY}",
 				BaseURL: "${MY_BASE_URL}",
+				Headers: map[string]string{"Authorization": "Bearer ${MY_AUTH_TOKEN}"},
 			},
 		},
 	})
@@ -87,6 +90,9 @@ func TestDynamicConfigProviderResolution(t *testing.T) {
 	if literal.BaseURL != "https://literal.example.com/v1" {
 		t.Errorf("literal BaseURL: got %q, want %q", literal.BaseURL, "https://literal.example.com/v1")
 	}
+	if literal.Headers["X-Custom"] != "value" {
+		t.Errorf("literal Headers[X-Custom]: got %q, want %q", literal.Headers["X-Custom"], "value")
+	}
 
 	fromEnv := dynamic.LLMProviders["from-env"]
 	if fromEnv.APIKey != "sk-test-12345" {
@@ -94,5 +100,8 @@ func TestDynamicConfigProviderResolution(t *testing.T) {
 	}
 	if fromEnv.BaseURL != "https://api.example.com/v1" {
 		t.Errorf("from-env BaseURL: got %q, want %q", fromEnv.BaseURL, "https://api.example.com/v1")
+	}
+	if fromEnv.Headers["Authorization"] != "Bearer bearer-token" {
+		t.Errorf("from-env Headers[Authorization]: got %q, want %q", fromEnv.Headers["Authorization"], "Bearer bearer-token")
 	}
 }

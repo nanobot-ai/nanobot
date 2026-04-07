@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"maps"
 	"strings"
@@ -24,8 +23,8 @@ var _ types.Completer = (*Client)(nil)
 // at request time from the session environment.
 type LLMProviderConfig struct {
 	Dialect types.Dialect
-	APIKey  string // env var name
-	BaseURL string // env var name
+	APIKey  string // supports ${VAR} syntax
+	BaseURL string // supports ${VAR} syntax
 	Headers map[string]string
 }
 
@@ -171,6 +170,7 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 			Dialect: p.Dialect,
 			APIKey:  p.APIKey,
 			BaseURL: p.BaseURL,
+			Headers: maps.Clone(p.Headers),
 		}
 	}
 
@@ -193,32 +193,4 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 	}
 
 	return cfg
-}
-
-func parseHeaderEnv(raw string) map[string]string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-
-	result := map[string]string{}
-	if err := json.Unmarshal([]byte(raw), &result); err == nil {
-		return result
-	}
-
-	for part := range strings.SplitSeq(raw, ",") {
-		k, v, ok := strings.Cut(part, "=")
-		if !ok {
-			continue
-		}
-		k = strings.TrimSpace(k)
-		v = strings.TrimSpace(v)
-		if k != "" {
-			result[k] = v
-		}
-	}
-	if len(result) == 0 {
-		return nil
-	}
-	return result
 }

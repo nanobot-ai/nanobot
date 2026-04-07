@@ -772,6 +772,13 @@ properties:
           description: |
             The base URL for this provider's API endpoint. Supports ${VAR} syntax
             to reference environment variables (e.g. "${OPENAI_BASE_URL}").
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: |
+            HTTP headers to include with every request to this provider. Values
+            support ${VAR} syntax (e.g. "Authorization": "Bearer ${MY_TOKEN}").
   agents:
     type: object
     description: |

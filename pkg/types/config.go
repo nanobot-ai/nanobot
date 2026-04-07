@@ -73,6 +73,7 @@ type LLMProvider struct {
 	Dialect Dialect `json:"dialect,omitempty"`
 	APIKey  string  `json:"apiKey,omitempty"`
 	BaseURL string  `json:"baseURL,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 type Config struct {
