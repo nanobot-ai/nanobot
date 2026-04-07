@@ -752,9 +752,10 @@ properties:
   llmProviders:
     type: object
     description: |
-      A map of named LLM providers. Each provider specifies the API dialect and
-      references environment variable names (not values) for credentials, keeping
-      secrets out of the config file.
+      A map of named LLM providers. Each entry configures an API endpoint by
+      specifying its dialect, credentials, and optional headers. Values support env var
+      substitution using ${VAR} syntax. Providers are specified by the 'model' field using
+      the "{provider}/{model}" format
     additionalProperties:
       type: object
       properties:
