@@ -25,7 +25,6 @@ type HookAgent struct {
 	StarterMessages StringList                `json:"starterMessages,omitempty"`
 	Instructions    DynamicInstructions       `json:"instructions,omitzero"`
 	Model           string                    `json:"model,omitempty"`
-	Provider        string                    `json:"provider,omitempty"`
 	Permissions     *AgentPermissions         `json:"permissions,omitempty"`
 	MCPServers      StringList                `json:"mcpServers,omitempty"`
 	Tools           StringList                `json:"tools,omitempty"`

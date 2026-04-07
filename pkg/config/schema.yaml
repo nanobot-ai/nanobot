@@ -449,13 +449,10 @@ definitions:
       model:
         type: string
         description: |
-          The name of the LLM model to use for this agent. If no model is specified the
-          agent will use the global nanobot model.
-      provider:
-        type: string
-        description: |
-          The name of the provider to use for this agent, as defined in the top-level
-          "providers" configuration. If not set, the global default provider is used.
+          The LLM model to use for this agent. Can be a plain model name (e.g. "gpt-4.1")
+          or prefixed with a provider name using the "{provider}/{model}" format
+          (e.g. "anthropic/claude-haiku-4-5", "azure/gpt-4o"). If no model is specified
+          the agent will use the global default model.
       instructions:
         description: |
           Instructions that will be used by the LLM to guide the agent's behavior.

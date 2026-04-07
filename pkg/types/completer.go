@@ -36,7 +36,6 @@ func (c CompletionOptions) Merge(other CompletionOptions) (result CompletionOpti
 
 type CompletionRequest struct {
 	Model            string               `json:"model,omitempty"`
-	Provider         string               `json:"provider,omitempty"`
 	Agent            string               `json:"agent,omitempty"`
 	ThreadName       string               `json:"threadName,omitempty"`
 	NewThread        bool                 `json:"newThread,omitempty"`

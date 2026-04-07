@@ -29,60 +29,43 @@ type ProviderConfig struct {
 }
 
 type Config struct {
-	DefaultModel, DefaultMiniModel       string
-	DefaultProvider, DefaultMiniProvider string
-	Providers                            map[string]ProviderConfig
+	DefaultModel, DefaultMiniModel string
+	Providers                      map[string]ProviderConfig
 }
 
 func NewClient(cfg Config) *Client {
 	return &Client{
-		defaultModel:        cfg.DefaultModel,
-		defaultMiniModel:    cfg.DefaultMiniModel,
-		defaultProvider:     cfg.DefaultProvider,
-		defaultMiniProvider: cfg.DefaultMiniProvider,
-		cfg:                 cfg,
+		defaultModel:     cfg.DefaultModel,
+		defaultMiniModel: cfg.DefaultMiniModel,
+		cfg:              cfg,
 	}
 }
 
 type Client struct {
-	defaultModel        string
-	defaultMiniModel    string
-	defaultProvider     string
-	defaultMiniProvider string
-	cfg                 Config
+	defaultModel     string
+	defaultMiniModel string
+	cfg              Config
 }
 
 // resolveProvider resolves the model alias and provider name for a request.
 // Model aliases ("default", "mini", "") are expanded to their configured values.
-// Provider is resolved in priority order: request > alias default > global default >
-// fallback by known provider name > best guess (claude prefix → anthropic, else openai).
-func resolveProvider(model, provider string, cfg Config) (string, string) {
+// The provider is parsed from the model string using the "{provider}/{model}" format.
+// If no provider prefix is present, it falls back to a heuristic
+// (claude prefix → anthropic, else openai).
+func resolveProvider(model string, cfg Config) (string, string) {
 	switch model {
 	case "default", "":
 		model = cfg.DefaultModel
-		if provider == "" {
-			provider = cfg.DefaultProvider
-		}
 	case "mini":
 		model = cfg.DefaultMiniModel
-		if provider == "" {
-			provider = cfg.DefaultMiniProvider
-		}
 	}
-	if provider == "" {
-		provider = cfg.DefaultProvider
+	if provider, m, ok := strings.Cut(model, "/"); ok {
+		return m, provider
 	}
-	if _, ok := cfg.Providers[provider]; !ok {
-		provider = cfg.DefaultProvider
+	if strings.HasPrefix(model, "claude") {
+		return model, "anthropic"
 	}
-	if provider == "" {
-		if strings.HasPrefix(model, "claude") {
-			provider = "anthropic"
-		} else {
-			provider = "openai"
-		}
-	}
-	return model, provider
+	return model, "openai"
 }
 
 func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts ...types.CompletionOptions) (ret *types.CompletionResponse, err error) {
@@ -121,7 +104,8 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 
 	dynamic := c.dynamicConfig(ctx)
 
-	req.Model, req.Provider = resolveProvider(req.Model, req.Provider, dynamic)
+	var provider string
+	req.Model, provider = resolveProvider(req.Model, dynamic)
 
 	opt := complete.Complete(opts...)
 	if opt.ProgressToken != nil && len(req.Input) > 0 {
@@ -138,7 +122,7 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 		}
 	}
 
-	providerCfg := dynamic.Providers[req.Provider]
+	providerCfg := dynamic.Providers[provider]
 	switch providerCfg.Dialect {
 	case types.DialectAnthropicMessages:
 		return anthropic.NewClient(anthropic.Config{
@@ -157,11 +141,9 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 
 func (c Client) dynamicConfig(ctx context.Context) Config {
 	cfg := Config{
-		DefaultModel:        c.defaultModel,
-		DefaultMiniModel:    c.defaultMiniModel,
-		DefaultProvider:     c.defaultProvider,
-		DefaultMiniProvider: c.defaultMiniProvider,
-		Providers:           map[string]ProviderConfig{},
+		DefaultModel:     c.defaultModel,
+		DefaultMiniModel: c.defaultMiniModel,
+		Providers:        map[string]ProviderConfig{},
 	}
 
 	// Start with built-in/static provider refs (env var names)
@@ -198,13 +180,6 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 	if v := strings.TrimSpace(env["NANOBOT_DEFAULT_MINI_MODEL"]); v != "" {
 		cfg.DefaultMiniModel = v
 	}
-	if v := strings.TrimSpace(env["NANOBOT_DEFAULT_PROVIDER"]); v != "" {
-		cfg.DefaultProvider = v
-	}
-	if v := strings.TrimSpace(env["NANOBOT_DEFAULT_MINI_PROVIDER"]); v != "" {
-		cfg.DefaultMiniProvider = v
-	}
-
 	// Resolve env var names to actual values for each provider
 	for name, p := range cfg.Providers {
 		resolved := ProviderConfig{
