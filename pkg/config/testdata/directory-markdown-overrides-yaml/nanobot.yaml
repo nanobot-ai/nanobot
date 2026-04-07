@@ -1,0 +1,9 @@
+agents:
+  main:
+    name: YAML Main
+    model: gpt-4
+    instructions: YAML instructions
+
+mcpServers:
+  myserver:
+    url: https://example.com/mcp

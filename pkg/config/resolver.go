@@ -206,8 +206,11 @@ func (r *resource) read(ctx context.Context) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		// Try to read nanobot.yaml (may or may not exist)
+		var yamlData []byte
 		if data, err := os.ReadFile(f); err == nil {
-			return data, nil
+			yamlData = data
 		} else if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("error reading file %s: %w", f, err)
 		}
@@ -218,8 +221,12 @@ func (r *resource) read(ctx context.Context) ([]byte, error) {
 		}
 
 		if hasMd {
-			// Only markdown files - use directory loader
-			return loadFromDirectory(r.url)
+			// Directory mode: merge nanobot.yaml (if any) with markdown agents
+			return loadFromDirectory(r.url, yamlData)
+		}
+
+		if len(yamlData) > 0 {
+			return yamlData, nil
 		}
 
 		return nil, fmt.Errorf("%w at %s", NoConfigFoundErr, r.url)

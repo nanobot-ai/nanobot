@@ -3,11 +3,13 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"sigs.k8s.io/yaml"
 )
@@ -176,7 +178,8 @@ func loadAgentsFromMarkdown(config *types.Config, dirPath string) error {
 	return nil
 }
 
-// loadMCPServers loads MCP server definitions from mcp-servers.yaml or mcp-servers.json
+// loadMCPServers loads MCP server definitions from mcp-servers.yaml or mcp-servers.json.
+// Deprecated: define mcpServers in nanobot.yaml instead.
 func loadMCPServers(config *types.Config, dirPath string) error {
 	yamlPath := filepath.Join(dirPath, "mcp-servers.yaml")
 	jsonPath := filepath.Join(dirPath, "mcp-servers.json")
@@ -197,7 +200,14 @@ func loadMCPServers(config *types.Config, dirPath string) error {
 		return nil
 	}
 
+	// Only apply deprecated file if nanobot.yaml did not already define mcpServers
+	if len(config.MCPServers) > 0 {
+		slog.Warn("mcp-servers.yaml/mcp-servers.json is deprecated and ignored when mcpServers is defined in nanobot.yaml", "dir", dirPath)
+		return nil
+	}
+
 	if yamlExists {
+		slog.Warn("mcp-servers.yaml is deprecated; define mcpServers in nanobot.yaml instead", "path", yamlPath)
 		data, err := os.ReadFile(yamlPath)
 		if err != nil {
 			return fmt.Errorf("error reading mcp-servers.yaml: %w", err)
@@ -206,6 +216,7 @@ func loadMCPServers(config *types.Config, dirPath string) error {
 			return fmt.Errorf("error parsing mcp-servers.yaml: %w", err)
 		}
 	} else if jsonExists {
+		slog.Warn("mcp-servers.json is deprecated; define mcpServers in nanobot.yaml instead", "path", jsonPath)
 		data, err := os.ReadFile(jsonPath)
 		if err != nil {
 			return fmt.Errorf("error reading mcp-servers.json: %w", err)
@@ -229,14 +240,45 @@ func loadMCPServers(config *types.Config, dirPath string) error {
 	return nil
 }
 
-func loadFromDirectory(dirPath string) ([]byte, error) {
+// loadFromDirectory builds a config from a directory of markdown agent files, optionally
+// merged with a base nanobot.yaml. Markdown agents take precedence over YAML-defined agents.
+func loadFromDirectory(dirPath string, baseYAML []byte) ([]byte, error) {
 	var config types.Config
-	// Load agents from .md files
+
+	// Parse nanobot.yaml as base config if provided
+	if len(baseYAML) > 0 {
+		obj := map[string]any{}
+		if err := yaml.Unmarshal(baseYAML, &obj); err != nil {
+			return nil, fmt.Errorf("error parsing nanobot.yaml in %s: %w", dirPath, err)
+		}
+		if err := mcp.JSONCoerce(obj, &config); err != nil {
+			return nil, fmt.Errorf("error loading nanobot.yaml in %s: %w", dirPath, err)
+		}
+	}
+
+	// Save YAML-defined agents so we can merge them back after markdown takes precedence
+	yamlAgents := config.Agents
+
+	// Reset fields that markdown will rebuild
+	config.Agents = nil
+	config.Publish.Entrypoint = nil
+
+	// Load agents from .md files (these take precedence over YAML agents)
 	if err := loadAgentsFromMarkdown(&config, dirPath); err != nil {
 		return nil, err
 	}
 
-	// Load MCP servers
+	// Merge back YAML-only agents that markdown did not define
+	for id, agent := range yamlAgents {
+		if _, exists := config.Agents[id]; !exists {
+			if config.Agents == nil {
+				config.Agents = make(map[string]types.Agent)
+			}
+			config.Agents[id] = agent
+		}
+	}
+
+	// Load MCP servers from deprecated mcp-servers.yaml/json if present
 	if err := loadMCPServers(&config, dirPath); err != nil {
 		return nil, err
 	}

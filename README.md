@@ -97,16 +97,31 @@ The UI will be available at [http://localhost:8080](http://localhost:8080).
 
 ### Directory-Based Configuration
 
-Instead of using a `nanobot.yaml` file, you can organize your configuration as a directory structure where each agent is defined in its own `.md` file with YAML front-matter.
+You can organize your configuration as a directory with a top-level `nanobot.yaml` for shared settings and individual `.md` files for each agent.
 
 **Directory Structure:**
 
 ```
 my-config/
-├── agents/              # Agent definitions directory
-│   ├── main.md          # Main agent (auto-set as entrypoint)
-│   └── helper.md        # Additional agent
-└── mcp-servers.yaml     # MCP server definitions
+├── nanobot.yaml         # Shared config: mcpServers, llmProviders, env, etc.
+└── agents/              # Agent definitions directory
+    ├── main.md          # Main agent (auto-set as entrypoint)
+    └── helper.md        # Additional agent
+```
+
+**`nanobot.yaml`** defines shared resources available to all agents:
+
+```yaml
+llmProviders:
+  anthropic:
+    dialect: AnthropicMessages
+    apiKey: ${ANTHROPIC_API_KEY}
+
+mcpServers:
+  store:
+    url: https://example.com/mcp
+    headers:
+      Authorization: Bearer ${MY_TOKEN}
 ```
 
 **Agent File Format (`agents/main.md`):**
@@ -114,7 +129,7 @@ my-config/
 ```markdown
 ---
 name: Shopping Assistant
-model: claude-3-7-sonnet-latest
+model: anthropic/claude-3-7-sonnet-latest
 mcpServers:
   - store
 temperature: 0.7
@@ -125,16 +140,7 @@ You are a helpful shopping assistant.
 Help users find products and answer their questions.
 ```
 
-The YAML front-matter supports all agent configuration fields (model, name, mcpServers, tools, temperature, etc.), and the markdown body becomes the agent's instructions.
-
-**MCP Servers File (`mcp-servers.yaml` or `mcp-servers.json`):**
-
-```yaml
-store:
-  url: https://example.com/mcp
-  headers:
-    Authorization: Bearer ${MY_TOKEN}
-```
+The YAML front-matter supports all agent configuration fields (model, name, mcpServers, tools, temperature, etc.), and the markdown body becomes the agent's instructions. Markdown agents take precedence over any agents defined in `nanobot.yaml` with the same name.
 
 **Usage:**
 
@@ -146,8 +152,10 @@ nanobot run ./my-config/
 
 - **Agent directory**: All agent `.md` files must be in the `agents/` subdirectory
 - **Auto-entrypoint**: If `agents/main.md` exists, it's automatically set as the default agent
-- **Agent ID**: Use the `id` field in front-matter, or defaults to the filename (without `.md`)
+- **Markdown precedence**: Agents defined in `agents/*.md` override same-named agents in `nanobot.yaml`
 - **README.md**: Automatically ignored in the `agents/` directory (use it for documentation)
+
+> **Deprecated:** `mcp-servers.yaml` and `mcp-servers.json` are still supported for backwards compatibility but are deprecated. Define `mcpServers` in `nanobot.yaml` instead.
 
 See the [directory-config example](./examples/directory-config/) for a complete working example.
 
