@@ -10,6 +10,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/envvar"
 	"github.com/nanobot-ai/nanobot/pkg/llm/anthropic"
+	"github.com/nanobot-ai/nanobot/pkg/llm/completions"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
 	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -130,6 +131,12 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 	switch providerCfg.Dialect {
 	case types.DialectAnthropicMessages:
 		return anthropic.NewClient(anthropic.Config{
+			APIKey:  providerCfg.APIKey,
+			BaseURL: providerCfg.BaseURL,
+			Headers: providerCfg.Headers,
+		}).Complete(ctx, req, opts...)
+	case types.DialectOpenAIChatCompletions:
+		return completions.NewClient(completions.Config{
 			APIKey:  providerCfg.APIKey,
 			BaseURL: providerCfg.BaseURL,
 			Headers: providerCfg.Headers,
