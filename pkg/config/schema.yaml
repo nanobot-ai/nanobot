@@ -450,7 +450,7 @@ definitions:
         type: string
         description: |
           The LLM model to use for this agent. Can be a plain model name (e.g. "gpt-4.1")
-          or prefixed with a provider name using the "{provider}/{model}" format
+          or prefixed with a provider name using the "{llmProvider}/{model}" format
           (e.g. "anthropic/claude-haiku-4-5", "azure/gpt-4o"). If no model is specified
           the agent will use the global default model.
       instructions:
@@ -749,7 +749,7 @@ properties:
     description: |
       A map of hooks that will be executed at various stages of the Nanobot lifecycle.
       This is useful for customizing the behavior of the Nanobot at the global level.
-  providers:
+  llmProviders:
     type: object
     description: |
       A map of named LLM providers. Each provider specifies the API dialect and

@@ -163,7 +163,7 @@ func (n *Nanobot) llmConfig() llm.Config {
 		DefaultMiniModel: n.DefaultMiniModel,
 		// Built-in default providers for backwards compatibility.
 		// These are overridden by any providers defined in the YAML config.
-		Providers: map[string]llm.ProviderConfig{
+		LLMProviders: map[string]llm.LLMProviderConfig{
 			"openai": {
 				Dialect: types.DialectOpenResponses,
 				APIKey:  "${OPENAI_API_KEY}",

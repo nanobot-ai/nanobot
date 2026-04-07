@@ -12,7 +12,7 @@ func TestResolveProvider(t *testing.T) {
 	cfg := Config{
 		DefaultModel:     "openai/gpt-4.1",
 		DefaultMiniModel: "anthropic/claude-haiku-4-5",
-		Providers: map[string]ProviderConfig{
+		LLMProviders: map[string]LLMProviderConfig{
 			"openai":    {Dialect: types.DialectOpenResponses},
 			"anthropic": {Dialect: types.DialectAnthropicMessages},
 			"azure":     {Dialect: types.DialectOpenResponses},
@@ -64,7 +64,7 @@ func TestDynamicConfigProviderResolution(t *testing.T) {
 	})
 
 	client := NewClient(Config{
-		Providers: map[string]ProviderConfig{
+		LLMProviders: map[string]LLMProviderConfig{
 			"literal": {
 				Dialect: types.DialectOpenResponses,
 				APIKey:  "sk-literal-key",
@@ -80,7 +80,7 @@ func TestDynamicConfigProviderResolution(t *testing.T) {
 
 	dynamic := client.dynamicConfig(session.Context())
 
-	literal := dynamic.Providers["literal"]
+	literal := dynamic.LLMProviders["literal"]
 	if literal.APIKey != "sk-literal-key" {
 		t.Errorf("literal APIKey: got %q, want %q", literal.APIKey, "sk-literal-key")
 	}
@@ -88,7 +88,7 @@ func TestDynamicConfigProviderResolution(t *testing.T) {
 		t.Errorf("literal BaseURL: got %q, want %q", literal.BaseURL, "https://literal.example.com/v1")
 	}
 
-	fromEnv := dynamic.Providers["from-env"]
+	fromEnv := dynamic.LLMProviders["from-env"]
 	if fromEnv.APIKey != "sk-test-12345" {
 		t.Errorf("from-env APIKey: got %q, want %q", fromEnv.APIKey, "sk-test-12345")
 	}

@@ -19,10 +19,10 @@ import (
 
 var _ types.Completer = (*Client)(nil)
 
-// ProviderConfig holds the configuration for a named LLM provider.
+// LLMProviderConfig holds the configuration for a named LLM provider.
 // APIKey and BaseURL are environment variable names whose values are resolved
 // at request time from the session environment.
-type ProviderConfig struct {
+type LLMProviderConfig struct {
 	Dialect types.Dialect
 	APIKey  string // env var name
 	BaseURL string // env var name
@@ -31,7 +31,7 @@ type ProviderConfig struct {
 
 type Config struct {
 	DefaultModel, DefaultMiniModel string
-	Providers                      map[string]ProviderConfig
+	LLMProviders                   map[string]LLMProviderConfig
 }
 
 func NewClient(cfg Config) *Client {
@@ -123,7 +123,7 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 		}
 	}
 
-	providerCfg := dynamic.Providers[provider]
+	providerCfg := dynamic.LLMProviders[provider]
 	switch providerCfg.Dialect {
 	case types.DialectAnthropicMessages:
 		return anthropic.NewClient(anthropic.Config{
@@ -144,12 +144,12 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 	cfg := Config{
 		DefaultModel:     c.defaultModel,
 		DefaultMiniModel: c.defaultMiniModel,
-		Providers:        map[string]ProviderConfig{},
+		LLMProviders:     map[string]LLMProviderConfig{},
 	}
 
 	// Start with built-in/static provider refs (env var names)
-	for name, p := range c.cfg.Providers {
-		cfg.Providers[name] = ProviderConfig{
+	for name, p := range c.cfg.LLMProviders {
+		cfg.LLMProviders[name] = LLMProviderConfig{
 			Dialect: p.Dialect,
 			APIKey:  p.APIKey,
 			BaseURL: p.BaseURL,
@@ -166,8 +166,8 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 
 	// Overlay providers defined in the YAML config for this session
 	typesConfig := types.ConfigFromContext(ctx)
-	for name, p := range typesConfig.Providers {
-		cfg.Providers[name] = ProviderConfig{
+	for name, p := range typesConfig.LLMProviders {
+		cfg.LLMProviders[name] = LLMProviderConfig{
 			Dialect: p.Dialect,
 			APIKey:  p.APIKey,
 			BaseURL: p.BaseURL,
@@ -183,8 +183,8 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 	}
 
 	// Resolve ${VAR} references in provider config using the session env
-	for name, p := range cfg.Providers {
-		cfg.Providers[name] = ProviderConfig{
+	for name, p := range cfg.LLMProviders {
+		cfg.LLMProviders[name] = LLMProviderConfig{
 			Dialect: p.Dialect,
 			APIKey:  envvar.ReplaceString(env, p.APIKey),
 			BaseURL: envvar.ReplaceString(env, p.BaseURL),
