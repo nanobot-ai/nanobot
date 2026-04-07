@@ -206,24 +206,18 @@ func loadMCPServers(config *types.Config, dirPath string) error {
 		return nil
 	}
 
-	if yamlExists {
-		slog.Warn("mcp-servers.yaml is deprecated; define mcpServers in nanobot.yaml instead", "path", yamlPath)
-		data, err := os.ReadFile(yamlPath)
-		if err != nil {
-			return fmt.Errorf("error reading mcp-servers.yaml: %w", err)
-		}
-		if err := yaml.Unmarshal(data, &config.MCPServers); err != nil {
-			return fmt.Errorf("error parsing mcp-servers.yaml: %w", err)
-		}
-	} else if jsonExists {
-		slog.Warn("mcp-servers.json is deprecated; define mcpServers in nanobot.yaml instead", "path", jsonPath)
-		data, err := os.ReadFile(jsonPath)
-		if err != nil {
-			return fmt.Errorf("error reading mcp-servers.json: %w", err)
-		}
-		if err := json.Unmarshal(data, &config.MCPServers); err != nil {
-			return fmt.Errorf("error parsing mcp-servers.json: %w", err)
-		}
+	filePath := yamlPath
+	if jsonExists {
+		filePath = jsonPath
+	}
+
+	slog.Warn("mcp-servers.yaml/mcp-servers.json is deprecated; define mcpServers in nanobot.yaml instead", "path", filePath)
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("error reading %s: %w", filePath, err)
+	}
+	if err := yaml.Unmarshal(data, &config.MCPServers); err != nil {
+		return fmt.Errorf("error parsing %s: %w", filePath, err)
 	}
 
 	// Validate that all referenced MCP servers exist
