@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"strings"
 
@@ -122,7 +123,10 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 		}
 	}
 
-	providerCfg := dynamic.LLMProviders[provider]
+	providerCfg, ok := dynamic.LLMProviders[provider]
+	if !ok {
+		return nil, fmt.Errorf("unknown LLM provider %q: not defined in llmProviders config", provider)
+	}
 	switch providerCfg.Dialect {
 	case types.DialectAnthropicMessages:
 		return anthropic.NewClient(anthropic.Config{
@@ -131,7 +135,8 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 			Headers: providerCfg.Headers,
 		}).Complete(ctx, req, opts...)
 	case types.DialectOpenAIResponses, types.DialectOpenResponses:
-		// same as default
+		// DialectOpenAIResponses and DialectOpenResponses are intentionally distinct specs that currently
+		// share the same client implementation but may diverge
 		fallthrough
 	default:
 		return responses.NewClient(responses.Config{

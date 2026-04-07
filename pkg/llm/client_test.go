@@ -56,6 +56,54 @@ func TestResolveProvider(t *testing.T) {
 	}
 }
 
+func TestResolveProviderMalformedModel(t *testing.T) {
+	cfg := Config{
+		LLMProviders: map[string]LLMProviderConfig{
+			"openai": {Dialect: types.DialectOpenAIResponses},
+		},
+	}
+
+	tests := []struct {
+		name         string
+		model        string
+		wantModel    string
+		wantProvider string
+	}{
+		{"extra slash", "openai/model/extra", "model/extra", "openai"},
+		{"single slash", "openai/gpt-4o", "gpt-4o", "openai"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotModel, gotProvider := resolveProvider(tt.model, cfg)
+			if gotModel != tt.wantModel {
+				t.Errorf("model: got %q, want %q", gotModel, tt.wantModel)
+			}
+			if gotProvider != tt.wantProvider {
+				t.Errorf("provider: got %q, want %q", gotProvider, tt.wantProvider)
+			}
+		})
+	}
+}
+
+func TestCompleteUnknownProvider(t *testing.T) {
+	session := mcp.NewEmptySession(context.Background())
+
+	client := NewClient(Config{
+		DefaultModel: "vertex/gemini-pro",
+		LLMProviders: map[string]LLMProviderConfig{
+			"openai": {Dialect: types.DialectOpenAIResponses},
+		},
+	})
+
+	ctx := session.Context()
+	_, err := client.Complete(ctx, types.CompletionRequest{Model: "vertex/gemini-pro"})
+	wantErr := `unknown LLM provider "vertex": not defined in llmProviders config`
+	if err == nil || err.Error() != wantErr {
+		t.Errorf("got error %v, want %q", err, wantErr)
+	}
+}
+
 func TestDynamicConfigProviderResolution(t *testing.T) {
 	session := mcp.NewEmptySession(context.Background())
 	session.SetEnv(map[string]string{
