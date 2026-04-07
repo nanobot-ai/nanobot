@@ -86,6 +86,9 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 	for key, value := range c.Headers {
 		httpReq.Header.Set(key, value)
 	}
+	if requestType := types.InternalLLMRequestType(ctx); requestType != "" {
+		httpReq.Header.Set(types.InternalLLMRequestTypeHeader, requestType)
+	}
 
 	httpResp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
