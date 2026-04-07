@@ -109,13 +109,67 @@ my-config/
     └── helper.md        # Additional agent
 ```
 
+**LLM Providers**
+
+`openai` and `anthropic` are built-in providers — set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` and they work with no additional config. Use the `{provider}/{model}` format in the `model` field to select a provider.
+
+Additional providers (Azure, Bedrock, Ollama, etc.) can be configured in `nanobot.yaml` under `llmProviders`. 
+
+Each entry specifies a `dialect` (the API protocol), credentials, and base URL. The `dialect` field accepts:
+
+| Dialect | Description |
+|---|---|
+| `OpenAIResponses` | OpenAI Responses API (default) |
+| `OpenAIChatCompletions` | OpenAI Chat Completions API |
+| `AnthropicMessages` | Anthropic Messages API |
+| `OpenResponses` | Generic OpenResponses-compatible endpoint |
+
+<details>
+<summary><strong>Example <code>llmProviders</code> config</strong></summary>
+
+```yaml
+llmProviders:
+  # Built-in providers — shown here for reference or to override baseURL/headers
+  openai:
+    dialect: OpenAIResponses
+    apiKey: ${OPENAI_API_KEY}
+    baseURL: ${OPENAI_BASE_URL}  # optional, default: https://api.openai.com/v1
+
+  anthropic:
+    dialect: AnthropicMessages
+    apiKey: ${ANTHROPIC_API_KEY}
+    baseURL: ${ANTHROPIC_BASE_URL}  # optional, default: https://api.anthropic.com/v1
+
+  # Custom providers pointing at any compatible endpoint
+  azureOpenAI:
+    dialect: OpenAIResponses
+    apiKey: ${AZURE_API_KEY}
+    baseURL: https://<your-resource>.cognitiveservices.azure.com/openai/v1
+
+  azureAnthropic:
+    dialect: AnthropicMessages
+    apiKey: ${AZURE_ANTHROPIC_KEY}
+    baseURL: https://<your-resource>.services.ai.azure.com/anthropic/v1
+
+  bedrockOpenAI:
+    dialect: OpenAIResponses
+    apiKey: ${BEDROCK_API_KEY}
+    baseURL: https://bedrock-mantle.us-east-1.api.aws/v1
+
+  ollama:
+    dialect: OpenResponses
+    baseURL: http://localhost:11434/v1
+```
+
+</details>
+
 **`nanobot.yaml`** defines shared resources available to all agents:
 
 ```yaml
 llmProviders:
-  anthropic:
-    dialect: AnthropicMessages
-    apiKey: ${ANTHROPIC_API_KEY}
+  ollama:
+    dialect: OpenResponses
+    baseURL: http://localhost:11434/v1
 
 mcpServers:
   store:
@@ -147,6 +201,8 @@ The YAML front-matter supports all agent configuration fields (model, name, mcpS
 ```bash
 nanobot run ./my-config/
 ```
+
+The default config path is `.nanobot/`, so `nanobot run` with no arguments will use that directory if it exists.
 
 **Features:**
 
