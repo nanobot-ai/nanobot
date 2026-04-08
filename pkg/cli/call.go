@@ -46,6 +46,7 @@ func (e *Call) Run(cmd *cobra.Command, args []string) error {
 	runtime, err := e.n.GetRuntime(cmd.Context(), runtime.Options{
 		MaxConcurrency: e.n.MaxConcurrency,
 		DSN:            e.n.DSN(),
+		DefaultModel:   e.n.DefaultModel,
 		ConfigDir:      e.n.ConfigPath,
 	})
 	if err != nil {

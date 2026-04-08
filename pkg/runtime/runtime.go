@@ -47,6 +47,7 @@ type Options struct {
 	TokenExchangeClientID     string
 	TokenExchangeClientSecret string
 	AuditLogCollector         *auditlogs.Collector
+	DefaultModel              string
 	ConfigDir                 string
 	LoopbackURL               string
 }
@@ -64,6 +65,7 @@ func (o Options) Merge(other Options) (result Options) {
 	result.TokenExchangeClientID = complete.Last(o.TokenExchangeClientID, other.TokenExchangeClientID)
 	result.TokenExchangeClientSecret = complete.Last(o.TokenExchangeClientSecret, other.TokenExchangeClientSecret)
 	result.AuditLogCollector = complete.Last(o.AuditLogCollector, other.AuditLogCollector)
+	result.DefaultModel = complete.Last(o.DefaultModel, other.DefaultModel)
 	result.ConfigDir = complete.Last(o.ConfigDir, other.ConfigDir)
 	result.LoopbackURL = complete.Last(o.LoopbackURL, other.LoopbackURL)
 	return
@@ -116,7 +118,7 @@ func NewRuntime(ctx context.Context, cfg llm.Config, opts ...Options) (*Runtime,
 	})
 
 	registry.AddServer("nanobot.system", func(string) mcp.MessageHandler {
-		return system.NewServer(opt.ConfigDir)
+		return system.NewServer(opt.DefaultModel, opt.ConfigDir)
 	})
 
 	registry.AddServer("nanobot.workflows", func(string) mcp.MessageHandler {

@@ -8,7 +8,7 @@ import (
 )
 
 func TestObotMCPBashEnvVarsAddsAPIKeyWithoutMCPCLIRefresh(t *testing.T) {
-	server := NewServer(".nanobot")
+	server := NewServer("", ".nanobot")
 	ctx := testContext(t)
 	session := mcp.SessionFromContext(ctx)
 	session.SetEnv(map[string]string{
@@ -31,7 +31,7 @@ func TestObotMCPBashEnvVarsAddsAPIKeyWithoutMCPCLIRefresh(t *testing.T) {
 }
 
 func TestObotMCPBashEnvVarsReturnsRefreshError(t *testing.T) {
-	server := NewServer(".nanobot")
+	server := NewServer("", ".nanobot")
 	ctx := testContext(t)
 	session := mcp.SessionFromContext(ctx)
 	session.SetEnv(map[string]string{
@@ -66,7 +66,7 @@ func TestObotMCPBashEnvVarsSkipsConfigWhenRefreshPrerequisitesAreMissing(t *test
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := NewServer(".nanobot")
+			server := NewServer("", ".nanobot")
 			ctx := testContext(t)
 			session := mcp.SessionFromContext(ctx)
 			session.SetEnv(tt.env)

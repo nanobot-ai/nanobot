@@ -128,6 +128,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		TokenExchangeEndpoint:     r.Auth.OAuthTokenURL,
 		TokenExchangeClientID:     r.Auth.OAuthClientID,
 		TokenExchangeClientSecret: r.Auth.OAuthClientSecret,
+		DefaultModel:              r.n.DefaultModel,
 		ConfigDir:                 r.n.ConfigPath,
 		LoopbackURL:               "http://" + r.ListenAddress + "/mcp/chat",
 	}

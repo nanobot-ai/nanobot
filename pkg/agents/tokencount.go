@@ -31,7 +31,7 @@ func init() {
 // For image content in tool call results, vision tokens are estimated from the
 // image dimensions rather than the base64 data length. See estimateImageTokens
 // for details on the estimation approach.
-func estimateTokens(messages []types.Message, systemPrompt string, tools []types.ToolUseDefinition) int {
+func estimateTokens(model string, messages []types.Message, systemPrompt string, tools []types.ToolUseDefinition) int {
 	var (
 		sb          strings.Builder
 		imageTokens int
@@ -103,7 +103,7 @@ func estimateTokens(messages []types.Message, systemPrompt string, tools []types
 		sb.WriteString("\n")
 	}
 
-	return countTokens(sb.String()) + imageTokens
+	return countTokens(model, sb.String()) + imageTokens
 }
 
 // estimateImageTokens estimates the number of tokens an image will consume when
@@ -162,12 +162,33 @@ func estimateImageTokens(data string) int {
 	return int(math.Round(float64(w*h) / 750.0))
 }
 
-// countTokens counts the tokens in the given text using tiktoken's cl100k_base encoding.
+// countTokens counts the tokens in the given text using tiktoken.
 // Falls back to len(text)/4 if encoding fails.
-func countTokens(text string) int {
-	enc, err := tiktoken.GetEncoding("cl100k_base")
+func countTokens(model, text string) int {
+	enc, err := tiktoken.GetEncoding(encodingForModel(model))
 	if err != nil {
 		return len(text) / 4
 	}
+
 	return len(enc.Encode(text, nil, nil))
+}
+
+// encodingForModel returns the tiktoken name of the encoding for a given model name.
+// It will try to find the appropriate encoding for the specified model,
+// and will default to cl100k_base if the model is not recognized.
+func encodingForModel(model string) string {
+	encoding := tiktoken.MODEL_TO_ENCODING[model]
+	if encoding == "" {
+		for prefix, enc := range tiktoken.MODEL_PREFIX_TO_ENCODING {
+			if strings.HasPrefix(model, prefix) {
+				encoding = enc
+				break
+			}
+		}
+		if encoding == "" {
+			encoding = tiktoken.MODEL_CL100K_BASE
+		}
+	}
+
+	return encoding
 }
