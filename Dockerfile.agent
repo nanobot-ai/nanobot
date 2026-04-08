@@ -81,6 +81,12 @@ RUN ARCH=$(if [ "${TARGETARCH}" = "amd64" ]; then echo "x64"; else echo "${TARGE
     mv mcp-cli-linux-${ARCH} /usr/bin/mcp-cli && \
     chmod +x /usr/bin/mcp-cli
 
+COPY scripts/prefetch-tiktoken-encodings.sh /tmp/prefetch-tiktoken-encodings.sh
+ENV TIKTOKEN_CACHE_DIR=/var/cache/tiktoken
+RUN chmod +x /tmp/prefetch-tiktoken-encodings.sh && \
+    /tmp/prefetch-tiktoken-encodings.sh && \
+    rm /tmp/prefetch-tiktoken-encodings.sh
+
 # Create non-root user with home directory
 RUN useradd -m -d /home/nanobot -s /bin/bash nanobot
 
