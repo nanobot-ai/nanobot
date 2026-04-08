@@ -255,7 +255,6 @@ func loadFromDirectory(dirPath string, baseYAML []byte) ([]byte, error) {
 
 	// Reset fields that markdown will rebuild
 	config.Agents = nil
-	config.Publish.Entrypoint = nil
 
 	// Load agents from .md files (these take precedence over YAML agents)
 	if err := loadAgentsFromMarkdown(&config, dirPath); err != nil {

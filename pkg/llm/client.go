@@ -21,8 +21,6 @@ import (
 var _ types.Completer = (*Client)(nil)
 
 // LLMProviderConfig holds the configuration for a named LLM provider.
-// APIKey and BaseURL are environment variable names whose values are resolved
-// at request time from the session environment.
 type LLMProviderConfig struct {
 	Dialect types.Dialect
 	APIKey  string // supports ${VAR} syntax
