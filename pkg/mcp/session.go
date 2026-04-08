@@ -815,12 +815,6 @@ func newSession(ctx context.Context, wire Wire, handler MessageHandler, session 
 		s.InitializeRequest = session.InitializeRequest
 		s.InitializeResult = session.InitializeResult
 	}
-	if s.Parent != nil {
-		go func() {
-			s.Parent.Wait()
-			s.Close(false)
-		}()
-	}
 	s.ctx, s.cancel = context.WithCancelCause(WithSession(ctx, s))
 
 	if err := wire.Start(s.ctx, s.onWire); err != nil {
