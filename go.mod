@@ -2,6 +2,8 @@ module github.com/nanobot-ai/nanobot
 
 go 1.26.0
 
+replace github.com/pkoukk/tiktoken-go => github.com/thedadams/tiktoken-go v0.0.0-20260408142119-821fdf98ee43
+
 require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.0
 	github.com/adrg/xdg v0.5.3

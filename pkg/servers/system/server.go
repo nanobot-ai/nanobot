@@ -52,6 +52,7 @@ func ensureSessionDir(sessionID string) (string, error) {
 }
 
 type Server struct {
+	defaultModel   string
 	configDir      string
 	tools          mcp.ServerTools
 	subscriptions  *fswatch.SubscriptionManager
@@ -59,8 +60,9 @@ type Server struct {
 	fileWatchersMu sync.Mutex
 }
 
-func NewServer(configDir string) *Server {
+func NewServer(defaultModel, configDir string) *Server {
 	s := &Server{
+		defaultModel:  defaultModel,
 		configDir:     configDir,
 		subscriptions: fswatch.NewSubscriptionManager(context.Background()),
 		fileWatchers:  make(map[string]*fswatch.Watcher),

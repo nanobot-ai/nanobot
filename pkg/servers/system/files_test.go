@@ -104,7 +104,7 @@ func TestListFileResources(t *testing.T) {
 	}
 
 	// Create server and list resources
-	server := NewServer("")
+	server := NewServer("", "")
 	ctx := testContext(t)
 	resources, err := server.listFileResources(ctx)
 	if err != nil {
@@ -204,7 +204,7 @@ func TestReadFileResource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	server := NewServer("")
+	server := NewServer("", "")
 	ctx := testContext(t)
 
 	// Minimal 1x1 PNG (binary); image resources must be returned as base64 Blob, not Text
@@ -429,7 +429,7 @@ func TestSubscribeFileResource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	server := NewServer("")
+	server := NewServer("", "")
 	ctx := testContext(t)
 
 	tests := []struct {
@@ -504,7 +504,7 @@ func TestResourcesListCombined(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	server := NewServer("")
+	server := NewServer("", "")
 	ctx := testContext(t)
 
 	// Call the combined resourcesList method
@@ -563,7 +563,7 @@ func TestResourcesReadDispatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	server := NewServer("")
+	server := NewServer("", "")
 	ctx := testContext(t)
 
 	tests := []struct {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/pkoukk/tiktoken-go"
 )
 
 func TestEstimateTokens_BasicMessages(t *testing.T) {
@@ -29,7 +30,7 @@ func TestEstimateTokens_BasicMessages(t *testing.T) {
 		},
 	}
 
-	tokens := estimateTokens(messages, "", nil)
+	tokens := estimateTokens("gpt-5.4", messages, "", nil)
 	if tokens <= 0 {
 		t.Errorf("expected positive token count, got %d", tokens)
 	}
@@ -40,8 +41,8 @@ func TestEstimateTokens_BasicMessages(t *testing.T) {
 }
 
 func TestEstimateTokens_WithSystemPrompt(t *testing.T) {
-	tokensWithout := estimateTokens(nil, "", nil)
-	tokensWith := estimateTokens(nil, "You are a helpful assistant.", nil)
+	tokensWithout := estimateTokens("gpt-5.4", nil, "", nil)
+	tokensWith := estimateTokens("gpt-5.4", nil, "You are a helpful assistant.", nil)
 	if tokensWith <= tokensWithout {
 		t.Errorf("expected more tokens with system prompt: without=%d, with=%d", tokensWithout, tokensWith)
 	}
@@ -56,8 +57,8 @@ func TestEstimateTokens_WithTools(t *testing.T) {
 		},
 	}
 
-	tokensWithout := estimateTokens(nil, "", nil)
-	tokensWith := estimateTokens(nil, "", tools)
+	tokensWithout := estimateTokens("gpt-5.4", nil, "", nil)
+	tokensWith := estimateTokens("gpt-5.4", nil, "", tools)
 	if tokensWith <= tokensWithout {
 		t.Errorf("expected more tokens with tools: without=%d, with=%d", tokensWithout, tokensWith)
 	}
@@ -74,7 +75,7 @@ func TestEstimateTokens_LargeInput(t *testing.T) {
 		},
 	}
 
-	tokens := estimateTokens(messages, "", nil)
+	tokens := estimateTokens("gpt-5.4", messages, "", nil)
 	// A large input should produce a significant number of tokens
 	if tokens < 1000 {
 		t.Errorf("expected > 1000 tokens for large input, got %d", tokens)
@@ -97,7 +98,7 @@ func TestEstimateTokens_WithToolCalls(t *testing.T) {
 		},
 	}
 
-	tokens := estimateTokens(messages, "", nil)
+	tokens := estimateTokens("gpt-5.4", messages, "", nil)
 	if tokens <= 0 {
 		t.Errorf("expected positive token count for tool calls, got %d", tokens)
 	}
@@ -122,14 +123,14 @@ func TestEstimateTokens_WithToolResults(t *testing.T) {
 		},
 	}
 
-	tokens := estimateTokens(messages, "", nil)
+	tokens := estimateTokens("gpt-5.4", messages, "", nil)
 	if tokens <= 0 {
 		t.Errorf("expected positive token count for tool results, got %d", tokens)
 	}
 }
 
 func TestCountTokens_EmptyString(t *testing.T) {
-	tokens := countTokens("")
+	tokens := countTokens("gpt-5.4", "")
 	if tokens != 0 {
 		t.Errorf("expected 0 tokens for empty string, got %d", tokens)
 	}
@@ -137,9 +138,31 @@ func TestCountTokens_EmptyString(t *testing.T) {
 
 func TestCountTokens_KnownString(t *testing.T) {
 	// "hello world" should produce a small number of tokens
-	tokens := countTokens("hello world")
+	tokens := countTokens("gpt-5.4", "hello world")
 	if tokens < 1 || tokens > 5 {
 		t.Errorf("expected 1-5 tokens for 'hello world', got %d", tokens)
+	}
+}
+
+func TestEncodingForModel(t *testing.T) {
+	tests := []struct {
+		model    string
+		expected string
+	}{
+		{model: "gpt-5.4", expected: tiktoken.MODEL_O200K_BASE},
+		{model: "gpt-5.4-mini", expected: tiktoken.MODEL_O200K_BASE},
+		{model: "claude-opus-4-6", expected: tiktoken.MODEL_CL100K_BASE},
+		{model: "claude-haiku-4-6", expected: tiktoken.MODEL_CL100K_BASE},
+		{model: "gpt-4o", expected: tiktoken.MODEL_O200K_BASE},
+		{model: "unknown-model", expected: tiktoken.MODEL_CL100K_BASE}, // default fallback
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			if got := encodingForModel(tt.model); got != tt.expected {
+				t.Fatalf("encodingForModel(%q) = %q, want %q", tt.model, got, tt.expected)
+			}
+		})
 	}
 }
 
