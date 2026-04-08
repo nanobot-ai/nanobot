@@ -190,6 +190,7 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request, aud
 		return
 	}
 	slog.Debug("mcp server opening event stream", "session_id", id, "path", req.URL.Path)
+	defer slog.Debug("mcp server closed event stream", "session_id", id, "path", req.URL.Path)
 
 	session, ok, err := h.sessions.Acquire(req.Context(), h.MessageHandler, id)
 	if err != nil {

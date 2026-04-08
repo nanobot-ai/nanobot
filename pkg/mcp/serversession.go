@@ -230,6 +230,7 @@ func (s *serverWire) subscribe(ctx context.Context) (<-chan Message, <-chan stru
 	s.subscriberLock.Unlock()
 	context.AfterFunc(ctx, func() {
 		s.removeSubscriber(ch)
+		close(ch)
 	})
 	return ch, s.ctx.Done()
 }

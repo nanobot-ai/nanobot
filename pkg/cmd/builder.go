@@ -51,7 +51,7 @@ func fields(obj any) []fieldInfo {
 		if fieldType.Anonymous {
 			if fieldType.Type.Kind() == reflect.Struct {
 				result = append(result, fields(objValue.Field(i).Addr().Interface())...)
-			} else if fieldType.Type.Kind() == reflect.Ptr && fieldType.Type.Elem().Kind() == reflect.Struct {
+			} else if fieldType.Type.Kind() == reflect.Pointer && fieldType.Type.Elem().Kind() == reflect.Struct {
 				result = append(result, fields(objValue.Field(i).Interface())...)
 			}
 		} else if !fieldType.Anonymous {
