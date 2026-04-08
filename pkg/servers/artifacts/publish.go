@@ -88,7 +88,7 @@ func (s *Server) publishArtifact(ctx context.Context, params publishArtifactPara
 
 	msg := fmt.Sprintf("Published %s v%d", apiResp.Name, apiResp.LatestVersion)
 	if apiResp.LatestVersion == 1 {
-		msg += ". This artifact is currently private. The user can change visibility to public in the Obot UI."
+		msg += ". This artifact is currently only visible to its owner. The user can add sharing subjects in the Obot UI."
 	}
 
 	return &publishResult{

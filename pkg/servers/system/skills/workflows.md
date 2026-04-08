@@ -283,7 +283,7 @@ To publish a workflow, use the `publishArtifact` tool:
 2. Call `publishArtifact` with the workflow directory name. For example: `publishArtifact({ "workflowName": "code-review" })`.
 3. The tool bundles all files in the directory and uploads to Obot. The `SKILL.md` frontmatter is the source of truth for artifact metadata.
 4. The first publish creates version 1. Subsequent publishes of the same workflow create new versions (v2, v3, etc.).
-5. The tool response will indicate visibility status when relevant — relay that information to the user. Do NOT assume or state the workflow's visibility unless the tool response explicitly mentions it.
+5. The tool response may mention owner-only sharing for newly published workflows — relay that information to the user. Do NOT assume or state the workflow's sharing subjects unless the tool response explicitly mentions them.
 
 ### Searching the Registry
 
