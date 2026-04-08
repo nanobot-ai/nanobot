@@ -202,6 +202,12 @@ func (r *resource) read(ctx context.Context) ([]byte, error) {
 	}
 
 	if r.resourceType == "path" {
+		info, err := os.Stat(r.url)
+		if err != nil {
+			return nil, fmt.Errorf("error looking up %s: %w", r.url, err)
+		}
+		isDir := info.IsDir()
+
 		f, err := r.fileToRead()
 		if err != nil {
 			return nil, err
@@ -215,14 +221,16 @@ func (r *resource) read(ctx context.Context) ([]byte, error) {
 			return nil, fmt.Errorf("error reading file %s: %w", f, err)
 		}
 
-		hasMd, err := hasMarkdownFiles(r.url)
-		if err != nil {
-			return nil, fmt.Errorf("error checking for markdown files in %s: %w", r.url, err)
-		}
+		if isDir {
+			hasMd, err := hasMarkdownFiles(r.url)
+			if err != nil {
+				return nil, fmt.Errorf("error checking for markdown files in %s: %w", r.url, err)
+			}
 
-		if hasMd {
-			// Directory mode: merge nanobot.yaml (if any) with markdown agents
-			return loadFromDirectory(r.url, yamlData)
+			if hasMd {
+				// Directory mode: merge nanobot.yaml (if any) with markdown agents
+				return loadFromDirectory(r.url, yamlData)
+			}
 		}
 
 		if len(yamlData) > 0 {
