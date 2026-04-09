@@ -10,6 +10,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/envvar"
 	"github.com/nanobot-ai/nanobot/pkg/llm/anthropic"
+	"github.com/nanobot-ai/nanobot/pkg/llm/bifrost"
 	"github.com/nanobot-ai/nanobot/pkg/llm/completions"
 	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
 	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
@@ -138,6 +139,13 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 			APIKey:  providerCfg.APIKey,
 			BaseURL: providerCfg.BaseURL,
 			Headers: providerCfg.Headers,
+		}).Complete(ctx, req, opts...)
+	case types.DialectBifrostRequest:
+		return bifrost.NewClient(bifrost.Config{
+			APIKey:   providerCfg.APIKey,
+			BaseURL:  providerCfg.BaseURL,
+			Headers:  providerCfg.Headers,
+			Provider: provider,
 		}).Complete(ctx, req, opts...)
 	case types.DialectOpenAIResponses, types.DialectOpenResponses:
 		// DialectOpenAIResponses and DialectOpenResponses are intentionally distinct specs that currently
