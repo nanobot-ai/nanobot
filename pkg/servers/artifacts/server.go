@@ -21,6 +21,17 @@ func NewServer() *Server {
 			"Publish a local workflow as a shareable artifact to the Obot registry. "+
 				"Reads the workflow directory, validates the SKILL.md, creates a ZIP, and uploads it.",
 			s.publishArtifact),
+		mcp.NewServerTool("listSubjects",
+			"List Obot users or groups that can be used as workflow-sharing subjects. "+
+				"Set `type` to 'user' or 'group'. "+
+				"Use the optional `query` to filter results by ID or name-like fields; leave it blank to list everything.",
+			s.listSubjects),
+		mcp.NewServerTool("setArtifactSubjects",
+			"Replace the sharing subjects for a published workflow artifact in the Obot registry. "+
+				"Use an empty subject list to make it owner-only again. "+
+				"Supported subject types are 'user', 'group', and 'selector' with id '*'. "+
+				"Use the artifact ID returned by publishArtifact or searchArtifacts.",
+			s.setArtifactSubjects),
 		mcp.NewServerTool("searchArtifacts",
 			"Search the Obot registry for published artifacts (workflows) by keyword query. "+
 				"This searches the REMOTE registry only — it does NOT find locally installed workflows. "+
