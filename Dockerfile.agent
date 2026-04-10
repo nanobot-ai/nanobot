@@ -19,12 +19,12 @@ COPY . .
 RUN CI=true CGO_ENABLED=0 go generate ./... && go build -o nanobot .
 
 # Final stage
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 
 # Install bash, git, common utilities, and poppler-utils (provides pdftoppm
 # and pdfinfo, used by the built-in read tool to render PDF pages as images).
 # LibreOffice is used by skills to convert between file formats.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get full-upgrade -y && apt-get install -y --no-install-recommends \
     bash \
     git \
     curl \
