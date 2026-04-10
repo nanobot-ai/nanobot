@@ -222,23 +222,12 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 		return nil, fmt.Errorf("failed to create state: %w", err)
 	}
 
-	authEndpoint, err := url.Parse(authorizationServerMetadata.AuthorizationEndpoint)
+	authURL, err := authCodeURL(conf, authorizationServerMetadata.AuthorizationEndpoint, connectURL, state, verifier)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse authorization endpoint: %w", err)
+		return nil, fmt.Errorf("failed to generate auth code URL: %w", err)
 	}
 
-	// Redirect user to consent page to ask for permission
-	// for the scopes specified above.
-	authCodeURLOpts := []oauth2.AuthCodeOption{oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier)}
-	if authEndpoint.Host != "login.microsoftonline.com" {
-		// This is a hacky workaround to avoid providing the `resource` parameter to Microsoft Entra.
-		// Entra does not like the resource parameter, and including it will often cause things to fail.
-		// VSCode does something similar to this.
-		authCodeURLOpts = append(authCodeURLOpts, oauth2.SetAuthURLParam("resource", connectURL))
-	}
-
-	authURL := conf.AuthCodeURL(state, authCodeURLOpts...)
-	slog.Info("handing oauth authorization url to callback handler", "server", c.serverName, "auth_host", authEndpoint.Host)
+	slog.Info("handing oauth authorization url to callback handler", "server", c.serverName, "auth_url", authorizationServerMetadata.AuthorizationEndpoint)
 	handled, err := o.callbackHandler.HandleAuthURL(ctx, c.displayName, authURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to handle auth url %s: %w", authURL, err)
@@ -438,6 +427,27 @@ func parseScopeFromAuthenticateHeader(authenticateHeader string) string {
 	}
 
 	return matches[1]
+}
+
+func authCodeURL(conf *oauth2.Config, urlFromMetadata, resourceURL, state, verifier string) (string, error) {
+	authEndpoint, err := url.Parse(urlFromMetadata)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse authorization endpoint: %w", err)
+	}
+
+	// Redirect user to consent page to ask for permission for the scopes specified above.
+	authCodeURLOpts := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier)}
+	if authEndpoint.Host != "login.microsoftonline.com" {
+		// Entra does not like the resource parameter, and including it will often cause things to fail.
+		// VSCode does something similar to this.
+		authCodeURLOpts = append(authCodeURLOpts, oauth2.SetAuthURLParam("resource", resourceURL))
+	}
+	if authEndpoint.Host != "mcp.zoho.com" {
+		// Zoho doesn't support the access_type parameter
+		authCodeURLOpts = append(authCodeURLOpts, oauth2.AccessTypeOffline)
+	}
+
+	return conf.AuthCodeURL(state, authCodeURLOpts...), nil
 }
 
 // protectedResourceMetadata represents OAuth 2.0 Protected Resource Metadata
