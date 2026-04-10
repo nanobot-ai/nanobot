@@ -23,7 +23,7 @@ FROM cgr.dev/chainguard/wolfi-base:latest AS runtime
 
 # Install bash, git, common utilities, uv, and poppler-utils (provides pdftoppm
 # and pdfinfo, used by the built-in read tool to render PDF pages as images)
-RUN apk update && apk add --no-cache \
+RUN apk update && apk upgrade --no-cache && apk add --no-cache \
     bash \
     git \
     curl \
