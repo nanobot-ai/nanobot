@@ -241,7 +241,7 @@ func loadFromDirectory(dirPath string, baseYAML []byte) ([]byte, error) {
 
 	// Parse nanobot.yaml as base config if provided
 	if len(baseYAML) > 0 {
-		obj := map[string]any{}
+		var obj map[string]any
 		if err := yaml.Unmarshal(baseYAML, &obj); err != nil {
 			return nil, fmt.Errorf("error parsing nanobot.yaml in %s: %w", dirPath, err)
 		}
