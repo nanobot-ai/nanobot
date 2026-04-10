@@ -296,12 +296,12 @@ type ToolCall struct {
 }
 
 type CallResult struct {
-	Content           []mcp.Content `json:"content,omitempty"`
-	IsError           bool          `json:"isError,omitempty"`
-	Agent             string        `json:"agent,omitempty"`
-	Model             string        `json:"model,omitempty"`
-	StopReason        string        `json:"stopReason,omitempty"`
-	StructuredContent any           `json:"structuredContent,omitempty"`
+	Content           []mcp.Content  `json:"content,omitempty"`
+	IsError           bool           `json:"isError,omitempty"`
+	Agent             string         `json:"agent,omitempty"`
+	Model             string         `json:"model,omitempty"`
+	StopReason        string         `json:"stopReason,omitempty"`
+	StructuredContent map[string]any `json:"structuredContent,omitempty"`
 }
 
 type AsyncCallResult struct {
