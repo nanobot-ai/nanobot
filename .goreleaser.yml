@@ -60,6 +60,8 @@ dockers:
       - "ghcr.io/nanobot-ai/nanobot:latest-amd64"
     dockerfile: Dockerfile
     use: buildx
+    extra_files:
+      - scripts/prefetch-tiktoken-encodings.sh
     build_flag_templates:
       - "--target=release"
       - "--platform=linux/amd64"
@@ -75,6 +77,8 @@ dockers:
       - "ghcr.io/nanobot-ai/nanobot:latest-arm64"
     dockerfile: Dockerfile
     use: buildx
+    extra_files:
+      - scripts/prefetch-tiktoken-encodings.sh
     build_flag_templates:
       - "--target=release"
       - "--platform=linux/arm64"
@@ -92,6 +96,7 @@ dockers:
     use: buildx
     extra_files:
       - scripts/agent-entrypoint.sh
+      - scripts/prefetch-tiktoken-encodings.sh
     build_flag_templates:
       - "--target=release"
       - "--platform=linux/amd64"
@@ -109,6 +114,7 @@ dockers:
     use: buildx
     extra_files:
       - scripts/agent-entrypoint.sh
+      - scripts/prefetch-tiktoken-encodings.sh
     build_flag_templates:
       - "--target=release"
       - "--platform=linux/arm64"
