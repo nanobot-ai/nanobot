@@ -246,6 +246,18 @@ func TestLoadFromDirectory_MissingServer_Error(t *testing.T) {
 	}
 }
 
+func TestLoadFromDirectory_WithBaseYAML_InvalidConfigType_Error(t *testing.T) {
+	// Valid YAML, but 'agents' must be a map — passing a string causes JSONCoerce to fail
+	baseYAML := []byte(`agents: "not-a-map"`)
+	_, err := loadFromDirectory("testdata/directory-simple", baseYAML)
+	if err == nil {
+		t.Fatal("expected error for wrong type in baseYAML")
+	}
+	if !strings.Contains(err.Error(), "error parsing nanobot.yaml") {
+		t.Errorf("expected JSONCoerce error, got: %v", err)
+	}
+}
+
 func TestHasMarkdownFiles(t *testing.T) {
 	// Directory with agents/ subdirectory containing .md files
 	hasMd, err := hasMarkdownFiles("testdata/directory-simple")

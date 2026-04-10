@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"sigs.k8s.io/yaml"
 )
@@ -241,12 +240,8 @@ func loadFromDirectory(dirPath string, baseYAML []byte) ([]byte, error) {
 
 	// Parse nanobot.yaml as base config if provided
 	if len(baseYAML) > 0 {
-		var obj map[string]any
-		if err := yaml.Unmarshal(baseYAML, &obj); err != nil {
+		if err := yaml.Unmarshal(baseYAML, &config); err != nil {
 			return nil, fmt.Errorf("error parsing nanobot.yaml in %s: %w", dirPath, err)
-		}
-		if err := mcp.JSONCoerce(obj, &config); err != nil {
-			return nil, fmt.Errorf("error loading nanobot.yaml in %s: %w", dirPath, err)
 		}
 	}
 
