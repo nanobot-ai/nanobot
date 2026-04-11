@@ -379,8 +379,10 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 	)
 	if opt.OnSampling != nil {
 		sampling = &SamplingCapability{
-			Context: &struct{}{},
-			Tools:   &struct{}{},
+			// Since we are technically only support protocol version 2025-06-18,
+			// we shouldn't indicate support for features that require later protocol versions.
+			// Context: &struct{}{},
+			// Tools:   &struct{}{},
 		}
 	}
 	if opt.OnRoots != nil {
