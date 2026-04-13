@@ -1,0 +1,8 @@
+llmProviders:
+  anthropic:
+    dialect: AnthropicMessages
+    apiKey: ${ANTHROPIC_API_KEY}
+
+mcpServers:
+  myserver:
+    url: https://example.com/mcp
