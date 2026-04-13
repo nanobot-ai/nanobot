@@ -141,6 +141,8 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 			Headers: providerCfg.Headers,
 		}).Complete(ctx, req, opts...)
 	case types.DialectBifrostRequest:
+		// provider is the key from llmProviders config (e.g. "bedrock", "openai") and is
+		// forwarded to Bifrost handler as the target backend provider name.
 		return bifrost.NewClient(bifrost.Config{
 			APIKey:   providerCfg.APIKey,
 			BaseURL:  providerCfg.BaseURL,

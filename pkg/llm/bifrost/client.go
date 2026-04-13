@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -88,8 +89,13 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 	return cResp, nil
 }
 
+var httpClient = &http.Client{Timeout: 10 * time.Minute}
+
 func (c *Client) complete(ctx context.Context, req *schemas.BifrostResponsesRequest) (*schemas.BifrostResponsesResponse, error) {
-	data, _ := json.Marshal(req)
+	data, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal bifrost request: %w", err)
+	}
 	log.Messages(ctx, "bifrost-request", true, data)
 
 	path := fmt.Sprintf("%s/v1/responses", c.BaseURL)
@@ -104,7 +110,7 @@ func (c *Client) complete(ctx context.Context, req *schemas.BifrostResponsesRequ
 		httpReq.Header.Set(types.InternalLLMRequestTypeHeader, requestType)
 	}
 
-	httpResp, err := http.DefaultClient.Do(httpReq)
+	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
 		return nil, err
 	}

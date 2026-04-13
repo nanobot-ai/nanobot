@@ -3,6 +3,7 @@ package bifrost
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -120,7 +121,7 @@ func toMessages(req *types.CompletionRequest, msg types.Message) ([]schemas.Resp
 	}
 
 	for _, item := range msg.Items {
-		if item.Content != nil && msg.Role != "user" {
+		if item.Content != nil {
 			if m, ok := toAssistantTextMessage(msg.Role, *item.Content); ok {
 				result = append(result, m)
 			}
@@ -200,13 +201,13 @@ func toFunctionCallMessage(item types.CompletionItem) schemas.ResponsesMessage {
 func toFunctionCallOutputMessage(req *types.CompletionRequest, result *types.ToolCallResult) schemas.ResponsesMessage {
 	msgType := schemas.ResponsesMessageTypeFunctionCallOutput
 
-	var outputStr string
+	var sb strings.Builder
 	for _, c := range result.Output.Content {
 		if c.Type == "text" {
-			outputStr = c.Text
-			break
+			sb.WriteString(c.Text)
 		}
 	}
+	outputStr := sb.String()
 	if outputStr == "" {
 		outputStr = "completed"
 	}
