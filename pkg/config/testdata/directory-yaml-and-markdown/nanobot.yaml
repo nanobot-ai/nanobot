@@ -1,0 +1,3 @@
+mcpServers:
+  myserver:
+    url: https://example.com/mcp

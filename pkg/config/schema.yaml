@@ -449,8 +449,10 @@ definitions:
       model:
         type: string
         description: |
-          The name of the LLM model to use for this agent. If no model is specified the
-          agent will use the global nanobot model.
+          The LLM model to use for this agent. Can be a plain model name (e.g. "gpt-4.1")
+          or prefixed with a provider name using the "{llmProvider}/{model}" format
+          (e.g. "anthropic/claude-haiku-4-5", "azure/gpt-4o"). If no model is specified
+          the agent will use the global default model.
       instructions:
         description: |
           Instructions that will be used by the LLM to guide the agent's behavior.
@@ -747,6 +749,39 @@ properties:
     description: |
       A map of hooks that will be executed at various stages of the Nanobot lifecycle.
       This is useful for customizing the behavior of the Nanobot at the global level.
+  llmProviders:
+    type: object
+    description: |
+      A map of named LLM providers. Each entry configures an API endpoint by
+      specifying its dialect, credentials, and optional headers. Values support env var
+      substitution using ${VAR} syntax. Providers are specified by the 'model' field using
+      the "{provider}/{model}" format
+    additionalProperties:
+      type: object
+      properties:
+        dialect:
+          type: string
+          enum: [AnthropicMessages, OpenAIResponses, OpenResponses, OpenAIChatCompletions]
+          description: |
+            The LLM API dialect this provider uses. This informs the agent on how to
+            make the API request.
+        apiKey:
+          type: string
+          description: |
+            The API key for this provider. Supports ${VAR} syntax to reference
+            environment variables (e.g. "${ANTHROPIC_API_KEY}").
+        baseURL:
+          type: string
+          description: |
+            The base URL for this provider's API endpoint. Supports ${VAR} syntax
+            to reference environment variables (e.g. "${OPENAI_BASE_URL}").
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: |
+            HTTP headers to include with every request to this provider. Values
+            support ${VAR} syntax (e.g. "Authorization": "Bearer ${MY_TOKEN}").
   agents:
     type: object
     description: |

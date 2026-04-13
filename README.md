@@ -97,16 +97,85 @@ The UI will be available at [http://localhost:8080](http://localhost:8080).
 
 ### Directory-Based Configuration
 
-Instead of using a `nanobot.yaml` file, you can organize your configuration as a directory structure where each agent is defined in its own `.md` file with YAML front-matter.
+You can organize your configuration as a directory with a top-level `nanobot.yaml` for shared settings and individual `.md` files for each agent.
 
 **Directory Structure:**
 
 ```
 my-config/
-├── agents/              # Agent definitions directory
-│   ├── main.md          # Main agent (auto-set as entrypoint)
-│   └── helper.md        # Additional agent
-└── mcp-servers.yaml     # MCP server definitions
+├── nanobot.yaml         # Shared config: mcpServers, llmProviders, env, etc.
+└── agents/              # Agent definitions directory
+    ├── main.md          # Main agent (auto-set as entrypoint)
+    └── helper.md        # Additional agent
+```
+
+**LLM Providers**
+
+`openai` and `anthropic` are built-in providers — set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` and they work with no additional config. Use the `{provider}/{model}` format in the `model` field to select a provider.
+
+Additional providers (Azure, Bedrock, Ollama, etc.) can be configured in `nanobot.yaml` under `llmProviders`. 
+
+Each entry specifies a `dialect` (the API protocol), credentials, and base URL. The `dialect` field accepts:
+
+| Dialect | Description |
+|---|---|
+| `OpenAIResponses` | OpenAI Responses API (default) |
+| `OpenAIChatCompletions` | OpenAI Chat Completions API |
+| `AnthropicMessages` | Anthropic Messages API |
+| `OpenResponses` | Generic OpenResponses-compatible endpoint |
+
+<details>
+<summary><strong>Example <code>llmProviders</code> config</strong></summary>
+
+```yaml
+llmProviders:
+  # Built-in providers — shown here for reference or to override baseURL/headers
+  openai:
+    dialect: OpenAIResponses
+    apiKey: ${OPENAI_API_KEY}
+    baseURL: ${OPENAI_BASE_URL}  # optional, default: https://api.openai.com/v1
+
+  anthropic:
+    dialect: AnthropicMessages
+    apiKey: ${ANTHROPIC_API_KEY}
+    baseURL: ${ANTHROPIC_BASE_URL}  # optional, default: https://api.anthropic.com/v1
+
+  # Custom providers pointing at any compatible endpoint
+  azureOpenAI:
+    dialect: OpenAIResponses
+    apiKey: ${AZURE_API_KEY}
+    baseURL: https://<your-resource>.cognitiveservices.azure.com/openai/v1
+
+  azureAnthropic:
+    dialect: AnthropicMessages
+    apiKey: ${AZURE_ANTHROPIC_KEY}
+    baseURL: https://<your-resource>.services.ai.azure.com/anthropic/v1
+
+  bedrockOpenAI:
+    dialect: OpenAIResponses
+    apiKey: ${BEDROCK_API_KEY}
+    baseURL: https://bedrock-mantle.us-east-1.api.aws/v1
+
+  ollama:
+    dialect: OpenResponses
+    baseURL: http://localhost:11434/v1
+```
+
+</details>
+
+**`nanobot.yaml`** defines shared resources available to all agents:
+
+```yaml
+llmProviders:
+  ollama:
+    dialect: OpenResponses
+    baseURL: http://localhost:11434/v1
+
+mcpServers:
+  store:
+    url: https://example.com/mcp
+    headers:
+      Authorization: Bearer ${MY_TOKEN}
 ```
 
 **Agent File Format (`agents/main.md`):**
@@ -114,7 +183,7 @@ my-config/
 ```markdown
 ---
 name: Shopping Assistant
-model: claude-3-7-sonnet-latest
+model: anthropic/claude-3-7-sonnet-latest
 mcpServers:
   - store
 temperature: 0.7
@@ -125,16 +194,7 @@ You are a helpful shopping assistant.
 Help users find products and answer their questions.
 ```
 
-The YAML front-matter supports all agent configuration fields (model, name, mcpServers, tools, temperature, etc.), and the markdown body becomes the agent's instructions.
-
-**MCP Servers File (`mcp-servers.yaml` or `mcp-servers.json`):**
-
-```yaml
-store:
-  url: https://example.com/mcp
-  headers:
-    Authorization: Bearer ${MY_TOKEN}
-```
+The YAML front-matter supports all agent configuration fields (model, name, mcpServers, tools, temperature, etc.), and the markdown body becomes the agent's instructions. Markdown agents take precedence over any agents defined in `nanobot.yaml` with the same name.
 
 **Usage:**
 
@@ -142,12 +202,16 @@ store:
 nanobot run ./my-config/
 ```
 
+The default config path is `.nanobot/`, so `nanobot run` with no arguments will use that directory if it exists.
+
 **Features:**
 
 - **Agent directory**: All agent `.md` files must be in the `agents/` subdirectory
 - **Auto-entrypoint**: If `agents/main.md` exists, it's automatically set as the default agent
-- **Agent ID**: Use the `id` field in front-matter, or defaults to the filename (without `.md`)
+- **Markdown precedence**: Agents defined in `agents/*.md` override same-named agents in `nanobot.yaml`
 - **README.md**: Automatically ignored in the `agents/` directory (use it for documentation)
+
+> **Deprecated:** `mcp-servers.yaml` and `mcp-servers.json` are still supported for backwards compatibility but are deprecated. Define `mcpServers` in `nanobot.yaml` instead.
 
 See the [directory-config example](./examples/directory-config/) for a complete working example.
 
