@@ -198,9 +198,14 @@ func callResult(object any, err error) (*CallToolResult, error) {
 		return nil, fmt.Errorf("failed to marshal thread data: %w", err)
 	}
 
+	var structuredContent map[string]any
+	if len(dataBytes) > 0 && dataBytes[0] == '{' {
+		_ = json.Unmarshal(dataBytes, &structuredContent)
+	}
+
 	return &CallToolResult{
 		IsError:           false,
-		StructuredContent: object,
+		StructuredContent: structuredContent,
 		Content: []Content{
 			{
 				Type: "text",

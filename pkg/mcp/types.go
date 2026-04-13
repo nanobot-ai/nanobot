@@ -333,9 +333,9 @@ func (t ToolAnnotations) IsDestructive() bool {
 }
 
 type CallToolResult struct {
-	IsError           bool      `json:"isError"`
-	Content           []Content `json:"content,omitzero"`
-	StructuredContent any       `json:"structuredContent,omitempty"`
+	IsError           bool           `json:"isError"`
+	Content           []Content      `json:"content,omitzero"`
+	StructuredContent map[string]any `json:"structuredContent,omitempty"`
 }
 
 type CallToolRequest struct {

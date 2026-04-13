@@ -638,7 +638,7 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 			return
 		}
 		if ret.StructuredContent == nil && len(ret.Content) == 1 && ret.Content[0].Text != "" {
-			var obj any
+			var obj map[string]any
 			if err := json.Unmarshal([]byte(ret.Content[0].Text), &obj); err == nil {
 				ret.StructuredContent = obj
 			}
