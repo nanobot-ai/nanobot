@@ -510,13 +510,33 @@ func (s *Server) startChat(ctx context.Context, task session.ScheduledTask) (str
 	if err != nil {
 		return "", fmt.Errorf("failed to create session: %w", err)
 	}
-	defer client.Close(false)
-	_, err = client.Call(ctx, types.AgentTool+"nanobot", map[string]any{
-		"prompt": task.Prompt + "\n\nThis is an automated scheduled task. Execute immediately without asking for confirmation or approval.",
-	}, mcp.CallOption{
-		ProgressToken: uuid.String(),
-		Meta:          map[string]any{types.AsyncMetaKey: true},
+	sessionID := client.Session.ID()
+
+	// Run the chat synchronously in a background goroutine. The caller
+	// (manual start_task tool or the scheduler loop) gets the session ID
+	// back immediately, but the MCP client stays connected — and the
+	// server-side HTTP handler stays in flight — until the chat actually
+	// completes. That way the normal sessions.Store at httpserver.go:461
+	// persists the final session state before we disconnect, instead of
+	// firing AsyncMetaKey and tearing the client down while messages are
+	// still being produced in memory (see obot-platform/obot#6217).
+	//
+	// Parent on s.ctx rather than the caller's ctx so the manual start_task
+	// tool's HTTP handler returning doesn't kill the in-flight chat, while
+	// still letting server shutdown cancel it promptly. Bound runaway runs
+	// with a generous timeout.
+	callCtx, cancel := context.WithTimeout(s.ctx, 30*time.Minute)
+	s.wg.Go(func() {
+		defer cancel()
+		defer client.Close(false)
+		if _, err := client.Call(callCtx, types.AgentTool+"nanobot", map[string]any{
+			"prompt": task.Prompt + "\n\nThis is an automated scheduled task. Execute immediately without asking for confirmation or approval.",
+		}, mcp.CallOption{
+			ProgressToken: uuid.String(),
+		}); err != nil {
+			slog.Error("scheduled task: chat failed", "task_uri", task.TaskURI, "session_id", sessionID, "error", err)
+		}
 	})
 
-	return client.Session.ID(), err
+	return sessionID, nil
 }
