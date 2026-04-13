@@ -66,6 +66,88 @@ func TestRead(t *testing.T) {
 		}
 	})
 
+	t.Run("text too large returns offset/limit hint", func(t *testing.T) {
+		// Build a file whose readText output will exceed maxReadTextBytes.
+		// Each line is ~100 chars; ~600 lines puts us comfortably over 50 KiB.
+		var sb strings.Builder
+		for i := 0; i < 600; i++ {
+			sb.WriteString(strings.Repeat("y", 100))
+			sb.WriteString("\n")
+		}
+		path := write("big.txt", sb.String())
+
+		result, err := s.read(t.Context(), ReadParams{FilePath: path})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(result.Content) != 1 {
+			t.Fatalf("expected single content item, got %d", len(result.Content))
+		}
+		text := result.Content[0].Text
+		if !strings.Contains(text, "too large") || !strings.Contains(text, "offset") || !strings.Contains(text, "limit") {
+			t.Errorf("expected offset/limit hint notice, got %q", text)
+		}
+		if !strings.Contains(text, path) {
+			t.Errorf("expected notice to mention file path, got %q", text)
+		}
+		// Must not include any of the actual file content.
+		if strings.Contains(text, strings.Repeat("y", 100)) {
+			t.Errorf("notice should not contain file contents, got %q", text)
+		}
+		// Must be marked skip-truncation so the agents truncator leaves it alone.
+		skipMeta, _ := result.Content[0].Meta[types.SkipTruncationMetaKey].(bool)
+		if !skipMeta {
+			t.Error("expected skip-truncation meta on oversized read notice")
+		}
+	})
+
+	t.Run("text many short lines triggers offset/limit hint", func(t *testing.T) {
+		// File with more than defaultReadLimit lines, each short enough that the
+		// built result stays well under maxReadTextBytes. Without the line-limit
+		// check, the caller would silently get only the first 2000 lines.
+		var sb strings.Builder
+		for i := 0; i < defaultReadLimit+500; i++ {
+			sb.WriteString("x\n")
+		}
+		path := write("many.txt", sb.String())
+
+		result, err := s.read(t.Context(), ReadParams{FilePath: path})
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := result.Content[0].Text
+		if !strings.Contains(text, "too large") || !strings.Contains(text, "offset") || !strings.Contains(text, "limit") {
+			t.Errorf("expected offset/limit hint notice, got %q", text)
+		}
+		skipMeta, _ := result.Content[0].Meta[types.SkipTruncationMetaKey].(bool)
+		if !skipMeta {
+			t.Error("expected skip-truncation meta on oversized read notice")
+		}
+	})
+
+	t.Run("text explicit pagination returns content", func(t *testing.T) {
+		// Same oversized file, but caller explicitly paginates: the hint
+		// must NOT fire — caller asked for a slice and should get it.
+		var sb strings.Builder
+		for i := 0; i < defaultReadLimit+500; i++ {
+			sb.WriteString("x\n")
+		}
+		path := write("paginated.txt", sb.String())
+		offset, limit := 0, 100
+		result, err := s.read(t.Context(), ReadParams{FilePath: path, Offset: &offset, Limit: &limit})
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := result.Content[0].Text
+		if strings.Contains(text, "too large") {
+			t.Errorf("explicit pagination should not trigger hint, got %q", text)
+		}
+		// Should have exactly 100 line-numbered rows.
+		if got := strings.Count(text, "\tx\n"); got != 100 {
+			t.Errorf("expected 100 lines, got %d", got)
+		}
+	})
+
 	t.Run("text rejects pages", func(t *testing.T) {
 		path := write("t.txt", "x\n")
 		p := "1-5"

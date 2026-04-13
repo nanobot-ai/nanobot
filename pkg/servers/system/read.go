@@ -21,6 +21,11 @@ const (
 	maxLineLength    = 2000
 	maxPDFPages      = 10
 	maxImageBytes    = 10_000_000 // 10MB
+	// maxReadTextBytes caps the size of a readText result. Beyond this, we return
+	// a notice instructing the model to use bash to read relevant portions instead
+	// of letting the generic tool-result truncator persist the output to disk.
+	// Should be kept in sync with maxToolResultSize in pkg/agents/truncate.go.
+	maxReadTextBytes = 50 * 1024 // 50 KiB
 )
 
 func readText(p ReadParams) (*mcp.CallToolResult, error) {
@@ -88,9 +93,61 @@ func readText(p ReadParams) (*mcp.CallToolResult, error) {
 		}
 	}
 
+	// Determine whether the loop stopped because of the line limit while file
+	// content still remains. We only trip the bash hint for this case when the
+	// caller relied on the default limit (no explicit offset or limit) — when
+	// the caller is paginating intentionally, hitting the limit is expected.
+	hitDefaultLineLimit := linesRead >= limit && p.Limit == nil && p.Offset == nil
+	moreFileContent := false
+	if hitDefaultLineLimit {
+		if _, err := reader.Peek(1); err == nil {
+			moreFileContent = true
+		}
+	}
+
+	if result.Len() > maxReadTextBytes || moreFileContent {
+		return tooLargeReadResult(p, result.Len(), linesRead), nil
+	}
+
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{{Type: "text", Text: result.String()}},
 	}, nil
+}
+
+// tooLargeReadResult returns a CallToolResult that tells the model the read
+// output couldn't return the full file — either because the built output
+// exceeded maxReadTextBytes or because the line limit was hit with more file
+// content remaining — and that it should call read again with offset and
+// limit to fetch specific line ranges. The content is marked with
+// SkipTruncationMetaKey so the generic truncator does not persist it to disk.
+func tooLargeReadResult(p ReadParams, builtBytes, linesReturned int) *mcp.CallToolResult {
+	var fileSize int64 = -1
+	if info, err := os.Stat(p.FilePath); err == nil {
+		fileSize = info.Size()
+	}
+
+	var sizeDesc string
+	if fileSize >= 0 {
+		sizeDesc = fmt.Sprintf("file size %d bytes; ", fileSize)
+	}
+
+	notice := fmt.Sprintf(
+		"File %s is too large to return in full through the read tool "+
+			"(%sreturned %d lines / %d bytes, with more content remaining). "+
+			"Call read again with the `offset` and `limit` parameters to fetch a "+
+			"specific line range (offset is the number of lines to skip from the "+
+			"start of the file, so the first returned line is line offset+1; limit "+
+			"is the maximum number of lines to return).",
+		p.FilePath, sizeDesc, linesReturned, builtBytes,
+	)
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{{
+			Type: "text",
+			Text: notice,
+			Meta: map[string]any{types.SkipTruncationMetaKey: true},
+		}},
+	}
 }
 
 func readImage(p ReadParams, mimeType string) (*mcp.CallToolResult, error) {

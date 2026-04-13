@@ -517,10 +517,11 @@ func (s *Server) bash(ctx context.Context, params BashParams) (string, error) {
 type ReadParams struct {
 	// FilePath is the absolute path to the file to read.
 	FilePath string `json:"file_path"`
-	// Offset is the line number to start reading from (default beginning of file).
-	// Only applicable to text files.
+	// Offset is the number of lines to skip from the start of the file
+	// (default 0, meaning read from the beginning). The first returned line is
+	// line offset+1. Only applicable to text files.
 	Offset *int `json:"offset,omitempty"`
-	// Limit is the number of lines to read (default 2000).
+	// Limit is the maximum number of lines to return (default 2000).
 	// Only applicable to text files.
 	Limit *int `json:"limit,omitempty"`
 	// Pages is the page range for PDF files (e.g., "1-5", "3", "10-20").
