@@ -26,6 +26,9 @@ const (
 	TaskURISessionKey               = "taskURI"
 	ResourceSubscriptionsSessionKey = "resourceSubscriptions"
 	PublicURLSessionKey             = "publicURL"
+	// ObotLastConnectServerIDSessionKey holds the server_id argument from the last obot_connect_to_mcp_server
+	// tool call (catalog entry or multi-user id) for elicitation meta when MCP_SERVER_SEARCH_URL is unset.
+	ObotLastConnectServerIDSessionKey = "obotLastConnectServerID"
 )
 
 type configContextKey struct{}

@@ -32,6 +32,9 @@ type ConnectedServer struct {
 	Alias       string `json:"alias,omitempty"`
 	Description string `json:"description,omitempty"`
 	ConnectURL  string `json:"connect_url"`
+	// Obot structured content may use numeric or string IDs; use any for JSON decoding.
+	MCPServerID    any `json:"mcp_server_id,omitempty"`
+	CatalogEntryID any `json:"catalog_entry_id,omitempty"`
 }
 
 type inventoryEntry struct {

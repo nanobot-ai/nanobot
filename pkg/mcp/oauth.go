@@ -228,7 +228,12 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	}
 
 	slog.Info("handing oauth authorization url to callback handler", "server", c.serverName, "auth_url", authorizationServerMetadata.AuthorizationEndpoint)
-	handled, err := o.callbackHandler.HandleAuthURL(ctx, c.displayName, authURL)
+	handled, err := o.callbackHandler.HandleAuthURL(ctx, AuthURLRequest{
+		DisplayName: c.displayName,
+		URL:         authURL,
+		ConnectURL:  c.baseURL,
+		ServerKey:   c.serverName,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to handle auth url %s: %w", authURL, err)
 	} else if !handled {

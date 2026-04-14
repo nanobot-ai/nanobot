@@ -12,8 +12,16 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// AuthURLRequest carries context for the OAuth authorization URL prompt.
+type AuthURLRequest struct {
+	DisplayName string
+	URL         string // authorization (browser) URL
+	ConnectURL  string // MCP server base URL used to match obot_list_connected_mcp_servers entries
+	ServerKey   string // Nanobot mcpServers map key (e.g. "gmail") for Obot name matching when URLs differ
+}
+
 type AuthURLHandler interface {
-	HandleAuthURL(context.Context, string, string) (bool, error)
+	HandleAuthURL(context.Context, AuthURLRequest) (bool, error)
 }
 
 type CallbackHandler interface {

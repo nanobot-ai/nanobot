@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/sampling"
+	"github.com/nanobot-ai/nanobot/pkg/servers/obotmcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/nanobot-ai/nanobot/pkg/uuid"
 )
@@ -106,6 +108,171 @@ func (s *Service) AddServer(name string, factory func(name string) mcp.MessageHa
 
 func (s *Service) SetSampler(sampler Sampler) {
 	s.sampler = sampler
+}
+
+func connectURLCandidatesForObot(srv mcp.Server, elicit mcp.ElicitRequest) []string {
+	var out []string
+	seen := map[string]struct{}{}
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
+		if _, ok := seen[s]; ok {
+			return
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	add(srv.BaseURL)
+	add(obotmcp.ResourceURLFromAuthorizeURL(elicit.URL))
+	if len(elicit.Meta) > 0 {
+		s := strings.TrimSpace(string(elicit.Meta))
+		if s != "" && s != "null" {
+			var meta map[string]any
+			if err := json.Unmarshal(elicit.Meta, &meta); err == nil && meta != nil {
+				if ou, ok := meta[types.MetaPrefix+"oauth-url"].(string); ok {
+					add(obotmcp.ResourceURLFromAuthorizeURL(ou))
+				}
+			}
+		}
+	}
+	return out
+}
+
+func displayNameCandidatesForObot(srv mcp.Server, serverKey string, elicit mcp.ElicitRequest) []string {
+	var out []string
+	seen := map[string]struct{}{}
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
+		if _, ok := seen[s]; ok {
+			return
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	add(complete.First(srv.Name, srv.ShortName, ""))
+	add(serverKey)
+	if len(elicit.Meta) > 0 {
+		s := strings.TrimSpace(string(elicit.Meta))
+		if s != "" && s != "null" {
+			var meta map[string]any
+			if err := json.Unmarshal(elicit.Meta, &meta); err == nil && meta != nil {
+				// Downstream MCP (e.g. Gmail) often sets this; Obot lists connected servers by that name, not the Obot bridge name.
+				if v, ok := meta[types.MetaPrefix+"server-name"].(string); ok {
+					add(v)
+				}
+			}
+		}
+	}
+	return out
+}
+
+func stashObotConnectServerIDInSession(session *mcp.Session, tool string, args any) {
+	if session == nil || tool != "obot_connect_to_mcp_server" {
+		return
+	}
+	sid := extractObotConnectServerIDFromArgs(args)
+	if sid == "" {
+		return
+	}
+	session.Set(types.ObotLastConnectServerIDSessionKey, mcp.SavedString(sid))
+}
+
+func extractObotConnectServerIDFromArgs(args any) string {
+	if args == nil {
+		return ""
+	}
+	m, ok := args.(map[string]any)
+	if !ok {
+		b, err := json.Marshal(args)
+		if err != nil {
+			return ""
+		}
+		if err := json.Unmarshal(b, &m); err != nil {
+			return ""
+		}
+	}
+	v, ok := m["server_id"]
+	if !ok {
+		return ""
+	}
+	switch x := v.(type) {
+	case string:
+		return strings.TrimSpace(x)
+	case float64:
+		return strconv.FormatInt(int64(x), 10)
+	default:
+		return strings.TrimSpace(fmt.Sprint(x))
+	}
+}
+
+// applyStashedObotConnectServerIDs fills missing IDs from the last obot_connect_to_mcp_server server_id
+// (catalog entry or multi-user id per Obot). Catalog-style ids typically use the "default-" prefix.
+func applyStashedObotConnectServerIDs(session *mcp.Session, mcpID, catalogID *string) {
+	var stashed string
+	if session == nil || !session.Get(types.ObotLastConnectServerIDSessionKey, &stashed) {
+		return
+	}
+	stashed = strings.TrimSpace(stashed)
+	if stashed == "" {
+		return
+	}
+	isCatalogish := strings.HasPrefix(stashed, "default-")
+	if *catalogID == "" && isCatalogish {
+		*catalogID = stashed
+	}
+	if *mcpID == "" && !isCatalogish {
+		*mcpID = stashed
+	}
+}
+
+// augmentElicitationMetaWithObotServerIDs adds ai.nanobot.meta/mcp-server-id and catalog-entry-id
+// when forwarding elicitation/create from a remote MCP server (e.g. OAuth URL mode), using
+// obot_list_connected_mcp_servers data matched to this client's MCP config.
+func augmentElicitationMetaWithObotServerIDs(ctx context.Context, session *mcp.Session, elicit *mcp.ElicitRequest, srv mcp.Server, serverKey string) error {
+	lookupCtx := mcp.WithSession(ctx, session)
+	// Subclient elicitation callbacks may not carry session in ctx; Obot fetch requires it.
+	candidates := connectURLCandidatesForObot(srv, *elicit)
+	displayNames := displayNameCandidatesForObot(srv, serverKey, *elicit)
+	mcpID, catalogID := obotmcp.LookupObotConnectedServerIDs(lookupCtx, candidates, displayNames)
+	applyStashedObotConnectServerIDs(session, &mcpID, &catalogID)
+	if mcpID == "" && catalogID == "" {
+		return nil
+	}
+
+	meta := map[string]any{}
+	if len(elicit.Meta) > 0 {
+		s := strings.TrimSpace(string(elicit.Meta))
+		if s != "" && s != "null" {
+			if err := json.Unmarshal(elicit.Meta, &meta); err != nil {
+				return fmt.Errorf("unmarshal elicitation _meta: %w", err)
+			}
+		}
+	}
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	p := types.MetaPrefix
+	if mcpID != "" {
+		if _, exists := meta[p+"mcp-server-id"]; !exists {
+			meta[p+"mcp-server-id"] = mcpID
+		}
+	}
+	if catalogID != "" {
+		if _, exists := meta[p+"catalog-entry-id"]; !exists {
+			meta[p+"catalog-entry-id"] = catalogID
+		}
+	}
+	data, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	elicit.Meta = data
+	return nil
 }
 
 // buildAuditLog creates a new audit log entry for internal service calls
@@ -486,6 +653,11 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 				s.collectAuditLog(auditLog)
 			}()
 
+			elicit := elicitation
+			if augErr := augmentElicitationMetaWithObotServerIDs(ctx, session, &elicit, mcpConfig, name); augErr == nil {
+				elicitation = elicit
+			}
+
 			if err = session.Exchange(mcp.WithMCPServerConfig(mcp.WithAuditLog(ctx, auditLog), mcpConfig), "elicitation/create", elicitation, &result); err != nil {
 				auditLog.Error = err.Error()
 			} else {
@@ -756,6 +928,7 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 		// For tools, use the user context so that tool calls can be cancelled by the user.
 		ctx = mcp.UserContext(ctx)
 	}
+	stashObotConnectServerIDInSession(session, tool, args)
 	mcpCallResult, err := c.Call(ctx, tool, args, mcp.CallOption{
 		ProgressToken: opt.ProgressToken,
 		Meta:          opt.Meta,
