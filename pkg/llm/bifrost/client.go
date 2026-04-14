@@ -1,6 +1,7 @@
 package bifrost
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"log/slog"
 
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/nanobot-ai/nanobot/pkg/complete"
@@ -49,57 +52,27 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 		return nil, err
 	}
 
-	resp, err := c.complete(ctx, req)
+	resp, err := c.complete(ctx, completionRequest.Agent, req, opts...)
 	if err != nil {
 		return nil, err
 	}
 
-	cResp, err := toResponse(&completionRequest, resp)
-	if err != nil {
-		return nil, err
-	}
-
-	opt := complete.Complete(opts...)
-	if opt.ProgressToken != nil {
-		progress := types.CompletionProgress{
-			Agent:     completionRequest.Agent,
-			Model:     cResp.Model,
-			MessageID: cResp.Output.ID,
-			Role:      cResp.Output.Role,
-		}
-		for _, item := range cResp.Output.Items {
-			progress.Item = types.CompletionItem{
-				Partial:  true,
-				HasMore:  true,
-				ID:       item.ID,
-				Content:  item.Content,
-				ToolCall: item.ToolCall,
-			}
-			llmProgress.Send(ctx, &progress, opt.ProgressToken)
-
-			// Signal end of item
-			progress.Item = types.CompletionItem{
-				Partial: true,
-				ID:      item.ID,
-			}
-			llmProgress.Send(ctx, &progress, opt.ProgressToken)
-		}
-	}
-
-	return cResp, nil
+	return toResponse(&completionRequest, resp)
 }
 
 var httpClient = &http.Client{Timeout: 10 * time.Minute}
 
-func (c *Client) complete(ctx context.Context, req *schemas.BifrostResponsesRequest) (*schemas.BifrostResponsesResponse, error) {
+func (c *Client) complete(ctx context.Context, agentName string, req *schemas.BifrostResponsesRequest, opts ...types.CompletionOptions) (*schemas.BifrostResponsesResponse, error) {
+	opt := complete.Complete(opts...)
+
 	data, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal bifrost request: %w", err)
 	}
 	log.Messages(ctx, "bifrost-request", true, data)
 
-	path := fmt.Sprintf("%s/v1/responses", c.BaseURL)
-	httpReq, err := http.NewRequestWithContext(mcp.UserContext(ctx), http.MethodPost, path, bytes.NewBuffer(data))
+	url := fmt.Sprintf("%s/v1/responses", c.BaseURL)
+	httpReq, err := http.NewRequestWithContext(mcp.UserContext(ctx), http.MethodPost, url, bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
@@ -116,25 +89,128 @@ func (c *Client) complete(ctx context.Context, req *schemas.BifrostResponsesRequ
 	}
 	defer httpResp.Body.Close()
 
-	body, err := io.ReadAll(httpResp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read bifrost response body: %w", err)
-	}
-
 	if httpResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(httpResp.Body)
 		return nil, fmt.Errorf("bifrost request failed: %s %q", httpResp.Status, string(body))
 	}
 
-	log.Messages(ctx, "bifrost-request", false, body)
+	return c.parseStream(ctx, agentName, httpResp.Body, opt.ProgressToken)
+}
 
-	var resp schemas.BifrostResponsesResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal bifrost response: %w", err)
+func (c *Client) parseStream(ctx context.Context, agentName string, body io.Reader, progressToken any) (*schemas.BifrostResponsesResponse, error) {
+	lines := bufio.NewScanner(body)
+	// Use 1 MiB buffer — the response.completed event carries the full response body.
+	lines.Buffer(make([]byte, 0, 4096), 1024*1024)
+
+	var (
+		resp     *schemas.BifrostResponsesResponse
+		progress = types.CompletionProgress{Agent: agentName}
+	)
+
+	for lines.Scan() {
+		line := lines.Text()
+
+		header, body, ok := strings.Cut(line, ":")
+		if !ok || strings.TrimSpace(header) != "data" {
+			continue
+		}
+		body = strings.TrimSpace(body)
+		if body == "[DONE]" {
+			break
+		}
+
+		var event schemas.BifrostResponsesStreamResponse
+		if err := json.Unmarshal([]byte(body), &event); err != nil {
+			slog.Error("bifrost: failed to decode stream event", "error", err, "body", body)
+			continue
+		}
+
+		switch event.Type {
+		case schemas.ResponsesStreamResponseTypeCreated:
+			if event.Response != nil {
+				progress.Model = event.Response.Model
+				if event.Response.ID != nil {
+					progress.MessageID = *event.Response.ID
+				}
+			}
+
+		case schemas.ResponsesStreamResponseTypeOutputItemAdded:
+			if event.Item == nil || event.Item.Type == nil {
+				continue
+			}
+			itemID := ""
+			if event.Item.ID != nil {
+				itemID = *event.Item.ID
+			}
+			switch *event.Item.Type {
+			case schemas.ResponsesMessageTypeMessage:
+				progress.Item = types.CompletionItem{
+					Partial: true,
+					HasMore: true,
+					ID:      itemID,
+					Content: &mcp.Content{Type: "text"},
+				}
+			case schemas.ResponsesMessageTypeFunctionCall:
+				tc := &types.ToolCall{}
+				if event.Item.ResponsesToolMessage != nil {
+					if event.Item.ResponsesToolMessage.Name != nil {
+						tc.Name = *event.Item.ResponsesToolMessage.Name
+					}
+					if event.Item.ResponsesToolMessage.CallID != nil {
+						tc.CallID = *event.Item.ResponsesToolMessage.CallID
+					}
+				}
+				progress.Item = types.CompletionItem{
+					Partial:  true,
+					HasMore:  true,
+					ID:       itemID,
+					ToolCall: tc,
+				}
+			}
+
+		case schemas.ResponsesStreamResponseTypeOutputTextDelta:
+			if event.Delta != nil && progress.Item.Content != nil {
+				progress.Item.Content.Text = *event.Delta
+				llmProgress.Send(ctx, &progress, progressToken)
+			}
+
+		case schemas.ResponsesStreamResponseTypeFunctionCallArgumentsDelta:
+			if event.Delta != nil && progress.Item.ToolCall != nil {
+				progress.Item.ToolCall.Arguments = *event.Delta
+				llmProgress.Send(ctx, &progress, progressToken)
+			}
+
+		case schemas.ResponsesStreamResponseTypeOutputItemDone:
+			if progress.Item.ID != "" {
+				llmProgress.Send(ctx, &types.CompletionProgress{
+					Agent:     agentName,
+					Model:     progress.Model,
+					MessageID: progress.MessageID,
+					Item:      types.CompletionItem{Partial: true, ID: progress.Item.ID},
+				}, progressToken)
+			}
+			progress.Item = types.CompletionItem{}
+
+		case schemas.ResponsesStreamResponseTypeCompleted:
+			if event.Response != nil {
+				resp = event.Response
+				data, _ := json.Marshal(resp)
+				log.Messages(ctx, "bifrost-request", false, data)
+			}
+
+		case schemas.ResponsesStreamResponseTypeFailed, schemas.ResponsesStreamResponseTypeIncomplete:
+			if event.Response != nil && event.Response.Error != nil {
+				return nil, fmt.Errorf("bifrost stream error: %s %s", event.Response.Error.Code, event.Response.Error.Message)
+			}
+			return nil, fmt.Errorf("bifrost stream ended with status: %s", event.Type)
+		}
 	}
 
-	if resp.Error != nil {
-		return nil, fmt.Errorf("bifrost response error: %s %s", resp.Error.Code, resp.Error.Message)
+	if err := lines.Err(); err != nil {
+		return nil, fmt.Errorf("bifrost stream read error: %w", err)
 	}
-
-	return &resp, nil
+	if resp == nil {
+		return nil, fmt.Errorf("bifrost stream ended without a completed response")
+	}
+	return resp, nil
 }
