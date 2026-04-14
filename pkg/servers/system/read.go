@@ -19,6 +19,7 @@ import (
 const (
 	defaultReadLimit = 2000
 	maxLineLength    = 2000
+	truncatedSuffix  = "... (line truncated to 2000 chars)"
 	maxPDFPages      = 10
 	maxImageBytes    = 10_000_000 // 10MB
 	// maxReadTextBytes caps the size of a readText result. Beyond this, we return
@@ -74,7 +75,7 @@ func readText(p ReadParams) (*mcp.CallToolResult, error) {
 			if lineNum > offset {
 				// Truncate long lines
 				if len(line) > maxLineLength {
-					line = line[:maxLineLength]
+					line = line[:maxLineLength] + truncatedSuffix
 				}
 
 				// Format with line number (cat -n style)

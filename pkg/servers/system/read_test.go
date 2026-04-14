@@ -61,8 +61,12 @@ func TestRead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if c := strings.Count(result.Content[0].Text, "x"); c != maxLineLength {
+		text := result.Content[0].Text
+		if c := strings.Count(text, "x"); c != maxLineLength {
 			t.Errorf("expected %d x's, got %d", maxLineLength, c)
+		}
+		if !strings.Contains(text, truncatedSuffix) {
+			t.Errorf("expected truncated suffix, got %q", text)
 		}
 	})
 
