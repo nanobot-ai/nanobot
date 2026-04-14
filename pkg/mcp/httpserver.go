@@ -264,7 +264,7 @@ func (h *HTTPServer) healthz(rw http.ResponseWriter, req *http.Request) {
 	if healthErr == nil {
 		http.Error(rw, "waiting for startup", http.StatusTooEarly)
 	} else if *healthErr != nil {
-		http.Error(rw, (*healthErr).Error(), http.StatusServiceUnavailable)
+		http.Error(rw, (*healthErr).Error(), http.StatusInternalServerError)
 	} else {
 		rw.WriteHeader(http.StatusOK)
 	}
