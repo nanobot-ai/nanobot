@@ -57,7 +57,7 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 		return nil, err
 	}
 
-	return toResponse(&completionRequest, resp)
+	return toResponse(resp)
 }
 
 var httpClient = &http.Client{Timeout: 10 * time.Minute}

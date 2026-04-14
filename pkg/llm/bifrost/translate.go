@@ -100,7 +100,7 @@ func toInput(req *types.CompletionRequest) ([]schemas.ResponsesMessage, error) {
 	var result []schemas.ResponsesMessage
 
 	for _, msg := range req.Input {
-		msgs, err := toMessages(req, msg)
+		msgs, err := toMessages(msg)
 		if err != nil {
 			return nil, err
 		}
@@ -110,20 +110,20 @@ func toInput(req *types.CompletionRequest) ([]schemas.ResponsesMessage, error) {
 	return result, nil
 }
 
-func toMessages(req *types.CompletionRequest, msg types.Message) ([]schemas.ResponsesMessage, error) {
+func toMessages(msg types.Message) ([]schemas.ResponsesMessage, error) {
 	var result []schemas.ResponsesMessage
 
-	if msg.Role == "user" {
-		if m, ok := toUserMessage(msg); ok {
-			result = append(result, m)
-		}
-		return result, nil
-	}
-
+	var contentBlocks []schemas.ResponsesMessageContentBlock
 	for _, item := range msg.Items {
 		if item.Content != nil {
-			if m, ok := toAssistantTextMessage(msg.Role, *item.Content); ok {
-				result = append(result, m)
+			if block, ok := toContentBlock(*item.Content); ok {
+				if msg.Role == "user" {
+					contentBlocks = append(contentBlocks, block)
+				} else {
+					if m, ok := toAssistantTextMessage(msg.Role, *item.Content); ok {
+						result = append(result, m)
+					}
+				}
 			}
 		}
 
@@ -132,36 +132,23 @@ func toMessages(req *types.CompletionRequest, msg types.Message) ([]schemas.Resp
 		}
 
 		if item.ToolCallResult != nil {
-			result = append(result, toFunctionCallOutputMessage(req, item.ToolCallResult))
+			result = append(result, toFunctionCallOutputMessage(item.ToolCallResult))
 		}
+	}
+
+	if len(contentBlocks) > 0 {
+		role := schemas.ResponsesInputMessageRoleUser
+		msgType := schemas.ResponsesMessageTypeMessage
+		result = append(result, schemas.ResponsesMessage{
+			Type: &msgType,
+			Role: &role,
+			Content: &schemas.ResponsesMessageContent{
+				ContentBlocks: contentBlocks,
+			},
+		})
 	}
 
 	return result, nil
-}
-
-func toUserMessage(msg types.Message) (schemas.ResponsesMessage, bool) {
-	var blocks []schemas.ResponsesMessageContentBlock
-	for _, item := range msg.Items {
-		if item.Content != nil {
-			block, ok := toContentBlock(*item.Content)
-			if ok {
-				blocks = append(blocks, block)
-			}
-		}
-	}
-	if len(blocks) == 0 {
-		return schemas.ResponsesMessage{}, false
-	}
-
-	role := schemas.ResponsesInputMessageRoleUser
-	msgType := schemas.ResponsesMessageTypeMessage
-	return schemas.ResponsesMessage{
-		Type: &msgType,
-		Role: &role,
-		Content: &schemas.ResponsesMessageContent{
-			ContentBlocks: blocks,
-		},
-	}, true
 }
 
 func toAssistantTextMessage(role string, content mcp.Content) (schemas.ResponsesMessage, bool) {
@@ -198,7 +185,7 @@ func toFunctionCallMessage(item types.CompletionItem) schemas.ResponsesMessage {
 	}
 }
 
-func toFunctionCallOutputMessage(req *types.CompletionRequest, result *types.ToolCallResult) schemas.ResponsesMessage {
+func toFunctionCallOutputMessage(result *types.ToolCallResult) schemas.ResponsesMessage {
 	msgType := schemas.ResponsesMessageTypeFunctionCallOutput
 
 	var sb strings.Builder
@@ -242,7 +229,7 @@ func toContentBlock(content mcp.Content) (schemas.ResponsesMessageContentBlock, 
 	return schemas.ResponsesMessageContentBlock{}, false
 }
 
-func toResponse(req *types.CompletionRequest, resp *schemas.BifrostResponsesResponse) (*types.CompletionResponse, error) {
+func toResponse(resp *schemas.BifrostResponsesResponse) (*types.CompletionResponse, error) {
 	result := &types.CompletionResponse{
 		Model: resp.Model,
 		Output: types.Message{
