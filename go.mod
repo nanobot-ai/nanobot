@@ -1,6 +1,6 @@
 module github.com/nanobot-ai/nanobot
 
-go 1.26.1
+go 1.26.2
 
 replace github.com/pkoukk/tiktoken-go => github.com/thedadams/tiktoken-go v0.0.0-20260408142119-821fdf98ee43
 
