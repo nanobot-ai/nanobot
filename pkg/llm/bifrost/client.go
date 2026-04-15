@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -57,12 +58,17 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 		return nil, err
 	}
 
-	return toResponse(resp)
+	respData, err := json.Marshal(resp)
+	if err == nil {
+		log.Messages(ctx, "bifrost-request", false, respData)
+	}
+
+	return resp, nil
 }
 
 var httpClient = &http.Client{Timeout: 10 * time.Minute}
 
-func (c *Client) complete(ctx context.Context, agentName string, req *schemas.BifrostResponsesRequest, opts ...types.CompletionOptions) (*schemas.BifrostResponsesResponse, error) {
+func (c *Client) complete(ctx context.Context, agentName string, req *schemas.BifrostResponsesRequest, opts ...types.CompletionOptions) (*types.CompletionResponse, error) {
 	opt := complete.Complete(opts...)
 
 	data, err := json.Marshal(req)
@@ -72,6 +78,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req *schemas.Bi
 	log.Messages(ctx, "bifrost-request", true, data)
 
 	url := fmt.Sprintf("%s/v1/responses", c.BaseURL)
+	slog.Debug("bifrost request", "url", url, "provider", c.Provider, "model", req.Model)
 	httpReq, err := http.NewRequestWithContext(mcp.UserContext(ctx), http.MethodPost, url, bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
@@ -97,17 +104,32 @@ func (c *Client) complete(ctx context.Context, agentName string, req *schemas.Bi
 	return c.parseStream(ctx, agentName, httpResp.Body, opt.ProgressToken)
 }
 
-func (c *Client) parseStream(ctx context.Context, agentName string, body io.Reader, progressToken any) (*schemas.BifrostResponsesResponse, error) {
+// recordFixture is used to record data for unit tests. I must be manually enabled:
+//
+//	var close func() error
+//	streamBody, close = recordFixture("/home/nanobot/fixture.sse")
+//	defer close()
+func recordFixture(path string, r io.Reader) (io.Reader, func() error) {
+	f, _ := os.Create(path)
+	return io.TeeReader(r, f), f.Close
+}
+
+func (c *Client) parseStream(ctx context.Context, agentName string, body io.Reader, progressToken any) (*types.CompletionResponse, error) {
 	lines := bufio.NewScanner(body)
 	lines.Buffer(make([]byte, 0, 4096), 1024*1024)
 
+	result := &types.CompletionResponse{
+		Output: types.Message{Role: "assistant"},
+	}
+
 	var (
-		resp        *schemas.BifrostResponsesResponse
 		progress    = types.CompletionProgress{Agent: agentName}
-		currentItem *schemas.ResponsesMessage
+		started     bool
+		currentID   string
+		currentType schemas.ResponsesMessageType
+		currentTC   *types.ToolCall
 		currentText strings.Builder
 		currentArgs strings.Builder
-		builtOutput []schemas.ResponsesMessage
 	)
 
 	for lines.Scan() {
@@ -131,47 +153,51 @@ func (c *Client) parseStream(ctx context.Context, agentName string, body io.Read
 		switch event.Type {
 		case schemas.ResponsesStreamResponseTypeCreated:
 			if event.Response != nil {
-				resp = event.Response
-				progress.Model = event.Response.Model
+				started = true
+				result.Model = event.Response.Model
 				if event.Response.ID != nil {
-					progress.MessageID = *event.Response.ID
+					result.Output.ID = *event.Response.ID
 				}
+				progress.Model = event.Response.Model
+				progress.MessageID = result.Output.ID
 			}
 
 		case schemas.ResponsesStreamResponseTypeOutputItemAdded:
 			if event.Item == nil || event.Item.Type == nil {
 				continue
 			}
-			itemID := ""
+			currentID = ""
 			if event.Item.ID != nil {
-				itemID = *event.Item.ID
+				currentID = *event.Item.ID
 			}
+			currentType = *event.Item.Type
 			currentText.Reset()
 			currentArgs.Reset()
-			currentItem = event.Item
-			switch *event.Item.Type {
+			currentTC = nil
+
+			switch currentType {
 			case schemas.ResponsesMessageTypeMessage:
 				progress.Item = types.CompletionItem{
 					Partial: true,
 					HasMore: true,
-					ID:      itemID,
+					ID:      currentID,
 					Content: &mcp.Content{Type: "text"},
 				}
 			case schemas.ResponsesMessageTypeFunctionCall:
-				tc := &types.ToolCall{}
+				currentTC = &types.ToolCall{}
 				if event.Item.ResponsesToolMessage != nil {
 					if event.Item.ResponsesToolMessage.Name != nil {
-						tc.Name = *event.Item.ResponsesToolMessage.Name
+						currentTC.Name = *event.Item.ResponsesToolMessage.Name
 					}
 					if event.Item.ResponsesToolMessage.CallID != nil {
-						tc.CallID = *event.Item.ResponsesToolMessage.CallID
+						currentTC.CallID = *event.Item.ResponsesToolMessage.CallID
 					}
 				}
 				progress.Item = types.CompletionItem{
 					Partial:  true,
 					HasMore:  true,
-					ID:       itemID,
-					ToolCall: tc,
+					ID:       currentID,
+					ToolCall: currentTC,
 				}
 			}
 
@@ -194,35 +220,19 @@ func (c *Client) parseStream(ctx context.Context, agentName string, body io.Read
 			}
 
 		case schemas.ResponsesStreamResponseTypeOutputItemDone:
-			if currentItem != nil && currentItem.Type != nil {
-				switch *currentItem.Type {
-				case schemas.ResponsesMessageTypeMessage:
-					text := currentText.String()
-					msgType := schemas.ResponsesMessageTypeMessage
-					role := schemas.ResponsesInputMessageRoleAssistant
-					if currentItem.Role != nil {
-						role = *currentItem.Role
-					}
-					builtOutput = append(builtOutput, schemas.ResponsesMessage{
-						ID:   currentItem.ID,
-						Type: &msgType,
-						Role: &role,
-						Content: &schemas.ResponsesMessageContent{
-							ContentBlocks: []schemas.ResponsesMessageContentBlock{
-								{
-									Type: schemas.ResponsesOutputMessageContentTypeText,
-									Text: &text,
-								},
-							},
-						},
+			switch currentType {
+			case schemas.ResponsesMessageTypeMessage:
+				result.Output.Items = append(result.Output.Items, types.CompletionItem{
+					ID:      currentID,
+					Content: &mcp.Content{Type: "text", Text: currentText.String()},
+				})
+			case schemas.ResponsesMessageTypeFunctionCall:
+				if currentTC != nil {
+					currentTC.Arguments = currentArgs.String()
+					result.Output.Items = append(result.Output.Items, types.CompletionItem{
+						ID:       currentID,
+						ToolCall: currentTC,
 					})
-				case schemas.ResponsesMessageTypeFunctionCall:
-					args := currentArgs.String()
-					item := *currentItem
-					if item.ResponsesToolMessage != nil {
-						item.ResponsesToolMessage.Arguments = &args
-					}
-					builtOutput = append(builtOutput, item)
 				}
 			}
 			if progress.Item.ID != "" {
@@ -234,18 +244,14 @@ func (c *Client) parseStream(ctx context.Context, agentName string, body io.Read
 				}, progressToken)
 			}
 			progress.Item = types.CompletionItem{}
-			currentItem = nil
 
 		case schemas.ResponsesStreamResponseTypeCompleted:
 			if event.Response != nil {
-				if resp == nil {
-					resp = event.Response
-				} else {
-					resp.Usage = event.Response.Usage
-					resp.StopReason = event.Response.StopReason
-				}
-				if len(event.Response.Output) > 0 {
-					resp.Output = event.Response.Output
+				if !started {
+					result.Model = event.Response.Model
+					if event.Response.ID != nil {
+						result.Output.ID = *event.Response.ID
+					}
 				}
 			}
 
@@ -260,13 +266,8 @@ func (c *Client) parseStream(ctx context.Context, agentName string, body io.Read
 	if err := lines.Err(); err != nil {
 		return nil, fmt.Errorf("bifrost stream read error: %w", err)
 	}
-	if resp == nil {
+	if !started {
 		return nil, fmt.Errorf("bifrost stream ended without a completed response")
 	}
-	// Some providers (e.g. Bedrock) send output: null in the completed event and
-	// deliver content only through streaming delta events. Use what we accumulated.
-	if len(resp.Output) == 0 && len(builtOutput) > 0 {
-		resp.Output = builtOutput
-	}
-	return resp, nil
+	return result, nil
 }
