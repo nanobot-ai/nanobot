@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"log/slog"
 
@@ -66,8 +65,6 @@ func (c *Client) Complete(ctx context.Context, completionRequest types.Completio
 	return resp, nil
 }
 
-var httpClient = &http.Client{Timeout: 10 * time.Minute}
-
 func (c *Client) complete(ctx context.Context, agentName string, req *schemas.BifrostResponsesRequest, opts ...types.CompletionOptions) (*types.CompletionResponse, error) {
 	opt := complete.Complete(opts...)
 
@@ -78,7 +75,6 @@ func (c *Client) complete(ctx context.Context, agentName string, req *schemas.Bi
 	log.Messages(ctx, "bifrost-request", true, data)
 
 	url := fmt.Sprintf("%s/v1/responses", c.BaseURL)
-	slog.Debug("bifrost request", "url", url, "provider", c.Provider, "model", req.Model)
 	httpReq, err := http.NewRequestWithContext(mcp.UserContext(ctx), http.MethodPost, url, bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
@@ -90,7 +86,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req *schemas.Bi
 		httpReq.Header.Set(types.InternalLLMRequestTypeHeader, requestType)
 	}
 
-	httpResp, err := httpClient.Do(httpReq)
+	httpResp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
 		return nil, err
 	}
