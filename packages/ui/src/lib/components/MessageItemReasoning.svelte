@@ -1,12 +1,11 @@
 <script lang="ts">
-	import { Lightbulb } from '@lucide/svelte';
-	import type { ChatMessageItemReasoning } from '$lib/types';
+import type { ChatMessageItemReasoning } from "$lib/types";
 
-	interface Props {
-		item: ChatMessageItemReasoning;
-	}
+interface Props {
+	item: ChatMessageItemReasoning;
+}
 
-	let { item }: Props = $props();
+const { item }: Props = $props();
 </script>
 
 <div class="mb-3 rounded-lg border-l-4 border-neutral bg-neutral/20 p-3">

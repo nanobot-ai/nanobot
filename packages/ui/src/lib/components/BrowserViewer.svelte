@@ -1,270 +1,277 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
-	import { Monitor, X, Maximize2, Minimize2 } from '@lucide/svelte';
-	import RFB from '@novnc/novnc/lib/rfb.js';
+import RFB from "@novnc/novnc/lib/rfb.js";
+import { onDestroy } from "svelte";
 
-	interface Props {
-		vncUrl?: string;
-		visible?: boolean;
+interface Props {
+	vncUrl?: string;
+	visible?: boolean;
+}
+
+function defaultVNCUrl() {
+	if (typeof window === "undefined") {
+		return "ws://localhost/browser";
 	}
 
-	function defaultVNCUrl() {
-		if (typeof window === 'undefined') {
-			return 'ws://localhost/browser';
-		}
+	const url = new URL("/browser", window.location.origin);
+	url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+	return url.toString();
+}
 
-		const url = new URL('/browser', window.location.origin);
-		url.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-		return url.toString();
-	}
+const { vncUrl = defaultVNCUrl(), visible = $bindable(true) }: Props = $props();
 
-	let { vncUrl = defaultVNCUrl(), visible = $bindable(true) }: Props = $props();
+const container = $state<HTMLDivElement | undefined>(undefined);
+let rfb = $state<RFB | null>(null);
+let _connected = $state(false);
+let connecting = $state(false);
+let _error = $state<string | null>(null);
+let _isFullscreen = $state(false);
+let activeVNCUrl = $state<string | null>(null);
+let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+let lastRequestedSize = $state<string | null>(null);
+let viewerActive = $state(false);
 
-	let container = $state<HTMLDivElement | undefined>(undefined);
-	let rfb = $state<RFB | null>(null);
-	let connected = $state(false);
-	let connecting = $state(false);
-	let error = $state<string | null>(null);
-	let isFullscreen = $state(false);
-	let activeVNCUrl = $state<string | null>(null);
-	let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-	let lastRequestedSize = $state<string | null>(null);
-	let viewerActive = $state(false);
+async function connect() {
+	if (!container || rfb || connecting) return;
 
-	async function connect() {
-		if (!container || rfb || connecting) return;
+	connecting = true;
+	_error = null;
 
-		connecting = true;
-		error = null;
+	try {
+		const nextRfb = new RFB(container, vncUrl);
+		rfb = nextRfb;
+		activeVNCUrl = vncUrl;
 
-		try {
-			const nextRfb = new RFB(container, vncUrl);
-			rfb = nextRfb;
-			activeVNCUrl = vncUrl;
-
-			nextRfb.addEventListener('connect', () => {
-				if (rfb !== nextRfb) return;
-				connected = true;
-				connecting = false;
-				error = null;
-			});
-
-			nextRfb.addEventListener('disconnect', () => {
-				if (rfb === nextRfb) {
-					rfb = null;
-					activeVNCUrl = null;
-				}
-				connected = false;
-				connecting = false;
-			});
-
-			nextRfb.addEventListener('credentialsrequired', () => {
-				if (rfb !== nextRfb) return;
-				connecting = false;
-				error = 'Password required (but none configured)';
-			});
-
-			nextRfb.addEventListener('securityfailure', (e) => {
-				if (rfb !== nextRfb) return;
-				connecting = false;
-				error = `Security failure: ${e.detail.status}`;
-			});
-
-			nextRfb.scaleViewport = true;
-			nextRfb.resizeSession = true;
-			nextRfb.dragViewport = false;
-			nextRfb.clipViewport = false;
-		} catch (err) {
-			rfb = null;
-			activeVNCUrl = null;
+		nextRfb.addEventListener("connect", () => {
+			if (rfb !== nextRfb) return;
+			_connected = true;
 			connecting = false;
-			error = err instanceof Error ? err.message : 'Connection failed';
-		}
-	}
-
-	function disconnect() {
-		if (rfb) {
-			rfb.disconnect();
-		}
-		rfb = null;
-		activeVNCUrl = null;
-		connected = false;
-		connecting = false;
-	}
-
-	async function syncRemoteClipboard(text: string) {
-		if (!text || !rfb) return;
-		rfb.focus();
-		rfb.clipboardPasteFrom(text);
-	}
-
-	function sendRemotePasteShortcut() {
-		if (!rfb) return;
-		rfb.focus();
-		rfb.sendKey(0xffe3, 'ControlLeft', true);
-		rfb.sendKey(0x0076, 'KeyV', true);
-		rfb.sendKey(0x0076, 'KeyV', false);
-		rfb.sendKey(0xffe3, 'ControlLeft', false);
-	}
-
-	async function handleLocalPaste() {
-		if (!viewerActive || !rfb || typeof navigator === 'undefined' || !navigator.clipboard) {
-			return;
-		}
-
-		try {
-			const text = await navigator.clipboard.readText();
-			await syncRemoteClipboard(text);
-			sendRemotePasteShortcut();
-		} catch {
-			// Clipboard reads are permission-gated in the browser; ignore failures.
-		}
-	}
-
-	function resizeUrl(currentVNCUrl: string) {
-		const url = new URL(currentVNCUrl);
-		url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
-		url.pathname = `${url.pathname.replace(/\/$/, '')}/resize`;
-		url.search = '';
-		url.hash = '';
-		return url.toString();
-	}
-
-	function queueResize(width: number, height: number) {
-		const targetWidth = Math.max(640, Math.ceil(width * window.devicePixelRatio));
-		const targetHeight = Math.max(480, Math.ceil(height * window.devicePixelRatio));
-		const sizeKey = `${targetWidth}x${targetHeight}`;
-		if (sizeKey === lastRequestedSize) return;
-
-		if (resizeTimer) {
-			clearTimeout(resizeTimer);
-		}
-
-		resizeTimer = setTimeout(async () => {
-			try {
-				const response = await fetch(resizeUrl(vncUrl), {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-					},
-					body: JSON.stringify({
-						width: targetWidth,
-						height: targetHeight,
-					}),
-				});
-
-				if (!response.ok) {
-					throw new Error(`resize failed: ${response.status}`);
-				}
-
-				lastRequestedSize = sizeKey;
-			} catch {
-				// Resize is best-effort and should not disrupt the viewer.
-			}
-		}, 150);
-	}
-
-	function toggleFullscreen() {
-		if (!container) return;
-
-		if (!document.fullscreenElement) {
-			container.requestFullscreen();
-			isFullscreen = true;
-		} else {
-			document.exitFullscreen();
-			isFullscreen = false;
-		}
-	}
-
-	onDestroy(() => {
-		if (resizeTimer) {
-			clearTimeout(resizeTimer);
-		}
-		disconnect();
-	});
-
-	$effect(() => {
-		if (!visible || !container || typeof ResizeObserver === 'undefined') {
-			return;
-		}
-
-		const observer = new ResizeObserver((entries) => {
-			const entry = entries[0];
-			if (!entry) return;
-			queueResize(entry.contentRect.width, entry.contentRect.height);
+			_error = null;
 		});
 
-		observer.observe(container);
-		const rect = container.getBoundingClientRect();
-		queueResize(rect.width, rect.height);
+		nextRfb.addEventListener("disconnect", () => {
+			if (rfb === nextRfb) {
+				rfb = null;
+				activeVNCUrl = null;
+			}
+			_connected = false;
+			connecting = false;
+		});
 
-		return () => {
-			observer.disconnect();
-		};
-	});
+		nextRfb.addEventListener("credentialsrequired", () => {
+			if (rfb !== nextRfb) return;
+			connecting = false;
+			_error = "Password required (but none configured)";
+		});
 
-	$effect(() => {
-		if (!visible || !container) {
-			viewerActive = false;
-			return;
-		}
+		nextRfb.addEventListener("securityfailure", (e) => {
+			if (rfb !== nextRfb) return;
+			connecting = false;
+			_error = `Security failure: ${e.detail.status}`;
+		});
 
-		const handlePointerDown = (event: PointerEvent) => {
-			if (!container) return;
-			viewerActive = container.contains(event.target as Node);
-		};
+		nextRfb.scaleViewport = true;
+		nextRfb.resizeSession = true;
+		nextRfb.dragViewport = false;
+		nextRfb.clipViewport = false;
+	} catch (err) {
+		rfb = null;
+		activeVNCUrl = null;
+		connecting = false;
+		_error = err instanceof Error ? err.message : "Connection failed";
+	}
+}
 
-		const handlePaste = async (event: ClipboardEvent) => {
-			if (!viewerActive || !rfb) return;
+function disconnect() {
+	if (rfb) {
+		rfb.disconnect();
+	}
+	rfb = null;
+	activeVNCUrl = null;
+	_connected = false;
+	connecting = false;
+}
 
-			const text = event.clipboardData?.getData('text/plain') ?? '';
-			if (!text) return;
+async function syncRemoteClipboard(text: string) {
+	if (!text || !rfb) return;
+	rfb.focus();
+	rfb.clipboardPasteFrom(text);
+}
 
-			event.preventDefault();
-			await syncRemoteClipboard(text);
-			sendRemotePasteShortcut();
-		};
+function sendRemotePasteShortcut() {
+	if (!rfb) return;
+	rfb.focus();
+	rfb.sendKey(0xffe3, "ControlLeft", true);
+	rfb.sendKey(0x0076, "KeyV", true);
+	rfb.sendKey(0x0076, "KeyV", false);
+	rfb.sendKey(0xffe3, "ControlLeft", false);
+}
 
-		const handleKeyDown = async (event: KeyboardEvent) => {
-			const modifierPressed = event.metaKey || event.ctrlKey;
-			if (!viewerActive || !modifierPressed || event.key.toLowerCase() !== 'v') {
-				return;
+async function handleLocalPaste() {
+	if (
+		!viewerActive ||
+		!rfb ||
+		typeof navigator === "undefined" ||
+		!navigator.clipboard
+	) {
+		return;
+	}
+
+	try {
+		const text = await navigator.clipboard.readText();
+		await syncRemoteClipboard(text);
+		sendRemotePasteShortcut();
+	} catch {
+		// Clipboard reads are permission-gated in the browser; ignore failures.
+	}
+}
+
+function resizeUrl(currentVNCUrl: string) {
+	const url = new URL(currentVNCUrl);
+	url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+	url.pathname = `${url.pathname.replace(/\/$/, "")}/resize`;
+	url.search = "";
+	url.hash = "";
+	return url.toString();
+}
+
+function queueResize(width: number, height: number) {
+	const targetWidth = Math.max(640, Math.ceil(width * window.devicePixelRatio));
+	const targetHeight = Math.max(
+		480,
+		Math.ceil(height * window.devicePixelRatio),
+	);
+	const sizeKey = `${targetWidth}x${targetHeight}`;
+	if (sizeKey === lastRequestedSize) return;
+
+	if (resizeTimer) {
+		clearTimeout(resizeTimer);
+	}
+
+	resizeTimer = setTimeout(async () => {
+		try {
+			const response = await fetch(resizeUrl(vncUrl), {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					width: targetWidth,
+					height: targetHeight,
+				}),
+			});
+
+			if (!response.ok) {
+				throw new Error(`resize failed: ${response.status}`);
 			}
 
-			event.preventDefault();
-			await handleLocalPaste();
-		};
+			lastRequestedSize = sizeKey;
+		} catch {
+			// Resize is best-effort and should not disrupt the viewer.
+		}
+	}, 150);
+}
 
-		document.addEventListener('pointerdown', handlePointerDown, true);
-		window.addEventListener('paste', handlePaste);
-		window.addEventListener('keydown', handleKeyDown, true);
+function _toggleFullscreen() {
+	if (!container) return;
 
-		return () => {
-			document.removeEventListener('pointerdown', handlePointerDown, true);
-			window.removeEventListener('paste', handlePaste);
-			window.removeEventListener('keydown', handleKeyDown, true);
-		};
+	if (!document.fullscreenElement) {
+		container.requestFullscreen();
+		_isFullscreen = true;
+	} else {
+		document.exitFullscreen();
+		_isFullscreen = false;
+	}
+}
+
+onDestroy(() => {
+	if (resizeTimer) {
+		clearTimeout(resizeTimer);
+	}
+	disconnect();
+});
+
+$effect(() => {
+	if (!visible || !container || typeof ResizeObserver === "undefined") {
+		return;
+	}
+
+	const observer = new ResizeObserver((entries) => {
+		const entry = entries[0];
+		if (!entry) return;
+		queueResize(entry.contentRect.width, entry.contentRect.height);
 	});
 
-	$effect(() => {
-		const desiredVisible = visible;
-		const desiredUrl = vncUrl;
-		const hasContainer = !!container;
+	observer.observe(container);
+	const rect = container.getBoundingClientRect();
+	queueResize(rect.width, rect.height);
 
-		if (!desiredVisible || !hasContainer) {
-			disconnect();
+	return () => {
+		observer.disconnect();
+	};
+});
+
+$effect(() => {
+	if (!visible || !container) {
+		viewerActive = false;
+		return;
+	}
+
+	const handlePointerDown = (event: PointerEvent) => {
+		if (!container) return;
+		viewerActive = container.contains(event.target as Node);
+	};
+
+	const handlePaste = async (event: ClipboardEvent) => {
+		if (!viewerActive || !rfb) return;
+
+		const text = event.clipboardData?.getData("text/plain") ?? "";
+		if (!text) return;
+
+		event.preventDefault();
+		await syncRemoteClipboard(text);
+		sendRemotePasteShortcut();
+	};
+
+	const handleKeyDown = async (event: KeyboardEvent) => {
+		const modifierPressed = event.metaKey || event.ctrlKey;
+		if (!viewerActive || !modifierPressed || event.key.toLowerCase() !== "v") {
 			return;
 		}
 
-		if (rfb && activeVNCUrl !== desiredUrl) {
-			disconnect();
-			return;
-		}
+		event.preventDefault();
+		await handleLocalPaste();
+	};
 
-		if (!rfb && !connecting) {
-			void connect();
-		}
-	});
+	document.addEventListener("pointerdown", handlePointerDown, true);
+	window.addEventListener("paste", handlePaste);
+	window.addEventListener("keydown", handleKeyDown, true);
+
+	return () => {
+		document.removeEventListener("pointerdown", handlePointerDown, true);
+		window.removeEventListener("paste", handlePaste);
+		window.removeEventListener("keydown", handleKeyDown, true);
+	};
+});
+
+$effect(() => {
+	const desiredVisible = visible;
+	const desiredUrl = vncUrl;
+	const hasContainer = !!container;
+
+	if (!desiredVisible || !hasContainer) {
+		disconnect();
+		return;
+	}
+
+	if (rfb && activeVNCUrl !== desiredUrl) {
+		disconnect();
+		return;
+	}
+
+	if (!rfb && !connecting) {
+		void connect();
+	}
+});
 </script>
 
 {#if visible}

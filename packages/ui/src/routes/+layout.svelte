@@ -1,116 +1,132 @@
 <script lang="ts">
-	import '../app.css';
-	import favicon from '$lib/assets/favicon.svg';
-	import Threads from '$lib/components/Threads.svelte';
-	import Notifications from '$lib/components/Notifications.svelte';
-	import { defaultChatApi } from '$lib/chat.svelte';
-	import { NotificationStore } from '$lib/stores/notifications.svelte';
-	import { setNotificationContext } from '$lib/context/notifications.svelte';
-	import { onMount } from 'svelte';
-	import { browser } from '$app/environment';
-	import { Menu, X, SidebarOpen, SidebarClose, Sun, Moon, SquarePen } from '@lucide/svelte';
-	import type { Chat } from '$lib/types';
-	import { resolve } from '$app/paths';
+import "../app.css";
+import { onMount } from "svelte";
+import { browser } from "$app/environment";
+import { resolve } from "$app/paths";
+import { defaultChatApi } from "$lib/chat.svelte";
+import { setNotificationContext } from "$lib/context/notifications.svelte";
+import { NotificationStore } from "$lib/stores/notifications.svelte";
+import type { Chat } from "$lib/types";
 
-	let { children } = $props();
+const { children } = $props();
 
-	let threads = $state<Chat[]>([]);
-	let isLoading = $state(true);
-	let isSidebarCollapsed = $state(false);
-	let isMobileSidebarOpen = $state(false);
-	let currentTheme = $state('nanobotlight');
-	let currentLogoUrl = $state('/assets/nanobot.svg');
-	const root = resolve('/');
-	const newThread = resolve('/');
-	const notifications = new NotificationStore();
+let threads = $state<Chat[]>([]);
+let _isLoading = $state(true);
+let isSidebarCollapsed = $state(false);
+let isMobileSidebarOpen = $state(false);
+let currentTheme = $state("nanobotlight");
+let _currentLogoUrl = $state("/assets/nanobot.svg");
+const _root = resolve("/");
+const _newThread = resolve("/");
+const notifications = new NotificationStore();
 
-	// Set notification context for global access
-	setNotificationContext(notifications);
+// Set notification context for global access
+setNotificationContext(notifications);
 
-	onMount(async () => {
-		// Load sidebar state from localStorage (desktop only)
-		if (browser && window.innerWidth >= 1024) {
-			const saved = localStorage.getItem('sidebar-collapsed');
-			if (saved !== null) {
-				isSidebarCollapsed = JSON.parse(saved);
-			}
-		}
-
-		// Load theme from localStorage or detect system preference
-		if (browser) {
-			const savedTheme = localStorage.getItem('theme');
-			if (savedTheme) {
-				currentTheme = savedTheme;
-			} else {
-				// Default to system preference
-				const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-				currentTheme = prefersDark ? 'nanobotdark' : 'nanobotlight';
-			}
-			// Set theme on document
-			document.documentElement.setAttribute('data-theme', currentTheme);
-		}
-
-		threads = await defaultChatApi.getThreads()
-		isLoading = false;
-	});
-
-	$effect(() => {
-		if (currentTheme) {
-			requestAnimationFrame(() => {
-				const logoUrlAttribute = getComputedStyle(document.documentElement).getPropertyValue('--logo-url');
-				currentLogoUrl = logoUrlAttribute || '/assets/nanobot.svg';
-			});
-		}
-	})
-
-	function toggleDesktopSidebar() {
-		if (browser && window.innerWidth >= 1024) {
-			isSidebarCollapsed = !isSidebarCollapsed;
-			localStorage.setItem('sidebar-collapsed', JSON.stringify(isSidebarCollapsed));
+onMount(async () => {
+	// Load sidebar state from localStorage (desktop only)
+	if (browser && window.innerWidth >= 1024) {
+		const saved = localStorage.getItem("sidebar-collapsed");
+		if (saved !== null) {
+			isSidebarCollapsed = JSON.parse(saved);
 		}
 	}
 
-	function toggleMobileSidebar() {
-		isMobileSidebarOpen = !isMobileSidebarOpen;
-	}
-
-	function closeMobileSidebar() {
-		isMobileSidebarOpen = false;
-	}
-
-	async function handleRenameThread(threadId: string, newTitle: string) {
-		try {
-			await defaultChatApi.renameThread(threadId, newTitle);
-			const threadIndex = threads.findIndex((t) => t.id === threadId);
-			if (threadIndex !== -1) {
-				threads[threadIndex].title = newTitle;
-			}
-			notifications.success('Thread Renamed', `Successfully renamed to "${newTitle}"`);
-		} catch (error) {
-			notifications.error('Rename Failed', 'Unable to rename the thread. Please try again.');
-			console.error('Failed to rename thread:', error);
+	// Load theme from localStorage or detect system preference
+	if (browser) {
+		const savedTheme = localStorage.getItem("theme");
+		if (savedTheme) {
+			currentTheme = savedTheme;
+		} else {
+			// Default to system preference
+			const prefersDark = window.matchMedia(
+				"(prefers-color-scheme: dark)",
+			).matches;
+			currentTheme = prefersDark ? "nanobotdark" : "nanobotlight";
 		}
+		// Set theme on document
+		document.documentElement.setAttribute("data-theme", currentTheme);
 	}
 
-	async function handleDeleteThread(threadId: string) {
-		try {
-			await defaultChatApi.deleteThread(threadId);
-			const threadToDelete = threads.find((t) => t.id === threadId);
-			threads = threads.filter((t) => t.id !== threadId);
-			notifications.success('Thread Deleted', `Deleted "${threadToDelete?.title || 'thread'}"`);
-		} catch (error) {
-			notifications.error('Delete Failed', 'Unable to delete the thread. Please try again.');
-			console.error('Failed to delete thread:', error);
-		}
-	}
+	threads = await defaultChatApi.getThreads();
+	_isLoading = false;
+});
 
-	function toggleTheme() {
-		if (browser) {
-			currentTheme = currentTheme === 'nanobotlight' ? 'nanobotdark' : 'nanobotlight';
-			document.documentElement.setAttribute('data-theme', currentTheme);
-			localStorage.setItem('theme', currentTheme);
-		}
+$effect(() => {
+	if (currentTheme) {
+		requestAnimationFrame(() => {
+			const logoUrlAttribute = getComputedStyle(
+				document.documentElement,
+			).getPropertyValue("--logo-url");
+			_currentLogoUrl = logoUrlAttribute || "/assets/nanobot.svg";
+		});
 	}
+});
+
+function _toggleDesktopSidebar() {
+	if (browser && window.innerWidth >= 1024) {
+		isSidebarCollapsed = !isSidebarCollapsed;
+		localStorage.setItem(
+			"sidebar-collapsed",
+			JSON.stringify(isSidebarCollapsed),
+		);
+	}
+}
+
+function _toggleMobileSidebar() {
+	isMobileSidebarOpen = !isMobileSidebarOpen;
+}
+
+function _closeMobileSidebar() {
+	isMobileSidebarOpen = false;
+}
+
+async function _handleRenameThread(threadId: string, newTitle: string) {
+	try {
+		await defaultChatApi.renameThread(threadId, newTitle);
+		const threadIndex = threads.findIndex((t) => t.id === threadId);
+		if (threadIndex !== -1) {
+			threads[threadIndex].title = newTitle;
+		}
+		notifications.success(
+			"Thread Renamed",
+			`Successfully renamed to "${newTitle}"`,
+		);
+	} catch (error) {
+		notifications.error(
+			"Rename Failed",
+			"Unable to rename the thread. Please try again.",
+		);
+		console.error("Failed to rename thread:", error);
+	}
+}
+
+async function _handleDeleteThread(threadId: string) {
+	try {
+		await defaultChatApi.deleteThread(threadId);
+		const threadToDelete = threads.find((t) => t.id === threadId);
+		threads = threads.filter((t) => t.id !== threadId);
+		notifications.success(
+			"Thread Deleted",
+			`Deleted "${threadToDelete?.title || "thread"}"`,
+		);
+	} catch (error) {
+		notifications.error(
+			"Delete Failed",
+			"Unable to delete the thread. Please try again.",
+		);
+		console.error("Failed to delete thread:", error);
+	}
+}
+
+function _toggleTheme() {
+	if (browser) {
+		currentTheme =
+			currentTheme === "nanobotlight" ? "nanobotdark" : "nanobotlight";
+		document.documentElement.setAttribute("data-theme", currentTheme);
+		localStorage.setItem("theme", currentTheme);
+	}
+}
 </script>
 
 <svelte:head>

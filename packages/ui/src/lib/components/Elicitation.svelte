@@ -1,247 +1,262 @@
 <script lang="ts">
-	interface Props {
-		elicitation: Elicitation;
-		open?: boolean;
-		onresult?: (result: ElicitationResult) => void;
-	}
+interface Props {
+	elicitation: Elicitation;
+	open?: boolean;
+	onresult?: (result: ElicitationResult) => void;
+}
 
-	import type { Elicitation, ElicitationResult, PrimitiveSchemaDefinition } from '$lib/types';
-	import { Copy, ChevronLeft, ChevronRight, SkipForward, Pencil } from '@lucide/svelte';
-	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from "svelte/reactivity";
+import type {
+	Elicitation,
+	ElicitationResult,
+	PrimitiveSchemaDefinition,
+} from "$lib/types";
 
-	const stepColors = [
-		{ bg: 'bg-primary', text: 'text-primary-content', ring: 'ring-primary/30' },
-		{ bg: 'bg-secondary', text: 'text-secondary-content', ring: 'ring-secondary/30' },
-		{ bg: 'bg-accent', text: 'text-accent-content', ring: 'ring-accent/30' },
-		{ bg: 'bg-info', text: 'text-info-content', ring: 'ring-info/30' }
-	];
+const _stepColors = [
+	{ bg: "bg-primary", text: "text-primary-content", ring: "ring-primary/30" },
+	{
+		bg: "bg-secondary",
+		text: "text-secondary-content",
+		ring: "ring-secondary/30",
+	},
+	{ bg: "bg-accent", text: "text-accent-content", ring: "ring-accent/30" },
+	{ bg: "bg-info", text: "text-info-content", ring: "ring-info/30" },
+];
 
-	let { elicitation, open = false, onresult }: Props = $props();
+const { elicitation, open = false, onresult }: Props = $props();
 
-	let formData = $state<{ [key: string]: string | number | boolean }>({});
-	let showCopiedTooltip = $state(false);
+let formData = $state<{ [key: string]: string | number | boolean }>({});
+let _showCopiedTooltip = $state(false);
 
-	// Question-specific types
-	interface QuestionOptionData {
-		label: string;
-		description?: string;
-	}
-	interface QuestionData {
-		question: string;
-		header?: string;
-		multiple?: boolean;
-		options: QuestionOptionData[];
-	}
+// Question-specific types
+interface QuestionOptionData {
+	label: string;
+	description?: string;
+}
+interface QuestionData {
+	question: string;
+	header?: string;
+	multiple?: boolean;
+	options: QuestionOptionData[];
+}
 
-	// Question-specific state
-	let currentStep = $state(0);
-	let reviewMode = $state(false);
-	let selectedOptions = new SvelteMap<number, SvelteSet<string>>();
-	let customAnswers = new SvelteMap<number, string>();
-	let showCustomInput = new SvelteMap<number, boolean>();
+// Question-specific state
+let currentStep = $state(0);
+let _reviewMode = $state(false);
+const selectedOptions = new SvelteMap<number, SvelteSet<string>>();
+const customAnswers = new SvelteMap<number, string>();
+const showCustomInput = new SvelteMap<number, boolean>();
 
-	// Initialize form data with defaults
-	$effect(() => {
-		const newFormData: { [key: string]: string | number | boolean } = {};
+// Initialize form data with defaults
+$effect(() => {
+	const newFormData: { [key: string]: string | number | boolean } = {};
 
-		for (const [key, schema] of Object.entries(elicitation.requestedSchema.properties)) {
-			if (schema.type === 'boolean' && schema.default !== undefined) {
-				newFormData[key] = schema.default;
-			} else if (
-				schema.type === 'string' ||
-				schema.type === 'number' ||
-				schema.type === 'integer'
-			) {
-				newFormData[key] = schema.type === 'string' ? '' : 0;
-			} else if ('enum' in schema && schema.enum) {
-				newFormData[key] = (schema.enum as string[])[0] || '';
-			}
+	for (const [key, schema] of Object.entries(
+		elicitation.requestedSchema.properties,
+	)) {
+		if (schema.type === "boolean" && schema.default !== undefined) {
+			newFormData[key] = schema.default;
+		} else if (
+			schema.type === "string" ||
+			schema.type === "number" ||
+			schema.type === "integer"
+		) {
+			newFormData[key] = schema.type === "string" ? "" : 0;
+		} else if ("enum" in schema && schema.enum) {
+			newFormData[key] = (schema.enum as string[])[0] || "";
 		}
+	}
 
-		formData = newFormData;
+	formData = newFormData;
+});
+
+// Reset question state when elicitation changes
+$effect(() => {
+	if (isQuestionElicitation()) {
+		currentStep = 0;
+		_reviewMode = false;
+		selectedOptions.clear();
+		customAnswers.clear();
+		showCustomInput.clear();
+	}
+});
+
+function handleAccept() {
+	onresult?.({
+		action: "accept",
+		content: { ...formData },
 	});
+}
 
-	// Reset question state when elicitation changes
-	$effect(() => {
-		if (isQuestionElicitation()) {
-			currentStep = 0;
-			reviewMode = false;
-			selectedOptions.clear();
-			customAnswers.clear();
-			showCustomInput.clear();
-		}
+function _handleDecline() {
+	onresult?.({
+		action: "decline",
 	});
+}
 
-	function handleAccept() {
-		onresult?.({
-			action: 'accept',
-			content: { ...formData }
-		});
-	}
-
-	function handleDecline() {
-		onresult?.({
-			action: 'decline'
-		});
-	}
-
-	function handleCancel() {
-		onresult?.({
-			action: 'cancel'
-		});
-	}
-
-	function isRequired(key: string): boolean {
-		return elicitation.requestedSchema.required?.includes(key) ?? false;
-	}
-
-	function getFieldTitle(key: string, schema: PrimitiveSchemaDefinition): string {
-		return schema.title || key;
-	}
-
-	function validateForm(): boolean {
-		if (!elicitation.requestedSchema.required) return true;
-
-		for (const requiredField of elicitation.requestedSchema.required) {
-			const value = formData[requiredField];
-			if (value === undefined || value === '' || value === null) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	function isOAuthElicitation(): boolean {
-		return Boolean(elicitation._meta?.['ai.nanobot.meta/oauth-url']);
-	}
-
-	function getOAuthUrl(): string {
-		return elicitation._meta?.['ai.nanobot.meta/oauth-url'] as string;
-	}
-
-	function getServerName(): string {
-		return (elicitation._meta?.['ai.nanobot.meta/server-name'] as string) || 'MCP Server';
-	}
-
-	function openOAuthLink() {
-		const url = getOAuthUrl();
-		window.open(url, '_blank');
-		handleAccept();
-	}
-
-	async function copyToClipboard() {
-		const url = getOAuthUrl();
-		await navigator.clipboard.writeText(url);
-		showCopiedTooltip = true;
-		setTimeout(() => {
-			showCopiedTooltip = false;
-		}, 2000);
-	}
-
-	// Question elicitation functions
-	function isQuestionElicitation(): boolean {
-		return Boolean(elicitation._meta?.['ai.nanobot.meta/question']);
-	}
-
-	const questions: QuestionData[] = $derived.by(() => {
-		const raw = elicitation._meta?.['ai.nanobot.meta/question'];
-		if (!raw) return [];
-
-		if (typeof raw === 'string') {
-			try {
-				const parsed = JSON.parse(raw);
-				if (Array.isArray(parsed)) return parsed as QuestionData[];
-				if (parsed && typeof parsed === 'object') return [parsed as QuestionData];
-				return [];
-			} catch {
-				return [];
-			}
-		}
-
-		if (Array.isArray(raw)) return raw as QuestionData[];
-		if (raw && typeof raw === 'object') return [raw as QuestionData];
-		return [];
+function _handleCancel() {
+	onresult?.({
+		action: "cancel",
 	});
+}
 
-	function toggleOption(qIndex: number, label: string) {
-		let current = selectedOptions.get(qIndex);
-		if (!current) {
-			current = new SvelteSet();
-			selectedOptions.set(qIndex, current);
+function _isRequired(key: string): boolean {
+	return elicitation.requestedSchema.required?.includes(key) ?? false;
+}
+
+function _getFieldTitle(
+	key: string,
+	schema: PrimitiveSchemaDefinition,
+): string {
+	return schema.title || key;
+}
+
+function _validateForm(): boolean {
+	if (!elicitation.requestedSchema.required) return true;
+
+	for (const requiredField of elicitation.requestedSchema.required) {
+		const value = formData[requiredField];
+		if (value === undefined || value === "" || value === null) {
+			return false;
 		}
+	}
+	return true;
+}
 
-		if (questions[qIndex].multiple) {
-			if (current.has(label)) current.delete(label);
-			else current.add(label);
+function _isOAuthElicitation(): boolean {
+	return Boolean(elicitation._meta?.["ai.nanobot.meta/oauth-url"]);
+}
+
+function getOAuthUrl(): string {
+	return elicitation._meta?.["ai.nanobot.meta/oauth-url"] as string;
+}
+
+function _getServerName(): string {
+	return (
+		(elicitation._meta?.["ai.nanobot.meta/server-name"] as string) ||
+		"MCP Server"
+	);
+}
+
+function _openOAuthLink() {
+	const url = getOAuthUrl();
+	window.open(url, "_blank");
+	handleAccept();
+}
+
+async function _copyToClipboard() {
+	const url = getOAuthUrl();
+	await navigator.clipboard.writeText(url);
+	_showCopiedTooltip = true;
+	setTimeout(() => {
+		_showCopiedTooltip = false;
+	}, 2000);
+}
+
+// Question elicitation functions
+function isQuestionElicitation(): boolean {
+	return Boolean(elicitation._meta?.["ai.nanobot.meta/question"]);
+}
+
+const questions: QuestionData[] = $derived.by(() => {
+	const raw = elicitation._meta?.["ai.nanobot.meta/question"];
+	if (!raw) return [];
+
+	if (typeof raw === "string") {
+		try {
+			const parsed = JSON.parse(raw);
+			if (Array.isArray(parsed)) return parsed as QuestionData[];
+			if (parsed && typeof parsed === "object") return [parsed as QuestionData];
+			return [];
+		} catch {
+			return [];
+		}
+	}
+
+	if (Array.isArray(raw)) return raw as QuestionData[];
+	if (raw && typeof raw === "object") return [raw as QuestionData];
+	return [];
+});
+
+function _toggleOption(qIndex: number, label: string) {
+	let current = selectedOptions.get(qIndex);
+	if (!current) {
+		current = new SvelteSet();
+		selectedOptions.set(qIndex, current);
+	}
+
+	if (questions[qIndex].multiple) {
+		if (current.has(label)) current.delete(label);
+		else current.add(label);
+	} else {
+		current.clear();
+		current.add(label);
+		showCustomInput.set(qIndex, false);
+		customAnswers.set(qIndex, "");
+	}
+}
+
+function _toggleCustomInput(qIndex: number) {
+	const current = showCustomInput.get(qIndex) ?? false;
+	showCustomInput.set(qIndex, !current);
+	if (current) {
+		customAnswers.set(qIndex, "");
+	} else if (!questions[qIndex].multiple) {
+		selectedOptions.set(qIndex, new SvelteSet());
+	}
+}
+
+function _updateCustomAnswer(qIndex: number, value: string) {
+	customAnswers.set(qIndex, value);
+}
+
+function _hasAnswer(qIndex: number): boolean {
+	const selected = selectedOptions.get(qIndex);
+	const custom = customAnswers.get(qIndex)?.trim();
+	return (selected !== undefined && selected.size > 0) || !!custom;
+}
+
+function _getAnswerSummary(qIndex: number): string {
+	const selected = Array.from(selectedOptions.get(qIndex) ?? []);
+	const custom = customAnswers.get(qIndex)?.trim();
+	if (custom) selected.push(custom);
+	return selected.length > 0 ? selected.join(", ") : "(skipped)";
+}
+
+function _goToStep(step: number) {
+	currentStep = step;
+	_reviewMode = false;
+}
+
+function _nextStep() {
+	if (currentStep < questions.length - 1) {
+		currentStep++;
+	} else {
+		if (questions.length > 1) {
+			_reviewMode = true;
 		} else {
-			current.clear();
-			current.add(label);
-			showCustomInput.set(qIndex, false);
-			customAnswers.set(qIndex, '');
+			handleQuestionSubmit();
 		}
 	}
+}
 
-	function toggleCustomInput(qIndex: number) {
-		const current = showCustomInput.get(qIndex) ?? false;
-		showCustomInput.set(qIndex, !current);
-		if (current) {
-			customAnswers.set(qIndex, '');
-		} else if (!questions[qIndex].multiple) {
-			selectedOptions.set(qIndex, new SvelteSet());
-		}
-	}
+function _prevStep() {
+	if (currentStep > 0) currentStep--;
+}
 
-	function updateCustomAnswer(qIndex: number, value: string) {
-		customAnswers.set(qIndex, value);
-	}
+function handleQuestionSubmit() {
+	const content: Record<string, string | number | boolean> = {};
 
-	function hasAnswer(qIndex: number): boolean {
-		const selected = selectedOptions.get(qIndex);
-		const custom = customAnswers.get(qIndex)?.trim();
-		return (selected !== undefined && selected.size > 0) || !!custom;
-	}
-
-	function getAnswerSummary(qIndex: number): string {
-		const selected = Array.from(selectedOptions.get(qIndex) ?? []);
-		const custom = customAnswers.get(qIndex)?.trim();
+	for (let i = 0; i < questions.length; i++) {
+		const key = `q${i}`;
+		const selected = Array.from(selectedOptions.get(i) ?? []);
+		const custom = customAnswers.get(i)?.trim();
 		if (custom) selected.push(custom);
-		return selected.length > 0 ? selected.join(', ') : '(skipped)';
+		content[key] = JSON.stringify(selected);
 	}
 
-	function goToStep(step: number) {
-		currentStep = step;
-		reviewMode = false;
-	}
-
-	function nextStep() {
-		if (currentStep < questions.length - 1) {
-			currentStep++;
-		} else {
-			if (questions.length > 1) {
-				reviewMode = true;
-			} else {
-				handleQuestionSubmit();
-			}
-		}
-	}
-
-	function prevStep() {
-		if (currentStep > 0) currentStep--;
-	}
-
-	function handleQuestionSubmit() {
-		const content: Record<string, string | number | boolean> = {};
-
-		for (let i = 0; i < questions.length; i++) {
-			const key = `q${i}`;
-			const selected = Array.from(selectedOptions.get(i) ?? []);
-			const custom = customAnswers.get(i)?.trim();
-			if (custom) selected.push(custom);
-			content[key] = JSON.stringify(selected);
-		}
-
-		onresult?.({ action: 'accept', content });
-	}
+	onresult?.({ action: "accept", content });
+}
 </script>
 
 {#if open && isQuestionElicitation()}
