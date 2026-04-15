@@ -84,7 +84,8 @@ func TestSetArtifactSubjects(t *testing.T) {
 	result, err := s.setArtifactSubjects(artifactTestContext(ts.URL, map[string]string{
 		"MCP_API_KEY": "secret-token",
 	}), setArtifactSubjectsParams{
-		ID: "pa1",
+		ID:      "pa1",
+		Version: func() *int { v := 2; return &v }(),
 		Subjects: []artifactSubject{
 			{Type: "group", ID: "eng"},
 			{Type: "user", ID: "alice"},
@@ -97,10 +98,13 @@ func TestSetArtifactSubjects(t *testing.T) {
 	if gotAuthHeader != "Bearer secret-token" {
 		t.Fatalf("unexpected auth header: %q", gotAuthHeader)
 	}
-	if result.Message != "Updated sharing for code-review with 2 subject(s)." {
+	if result.Message != "Updated sharing for code-review v2 with 2 subject(s)." {
 		t.Fatalf("unexpected message: %q", result.Message)
 	}
 
+	if gotBody["version"].(float64) != 2 {
+		t.Fatalf("unexpected version payload: %#v", gotBody["version"])
+	}
 	rawSubjects, ok := gotBody["subjects"].([]any)
 	if !ok || len(rawSubjects) != 2 {
 		t.Fatalf("unexpected request subjects payload: %#v", gotBody["subjects"])

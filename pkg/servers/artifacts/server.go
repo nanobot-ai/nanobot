@@ -27,7 +27,8 @@ func NewServer() *Server {
 				"Use the optional `query` to filter results by ID or name-like fields; leave it blank to list everything.",
 			s.listSubjects),
 		mcp.NewServerTool("setArtifactSubjects",
-			"Replace the sharing subjects for a published workflow artifact in the Obot registry. "+
+			"Replace the sharing subjects for a published workflow version in the Obot registry. "+
+				"If version is omitted, the latest version is updated. "+
 				"Use an empty subject list to make it owner-only again. "+
 				"Supported subject types are 'user', 'group', and 'selector' with id '*'. "+
 				"Use the artifact ID returned by publishArtifact or searchArtifacts.",

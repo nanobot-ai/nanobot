@@ -12,6 +12,7 @@ import (
 
 type setArtifactSubjectsParams struct {
 	ID       string            `json:"id"`
+	Version  *int              `json:"version,omitempty"`
 	Subjects []artifactSubject `json:"subjects,omitempty"`
 }
 
@@ -43,6 +44,7 @@ func (s *Server) setArtifactSubjects(ctx context.Context, params setArtifactSubj
 	}
 
 	body, err := json.Marshal(map[string]any{
+		"version":  params.Version,
 		"subjects": subjects,
 	})
 	if err != nil {
@@ -82,7 +84,7 @@ func (s *Server) setArtifactSubjects(ctx context.Context, params setArtifactSubj
 		ID:       apiResp.ID,
 		Name:     apiResp.Name,
 		Subjects: apiResp.Subjects,
-		Message:  artifactSubjectsMessage(apiResp.Name, apiResp.Subjects),
+		Message:  artifactSubjectsMessage(apiResp.Name, params.Version, apiResp.Subjects),
 	}, nil
 }
 
@@ -131,13 +133,17 @@ func normalizeArtifactSubjects(subjects []artifactSubject) ([]artifactSubject, e
 	return result, nil
 }
 
-func artifactSubjectsMessage(name string, subjects []artifactSubject) string {
+func artifactSubjectsMessage(name string, version *int, subjects []artifactSubject) string {
+	target := name
+	if version != nil {
+		target = fmt.Sprintf("%s v%d", name, *version)
+	}
 	switch {
 	case len(subjects) == 0:
-		return fmt.Sprintf("Updated sharing for %s. It is now owner-only.", name)
+		return fmt.Sprintf("Updated sharing for %s. It is now owner-only.", target)
 	case len(subjects) == 1 && subjects[0].Type == "selector" && subjects[0].ID == "*":
-		return fmt.Sprintf("Updated sharing for %s. It is now shared with all Obot users.", name)
+		return fmt.Sprintf("Updated sharing for %s. It is now shared with all Obot users.", target)
 	default:
-		return fmt.Sprintf("Updated sharing for %s with %d subject(s).", name, len(subjects))
+		return fmt.Sprintf("Updated sharing for %s with %d subject(s).", target, len(subjects))
 	}
 }

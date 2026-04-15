@@ -28,10 +28,6 @@ type searchResultItem struct {
 	ArtifactType  string `json:"artifactType"`
 	AuthorEmail   string `json:"authorEmail,omitempty"`
 	LatestVersion int    `json:"latestVersion"`
-	Subjects      []struct {
-		Type string `json:"type"`
-		ID   string `json:"id"`
-	} `json:"subjects,omitempty"`
 }
 
 func (s *Server) searchArtifacts(ctx context.Context, params searchArtifactsParams) (*searchResult, error) {
