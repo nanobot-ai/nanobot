@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 
 	"log/slog"
@@ -98,16 +97,6 @@ func (c *Client) complete(ctx context.Context, agentName string, req *schemas.Bi
 	}
 
 	return c.parseStream(ctx, agentName, httpResp.Body, opt.ProgressToken)
-}
-
-// recordFixture is used to record data for unit tests. I must be manually enabled:
-//
-//	var close func() error
-//	streamBody, close = recordFixture("/home/nanobot/fixture.sse")
-//	defer close()
-func recordFixture(path string, r io.Reader) (io.Reader, func() error) {
-	f, _ := os.Create(path)
-	return io.TeeReader(r, f), f.Close
 }
 
 func (c *Client) parseStream(ctx context.Context, agentName string, body io.Reader, progressToken any) (*types.CompletionResponse, error) {

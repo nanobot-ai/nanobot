@@ -8,6 +8,13 @@ import (
 	"testing"
 )
 
+// loadFixture reads testdata to "replay" SSE responses and test parsing. Fixtures are recorded by simply using
+// an io.TeeReader on the response body used for parseStream:
+//
+//	f, _ := os.Create(path)
+//	streamBody := io.TeeReader(r.Body, f)
+//	defer f.Close()
+//	return c.parseStream(ctx, agentName, streamBody, opt.ProgressToken)
 func loadFixture(t *testing.T, name string) *bytes.Reader {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", name))
