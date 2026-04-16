@@ -8,7 +8,6 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-
 func TestToInput_ToolCallResultInUserMessage(t *testing.T) {
 	callID := "call_abc123"
 	req := &types.CompletionRequest{
