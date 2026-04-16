@@ -1,0 +1,11 @@
+data: {"type":"response.created","sequence_number":0,"response":{"id":"msg_openai_001","object":"","created_at":1776268091,"completed_at":null,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o","output":null,"previous_response_id":null,"prompt_cache_key":null,"reasoning":null,"safety_identifier":null,"service_tier":null,"stop_reason":null,"tools":null,"usage":null,"extra_fields":{"request_type":"","latency":0,"chunk_index":0}}}
+
+data: {"type":"response.output_item.added","sequence_number":1,"item":{"id":"item_001","type":"message","role":"assistant"},"output_index":0}
+
+data: {"type":"response.output_text.delta","sequence_number":2,"delta":"Hello","item_id":"item_001","output_index":0,"content_index":0}
+
+data: {"type":"response.output_text.delta","sequence_number":3,"delta":" there!","item_id":"item_001","output_index":0,"content_index":0}
+
+data: {"type":"response.output_item.done","sequence_number":4,"item":{"id":"item_001","type":"message","role":"assistant"},"output_index":0}
+
+data: {"type":"response.completed","sequence_number":5,"response":{"id":"msg_openai_001","object":"","created_at":1776268091,"completed_at":null,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o","output":[{"id":"item_001","type":"message","role":"assistant","content":[{"type":"output_text","text":"Hello there!","annotations":[],"logprobs":[]}]}],"previous_response_id":null,"prompt_cache_key":null,"reasoning":null,"safety_identifier":null,"service_tier":null,"stop_reason":"stop","tools":null,"usage":{"input_tokens":10,"input_tokens_details":null,"output_tokens":2,"output_tokens_details":null,"total_tokens":12},"extra_fields":{"request_type":"","latency":0,"chunk_index":0}}}

@@ -1,0 +1,11 @@
+data: {"type":"response.created","sequence_number":0,"response":{"id":"msg_fc_001","object":"","created_at":1776268091,"completed_at":null,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"us.anthropic.claude-sonnet-4-6","output":null,"previous_response_id":null,"prompt_cache_key":null,"reasoning":null,"safety_identifier":null,"service_tier":null,"stop_reason":null,"tools":null,"usage":null,"extra_fields":{"request_type":"","latency":0,"chunk_index":0}}}
+
+data: {"type":"response.output_item.added","sequence_number":1,"item":{"id":"item_001","type":"function_call","call_id":"call_abc123","name":"my_tool"},"output_index":0}
+
+data: {"type":"response.function_call_arguments.delta","sequence_number":2,"delta":"{\"key\":","item_id":"item_001","output_index":0}
+
+data: {"type":"response.function_call_arguments.delta","sequence_number":3,"delta":"\"value\"}","item_id":"item_001","output_index":0}
+
+data: {"type":"response.output_item.done","sequence_number":4,"item":{"id":"item_001","type":"function_call","call_id":"call_abc123","name":"my_tool"},"output_index":0}
+
+data: {"type":"response.completed","sequence_number":5,"response":{"id":"msg_fc_001","object":"","created_at":1776268091,"completed_at":null,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"us.anthropic.claude-sonnet-4-6","output":null,"previous_response_id":null,"prompt_cache_key":null,"reasoning":null,"safety_identifier":null,"service_tier":null,"stop_reason":"tool_use","tools":null,"usage":{"input_tokens":20,"input_tokens_details":null,"output_tokens":5,"output_tokens_details":null,"total_tokens":25},"extra_fields":{"request_type":"","latency":0,"chunk_index":0}}}

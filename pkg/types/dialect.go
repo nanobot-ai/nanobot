@@ -7,5 +7,6 @@ const (
 	DialectOpenAIResponses       Dialect = "OpenAIResponses"
 	DialectOpenResponses         Dialect = "OpenResponses"
 	DialectOpenAIChatCompletions Dialect = "OpenAIChatCompletions"
+	DialectBifrostRequest        Dialect = "BifrostRequest"
 	DialectDefault                       = DialectOpenAIResponses
 )
