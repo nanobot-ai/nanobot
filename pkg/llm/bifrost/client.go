@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -249,6 +250,37 @@ func (c *Client) parseStream(ctx context.Context, agentName string, body io.Read
 	}
 
 	if err := lines.Err(); err != nil {
+		// Check if this was a client-initiated cancellation
+		if cancelErr, ok := errors.AsType[*mcp.RequestCancelledError](context.Cause(mcp.UserContext(ctx))); ok && cancelErr != nil {
+			errorText := "\n\n" + strings.ToUpper(cancelErr.Error())
+
+			// Append to the last text item, or add a new one
+			itemIndex := len(result.Output.Items) - 1
+			if itemIndex >= 0 && result.Output.Items[itemIndex].Content != nil {
+				result.Output.Items[itemIndex].Content.Text += errorText
+			} else {
+				// Either no items yet, or the last item has no text content
+				itemIndex = len(result.Output.Items)
+				result.Output.Items = append(result.Output.Items, types.CompletionItem{
+					ID:      fmt.Sprintf("%s-%d", result.Output.ID, itemIndex),
+					Content: &mcp.Content{Type: "text", Text: errorText},
+				})
+			}
+
+			// Send progress notification with the error text
+			llmProgress.Send(ctx, &types.CompletionProgress{
+				Model:     progress.Model,
+				Agent:     agentName,
+				MessageID: progress.MessageID,
+				Item: types.CompletionItem{
+					ID:      result.Output.Items[itemIndex].ID,
+					Partial: true,
+					Content: &mcp.Content{Type: "text", Text: errorText},
+				},
+			}, progressToken)
+
+			return result, nil
+		}
 		return nil, fmt.Errorf("bifrost stream read error: %w", err)
 	}
 	if !started {

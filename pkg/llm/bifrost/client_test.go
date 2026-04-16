@@ -3,9 +3,13 @@ package bifrost
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 )
 
 // loadFixture reads testdata to "replay" SSE responses and test parsing. Fixtures are recorded by simply using
@@ -99,6 +103,94 @@ func TestParseStream_FunctionCall(t *testing.T) {
 	}
 	if item.ToolCall.Arguments != `{"key":"value"}` {
 		t.Errorf("arguments: got %q, want %q", item.ToolCall.Arguments, `{"key":"value"}`)
+	}
+}
+
+// errReader wraps an io.Reader and substitutes a given error for io.EOF, allowing
+// tests to simulate a mid-stream connection error (e.g. context cancellation).
+type errReader struct {
+	r   io.Reader
+	err error
+}
+
+func (r *errReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if err == io.EOF {
+		return n, r.err
+	}
+	return n, err
+}
+
+// TestParseStream_Cancellation verifies that when lines.Err() is set and the
+// context was cancelled with a *mcp.RequestCancelledError, parseStream returns
+// the partial response (with the error appended as text) rather than an error.
+func TestParseStream_Cancellation(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancelErr := &mcp.RequestCancelledError{Reason: "user stopped"}
+	cancel(cancelErr)
+
+	// Partial SSE stream: created + one text delta, no completed event.
+	partialSSE := strings.Join([]string{
+		`data: {"type":"response.created","sequence_number":0,"response":{"id":"msg_cancel_001","model":"test-model","output":null}}`,
+		``,
+		`data: {"type":"response.output_item.added","sequence_number":1,"item":{"id":"item_001","type":"message","role":"assistant"},"output_index":0}`,
+		``,
+		`data: {"type":"response.output_text.delta","sequence_number":2,"delta":"Hello","item_id":"item_001","output_index":0,"content_index":0}`,
+		``,
+	}, "\n")
+
+	reader := &errReader{r: strings.NewReader(partialSSE), err: context.Canceled}
+
+	c := &Client{}
+	got, err := c.parseStream(ctx, "test-agent", reader, nil)
+	if err != nil {
+		t.Fatalf("expected no error for cancellation, got: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected a non-nil result")
+	}
+	if got.Output.ID != "msg_cancel_001" {
+		t.Errorf("output ID: got %q, want %q", got.Output.ID, "msg_cancel_001")
+	}
+	if len(got.Output.Items) == 0 {
+		t.Fatal("expected at least one output item")
+	}
+	lastItem := got.Output.Items[len(got.Output.Items)-1]
+	if lastItem.Content == nil {
+		t.Fatal("last item content is nil")
+	}
+	wantSuffix := "\n\n" + strings.ToUpper(cancelErr.Error())
+	if !strings.HasSuffix(lastItem.Content.Text, wantSuffix) {
+		t.Errorf("text: got %q, want suffix %q", lastItem.Content.Text, wantSuffix)
+	}
+}
+
+// TestParseStream_Cancellation_EmptyStream verifies cancellation handling when
+// no items have been accumulated yet (cancelled before any output item).
+func TestParseStream_Cancellation_EmptyStream(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancelErr := &mcp.RequestCancelledError{Reason: "aborted"}
+	cancel(cancelErr)
+
+	// Only the created event — no output items yet.
+	partialSSE := `data: {"type":"response.created","sequence_number":0,"response":{"id":"msg_cancel_002","model":"test-model","output":null}}` + "\n\n"
+
+	reader := &errReader{r: strings.NewReader(partialSSE), err: context.Canceled}
+
+	c := &Client{}
+	got, err := c.parseStream(ctx, "test-agent", reader, nil)
+	if err != nil {
+		t.Fatalf("expected no error for cancellation, got: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected a non-nil result")
+	}
+	if len(got.Output.Items) != 1 {
+		t.Fatalf("items: got %d, want 1", len(got.Output.Items))
+	}
+	wantText := "\n\n" + strings.ToUpper(cancelErr.Error())
+	if got.Output.Items[0].Content == nil || got.Output.Items[0].Content.Text != wantText {
+		t.Errorf("text: got %q, want %q", got.Output.Items[0].Content.Text, wantText)
 	}
 }
 

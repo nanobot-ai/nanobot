@@ -256,6 +256,8 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 			}, opt.ProgressToken)
 			return &resp, inputReplacement, toolCallPolicyViolation, nil
 		}
+
+		return nil, "", "", err
 	}
 
 	respData, err := json.Marshal(resp)
