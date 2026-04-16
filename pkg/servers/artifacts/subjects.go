@@ -131,7 +131,7 @@ func listGroupSubjects(ctx context.Context, cfg obotConfig, query string) ([]lis
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("list groups failed (status %d): %s", resp.StatusCode, string(body))
 	}
 

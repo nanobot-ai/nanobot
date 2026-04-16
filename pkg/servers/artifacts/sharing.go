@@ -67,7 +67,7 @@ func (s *Server) setArtifactSubjects(ctx context.Context, params setArtifactSubj
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("update artifact subjects failed (status %d): %s", resp.StatusCode, string(body))
 	}
 
