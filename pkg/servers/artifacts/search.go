@@ -28,7 +28,6 @@ type searchResultItem struct {
 	ArtifactType  string `json:"artifactType"`
 	AuthorEmail   string `json:"authorEmail,omitempty"`
 	LatestVersion int    `json:"latestVersion"`
-	Visibility    string `json:"visibility"`
 }
 
 func (s *Server) searchArtifacts(ctx context.Context, params searchArtifactsParams) (*searchResult, error) {

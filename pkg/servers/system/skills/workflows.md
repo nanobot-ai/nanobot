@@ -283,7 +283,15 @@ To publish a workflow, use the `publishArtifact` tool:
 2. Call `publishArtifact` with the workflow directory name. For example: `publishArtifact({ "workflowName": "code-review" })`.
 3. The tool bundles all files in the directory and uploads to Obot. The `SKILL.md` frontmatter is the source of truth for artifact metadata.
 4. The first publish creates version 1. Subsequent publishes of the same workflow create new versions (v2, v3, etc.).
-5. The tool response will indicate visibility status when relevant — relay that information to the user. Do NOT assume or state the workflow's visibility unless the tool response explicitly mentions it.
+5. Version 1 starts owner-only unless its subjects are updated.
+6. Each later published version defaults to the previous version's sharing settings.
+7. To change who a specific published version is shared with, use `setArtifactSubjects({ "id": "<artifact-id>", "version": <n>, "subjects": [...] })`. If `version` is omitted, the latest version is updated.
+8. Supported subjects are:
+   - `{ "type": "user", "id": "<user-id>" }`
+   - `{ "type": "group", "id": "<group-id>" }`
+   - `{ "type": "selector", "id": "*" }` for all Obot users
+9. An empty `subjects` list makes that version owner-only again.
+10. To find valid user or group IDs before setting subjects, use `listSubjects({ "type": "user" | "group", "query": "..." })`. Leave `query` blank to list everything visible.
 
 ### Searching the Registry
 
