@@ -14,7 +14,7 @@ require (
 	github.com/google/jsonschema-go v0.4.2
 	github.com/google/uuid v1.6.0
 	github.com/hexops/autogold/v2 v2.3.0
-	github.com/maximhq/bifrost/core v1.5.0
+	github.com/maximhq/bifrost/core v1.5.2
 	github.com/obot-platform/mcp-oauth-proxy v0.0.3-0.20260106135339-3745d9b14a30
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/robfig/cron/v3 v3.0.1
@@ -28,7 +28,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.43.0
 	golang.org/x/image v0.36.0
 	golang.org/x/net v0.52.0
-	golang.org/x/oauth2 v0.35.0
+	golang.org/x/oauth2 v0.36.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/postgres v1.6.0
