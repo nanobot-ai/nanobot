@@ -92,12 +92,21 @@ func (c *Client) complete(ctx context.Context, agentName string, req *schemas.Bi
 	}
 	defer httpResp.Body.Close()
 
+	inputReplacement := httpResp.Header.Get("X-Obot-Message-Policy-Replacement")
+
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
 		return nil, fmt.Errorf("bifrost request failed: %s %q", httpResp.Status, string(body))
 	}
 
-	return c.parseStream(ctx, agentName, httpResp.Body, opt.ProgressToken)
+	result, err := c.parseStream(ctx, agentName, httpResp.Body, opt.ProgressToken)
+	if err != nil {
+		return nil, err
+	}
+	if inputReplacement != "" {
+		result.InputReplacement = inputReplacement
+	}
+	return result, nil
 }
 
 func (c *Client) parseStream(ctx context.Context, agentName string, body io.Reader, progressToken any) (*types.CompletionResponse, error) {
