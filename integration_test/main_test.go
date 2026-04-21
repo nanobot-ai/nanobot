@@ -26,7 +26,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// toolCallRecorder wraps an MCP handler, records every tools/call invocation, and
 // ToolHandler is a function that handles a mocked tool call and returns a result.
 type ToolHandler func(mcp.CallToolRequest) *mcp.CallToolResult
 
@@ -132,7 +131,7 @@ func stubMCPHandler() mcp.MessageHandler {
 // newTestRuntime creates a Runtime and installs a toolCallRecorder on nanobot.system.
 // The agent has no pre-loaded instructions; it discovers the workflows skill naturally
 // via the getSkill tool that the config hook injects.
-func newTestRuntime(t *testing.T, completer types.Completer, recorder *toolCallRecorder) context.Context {
+func newTestRuntime(t *testing.T, completer types.Completer, recorder *toolCallRecorder) (context.Context, *agents.Agents) {
 	t.Helper()
 
 	rt, err := runtime.NewRuntime(context.Background(), llm.Config{})
@@ -157,13 +156,10 @@ func newTestRuntime(t *testing.T, completer types.Completer, recorder *toolCallR
 
 	agentSvc := agents.New(completer, rt.Service)
 	ctx := rt.WithTempSession(context.Background(), cfg)
-	return context.WithValue(ctx, agentSvcKey{}, agentSvc)
+	return ctx, agentSvc
 }
 
-type agentSvcKey struct{}
-
-func runAgent(ctx context.Context, prompt string) error {
-	svc := ctx.Value(agentSvcKey{}).(*agents.Agents)
+func runAgent(ctx context.Context, svc *agents.Agents, prompt string) error {
 	_, err := svc.Complete(ctx, types.CompletionRequest{
 		Agent: "nanobot",
 		Input: []types.Message{{

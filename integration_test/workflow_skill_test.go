@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nanobot-ai/nanobot/pkg/agents"
 	"github.com/nanobot-ai/nanobot/pkg/llm"
 	"github.com/nanobot-ai/nanobot/pkg/llm/anthropic"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
@@ -15,7 +16,7 @@ import (
 
 // setupWorkflowListing creates a recorder that mocks the glob tool with a pair of
 // fake workflow files, and a runtime context ready for agent execution.
-func setupWorkflowListing(t *testing.T, completer types.Completer) (context.Context, *toolCallRecorder) {
+func setupWorkflowListing(t *testing.T, completer types.Completer) (context.Context, *agents.Agents, *toolCallRecorder) {
 	t.Helper()
 	recorder := newRecorder(map[string]ToolHandler{
 		"glob": func(_ mcp.CallToolRequest) *mcp.CallToolResult {
@@ -24,7 +25,8 @@ func setupWorkflowListing(t *testing.T, completer types.Completer) (context.Cont
 			}
 		},
 	})
-	return newTestRuntime(t, completer, recorder), recorder
+	ctx, svc := newTestRuntime(t, completer, recorder)
+	return ctx, svc, recorder
 }
 
 // getSkillDiagnostic returns a string describing whether the model called getSkill,
@@ -97,9 +99,9 @@ func TestWorkflowListingGlobPattern(t *testing.T) {
 			for i := range *numRuns {
 				t.Run(fmt.Sprintf("run%d", i+1), func(t *testing.T) {
 					t.Parallel()
-					ctx, recorder := setupWorkflowListing(t, completer)
+					ctx, svc, recorder := setupWorkflowListing(t, completer)
 
-					err := runAgent(ctx, prompt)
+					err := runAgent(ctx, svc, prompt)
 					if err != nil {
 						t.Fatalf("Complete() failed: %v", err)
 					}
