@@ -107,6 +107,10 @@ func TestWorkflowListingGlobPattern(t *testing.T) {
 					}
 
 					assertCorrectGlobCall(t, recorder)
+
+					if call := recorder.find("searchArtifacts"); call != nil {
+						t.Errorf("model should not call searchArtifacts for local listing prompts\nall tool calls:\n%s", recorder.summary())
+					}
 				})
 			}
 		})

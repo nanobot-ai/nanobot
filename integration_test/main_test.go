@@ -50,7 +50,10 @@ func (r *toolCallRecorder) wrap(inner mcp.MessageHandler) mcp.MessageHandler {
 		}
 
 		var call mcp.CallToolRequest
-		_ = json.Unmarshal(msg.Params, &call)
+		if err := json.Unmarshal(msg.Params, &call); err != nil {
+			msg.SendError(ctx, mcp.ErrRPCInvalidParams.WithMessage("unmarshal tools/call params: %v", err))
+			return
+		}
 		r.mu.Lock()
 		r.calls = append(r.calls, call)
 		r.mu.Unlock()
@@ -81,7 +84,8 @@ func (r *toolCallRecorder) find(name string) *mcp.CallToolRequest {
 	defer r.mu.Unlock()
 	for i := range r.calls {
 		if r.calls[i].Name == name {
-			return &r.calls[i]
+			c := r.calls[i]
+			return &c
 		}
 	}
 	return nil

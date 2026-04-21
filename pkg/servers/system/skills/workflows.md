@@ -16,7 +16,7 @@ There are two places workflows can exist:
 
 **When the user asks about "shared workflows", "public workflows", workflows from other users, or wants to discover/find/browse available workflows they haven't installed yet, ALWAYS use `searchArtifacts` to search the remote registry.** Do not just list the local `workflows/` directory — that only shows what is already installed locally.
 
-If the user asks to "list all workflows", "show my workflows", "which workflows are installed" or similar without specifying shared/public, find workflows by using the Glob tool (never Bash with find or ls) with pattern `**/SKILL.md` in the `workflows/` directory (do NOT set path to `workflows/` and pattern to `workflows/**/SKILL.md` — that double-nests the path). If they ask to "list shared workflows" or "find workflows", use `searchArtifacts`.
+If the user asks to "list all workflows", "show my workflows", "which workflows are installed" or similar without specifying shared/public, find workflows by using the Glob tool (never Bash with find or ls) with pattern `**/SKILL.md` in the `workflows/` directory (do NOT include `workflows/` in both the path and the pattern — that double-nests). If they ask to "list shared workflows" or "find workflows", use `searchArtifacts`.
 
 ## When to Use Workflows
 
