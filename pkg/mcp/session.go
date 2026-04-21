@@ -721,6 +721,7 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 	opt := complete.Complete(opts...)
 	var (
 		req        *Message
+		resp       Message
 		respResult json.RawMessage
 		respError  *RPCError
 	)
@@ -736,8 +737,13 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 		if err != nil && respError == nil {
 			tempReq.Error = ErrRPCUnknown.WithMessage("failed to call %s [%s]: %v", req.Method, getMessageName(req), err)
 		}
-		if _, hooksErr := s.callAllHooks(ctx, &tempReq, "response"); hooksErr != nil && err == nil {
+		if hooksMessage, hooksErr := s.callAllHooks(ctx, &tempReq, "response"); hooksErr != nil && err == nil {
 			err = fmt.Errorf("failed to call \"response\" hooks: %w", hooksErr)
+		} else if hooksMessage != nil {
+			resp = *hooksMessage
+		}
+		if unmarshalErr := s.marshalResponse(resp, out); unmarshalErr != nil && err == nil {
+			err = ErrRPCUnknown.WithMessage("failed to unmarshal response: %v", unmarshalErr)
 		}
 	}()
 
@@ -782,15 +788,17 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 			// If the error is nil, then the send call was successful.
 			// Set the error channel to nil so that this case always blocks.
 			errChan = nil
-		case m := <-ch:
+		case resp = <-ch:
 			if isInit {
-				if err := s.postInit(&m); err != nil {
+				if err := s.postInit(&resp); err != nil {
 					return fmt.Errorf("failed to post init: %w", err)
 				}
 			}
-			respResult = m.Result
-			respError = m.Error
-			return s.marshalResponse(m, out)
+			respResult = resp.Result
+			respError = resp.Error
+			// Don't marshal the response until we've called all the hooks, otherwise hooks won't be able to modify the response.
+			// So return here and the response will be marshaled in the deferred function after the hooks are called, if any.
+			return
 		}
 	}
 }
