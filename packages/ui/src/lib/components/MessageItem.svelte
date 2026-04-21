@@ -1,21 +1,22 @@
 <script lang="ts">
-	import type { Attachment, ChatResult, ChatMessageItem, ResourceContents } from '$lib/types';
-	import MessageItemText from './MessageItemText.svelte';
-	import MessageItemImage from './MessageItemImage.svelte';
-	import MessageItemAudio from './MessageItemAudio.svelte';
-	import MessageItemResourceLink from './MessageItemResourceLink.svelte';
-	import MessageItemResource from './MessageItemResource.svelte';
-	import MessageItemReasoning from './MessageItemReasoning.svelte';
-	import MessageItemTool from './MessageItemTool.svelte';
+import type {
+	Attachment,
+	ChatMessageItem,
+	ChatResult,
+	ResourceContents,
+} from "$lib/types";
 
-	interface Props {
-		item: ChatMessageItem;
-		role: 'user' | 'assistant';
-		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
-		onReadResource?: (uri: string) => Promise<{ contents: ResourceContents[] }>;
-	}
+interface Props {
+	item: ChatMessageItem;
+	role: "user" | "assistant";
+	onSend?: (
+		message: string,
+		attachments?: Attachment[],
+	) => Promise<ChatResult | undefined>;
+	onReadResource?: (uri: string) => Promise<{ contents: ResourceContents[] }>;
+}
 
-	let { item, role, onSend, onReadResource }: Props = $props();
+const { item, role, onSend, onReadResource }: Props = $props();
 </script>
 
 {#if item.type === 'text'}

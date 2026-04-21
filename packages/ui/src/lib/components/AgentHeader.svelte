@@ -1,45 +1,52 @@
 <script lang="ts">
-	import type { Agent, Attachment, ChatResult } from '$lib/types';
-	import { onMount } from 'svelte';
+import { onMount } from "svelte";
+import type { Agent, Attachment, ChatResult } from "$lib/types";
 
-	interface Props {
-		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
-		agent?: Agent;
-	}
+interface Props {
+	onSend?: (
+		message: string,
+		attachments?: Attachment[],
+	) => Promise<ChatResult | undefined>;
+	agent?: Agent;
+}
 
-	let { onSend, agent }: Props = $props();
+const { onSend, agent }: Props = $props();
 
-	let imgRef = $state<HTMLImageElement>();
+const imgRef = $state<HTMLImageElement>();
 
-	onMount(() => {
-		const target = document.documentElement;
-		const observer = new MutationObserver((mutations) => {
-			for (const mutation of mutations) {
-				if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
-					updateLogo();
-				}
+onMount(() => {
+	const target = document.documentElement;
+	const observer = new MutationObserver((mutations) => {
+		for (const mutation of mutations) {
+			if (
+				mutation.type === "attributes" &&
+				mutation.attributeName === "data-theme"
+			) {
+				updateLogo();
 			}
-		});
-
-		observer.observe(target, {
-			attributes: true,
-			attributeFilter: ['data-theme']
-		});
+		}
 	});
 
-	function updateLogo() {
-		const isDark = document.documentElement.getAttribute('data-theme') === 'black';
-		const url = isDark ? agent?.iconDark || agent?.icon : agent?.icon;
-		if (url && imgRef) {
-			imgRef.src = url;
-		}
+	observer.observe(target, {
+		attributes: true,
+		attributeFilter: ["data-theme"],
+	});
+});
+
+function updateLogo() {
+	const isDark =
+		document.documentElement.getAttribute("data-theme") === "black";
+	const url = isDark ? agent?.iconDark || agent?.icon : agent?.icon;
+	if (url && imgRef) {
+		imgRef.src = url;
 	}
+}
 
-	$effect(() => {
-		if (imgRef) {
-			updateLogo();
-		}
-	});
+$effect(() => {
+	if (imgRef) {
+		updateLogo();
+	}
+});
 </script>
 
 <div class="flex flex-col items-center p-8 pt-20">

@@ -1,7 +1,7 @@
-import { getContext, setContext } from 'svelte';
-import type { NotificationStore } from '$lib/stores/notifications.svelte';
+import { getContext, setContext } from "svelte";
+import type { NotificationStore } from "$lib/stores/notifications.svelte";
 
-const NOTIFICATIONS_KEY = Symbol('notifications');
+const NOTIFICATIONS_KEY = Symbol("notifications");
 
 export function setNotificationContext(notifications: NotificationStore) {
 	setContext(NOTIFICATIONS_KEY, notifications);

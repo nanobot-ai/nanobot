@@ -1,6 +1,5 @@
 <script lang="ts">
 import type { ChatService } from "$lib/chat.svelte";
-import Thread from "$lib/components/Thread.svelte";
 
 interface Props {
 	chat: ChatService;

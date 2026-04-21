@@ -1,29 +1,37 @@
 <script lang="ts">
-	import MessageItem from './MessageItem.svelte';
-	import type { Attachment, ChatMessage, ChatResult, ResourceContents } from '$lib/types';
-	import MessageItemText from '$lib/components/MessageItemText.svelte';
+import type {
+	Attachment,
+	ChatMessage,
+	ChatResult,
+	ResourceContents,
+} from "$lib/types";
 
-	interface Props {
-		message: ChatMessage;
-		timestamp?: Date;
-		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
-		onReadResource?: (uri: string) => Promise<{ contents: ResourceContents[] }>;
+interface Props {
+	message: ChatMessage;
+	timestamp?: Date;
+	onSend?: (
+		message: string,
+		attachments?: Attachment[],
+	) => Promise<ChatResult | undefined>;
+	onReadResource?: (uri: string) => Promise<{ contents: ResourceContents[] }>;
+}
+
+const { message, timestamp, onSend, onReadResource }: Props = $props();
+
+const _displayTime = $derived(
+	timestamp || (message.created ? new Date(message.created) : new Date()),
+);
+const _toolCall = $derived.by(() => {
+	try {
+		const item = message.items?.[0];
+		return message.role === "user" && item?.type === "text"
+			? JSON.parse(item.text)
+			: null;
+	} catch {
+		// ignore parse error
+		return null;
 	}
-
-	let { message, timestamp, onSend, onReadResource }: Props = $props();
-
-	const displayTime = $derived(
-		timestamp || (message.created ? new Date(message.created) : new Date())
-	);
-	const toolCall = $derived.by(() => {
-		try {
-			const item = message.items?.[0];
-			return message.role === 'user' && item?.type === 'text' ? JSON.parse(item.text) : null;
-		} catch {
-			// ignore parse error
-			return null;
-		}
-	});
+});
 </script>
 
 {#if message.items?.[0]?._meta?.['ai.nanobot.meta/attachment']}

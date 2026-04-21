@@ -1,43 +1,41 @@
 <script lang="ts">
-	import { slide } from 'svelte/transition';
-	import { X, CheckCircle, AlertCircle, AlertTriangle, Info, Copy } from '@lucide/svelte';
-	import type { Notification } from '$lib/types';
-	import { getNotificationContext } from '$lib/context/notifications.svelte';
+import { getNotificationContext } from "$lib/context/notifications.svelte";
+import type { Notification } from "$lib/types";
 
-	let copiedTooltipId = $state<string | null>(null);
-	const notifications = getNotificationContext();
+let _copiedTooltipId = $state<string | null>(null);
+const notifications = getNotificationContext();
 
-	function getNotificationClasses(type: Notification['type']): string {
-		const baseClasses = 'alert shadow-lg border';
+function _getNotificationClasses(type: Notification["type"]): string {
+	const baseClasses = "alert shadow-lg border";
 
-		switch (type) {
-			case 'success':
-				return `${baseClasses} alert-success`;
-			case 'error':
-				return `${baseClasses} alert-error`;
-			case 'warning':
-				return `${baseClasses} alert-warning`;
-			case 'info':
-				return `${baseClasses} alert-info`;
-			default:
-				return `${baseClasses}`;
-		}
+	switch (type) {
+		case "success":
+			return `${baseClasses} alert-success`;
+		case "error":
+			return `${baseClasses} alert-error`;
+		case "warning":
+			return `${baseClasses} alert-warning`;
+		case "info":
+			return `${baseClasses} alert-info`;
+		default:
+			return `${baseClasses}`;
 	}
+}
 
-	function handleClose(id: string) {
-		notifications.remove(id);
-	}
+function _handleClose(id: string) {
+	notifications.remove(id);
+}
 
-	async function copyNotificationContent(notification: Notification) {
-		const content = notification.message
-			? `${notification.title}\n${notification.message}`
-			: notification.title;
-		await navigator.clipboard.writeText(content);
-		copiedTooltipId = notification.id;
-		setTimeout(() => {
-			copiedTooltipId = null;
-		}, 2000);
-	}
+async function _copyNotificationContent(notification: Notification) {
+	const content = notification.message
+		? `${notification.title}\n${notification.message}`
+		: notification.title;
+	await navigator.clipboard.writeText(content);
+	_copiedTooltipId = notification.id;
+	setTimeout(() => {
+		_copiedTooltipId = null;
+	}, 2000);
+}
 </script>
 
 <!-- Notification container -->
