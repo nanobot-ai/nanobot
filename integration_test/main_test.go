@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ func TestMain(m *testing.M) {
 	flag.Parse()
 
 	if !*integrationRun {
+		log.Println("use -integration to run the integration tests")
 		return
 	}
 
