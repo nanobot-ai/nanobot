@@ -704,6 +704,12 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 			hookResponse.Message = req
 		} else {
 			req = hookResponse.Message
+			if string(req.Result) == "null" {
+				req.Result = nil
+			}
+			if string(req.Params) == "null" {
+				req.Params = nil
+			}
 		}
 		return hookResponse
 	})
