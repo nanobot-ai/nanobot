@@ -12,16 +12,7 @@ ANTHROPIC_API_KEY=... go test ./integration_test/ -runs 5
 
 ## Agent Configuration
 
-The harness loads the builtin `nanobot` agent via `config.Load(".nanobot/", true)`. If a `.nanobot/` directory exists in the working directory when the tests run, its config is merged in — allowing you to override the agent's model, instructions, or add MCP servers without changing test code.
-
-For example, to test against a specific model:
-
-```yaml
-# .nanobot/nanobot.yaml
-agents:
-  nanobot:
-    model: claude-haiku-4-5
-```
+The harness loads the builtin `nanobot` agent via `config.Load(".nanobot/", true)`. If a `.nanobot/` directory exists in the working directory when the tests run, its config is merged in — allowing you to override the agent's instructions, add MCP servers, or adjust other settings without changing test code.
 
 If no `.nanobot/` directory exists, the tests run against the default builtin agent.
 
@@ -29,8 +20,8 @@ If no `.nanobot/` directory exists, the tests run against the default builtin ag
 
 Tests use shared tooling:
 
-- **`newTestRuntime(t, completer, recorder)`** — creates a `Runtime` wired with a recording/intercepting system server and returns a context ready for agent execution.
-- **`runAgent(ctx, prompt)`** — runs the agent with the given user prompt.
+- **`newTestRuntime(t, completer, recorder)`** — creates a `Runtime` wired with a recording/intercepting system server and returns a context and agent service ready for execution.
+- **`runAgent(ctx, svc, prompt)`** — runs the agent with the given user prompt.
 - **`newRecorder(handlers)`** — creates a `toolCallRecorder` with custom `ToolHandler`s for specific tools. By default, `config` and `getSkill` always pass through to the real server; all other tools return an error unless a handler is registered.
 - **`recorder.find(name)`** — returns the first recorded call for a tool, or nil.
 - **`recorder.summary()`** — returns a formatted list of all tool calls with arguments, useful in failure messages.
@@ -58,8 +49,8 @@ func TestMySkillBehavior(t *testing.T) {
         },
     })
 
-    ctx := newTestRuntime(t, completer, recorder)
-    if err := runAgent(ctx, "my prompt"); err != nil {
+    ctx, svc := newTestRuntime(t, completer, recorder)
+    if err := runAgent(ctx, svc, "my prompt"); err != nil {
         t.Fatalf("Complete() failed: %v", err)
     }
 
