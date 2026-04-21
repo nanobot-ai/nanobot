@@ -77,7 +77,7 @@ func assertCorrectGlobCall(t *testing.T, recorder *toolCallRecorder) {
 func TestWorkflowListingGlobPattern(t *testing.T) {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
-		t.Skip("ANTHROPIC_API_KEY not set")
+		t.Fatal("ANTHROPIC_API_KEY must be set when running integration tests")
 	}
 
 	completer := llm.NewClient(llm.Config{

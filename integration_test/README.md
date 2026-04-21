@@ -1,14 +1,15 @@
 # Integration Tests
 
-End-to-end tests that run against a real LLM. Skipped automatically when `ANTHROPIC_API_KEY` is not set.
+End-to-end tests that run against a real LLM. Skipped by default — you must pass `-integration` to opt in.
 
 ## Running
 
 ```bash
-ANTHROPIC_API_KEY=... go test ./integration_test/ -runs 5
+ANTHROPIC_API_KEY=... go test ./integration_test/ -integration -runs 5
 ```
 
-`-runs` controls how many times each prompt is run per test (default: 5).
+- `-integration` enables the tests (required; without it all tests are skipped).
+- `-runs` controls how many times each prompt is run per test (default: 5).
 
 ## Agent Configuration
 
@@ -32,7 +33,7 @@ Tests use shared tooling:
 func TestMySkillBehavior(t *testing.T) {
     apiKey := os.Getenv("ANTHROPIC_API_KEY")
     if apiKey == "" {
-        t.Skip("ANTHROPIC_API_KEY not set")
+        t.Fatal("ANTHROPIC_API_KEY must be set when running integration tests")
     }
 
     completer := llm.NewClient(llm.Config{

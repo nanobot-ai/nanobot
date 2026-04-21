@@ -19,10 +19,18 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-var numRuns = flag.Int("runs", 5, "number of times to run each prompt")
+var (
+	numRuns        = flag.Int("runs", 5, "number of times to run each prompt")
+	integrationRun = flag.Bool("integration", false, "enable integration tests (requires ANTHROPIC_API_KEY)")
+)
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+
+	if !*integrationRun {
+		return
+	}
+
 	os.Exit(m.Run())
 }
 
