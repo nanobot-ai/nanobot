@@ -1,0 +1,72 @@
+# Integration Tests
+
+End-to-end tests that run against a real LLM. Skipped automatically when `ANTHROPIC_API_KEY` is not set.
+
+## Running
+
+```bash
+ANTHROPIC_API_KEY=... go test ./integration_test/ -runs 5
+```
+
+`-runs` controls how many times each prompt is run per test (default: 5).
+
+## Agent Configuration
+
+The harness loads the builtin `nanobot` agent via `config.Load(".nanobot/", true)`. If a `.nanobot/` directory exists in the working directory when the tests run, its config is merged in — allowing you to override the agent's model, instructions, or add MCP servers without changing test code.
+
+For example, to test against a specific model:
+
+```yaml
+# .nanobot/nanobot.yaml
+agents:
+  nanobot:
+    model: claude-haiku-4-5
+```
+
+If no `.nanobot/` directory exists, the tests run against the default builtin agent.
+
+## Adding a Test
+
+Tests use shared tooling:
+
+- **`newTestRuntime(t, completer, recorder)`** — creates a `Runtime` wired with a recording/intercepting system server and returns a context ready for agent execution.
+- **`runAgent(ctx, prompt)`** — runs the agent with the given user prompt.
+- **`newRecorder(handlers)`** — creates a `toolCallRecorder` with custom `ToolHandler`s for specific tools. By default, `config` and `getSkill` always pass through to the real server; all other tools return an error unless a handler is registered.
+- **`recorder.find(name)`** — returns the first recorded call for a tool, or nil.
+- **`recorder.summary()`** — returns a formatted list of all tool calls with arguments, useful in failure messages.
+
+### Example
+
+```go
+func TestMySkillBehavior(t *testing.T) {
+    apiKey := os.Getenv("ANTHROPIC_API_KEY")
+    if apiKey == "" {
+        t.Skip("ANTHROPIC_API_KEY not set")
+    }
+
+    completer := llm.NewClient(llm.Config{
+        DefaultModel: "claude-sonnet-4-6",
+        Anthropic:    anthropic.Config{APIKey: apiKey},
+    })
+
+    recorder := newRecorder(map[string]ToolHandler{
+        // Register tools the agent is expected to call with mock responses.
+        "bash": func(req mcp.CallToolRequest) *mcp.CallToolResult {
+            return &mcp.CallToolResult{
+                Content: []mcp.Content{{Type: "text", Text: "mock output"}},
+            }
+        },
+    })
+
+    ctx := newTestRuntime(t, completer, recorder)
+    if err := runAgent(ctx, "my prompt"); err != nil {
+        t.Fatalf("Complete() failed: %v", err)
+    }
+
+    call := recorder.find("bash")
+    if call == nil {
+        t.Fatalf("expected bash call\nall tool calls:\n%s", recorder.summary())
+    }
+    // assert call.Arguments as needed
+}
+```
