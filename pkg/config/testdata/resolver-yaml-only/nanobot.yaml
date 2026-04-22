@@ -1,0 +1,4 @@
+agents:
+  myagent:
+    name: YAML Only Agent
+    model: gpt-4

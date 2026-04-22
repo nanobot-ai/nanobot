@@ -11,7 +11,7 @@ import (
 )
 
 func TestLoadFromDirectory_Simple(t *testing.T) {
-	data, err := loadFromDirectory("testdata/directory-simple")
+	data, err := loadFromDirectory("testdata/directory-simple", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestLoadFromDirectory_Simple(t *testing.T) {
 }
 
 func TestLoadFromDirectory_MultipleAgents(t *testing.T) {
-	data, err := loadFromDirectory("testdata/directory-multiple")
+	data, err := loadFromDirectory("testdata/directory-multiple", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestLoadFromDirectory_MultipleAgents(t *testing.T) {
 }
 
 func TestLoadFromDirectory_JSON(t *testing.T) {
-	data, err := loadFromDirectory("testdata/directory-json")
+	data, err := loadFromDirectory("testdata/directory-json", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestLoadFromDirectory_JSON(t *testing.T) {
 }
 
 func TestLoadFromDirectory_BothMCPFiles_Error(t *testing.T) {
-	_, err := loadFromDirectory("testdata/directory-both-mcp")
+	_, err := loadFromDirectory("testdata/directory-both-mcp", nil)
 	if err == nil {
 		t.Fatal("expected error when both mcp-servers.yaml and mcp-servers.json exist")
 	}
@@ -155,7 +155,7 @@ func TestLoadFromDirectory_BothMCPFiles_Error(t *testing.T) {
 }
 
 func TestLoadFromDirectory_NoMCPServers(t *testing.T) {
-	data, err := loadFromDirectory("testdata/directory-no-mcp")
+	data, err := loadFromDirectory("testdata/directory-no-mcp", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestLoadFromDirectory_NoMCPServers(t *testing.T) {
 }
 
 func TestLoadFromDirectory_WithREADME(t *testing.T) {
-	data, err := loadFromDirectory("testdata/directory-with-readme")
+	data, err := loadFromDirectory("testdata/directory-with-readme", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestLoadFromDirectory_WithREADME(t *testing.T) {
 }
 
 func TestLoadFromDirectory_HiddenFiles(t *testing.T) {
-	data, err := loadFromDirectory("testdata/directory-hidden")
+	data, err := loadFromDirectory("testdata/directory-hidden", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestLoadFromDirectory_HiddenFiles(t *testing.T) {
 }
 
 func TestLoadFromDirectory_InvalidYAML_Error(t *testing.T) {
-	_, err := loadFromDirectory("testdata/directory-invalid-yaml")
+	_, err := loadFromDirectory("testdata/directory-invalid-yaml", nil)
 	if err == nil {
 		t.Fatal("expected error for invalid YAML front-matter")
 	}
@@ -236,13 +236,25 @@ func TestLoadFromDirectory_InvalidYAML_Error(t *testing.T) {
 }
 
 func TestLoadFromDirectory_MissingServer_Error(t *testing.T) {
-	_, err := loadFromDirectory("testdata/directory-missing-server")
+	_, err := loadFromDirectory("testdata/directory-missing-server", nil)
 	if err == nil {
 		t.Fatal("expected error when agent references non-existent MCP server")
 	}
 
 	if !strings.Contains(err.Error(), "references MCP server") || !strings.Contains(err.Error(), "nonexistent") {
 		t.Errorf("expected error about missing MCP server, got: %v", err)
+	}
+}
+
+func TestLoadFromDirectory_WithBaseYAML_InvalidConfigType_Error(t *testing.T) {
+	// Valid YAML, but 'agents' must be a map — passing a string causes JSONCoerce to fail
+	baseYAML := []byte(`agents: "not-a-map"`)
+	_, err := loadFromDirectory("testdata/directory-simple", baseYAML)
+	if err == nil {
+		t.Fatal("expected error for wrong type in baseYAML")
+	}
+	if !strings.Contains(err.Error(), "error parsing nanobot.yaml") {
+		t.Errorf("expected JSONCoerce error, got: %v", err)
 	}
 }
 
@@ -322,7 +334,7 @@ func TestParseMarkdownAgent_AllFields(t *testing.T) {
 }
 
 func TestLoadFromDirectory_DefaultAgent_Single(t *testing.T) {
-	data, err := loadFromDirectory("testdata/directory-default-single")
+	data, err := loadFromDirectory("testdata/directory-default-single", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -353,7 +365,7 @@ func TestLoadFromDirectory_DefaultAgent_Single(t *testing.T) {
 }
 
 func TestLoadFromDirectory_DefaultAgent_Explicit(t *testing.T) {
-	data, err := loadFromDirectory("testdata/directory-default-explicit")
+	data, err := loadFromDirectory("testdata/directory-default-explicit", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -408,7 +420,7 @@ func TestLoadFromDirectory_DefaultAgent_Explicit(t *testing.T) {
 }
 
 func TestLoadFromDirectory_DefaultAgent_MultipleDefaults_Error(t *testing.T) {
-	_, err := loadFromDirectory("testdata/directory-default-multiple-error")
+	_, err := loadFromDirectory("testdata/directory-default-multiple-error", nil)
 	if err == nil {
 		t.Fatal("expected error when multiple agents are marked as default")
 	}
@@ -424,7 +436,7 @@ func TestLoadFromDirectory_DefaultAgent_MultipleDefaults_Error(t *testing.T) {
 }
 
 func TestLoadFromDirectory_DefaultSubagent_Error(t *testing.T) {
-	_, err := loadFromDirectory("testdata/directory-default-subagent-error")
+	_, err := loadFromDirectory("testdata/directory-default-subagent-error", nil)
 	if err == nil {
 		t.Fatal("expected error when agent is both default and subagent")
 	}
@@ -476,7 +488,7 @@ func TestParseMarkdownAgent_NoDefaultField(t *testing.T) {
 // Tests for mode field
 
 func TestLoadFromDirectory_ModeChatAddsToEntrypoint(t *testing.T) {
-	data, err := loadFromDirectory("testdata/directory-mode-chat")
+	data, err := loadFromDirectory("testdata/directory-mode-chat", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -507,7 +519,7 @@ func TestLoadFromDirectory_ModeChatAddsToEntrypoint(t *testing.T) {
 }
 
 func TestLoadFromDirectory_ModePrimaryAddsToEntrypoint(t *testing.T) {
-	data, err := loadFromDirectory("testdata/directory-mode-primary")
+	data, err := loadFromDirectory("testdata/directory-mode-primary", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -538,7 +550,7 @@ func TestLoadFromDirectory_ModePrimaryAddsToEntrypoint(t *testing.T) {
 }
 
 func TestLoadFromDirectory_ModeAllAddsToEntrypoint(t *testing.T) {
-	data, err := loadFromDirectory("testdata/directory-mode-all")
+	data, err := loadFromDirectory("testdata/directory-mode-all", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -569,7 +581,7 @@ func TestLoadFromDirectory_ModeAllAddsToEntrypoint(t *testing.T) {
 }
 
 func TestLoadFromDirectory_ModeSubagentNotInEntrypoint(t *testing.T) {
-	data, err := loadFromDirectory("testdata/directory-mode-subagent")
+	data, err := loadFromDirectory("testdata/directory-mode-subagent", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -610,7 +622,7 @@ func TestLoadFromDirectory_ModeSubagentNotInEntrypoint(t *testing.T) {
 }
 
 func TestLoadFromDirectory_ModeMixed(t *testing.T) {
-	data, err := loadFromDirectory("testdata/directory-mode-mixed")
+	data, err := loadFromDirectory("testdata/directory-mode-mixed", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -678,7 +690,7 @@ func TestLoadFromDirectory_ModeMixed(t *testing.T) {
 }
 
 func TestLoadFromDirectory_ModeInvalid_Error(t *testing.T) {
-	_, err := loadFromDirectory("testdata/directory-mode-invalid")
+	_, err := loadFromDirectory("testdata/directory-mode-invalid", nil)
 	if err == nil {
 		t.Fatal("expected error for invalid mode value")
 	}
@@ -734,7 +746,7 @@ func TestParseMarkdownAgent_NoModeField(t *testing.T) {
 // Tests for permissions field
 
 func TestLoadFromDirectory_WithPermissions(t *testing.T) {
-	data, err := loadFromDirectory("testdata/directory-permissions")
+	data, err := loadFromDirectory("testdata/directory-permissions", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -927,5 +939,183 @@ func TestParseMarkdownAgent_NoPermissions(t *testing.T) {
 	// According to AgentPermissions.IsAllowed, nil permissions allow everything
 	if agent.Permissions != nil {
 		t.Errorf("expected Permissions field to be nil when not specified, got %v", agent.Permissions)
+	}
+}
+
+func TestLoadFromDirectory_YAMLAndMarkdown(t *testing.T) {
+	data, err := loadFromDirectory("testdata/directory-yaml-and-markdown", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var config types.Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("error unmarshaling config: %v", err)
+	}
+
+	// Agent should come from markdown
+	if len(config.Agents) != 1 {
+		t.Fatalf("expected 1 agent, got %d", len(config.Agents))
+	}
+	agent, ok := config.Agents["main"]
+	if !ok {
+		t.Fatal("expected agent 'main'")
+	}
+	if agent.Name != "Main Agent" {
+		t.Errorf("name: got %q, want %q", agent.Name, "Main Agent")
+	}
+
+	// No mcpServers since no baseYAML was provided
+	if len(config.MCPServers) != 0 {
+		t.Errorf("expected no mcpServers without baseYAML, got %v", config.MCPServers)
+	}
+}
+
+func TestLoadFromDirectory_YAMLBaseWithBaseYAMLParam(t *testing.T) {
+	yamlData, err := os.ReadFile("testdata/directory-yaml-and-markdown/nanobot.yaml")
+	if err != nil {
+		t.Fatalf("error reading nanobot.yaml: %v", err)
+	}
+
+	data, err := loadFromDirectory("testdata/directory-yaml-and-markdown", yamlData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var config types.Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("error unmarshaling config: %v", err)
+	}
+
+	// Both agent and MCP server should be present
+	if _, ok := config.Agents["main"]; !ok {
+		t.Error("expected agent 'main'")
+	}
+	if _, ok := config.MCPServers["myserver"]; !ok {
+		t.Error("expected mcpServer 'myserver'")
+	}
+}
+
+func TestLoadFromDirectory_MarkdownOverridesYAML(t *testing.T) {
+	yamlData, err := os.ReadFile("testdata/directory-markdown-overrides-yaml/nanobot.yaml")
+	if err != nil {
+		t.Fatalf("error reading nanobot.yaml: %v", err)
+	}
+
+	data, err := loadFromDirectory("testdata/directory-markdown-overrides-yaml", yamlData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var config types.Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("error unmarshaling config: %v", err)
+	}
+
+	agent, ok := config.Agents["main"]
+	if !ok {
+		t.Fatal("expected agent 'main'")
+	}
+
+	// Markdown agent should win: name and model from markdown
+	if agent.Name != "Markdown Main" {
+		t.Errorf("name: got %q, want %q (markdown should override YAML)", agent.Name, "Markdown Main")
+	}
+	if agent.Model != "gpt-4.1" {
+		t.Errorf("model: got %q, want %q", agent.Model, "gpt-4.1")
+	}
+
+	// MCP server from YAML base should still be present
+	if _, ok := config.MCPServers["myserver"]; !ok {
+		t.Error("expected mcpServer 'myserver' from nanobot.yaml")
+	}
+}
+
+func TestLoadFromDirectory_LLMProvidersFromYAML(t *testing.T) {
+	yamlData, err := os.ReadFile("testdata/directory-llm-providers-from-yaml/nanobot.yaml")
+	if err != nil {
+		t.Fatalf("error reading nanobot.yaml: %v", err)
+	}
+
+	data, err := loadFromDirectory("testdata/directory-llm-providers-from-yaml", yamlData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var config types.Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("error unmarshaling config: %v", err)
+	}
+
+	// LLM provider from nanobot.yaml should be preserved
+	provider, ok := config.LLMProviders["anthropic"]
+	if !ok {
+		t.Fatal("expected llmProvider 'anthropic' from nanobot.yaml")
+	}
+	if provider.Dialect != "AnthropicMessages" {
+		t.Errorf("dialect: got %q, want %q", provider.Dialect, "AnthropicMessages")
+	}
+	if provider.APIKey != "${ANTHROPIC_API_KEY}" {
+		t.Errorf("apiKey: got %q, want %q", provider.APIKey, "${ANTHROPIC_API_KEY}")
+	}
+
+	// Markdown agent should be present
+	agent, ok := config.Agents["main"]
+	if !ok {
+		t.Fatal("expected agent 'main'")
+	}
+	if agent.Model != "anthropic/claude-haiku-4-5" {
+		t.Errorf("model: got %q, want %q", agent.Model, "anthropic/claude-haiku-4-5")
+	}
+}
+
+func TestLoadFromDirectory_Merge(t *testing.T) {
+	yamlData, err := os.ReadFile("testdata/directory-merge/nanobot.yaml")
+	if err != nil {
+		t.Fatalf("error reading nanobot.yaml: %v", err)
+	}
+
+	data, err := loadFromDirectory("testdata/directory-merge", yamlData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var config types.Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("error unmarshaling config: %v", err)
+	}
+
+	// Markdown main overrides YAML main
+	main, ok := config.Agents["main"]
+	if !ok {
+		t.Fatal("expected agent 'main'")
+	}
+	if main.Name != "Markdown Main" {
+		t.Errorf("main name: got %q, want %q (markdown should override YAML)", main.Name, "Markdown Main")
+	}
+	if main.Model != "gpt-4" {
+		t.Errorf("main model: got %q, want %q (markdown should override YAML)", main.Model, "gpt-4")
+	}
+
+	// Markdown-only helper is present
+	if _, ok := config.Agents["helper"]; !ok {
+		t.Error("expected agent 'helper' from markdown")
+	}
+
+	// YAML-only agent is preserved
+	yamlOnly, ok := config.Agents["yamlonly"]
+	if !ok {
+		t.Error("expected YAML-only agent 'yamlonly' to be preserved")
+	}
+	if yamlOnly.Name != "YAML Only Agent" {
+		t.Errorf("yamlonly name: got %q, want %q", yamlOnly.Name, "YAML Only Agent")
+	}
+
+	// nanobot.yaml mcpServers take precedence; deprecated mcp-servers.yaml is ignored
+	if _, ok := config.MCPServers["yamlserver"]; !ok {
+		t.Error("expected 'yamlserver' from nanobot.yaml")
+	}
+	if _, ok := config.MCPServers["mdserver"]; ok {
+		t.Error("expected 'mdserver' from deprecated mcp-servers.yaml to be ignored")
 	}
 }
