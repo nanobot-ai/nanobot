@@ -1,14 +1,14 @@
 # Integration Tests
 
-End-to-end tests that run against a real LLM. Skipped by default — you must pass `-integration` to opt in.
+End-to-end tests that run against a real LLM. Excluded from `go test ./...` by default via the `//go:build integration` build tag.
 
 ## Running
 
 ```bash
-ANTHROPIC_API_KEY=... go test ./integration_test/ -integration -runs 5
+ANTHROPIC_API_KEY=... go test -tags integration ./integration_test/ -runs 5
 ```
 
-- `-integration` enables the tests (required; without it all tests are skipped).
+- `-tags integration` enables compilation of the tests (required; without it they are completely skipped).
 - `-runs` controls how many times each prompt is run per test (default: 5).
 
 ## Agent Configuration

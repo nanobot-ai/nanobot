@@ -1,3 +1,7 @@
+//go:build integration
+
+// Package integration_test contains integration tests that require a real LLM.
+// Build with -tags integration to include them.
 package integration_test
 
 import (
@@ -5,8 +9,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -20,21 +22,7 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
-var (
-	numRuns        = flag.Int("runs", 5, "number of times to run each prompt")
-	integrationRun = flag.Bool("integration", false, "enable integration tests (requires ANTHROPIC_API_KEY)")
-)
-
-func TestMain(m *testing.M) {
-	flag.Parse()
-
-	if !*integrationRun {
-		log.Println("use -integration to run the integration tests")
-		return
-	}
-
-	os.Exit(m.Run())
-}
+var numRuns = flag.Int("runs", 5, "number of times to run each prompt")
 
 // ToolHandler is a function that handles a mocked tool call and returns a result.
 type ToolHandler func(mcp.CallToolRequest) *mcp.CallToolResult
