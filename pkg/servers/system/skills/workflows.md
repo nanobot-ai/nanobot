@@ -16,7 +16,7 @@ There are two places workflows can exist:
 
 **When the user asks about "shared workflows", "public workflows", workflows from other users, or wants to discover/find/browse available workflows they haven't installed yet, ALWAYS use `searchArtifacts` to search the remote registry.** Do not just list the local `workflows/` directory — that only shows what is already installed locally.
 
-If the user asks to "list all workflows" or "show my workflows" without specifying shared/public, list the local `workflows/` directory. If they ask to "list shared workflows" or "find workflows", use `searchArtifacts`.
+If the user asks to "list all workflows", "show my workflows", "which workflows are installed" or similar without specifying shared/public, find workflows by using the Glob tool (never Bash with find or ls) with pattern `**/SKILL.md` in the `workflows/` directory (do NOT include `workflows/` in both the path and the pattern — that double-nests). If they ask to "list shared workflows" or "find workflows", use `searchArtifacts`.
 
 ## When to Use Workflows
 
@@ -209,7 +209,7 @@ Users may ask to run a workflow at any time — not just immediately after desig
 
 When the user asks you to run a workflow:
 
-1. Load the workflow from `workflows/<name>/SKILL.md`. If you're unsure which workflows are available, list the `workflows/` directory.
+1. Load the workflow from `workflows/<name>/SKILL.md`. If you're unsure which workflows are available, use glob pattern `**/SKILL.md` with path `workflows/` to find them.
 2. Use TodoWrite to create a todo for each workflow step before you begin. This is your execution plan — the user will follow along.
 3. **Present the execution plan to the user.** After creating the todos, present a brief summary of what will be executed and ask the user to confirm before proceeding. For example: "I've planned the following steps: [list steps]. Does this look good to proceed?"
 4. **Wait for user approval.** Do not begin execution until the user confirms.
