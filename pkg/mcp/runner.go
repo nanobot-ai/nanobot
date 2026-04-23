@@ -70,12 +70,11 @@ func (r *Runner) newCommand(ctx context.Context, currentEnv map[string]string, r
 		if command == "nanobot" {
 			command = system.Bin()
 		}
-		cmd := supervise.Cmd(ctx, command, args...)
+		internalCtx, forceCancel := context.WithCancel(context.Background())
+		cmd := supervise.Cmd(internalCtx, command, args...)
 		cmd.Dir = envvar.ReplaceString(currentEnv, config.Cwd)
 		cmd.Env = append(cleanOSEnv(), env...)
-		return config, &sandbox.Cmd{
-			Cmd: cmd,
-		}, nil
+		return config, sandbox.WrapCmd(ctx, cmd, forceCancel, nil), nil
 	}
 
 	var (
