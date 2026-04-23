@@ -50,7 +50,7 @@ func (r *Run) Customize(cmd *cobra.Command) {
 	cmd.Short = "Run the nanobot"
 	cmd.Long = `Run the nanobot using the specified configuration.
 
-If a configuration is not specified with the --config, the nanobot.yaml in the .nanobot/ directory
+If a configuration is not specified with the --config flag, the nanobot.yaml in the .nanobot/ directory
 will be used if it exists. Otherwise, the markdown files in the .nanobot/agents/ subdirectory
 will be used as the configuration.
 
@@ -59,6 +59,10 @@ To change the configuration location, use the --config flag. The same rules appl
 - If --config is a directory, then:
 	- If a nanobot.yaml file is found at the specified location, it will be used.
 	- If no nanobot.yaml file is found, the markdown files in the agents/ subdirectory will be used.
+
+The --config flag may be repeated to merge multiple configurations. Later --config values override
+earlier ones. The first config path is also used as the local config workspace for things like skills
+and local MCP CLI state, so it must be a local directory.
 
 The configuration location can also be a URL, in which case the contents will be treated as a nanobot.yaml file.
 
@@ -75,6 +79,9 @@ only supports YAML configuration files (i.e., nanobot.yaml) and not a directory 
 
   # Run the nanobot.yaml at the URL
   nanobot run --config https://....
+
+  # Merge multiple configs, with later values overriding earlier ones
+  nanobot run -c .nanobot/ -c ./team.yaml -c ./local.yaml
 `
 }
 
@@ -121,6 +128,11 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 	}
 
 	callbackHandler := mcp.NewCallbackServer(confirm.New())
+	configDir, err := r.n.RuntimeConfigDir()
+	if err != nil {
+		return err
+	}
+	configPaths := r.n.ConfigPaths()
 	runtimeOpt := runtime.Options{
 		Roots:                     roots,
 		MaxConcurrency:            r.n.MaxConcurrency,
@@ -129,7 +141,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		TokenExchangeClientID:     r.Auth.OAuthClientID,
 		TokenExchangeClientSecret: r.Auth.OAuthClientSecret,
 		DefaultModel:              r.n.DefaultModel,
-		ConfigDir:                 r.n.ConfigPath,
+		ConfigDir:                 configDir,
 		LoopbackURL:               "http://" + r.ListenAddress + "/mcp/chat",
 	}
 
@@ -138,7 +150,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		if profiles != "" {
 			optCopy.Profiles = append(optCopy.Profiles, strings.Split(profiles, ",")...)
 		}
-		cfg, err := r.n.ReadConfig(cmd.Context(), r.n.ConfigPath, !r.n.ExcludeBuiltInAgents, optCopy)
+		cfg, err := r.n.ReadConfig(cmd.Context(), configPaths, !r.n.ExcludeBuiltInAgents, optCopy)
 		if err != nil {
 			return types.Config{}, err
 		}
@@ -162,7 +174,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 
 	once, err := cfgFactory(cmd.Context(), "")
 	if err != nil {
-		return fmt.Errorf("failed to read config from %q: %w", r.n.ConfigPath, err)
+		return fmt.Errorf("failed to read config from %q: %w", strings.Join(configPaths, ", "), err)
 	}
 
 	slog.Info("config", "json", once.Redacted())

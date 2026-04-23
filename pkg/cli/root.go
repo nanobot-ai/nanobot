@@ -55,7 +55,7 @@ type Nanobot struct {
 	MaxConcurrency       int      `usage:"The maximum number of concurrent tasks in a parallel loop" default:"10" hidden:"true"`
 	Chdir                string   `usage:"Change directory to this path before running the nanobot" default:"." short:"C"`
 	State                string   `usage:"Path to the state file" default:"./nanobot.db"`
-	ConfigPath           string   `usage:"Path to nanobot configuration file or directory" default:".nanobot/" name:"config" short:"c"`
+	ConfigPath           []string `usage:"Configuration file, directory, URL, or repo ref. Repeat to merge multiple configs; later entries override earlier ones" name:"config" short:"c"`
 	ExcludeBuiltInAgents bool     `usage:"Exclude built-in agents from the configuration"`
 
 	otel *telemetry.Otel
@@ -224,9 +224,37 @@ func (n *Nanobot) loadEnv() (map[string]string, error) {
 	return env, nil
 }
 
-func (n *Nanobot) ReadConfig(ctx context.Context, cfgPath string, includeDefaultAgents bool, opts ...runtime.Options) (*types.Config, error) {
-	cfg, _, err := config.Load(ctx, cfgPath, includeDefaultAgents, complete.Complete(opts...).Profiles...)
+func (n *Nanobot) ReadConfig(ctx context.Context, cfgPaths []string, includeDefaultAgents bool, opts ...runtime.Options) (*types.Config, error) {
+	cfg, _, err := config.LoadMany(ctx, cfgPaths, includeDefaultAgents, complete.Complete(opts...).Profiles...)
 	return cfg, err
+}
+
+func (n *Nanobot) ConfigPaths() []string {
+	if len(n.ConfigPath) == 0 {
+		return []string{".nanobot/"}
+	}
+	return n.ConfigPath
+}
+
+func (n *Nanobot) RuntimeConfigDir() (string, error) {
+	configPath := n.ConfigPaths()[0]
+	if strings.Contains(configPath, "://") {
+		return "", fmt.Errorf("first config path %q must be a local directory, not a URL", configPath)
+	}
+
+	info, err := os.Stat(configPath)
+	if err == nil {
+		if !info.IsDir() {
+			return "", fmt.Errorf("first config path %q must be a directory, not a file", configPath)
+		}
+		return configPath, nil
+	}
+
+	if strings.Count(configPath, "/") == 1 && !strings.HasPrefix(configPath, "/") && !strings.HasPrefix(configPath, "./") && !strings.HasPrefix(configPath, "../") {
+		return "", fmt.Errorf("first config path %q must be a local directory, not a GitHub repository", configPath)
+	}
+
+	return "", fmt.Errorf("failed to stat first config path %q: %w", configPath, err)
 }
 
 func (n *Nanobot) GetRuntime(ctx context.Context, opts ...runtime.Options) (*runtime.Runtime, error) {

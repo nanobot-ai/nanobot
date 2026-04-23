@@ -67,13 +67,6 @@ func storageRoot(configDir string) string {
 		}
 	}
 
-	if info, err := os.Stat(base); err == nil {
-		if info.IsDir() {
-			return base
-		}
-		return filepath.Dir(base)
-	}
-
 	return base
 }
 

@@ -20,6 +20,49 @@ import (
 )
 
 func Load(ctx context.Context, path string, includeDefaultAgents bool, profiles ...string) (cfg *types.Config, cwd string, err error) {
+	return LoadMany(ctx, []string{path}, includeDefaultAgents, profiles...)
+}
+
+func LoadMany(ctx context.Context, paths []string, includeDefaultAgents bool, profiles ...string) (cfg *types.Config, cwd string, err error) {
+	if len(paths) == 0 {
+		paths = []string{".nanobot/"}
+	}
+
+	var merged *types.Config
+	for _, path := range paths {
+		current, currentCwd, err := loadSingle(ctx, path, includeDefaultAgents, profiles...)
+		if err != nil {
+			return nil, "", err
+		}
+		if cwd == "" {
+			cwd = currentCwd
+		}
+		if merged == nil {
+			merged = current
+			continue
+		}
+
+		combined, err := Merge(*merged, *current)
+		if err != nil {
+			return nil, "", fmt.Errorf("error merging config path %s: %w", path, err)
+		}
+		merged = &combined
+	}
+
+	if merged == nil {
+		merged = new(types.Config)
+	}
+
+	if includeDefaultAgents {
+		if err := loadBuiltinAgents(merged); err != nil {
+			return nil, "", err
+		}
+	}
+
+	return merged, cwd, nil
+}
+
+func loadSingle(ctx context.Context, path string, includeDefaultAgents bool, profiles ...string) (cfg *types.Config, cwd string, err error) {
 	defer func() {
 		if err != nil {
 			if _, fErr := os.Stat(path); fErr == nil && !strings.HasPrefix(path, "/") && !strings.HasPrefix(path, ".") {
@@ -39,13 +82,6 @@ func Load(ctx context.Context, path string, includeDefaultAgents bool, profiles 
 		}
 	} else if !includeDefaultAgents {
 		return cfg, cwd, nil
-	}
-
-	if cfg == nil {
-		cfg = new(types.Config)
-	}
-	if err := loadBuiltinAgents(cfg); err != nil {
-		return nil, "", err
 	}
 
 	return cfg, cwd, nil
