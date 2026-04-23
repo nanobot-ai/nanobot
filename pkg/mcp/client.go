@@ -21,6 +21,7 @@ type Client struct {
 	Session       *Session
 	serverName    string
 	toolOverrides ToolOverrides
+	toolPrefix    string
 }
 
 func (c *Client) Close(deleteSession bool) {
@@ -151,6 +152,11 @@ type Server struct {
 	// If providing tool overrides, any tools not included will be implicitly disabled.
 	// If providing no tool overrides, all tools will be enabled.
 	ToolOverrides ToolOverrides `json:"toolOverrides,omitzero"`
+
+	// ToolPrefix is prepended to the name of every tool this server exposes
+	// (after any ToolOverrides rename). Incoming tool calls are stripped of the
+	// prefix before being dispatched upstream. Empty disables prefixing.
+	ToolPrefix string `json:"toolPrefix,omitempty"`
 
 	Hooks Hooks `json:"hooks,omitzero"`
 }
@@ -370,6 +376,7 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 		Session:       session,
 		serverName:    serverName,
 		toolOverrides: config.ToolOverrides,
+		toolPrefix:    config.ToolPrefix,
 	}
 
 	var (
@@ -553,6 +560,15 @@ func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 		tools.Tools = filtered
 	}
 
+	// Apply the per-server tool prefix (after any ToolOverrides rename).
+	// Works whether or not ToolOverrides is set — without overrides, every
+	// upstream tool is still prefixed.
+	if err == nil && c.toolPrefix != "" {
+		for i := range tools.Tools {
+			tools.Tools[i].Name = c.toolPrefix + tools.Tools[i].Name
+		}
+	}
+
 	finishOutboundSpan(span, err)
 	return &tools, err
 }
@@ -581,6 +597,10 @@ func (c CallOption) Merge(other CallOption) (result CallOption) {
 func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOption) (result *CallToolResult, err error) {
 	opt := complete.Complete(opts...)
 	result = new(CallToolResult)
+
+	// Strip the per-server tool prefix before reverse-resolving any override
+	// rename — the upstream server only knows the original (or override) name.
+	tool = strings.TrimPrefix(tool, c.toolPrefix)
 
 	for name, o := range c.toolOverrides {
 		if o.Name != "" && tool == o.Name {

@@ -369,6 +369,13 @@ definitions:
           or input schema, or to disable specific tools.
         additionalProperties:
           $ref: "#/definitions/ToolOverride"
+      toolPrefix:
+        type: string
+        description: |
+          A prefix prepended to the name of every tool this MCP Server exposes
+          (applied after any ToolOverrides rename). Incoming tool calls are stripped
+          of the prefix before being dispatched to the upstream server. Empty disables
+          prefixing.
       source:
         oneOf:
           - type: string
