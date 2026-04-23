@@ -14,14 +14,10 @@ func Daemon() error {
 	cmd := exec.CommandContext(ctx, os.Args[2], os.Args[3:]...)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
+	configureDaemonCommand(cmd)
 
-	// Inherit the process group from parent (don't create new one)
-	// The parent already set up the process group in Cmd()
 	cmd.Cancel = func() error {
-		if cmd.Process != nil {
-			return cmd.Process.Kill()
-		}
-		return nil
+		return cancelDaemonCommand(cmd)
 	}
 
 	processIn, err := cmd.StdinPipe()
@@ -30,6 +26,8 @@ func Daemon() error {
 	}
 
 	go func() {
+		defer processIn.Close()
+
 		var buf [4096]byte
 		for {
 			n, err := os.Stdin.Read(buf[:])
@@ -42,6 +40,8 @@ func Daemon() error {
 				}
 			}
 		}
+		// Give the wrapped command a short grace period to exit on stdin EOF before
+		// canceling and escalating to process-group termination.
 		time.Sleep(5 * time.Second)
 		cancel()
 	}()
