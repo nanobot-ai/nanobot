@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -113,5 +114,56 @@ func TestLoad_WithoutBuiltinAgents(t *testing.T) {
 	// Verify nanobot does NOT exist
 	if _, exists := cfg.Agents["nanobot"]; exists {
 		t.Errorf("did not expect builtin agent 'nanobot' when includeDefaultAgents=false")
+	}
+}
+
+func TestLoadMany_MergesInOrder(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	basePath := dir + "/base.yaml"
+	overlayPath := dir + "/overlay.yaml"
+
+	base := []byte(`agents:
+  assistant:
+    name: Base Assistant
+    instructions: Base instructions
+publish:
+  entrypoint:
+    - assistant
+`)
+	overlay := []byte(`agents:
+  assistant:
+    name: Overlay Assistant
+  helper:
+    name: Helper
+    instructions: Helper instructions
+publish:
+  entrypoint:
+    - helper
+`)
+
+	if err := os.WriteFile(basePath, base, 0o644); err != nil {
+		t.Fatalf("failed to write base config: %v", err)
+	}
+	if err := os.WriteFile(overlayPath, overlay, 0o644); err != nil {
+		t.Fatalf("failed to write overlay config: %v", err)
+	}
+
+	cfg, _, err := LoadMany(ctx, []string{basePath, overlayPath}, false)
+	if err != nil {
+		t.Fatalf("unexpected error loading merged configs: %v", err)
+	}
+
+	if got := cfg.Agents["assistant"].Name; got != "Overlay Assistant" {
+		t.Fatalf("expected later config to override assistant name, got %q", got)
+	}
+	if got := cfg.Agents["assistant"].Instructions.Instructions; got != "Base instructions" {
+		t.Fatalf("expected overlay merge to preserve existing instructions, got %q", got)
+	}
+	if _, ok := cfg.Agents["helper"]; !ok {
+		t.Fatalf("expected helper agent from overlay config to be present")
+	}
+	if got := cfg.Publish.Entrypoint; len(got) != 2 || got[0] != "assistant" || got[1] != "helper" {
+		t.Fatalf("expected entrypoint arrays to concatenate in order, got %v", got)
 	}
 }
