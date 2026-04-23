@@ -19,13 +19,15 @@ import (
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
+const DefaultConfigPath = ".nanobot/"
+
 func Load(ctx context.Context, path string, includeDefaultAgents bool, profiles ...string) (cfg *types.Config, cwd string, err error) {
 	return LoadMany(ctx, []string{path}, includeDefaultAgents, profiles...)
 }
 
 func LoadMany(ctx context.Context, paths []string, includeDefaultAgents bool, profiles ...string) (cfg *types.Config, cwd string, err error) {
 	if len(paths) == 0 {
-		paths = []string{".nanobot/"}
+		paths = []string{DefaultConfigPath}
 	}
 
 	var merged *types.Config
@@ -77,7 +79,7 @@ func loadSingle(ctx context.Context, path string, includeDefaultAgents bool, pro
 
 	cfg, cwd, err = loadResource(ctx, configResource, profiles...)
 	if err != nil {
-		if !includeDefaultAgents || !errors.Is(err, NoConfigFoundErr) && !errors.Is(err, fs.ErrNotExist) || path != ".nanobot/" {
+		if !includeDefaultAgents || !errors.Is(err, NoConfigFoundErr) && !errors.Is(err, fs.ErrNotExist) || path != DefaultConfigPath {
 			return cfg, cwd, err
 		}
 	} else if !includeDefaultAgents {

@@ -151,7 +151,7 @@ func newTestRuntime(t *testing.T, completer types.Completer, recorder *toolCallR
 
 	// Load the production config (builtin nanobot agent) from the standard location.
 	// config.Load handles a missing .nanobot/ directory gracefully.
-	cfg, _, err := config.Load(context.Background(), ".nanobot/", true)
+	cfg, _, err := config.Load(context.Background(), config.DefaultConfigPath, true)
 	if err != nil {
 		t.Fatalf("config.Load failed: %v", err)
 	}

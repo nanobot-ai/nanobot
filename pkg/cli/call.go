@@ -39,11 +39,6 @@ func (e *Call) Customize(cmd *cobra.Command) {
 }
 
 func (e *Call) Run(cmd *cobra.Command, args []string) error {
-	configDir, err := e.n.RuntimeConfigDir()
-	if err != nil {
-		return err
-	}
-
 	cfg, err := e.n.ReadConfig(cmd.Context(), e.n.ConfigPaths(), !e.n.ExcludeBuiltInAgents)
 	if err != nil {
 		return err
@@ -52,7 +47,7 @@ func (e *Call) Run(cmd *cobra.Command, args []string) error {
 		MaxConcurrency: e.n.MaxConcurrency,
 		DSN:            e.n.DSN(),
 		DefaultModel:   e.n.DefaultModel,
-		ConfigDir:      configDir,
+		ConfigDir:      e.n.RuntimeConfigDir(),
 	})
 	if err != nil {
 		return err

@@ -128,10 +128,6 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 	}
 
 	callbackHandler := mcp.NewCallbackServer(confirm.New())
-	configDir, err := r.n.RuntimeConfigDir()
-	if err != nil {
-		return err
-	}
 	configPaths := r.n.ConfigPaths()
 	runtimeOpt := runtime.Options{
 		Roots:                     roots,
@@ -141,7 +137,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		TokenExchangeClientID:     r.Auth.OAuthClientID,
 		TokenExchangeClientSecret: r.Auth.OAuthClientSecret,
 		DefaultModel:              r.n.DefaultModel,
-		ConfigDir:                 configDir,
+		ConfigDir:                 r.n.RuntimeConfigDir(),
 		LoopbackURL:               "http://" + r.ListenAddress + "/mcp/chat",
 	}
 

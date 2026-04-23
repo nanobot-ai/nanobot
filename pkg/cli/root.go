@@ -231,30 +231,32 @@ func (n *Nanobot) ReadConfig(ctx context.Context, cfgPaths []string, includeDefa
 
 func (n *Nanobot) ConfigPaths() []string {
 	if len(n.ConfigPath) == 0 {
-		return []string{".nanobot/"}
+		return []string{config.DefaultConfigPath}
 	}
 	return n.ConfigPath
 }
 
-func (n *Nanobot) RuntimeConfigDir() (string, error) {
-	configPath := n.ConfigPaths()[0]
-	if strings.Contains(configPath, "://") {
-		return "", fmt.Errorf("first config path %q must be a local directory, not a URL", configPath)
-	}
+func (n *Nanobot) RuntimeConfigDir() string {
+	return runtimeConfigDir(n.ConfigPath)
+}
 
-	info, err := os.Stat(configPath)
-	if err == nil {
-		if !info.IsDir() {
-			return "", fmt.Errorf("first config path %q must be a directory, not a file", configPath)
+func runtimeConfigDir(configPaths []string) string {
+	configPath := config.DefaultConfigPath
+	for _, p := range configPaths {
+		if strings.Contains(configPath, "://") {
+			continue
 		}
-		return configPath, nil
+
+		info, err := os.Stat(p)
+		if err == nil {
+			if !info.IsDir() {
+				configPath = filepath.Dir(p)
+			}
+			return configPath
+		}
 	}
 
-	if strings.Count(configPath, "/") == 1 && !strings.HasPrefix(configPath, "/") && !strings.HasPrefix(configPath, "./") && !strings.HasPrefix(configPath, "../") {
-		return "", fmt.Errorf("first config path %q must be a local directory, not a GitHub repository", configPath)
-	}
-
-	return "", fmt.Errorf("failed to stat first config path %q: %w", configPath, err)
+	return configPath
 }
 
 func (n *Nanobot) GetRuntime(ctx context.Context, opts ...runtime.Options) (*runtime.Runtime, error) {
