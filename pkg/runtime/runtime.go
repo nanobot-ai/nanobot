@@ -250,6 +250,7 @@ func (r *Runtime) CallFromCLI(ctx context.Context, serverRef string, args ...str
 		return nil, err
 	}
 	return &mcp.CallToolResult{
+		Meta:              callResult.Meta,
 		StructuredContent: callResult.StructuredContent,
 		IsError:           callResult.IsError,
 		Content:           callResult.Content,

@@ -763,11 +763,42 @@ func (s *Service) Call(ctx context.Context, server, tool string, args any, opts 
 	if err != nil {
 		return nil, err
 	}
-	return &types.CallResult{
+	return addHookMutationContent(&types.CallResult{
+		Meta:              mcpCallResult.Meta,
 		StructuredContent: mcpCallResult.StructuredContent,
 		Content:           mcpCallResult.Content,
 		IsError:           mcpCallResult.IsError,
-	}, nil
+	}), nil
+}
+
+func addHookMutationContent(response *types.CallResult) *types.CallResult {
+	if response.Meta == nil {
+		return response
+	}
+
+	var mutations map[string]mcp.HookMutation
+	if err := mcp.JSONCoerce(response.Meta[mcp.HookMutationsMetaKey], &mutations); err != nil || len(mutations) == 0 {
+		return response
+	}
+
+	if mutation := mutations["request"]; mutation.Mutated {
+		// Prepend output with request mutation details for better observability.
+		response.Content = append([]mcp.Content{hookMutationContent("request", mutation.Reasons)}, response.Content...)
+	}
+	if mutation := mutations["response"]; mutation.Mutated {
+		// Append output with response mutation details for better observability.
+		response.Content = append(response.Content, hookMutationContent("response", mutation.Reasons))
+	}
+
+	return response
+}
+
+func hookMutationContent(direction string, reasons []string) mcp.Content {
+	text := fmt.Sprintf("MCP %s was mutated by hooks.", direction)
+	if len(reasons) > 0 {
+		text += " Reasons: " + strings.Join(reasons, "; ")
+	}
+	return mcp.Content{Type: "text", Text: text}
 }
 
 type ListToolsOptions struct {
@@ -864,7 +895,7 @@ func filterTools(tools *mcp.ListToolsResult, filter []string) *mcp.ListToolsResu
 	if len(filter) == 0 {
 		return tools
 	}
-	var filteredTools mcp.ListToolsResult
+	filteredTools := mcp.ListToolsResult{Meta: tools.Meta}
 	for _, tool := range tools.Tools {
 		if slices.Contains(filter, tool.Name) {
 			filteredTools.Tools = append(filteredTools.Tools, tool)

@@ -196,6 +196,7 @@ func (s *Sampler) Sample(ctx context.Context, req mcp.CreateMessageRequest, opts
 				toolCallResult = &types.ToolCallResult{
 					CallID: currentContent.ToolUseID,
 					Output: types.CallResult{
+						Meta:              currentContent.Meta,
 						Content:           currentContent.Content,
 						IsError:           currentContent.IsError,
 						StructuredContent: currentContent.StructuredContent,

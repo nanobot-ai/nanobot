@@ -284,7 +284,7 @@ type ToolCallResult struct {
 	CallID string     `json:"callID,omitempty"`
 	Output CallResult `json:"output,omitzero"`
 	// NOTE: If you add fields here, make sure to update the CompletionItem.MarshalJSON method, it
-	//has special handling for ToolCallResult.
+	// has special handling for ToolCallResult.
 }
 
 type ToolCall struct {
@@ -296,6 +296,7 @@ type ToolCall struct {
 }
 
 type CallResult struct {
+	Meta              map[string]any `json:"_meta,omitzero"`
 	Content           []mcp.Content  `json:"content,omitempty"`
 	IsError           bool           `json:"isError,omitempty"`
 	Agent             string         `json:"agent,omitempty"`
@@ -305,10 +306,11 @@ type CallResult struct {
 }
 
 type AsyncCallResult struct {
-	IsError          bool          `json:"isError"`
-	Content          []mcp.Content `json:"content,omitzero"`
-	InProgress       bool          `json:"inProgress,omitempty"`
-	ToolName         string        `json:"toolName,omitempty"`
-	ProgressToken    any           `json:"progressToken,omitempty"`
-	InputReplacement string        `json:"inputReplacement,omitempty"`
+	Meta             map[string]any `json:"_meta,omitzero"`
+	IsError          bool           `json:"isError"`
+	Content          []mcp.Content  `json:"content,omitzero"`
+	InProgress       bool           `json:"inProgress,omitempty"`
+	ToolName         string         `json:"toolName,omitempty"`
+	ProgressToken    any            `json:"progressToken,omitempty"`
+	InputReplacement string         `json:"inputReplacement,omitempty"`
 }

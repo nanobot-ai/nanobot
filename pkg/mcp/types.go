@@ -77,6 +77,7 @@ type ElicitResult struct {
 	// Action must be one of "accept", "decline", "cancel"
 	Action  string         `json:"action"`
 	Content map[string]any `json:"content,omitempty"`
+	Meta    map[string]any `json:"_meta,omitzero"`
 }
 
 type ElicitRequest struct {
@@ -142,7 +143,8 @@ type ToolChoice struct {
 type ListRootsRequest struct{}
 
 type ListRootsResult struct {
-	Roots []Root `json:"roots"`
+	Meta  map[string]any `json:"_meta,omitzero"`
+	Roots []Root         `json:"roots"`
 }
 
 type Root struct {
@@ -255,10 +257,11 @@ func (c Content) MarshalJSON() ([]byte, error) {
 }
 
 type CreateMessageResult struct {
-	Content    Contents `json:"content,omitempty"`
-	Role       string   `json:"role,omitempty"`
-	Model      string   `json:"model,omitempty"`
-	StopReason string   `json:"stopReason,omitempty"`
+	Meta       map[string]any `json:"_meta,omitzero"`
+	Content    Contents       `json:"content,omitempty"`
+	Role       string         `json:"role,omitempty"`
+	Model      string         `json:"model,omitempty"`
+	StopReason string         `json:"stopReason,omitempty"`
 }
 
 func (c *Content) ToImageURL() string {
@@ -333,6 +336,7 @@ func (t ToolAnnotations) IsDestructive() bool {
 }
 
 type CallToolResult struct {
+	Meta              map[string]any `json:"_meta,omitzero"`
 	IsError           bool           `json:"isError"`
 	Content           []Content      `json:"content,omitzero"`
 	StructuredContent map[string]any `json:"structuredContent,omitempty"`
@@ -349,7 +353,8 @@ var EmptyObjectSchema = json.RawMessage(`{"type": "object", "properties": {}, "a
 type ListToolsRequest struct{}
 
 type ListToolsResult struct {
-	Tools []Tool `json:"tools"`
+	Meta  map[string]any `json:"_meta,omitzero"`
+	Tools []Tool         `json:"tools"`
 }
 
 type GetPromptRequest struct {
@@ -358,6 +363,7 @@ type GetPromptRequest struct {
 }
 
 type GetPromptResult struct {
+	Meta        map[string]any  `json:"_meta,omitzero"`
 	Description string          `json:"description,omitempty"`
 	Messages    []PromptMessage `json:"messages"`
 }
@@ -372,6 +378,7 @@ type ReadResourceRequest struct {
 }
 
 type ReadResourceResult struct {
+	Meta     map[string]any    `json:"_meta,omitzero"`
 	Contents []ResourceContent `json:"contents"`
 }
 
@@ -405,6 +412,7 @@ func (r ResourceContent) ToDataURI() string {
 type ListResourceTemplatesRequest struct{}
 
 type ListResourceTemplatesResult struct {
+	Meta              map[string]any     `json:"_meta,omitzero"`
 	ResourceTemplates []ResourceTemplate `json:"resourceTemplates"`
 }
 
@@ -431,7 +439,8 @@ type ResourceTemplate struct {
 type ListResourcesRequest struct{}
 
 type ListResourcesResult struct {
-	Resources []Resource `json:"resources"`
+	Meta      map[string]any `json:"_meta,omitzero"`
+	Resources []Resource     `json:"resources"`
 }
 
 type Resource struct {
@@ -455,7 +464,8 @@ type Annotations struct {
 type ListPromptsRequest struct{}
 
 type ListPromptsResult struct {
-	Prompts []Prompt `json:"prompts"`
+	Meta    map[string]any `json:"_meta,omitzero"`
+	Prompts []Prompt       `json:"prompts"`
 }
 
 type Prompt struct {

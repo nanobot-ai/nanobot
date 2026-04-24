@@ -261,6 +261,7 @@ func (c chatCall) chatInvoke(ctx context.Context, msg mcp.Message, payload mcp.C
 	}
 
 	mcpResult := mcp.CallToolResult{
+		Meta:              result.Meta,
 		StructuredContent: result.StructuredContent,
 		IsError:           result.IsError,
 		Content:           result.Content,

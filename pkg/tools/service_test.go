@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nanobot-ai/nanobot/pkg/mcp"
 	"github.com/nanobot-ai/nanobot/pkg/types"
 )
 
@@ -109,5 +110,63 @@ func TestConvertToSampleRequestRejectsInvalidAttachmentURL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "only data URI and file:/// URIs are supported") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAddHookMutationContent(t *testing.T) {
+	response := &types.CallResult{
+		Meta: map[string]any{
+			mcp.HookMutationsMetaKey: map[string]any{
+				"request": map[string]any{
+					"mutated": true,
+					"reasons": []any{"request normalized", "request redacted"},
+				},
+				"response": map[string]any{
+					"mutated": true,
+					"reasons": []any{"response filtered"},
+				},
+			},
+		},
+		Content: []mcp.Content{
+			{Type: "text", Text: "tool output"},
+		},
+	}
+
+	addHookMutationContent(response)
+
+	if len(response.Content) != 3 {
+		t.Fatalf("unexpected content length: %#v", response.Content)
+	}
+	if response.Content[0].Text != "MCP request was mutated by hooks. Reasons: request normalized; request redacted" {
+		t.Fatalf("request mutation content was not prepended: %#v", response.Content)
+	}
+	if response.Content[1].Text != "tool output" {
+		t.Fatalf("original tool output was not preserved in the middle: %#v", response.Content)
+	}
+	if response.Content[2].Text != "MCP response was mutated by hooks. Reasons: response filtered" {
+		t.Fatalf("response mutation content was not appended: %#v", response.Content)
+	}
+}
+
+func TestAddHookMutationContentOmitsUnmutatedDirections(t *testing.T) {
+	response := &types.CallResult{
+		Meta: map[string]any{
+			mcp.HookMutationsMetaKey: map[string]mcp.HookMutation{
+				"request": {Mutated: true, Reasons: []string{"request normalized"}},
+			},
+		},
+		Content: []mcp.Content{{Type: "text", Text: "tool output"}},
+	}
+
+	addHookMutationContent(response)
+
+	if len(response.Content) != 2 {
+		t.Fatalf("unexpected content length: %#v", response.Content)
+	}
+	if response.Content[0].Text != "MCP request was mutated by hooks. Reasons: request normalized" {
+		t.Fatalf("request mutation content was not prepended: %#v", response.Content)
+	}
+	if response.Content[1].Text != "tool output" {
+		t.Fatalf("original tool output was not preserved after request mutation content: %#v", response.Content)
 	}
 }
