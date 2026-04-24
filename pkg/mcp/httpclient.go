@@ -789,6 +789,17 @@ func (s *HTTPClient) readResponse(resp *http.Response) (bool, error) {
 		}
 	}
 
+	// If the server returned HTML (e.g. an OAuth login redirect that was followed),
+	// treat it as an authentication-required error so the OAuth flow can restart
+	// rather than surfacing a confusing JSON parse error.
+	if ct := resp.Header.Get("Content-Type"); strings.Contains(ct, "text/html") {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return false, AuthRequiredErr{
+			ProtectedResourceValue: resp.Header.Get("WWW-Authenticate"),
+			Err:                    fmt.Errorf("server returned HTML instead of JSON (status %d)", resp.StatusCode),
+		}
+	}
+
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return seen, fmt.Errorf("failed to read response body: %w", err)
@@ -799,6 +810,13 @@ func (s *HTTPClient) readResponse(resp *http.Response) (bool, error) {
 	}
 
 	if data[0] != '{' {
+		// If the body starts with '<' it is almost certainly HTML from an auth redirect.
+		if data[0] == '<' {
+			return false, AuthRequiredErr{
+				ProtectedResourceValue: resp.Header.Get("WWW-Authenticate"),
+				Err:                    fmt.Errorf("server returned HTML instead of JSON (status %d)", resp.StatusCode),
+			}
+		}
 		return false, fmt.Errorf("invalid response format, expected JSON object, got: %s", data)
 	}
 
