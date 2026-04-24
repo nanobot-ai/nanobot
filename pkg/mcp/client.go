@@ -427,7 +427,7 @@ func (c *Client) Initialize(ctx context.Context, param InitializeRequest) (resul
 
 	err = c.Session.Exchange(ctx, "initialize", param, &result)
 	if err == nil {
-		err = c.Session.Send(ctx, Message{
+		err = c.Session.Send(ctx, &Message{
 			Method: "notifications/initialized",
 		})
 	}

@@ -135,7 +135,7 @@ func (r *Message) SendError(ctx context.Context, err error) {
 		data = ErrRPCInternal.WithError(err)
 	}
 
-	resp := Message{
+	resp := &Message{
 		JSONRPC: r.JSONRPC,
 		ID:      r.ID,
 		Error:   data,
@@ -151,7 +151,7 @@ func (r *Message) Reply(ctx context.Context, result any) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal result: %w", err)
 	}
-	return r.Session.Send(ctx, Message{
+	return r.Session.Send(ctx, &Message{
 		JSONRPC: r.JSONRPC,
 		ID:      r.ID,
 		Result:  data,
