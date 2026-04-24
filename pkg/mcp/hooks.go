@@ -18,7 +18,7 @@ type HookRunner interface {
 type Hooks []HookMapping
 
 func (h *Hooks) UnmarshalJSON(data []byte) error {
-	var m map[string]stringList
+	var m map[string][]HookTarget
 	if err := json.Unmarshal(data, &m); err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func (h Hooks) MarshalJSON() ([]byte, error) {
 		return nil, nil
 	}
 
-	m := make(map[string][]string, len(h))
+	m := make(map[string][]HookTarget, len(h))
 	for _, mapping := range h {
 		m[mapping.String()] = mapping.Targets
 	}
@@ -54,30 +54,7 @@ func (h Hooks) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-type stringList []string
-
-func (s *stringList) UnmarshalJSON(data []byte) error {
-	if data[0] == '[' && data[len(data)-1] == ']' {
-		var raw []string
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return err
-		}
-		*s = raw
-	} else {
-		var raw string
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return err
-		}
-		var list []string
-		for item := range strings.SplitSeq(raw, ",") {
-			list = append(list, strings.TrimSpace(item))
-		}
-		*s = list
-	}
-	return nil
-}
-
-type HookResponseCallback[T any] = func(hook HookMapping, resp T, err error) T
+type HookResponseCallback[T any] = func(hook HookMapping, target HookTarget, resp T, err error) T
 
 func InvokeHooks[T any](ctx context.Context, r HookRunner, hooks Hooks, in *T, name string, params map[string]string, callbacks ...HookResponseCallback[T]) (T, error) {
 	var (
@@ -90,10 +67,10 @@ func InvokeHooks[T any](ctx context.Context, r HookRunner, hooks Hooks, in *T, n
 		if mapping.Matches(name, params) {
 			for _, target := range mapping.Targets {
 				matched = true
-				hasOutput, err := r.RunHook(ctx, current, &out, target)
+				hasOutput, err := r.RunHook(ctx, current, &out, target.Target)
 				if hasOutput || err != nil {
 					for _, cb := range callbacks {
-						out = cb(mapping, out, err)
+						out = cb(mapping, target, out, err)
 					}
 				}
 				if err != nil {
@@ -115,7 +92,30 @@ func InvokeHooks[T any](ctx context.Context, r HookRunner, hooks Hooks, in *T, n
 type HookMapping struct {
 	Name    string
 	Params  map[string]string
-	Targets []string
+	Targets []HookTarget
+}
+
+type HookTarget struct {
+	Target           string
+	MutateDisallowed bool
+}
+
+func (h *HookTarget) UnmarshalJSON(data []byte) error {
+	var target string
+	if err := json.Unmarshal(data, &target); err != nil {
+		return err
+	}
+
+	h.Target, h.MutateDisallowed = strings.CutPrefix(target, "!mutate:")
+	return nil
+}
+
+func (h *HookTarget) MarshalJSON() ([]byte, error) {
+	target := h.Target
+	if h.MutateDisallowed {
+		target = "!mutate:" + target
+	}
+	return json.Marshal(target)
 }
 
 func parseHookDefinition(data string) (result HookMapping, _ error) {
@@ -127,12 +127,8 @@ func parseHookDefinition(data string) (result HookMapping, _ error) {
 		}
 		result.Params = make(map[string]string, len(query))
 		for k, v := range query {
-			if len(v) == 0 {
-				continue
-			} else if len(v) > 1 {
+			if len(v) > 0 {
 				result.Params[k] = strings.Join(v, ",")
-			} else {
-				result.Params[k] = v[0]
 			}
 		}
 	}

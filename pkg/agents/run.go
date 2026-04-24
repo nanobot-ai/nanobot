@@ -527,9 +527,9 @@ func (a *Agents) configHook(ctx context.Context, baseConfig types.Config, agentN
 
 	agent := baseConfig.Agents[agentName]
 	if !slices.ContainsFunc(agent.Hooks, func(hook mcp.HookMapping) bool {
-		return hook.Name == "config" && slices.Contains(hook.Targets, "nanobot.system/config")
+		return hook.Name == "config" && slices.Contains(hook.Targets, mcp.HookTarget{Target: "nanobot.system/config"})
 	}) {
-		agent.Hooks = append(agent.Hooks, mcp.HookMapping{Name: "config", Targets: []string{"nanobot.system/config"}})
+		agent.Hooks = append(agent.Hooks, mcp.HookMapping{Name: "config", Targets: []mcp.HookTarget{{Target: "nanobot.system/config"}}})
 	}
 	hookResult, err := mcp.InvokeHooks(ctx, a.registry, agent.Hooks, &types.AgentConfigHook{
 		Agent:     &agent.HookAgent,

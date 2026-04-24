@@ -488,6 +488,7 @@ type SetLogLevelResult struct{}
 
 type SessionMessageHook struct {
 	Accept  bool     `json:"accept"`
+	Mutated bool     `json:"mutated"`
 	Message *Message `json:"message"`
 	Reason  string   `json:"reason"`
 }
