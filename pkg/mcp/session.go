@@ -675,16 +675,28 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 	hookResponse, _ := InvokeHooks(ctx, s.HookRunner, hooks, &SessionMessageHook{
 		Accept:  true,
 		Message: req,
-	}, req.Method, params, func(hook HookMapping, hookResponse SessionMessageHook, err error) SessionMessageHook {
+	}, req.Method, params, func(hook HookMapping, target HookTarget, hookResponse SessionMessageHook, err error) SessionMessageHook {
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to run hook %s: %w", hook.Name, err))
 			return hookResponse
+		}
+
+		if hookResponse.Mutated && target.MutateDisallowed {
+			if hookResponse.Reason != "" {
+				hookResponse.Reason += "; "
+			}
+
+			hookResponse.Reason += "mutation not allowed by hook configuration, implicit rejection"
+			hookResponse.Accept = false
+			hookResponse.Mutated = false
 		}
 
 		if auditLog != nil {
 			status := "ok"
 			if !hookResponse.Accept {
 				status = "rejected"
+			} else if hookResponse.Mutated {
+				status = "mutated"
 			}
 			auditLog.WebhookStatuses = append(auditLog.WebhookStatuses, auditlogs.MCPWebhookStatus{
 				Type:    direction,
@@ -700,9 +712,7 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 		}
 
 		// Use the hook response message if set, otherwise use the last value we have
-		if hookResponse.Message == nil {
-			hookResponse.Message = req
-		} else {
+		if hookResponse.Mutated {
 			req = hookResponse.Message
 			if string(req.Result) == "null" {
 				req.Result = nil
@@ -710,6 +720,8 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 			if string(req.Params) == "null" {
 				req.Params = nil
 			}
+		} else {
+			hookResponse.Message = req
 		}
 		return hookResponse
 	})
