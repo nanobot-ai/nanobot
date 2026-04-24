@@ -1,26 +1,22 @@
-//go:build !windows
+//go:build !windows && !linux
 
 package supervise
 
 import (
 	"errors"
-	"os"
 	"os/exec"
 	"syscall"
 )
 
+func configureDaemonReaping() error {
+	return nil
+}
+
 func configureDaemonCommand(cmd *exec.Cmd) {
-	wrapperPGID, err := syscall.Getpgid(0)
-	if err != nil || wrapperPGID != os.Getpid() {
-		// There are two regimes here:
-		//   1. If _exec is already the leader of its own process group, keep the wrapped
-		//      command in that same group so an external kill of the wrapper group
-		//      naturally reaps the whole subtree.
-		//   2. Otherwise, put the wrapped command in its own group so Cancel can still
-		//      signal the entire child subtree without depending on the parent's group.
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			Setpgid: true,
-		}
+	// Always put the wrapped command in its own process group so _exec can kill
+	// the child subtree without signaling itself during stdin-EOF cleanup.
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
 	}
 }
 
@@ -46,4 +42,11 @@ func daemonTargetPGID(cmd *exec.Cmd) (int, error) {
 		return cmd.Process.Pid, nil
 	}
 	return syscall.Getpgid(0)
+}
+
+func afterDaemonCommandExit(cmd *exec.Cmd, waitErr error) error {
+	if err := cancelDaemonCommand(cmd); err != nil {
+		return err
+	}
+	return waitErr
 }

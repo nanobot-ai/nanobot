@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	"log/slog"
 
@@ -57,13 +59,39 @@ type Cmd struct {
 	*exec.Cmd
 	cancel    func()
 	postStart func() error
+
+	stdinMu   sync.Mutex
+	stdinPipe io.WriteCloser
+	done      chan struct{}
+	doneOnce  sync.Once
+	stopOnce  sync.Once
 }
 
 func (c *Cmd) Wait() error {
-	if c.cancel != nil {
-		defer c.cancel()
+	err := c.Cmd.Wait()
+	if c.done != nil {
+		c.doneOnce.Do(func() {
+			close(c.done)
+		})
 	}
-	return c.Cmd.Wait()
+	if c.cancel != nil {
+		c.cancel()
+	}
+	return err
+}
+
+func (c *Cmd) StdinPipe() (io.WriteCloser, error) {
+	c.stdinMu.Lock()
+	defer c.stdinMu.Unlock()
+	if c.stdinPipe != nil {
+		return c.stdinPipe, nil
+	}
+	pipe, err := c.Cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	c.stdinPipe = pipe
+	return pipe, nil
 }
 
 func (c *Cmd) Start() error {
@@ -81,6 +109,50 @@ func (c *Cmd) Start() error {
 	}
 
 	return nil
+}
+
+func (c *Cmd) requestStop(forceCancel func()) {
+	// stopOnce ensures stdin is closed at most once even on racy shutdown between
+	// context cancellation and Wait() completion.
+	c.stopOnce.Do(func() {
+		c.stdinMu.Lock()
+		pipe := c.stdinPipe
+		c.stdinMu.Unlock()
+		if pipe == nil {
+			forceCancel()
+			return
+		}
+		_ = pipe.Close()
+		go func() {
+			timer := time.NewTimer(10 * time.Second)
+			defer timer.Stop()
+			select {
+			case <-c.done:
+			case <-timer.C:
+				forceCancel()
+			}
+		}()
+	})
+}
+
+func WrapCmd(ctx context.Context, cmd *exec.Cmd, forceCancel func(), postStart func() error) *Cmd {
+	wrapped := &Cmd{
+		Cmd:  cmd,
+		done: make(chan struct{}),
+	}
+	wrapped.cancel = func() {
+		wrapped.requestStop(forceCancel)
+	}
+	go func() {
+		select {
+		case <-ctx.Done():
+			wrapped.requestStop(forceCancel)
+		case <-wrapped.done:
+			forceCancel()
+		}
+	}()
+	wrapped.postStart = postStart
+	return wrapped
 }
 
 func getBaseImage(ctx context.Context, config Command) (string, error) {
@@ -151,20 +223,16 @@ func NewCmd(ctx context.Context, sandbox Command) (*Cmd, error) {
 	}
 	dockerArgs = append(dockerArgs, sandbox.Args...)
 
-	ctx, cancel := context.WithCancel(ctx)
-	cmd := supervise.Cmd(ctx, "docker", dockerArgs...)
-	return &Cmd{
-		cancel: cancel,
-		Cmd:    cmd,
-		postStart: func() error {
-			for _, port := range sandbox.ReversePorts {
-				if err := startReversePort(ctx, containerName, port, cancel); err != nil {
-					return err
-				}
+	internalCtx, forceCancel := context.WithCancel(context.Background())
+	cmd := supervise.Cmd(internalCtx, "docker", dockerArgs...)
+	return WrapCmd(ctx, cmd, forceCancel, func() error {
+		for _, port := range sandbox.ReversePorts {
+			if err := startReversePort(internalCtx, containerName, port, forceCancel); err != nil {
+				return err
 			}
-			return err
-		},
-	}, nil
+		}
+		return err
+	}), nil
 }
 
 func buildImage(ctx context.Context, baseImage string, config Command) (string, error) {

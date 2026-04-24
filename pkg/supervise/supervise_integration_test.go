@@ -3,7 +3,6 @@
 package supervise_test
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -52,52 +51,44 @@ func TestExecSupervisorCleansUpGrandchildrenOnStdinCloseWithSplitChildGroup(t *t
 	assertGrandchildExited(t, pidFile, "stdin close in split-child-group regime")
 }
 
-func TestExecSupervisorCleansUpGrandchildrenOnExternalCancel(t *testing.T) {
+func TestExecSupervisorCleansUpGrandchildrenWhenDirectChildExitsOnEOF(t *testing.T) {
 	repoRoot := superviseRepoRoot(t)
 	binPath := buildNanobotBinary(t, repoRoot)
-	helperPath, pidFile := writeGrandchildHelper(t)
+	helperPath, pidFile := writeEarlyExitGrandchildHelper(t)
+
+	cmd, stdin, output := startExecSupervisor(t, binPath, helperPath, supervisorStartOptions{
+		withStdin:           true,
+		supervisorOwnPGroup: true,
+	})
+
+	stdinWriter, ok := stdin.(io.WriteCloser)
+	if !ok {
+		t.Fatalf("stdin pipe does not support writes")
+	}
+	if _, err := io.WriteString(stdinWriter, "hello\n"); err != nil {
+		t.Fatalf("failed to write to supervisor stdin: %v", err)
+	}
+	go func() {
+		time.Sleep(1 * time.Second)
+		_ = stdin.Close()
+	}()
+
+	waitForExit(t, cmd, output)
+	assertGrandchildExited(t, pidFile, "direct child exit after stdin EOF")
+}
+
+func TestExecSupervisorCleansUpGrandchildrenWhenDirectChildExitsImmediately(t *testing.T) {
+	repoRoot := superviseRepoRoot(t)
+	binPath := buildNanobotBinary(t, repoRoot)
+	helperPath, pidFile := writeImmediateExitGrandchildHelper(t)
 
 	cmd, _, output := startExecSupervisor(t, binPath, helperPath, supervisorStartOptions{
 		withStdin:           false,
 		supervisorOwnPGroup: true,
 	})
 
-	pid := waitForPIDFile(t, pidFile)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
-
-	select {
-	case <-ctx.Done():
-		t.Fatalf("timed out waiting for supervisor to start: %v", ctx.Err())
-	case <-time.After(1 * time.Second):
-	}
-
-	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
-		t.Fatalf("failed to kill supervisor process group: %v", err)
-	}
-
-	select {
-	case err := <-done:
-		if err == nil {
-			t.Logf("nanobot _exec output:\n%s", strings.TrimSpace(output.String()))
-		} else {
-			t.Logf("nanobot _exec exited with %v\n%s", err, strings.TrimSpace(output.String()))
-		}
-	case <-ctx.Done():
-		t.Fatalf("timed out waiting for supervisor to exit after external cancel: %v", ctx.Err())
-	}
-
-	defer killIfAlive(t, pid)
-	time.Sleep(1 * time.Second)
-	if processExists(pid) {
-		psOut, _ := exec.Command("ps", "-o", "pid=,ppid=,pgid=,command=", "-p", strconv.Itoa(pid)).CombinedOutput()
-		t.Fatalf("grandchild process %d is still alive after external supervisor cancel\nprocess:\n%s", pid, strings.TrimSpace(string(psOut)))
-	}
+	waitForExit(t, cmd, output)
+	assertGrandchildExited(t, pidFile, "direct child immediate exit")
 }
 
 type supervisorStartOptions struct {
@@ -152,6 +143,39 @@ sleep 1000 </dev/null >/dev/null 2>&1 &
 grandchild=$!
 printf '%%s\n' "${grandchild}" > %q
 wait
+`, pidFile))
+	return helperPath, pidFile
+}
+
+func writeEarlyExitGrandchildHelper(t *testing.T) (helperPath, pidFile string) {
+	t.Helper()
+
+	workDir := t.TempDir()
+	pidFile = filepath.Join(workDir, "grandchild.pid")
+	helperPath = filepath.Join(workDir, "spawn-grandchild-early-exit.sh")
+	writeExecutableFile(t, helperPath, fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+sleep 1000 </dev/null >/dev/null 2>&1 &
+grandchild=$!
+printf '%%s\n' "${grandchild}" > %q
+cat >/dev/null
+exit 0
+`, pidFile))
+	return helperPath, pidFile
+}
+
+func writeImmediateExitGrandchildHelper(t *testing.T) (helperPath, pidFile string) {
+	t.Helper()
+
+	workDir := t.TempDir()
+	pidFile = filepath.Join(workDir, "grandchild.pid")
+	helperPath = filepath.Join(workDir, "spawn-grandchild-immediate-exit.sh")
+	writeExecutableFile(t, helperPath, fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+sleep 1000 </dev/null >/dev/null 2>&1 &
+grandchild=$!
+printf '%%s\n' "${grandchild}" > %q
+exit 0
 `, pidFile))
 	return helperPath, pidFile
 }

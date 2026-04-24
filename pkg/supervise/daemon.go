@@ -11,6 +11,10 @@ func Daemon() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if err := configureDaemonReaping(); err != nil {
+		return err
+	}
+
 	cmd := exec.CommandContext(ctx, os.Args[2], os.Args[3:]...)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
@@ -22,6 +26,11 @@ func Daemon() error {
 
 	processIn, err := cmd.StdinPipe()
 	if err != nil {
+		return err
+	}
+
+	if err := cmd.Start(); err != nil {
+		_ = processIn.Close()
 		return err
 	}
 
@@ -46,5 +55,6 @@ func Daemon() error {
 		cancel()
 	}()
 
-	return cmd.Run()
+	err = cmd.Wait()
+	return afterDaemonCommandExit(cmd, err)
 }
