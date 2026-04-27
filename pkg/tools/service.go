@@ -413,7 +413,7 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 				s.collectAuditLog(auditLog)
 			}()
 
-			return session.Send(mcp.WithMCPServerConfig(mcp.WithAuditLog(ctx, auditLog), mcpConfig), msg)
+			return session.Send(mcp.WithMCPServerConfig(mcp.WithAuditLog(ctx, auditLog), mcpConfig), &msg)
 		},
 		OnLogging: func(ctx context.Context, logMsg mcp.LoggingMessage) (err error) {
 			data, err := json.Marshal(mcp.LoggingMessage{
@@ -448,7 +448,7 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 				s.collectAuditLog(auditLog)
 			}()
 
-			return session.Send(mcp.WithMCPServerConfig(mcp.WithAuditLog(ctx, auditLog), mcpConfig), msg)
+			return session.Send(mcp.WithMCPServerConfig(mcp.WithAuditLog(ctx, auditLog), mcpConfig), &msg)
 		},
 		Runner: &s.runner,
 		HTTPClientOptions: mcp.HTTPClientOptions{

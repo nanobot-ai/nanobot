@@ -107,7 +107,7 @@ func (sm *SubscriptionManager) SendResourceUpdatedNotification(uri string) {
 	}
 	sm.mu.RUnlock()
 
-	notification := mcp.Message{
+	notification := &mcp.Message{
 		JSONRPC: "2.0",
 		Method:  "notifications/resources/updated",
 	}
@@ -134,7 +134,7 @@ func (sm *SubscriptionManager) SendResourceUpdatedNotification(uri string) {
 
 // SendListChangedNotification sends a notifications/resources/list_changed message to all sessions.
 func (sm *SubscriptionManager) SendListChangedNotification() {
-	notification := mcp.Message{
+	notification := &mcp.Message{
 		JSONRPC: "2.0",
 		Method:  "notifications/resources/list_changed",
 	}

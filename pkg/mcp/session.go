@@ -517,15 +517,18 @@ func (s *Session) SendPayload(ctx context.Context, method string, payload any) e
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
-	return s.Send(ctx, Message{
+	return s.Send(ctx, &Message{
 		Method: method,
 		Params: data,
 	})
 }
 
-func (s *Session) Send(ctx context.Context, req Message) error {
+func (s *Session) Send(ctx context.Context, req *Message) error {
 	if s.wire == nil {
 		return fmt.Errorf("empty session: wire is not initialized")
+	}
+	if req == nil {
+		return fmt.Errorf("request is nil")
 	}
 
 	s.lock.Lock()
@@ -533,21 +536,21 @@ func (s *Session) Send(ctx context.Context, req Message) error {
 	s.lock.Unlock()
 
 	for _, filter := range f {
-		newReq, err := filter.filter(ctx, &req)
+		newReq, err := filter.filter(ctx, req)
 		if err != nil || newReq == nil {
 			return err
 		}
-		req = *newReq
+		*req = *newReq
 	}
 
-	newReq, err := s.callAllHooks(ctx, &req, "request")
+	newReq, err := s.callAllHooks(ctx, req, "request")
 	if err != nil {
 		return fmt.Errorf("failed to call \"request\" hooks: %w", err)
 	}
 
-	req = *newReq
+	*req = *newReq
 	req.JSONRPC = "2.0"
-	if err := s.wire.Send(ctx, req); err != nil {
+	if err := s.wire.Send(ctx, *req); err != nil {
 		return err
 	}
 	return nil
@@ -712,14 +715,28 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 		}
 
 		// Use the hook response message if set, otherwise use the last value we have
-		if hookResponse.Mutated {
-			req = hookResponse.Message
-			if string(req.Result) == "null" {
-				req.Result = nil
+		if hookResponse.Mutated && hookResponse.Message != nil {
+			if string(hookResponse.Message.Result) == "null" {
+				hookResponse.Message.Result = nil
 			}
-			if string(req.Params) == "null" {
-				req.Params = nil
+			if string(hookResponse.Message.Params) == "null" {
+				hookResponse.Message.Params = nil
 			}
+
+			if auditLog != nil {
+				switch direction {
+				case "request":
+					mutatedMessage, _ := json.Marshal(hookResponse.Message)
+					auditLog.MutatedRequestBody = mutatedMessage
+				case "response":
+					if auditLog.OriginalResponseBody == nil {
+						originalMessage, _ := json.Marshal(req)
+						auditLog.OriginalResponseBody = originalMessage
+					}
+				}
+			}
+
+			*req = *hookResponse.Message
 		} else {
 			hookResponse.Message = req
 		}
@@ -772,7 +789,7 @@ func (s *Session) Exchange(ctx context.Context, method string, in, out any, opts
 	go func() {
 		defer close(errChan)
 
-		if err := s.Send(ctx, *req); err != nil {
+		if err := s.Send(ctx, req); err != nil {
 			errChan <- fmt.Errorf("failed to send request: %w", err)
 		}
 	}()
