@@ -131,30 +131,30 @@ func callResult(object any, err error) (*CallToolResult, error) {
 		return nil, err
 	}
 
-	if _, ok := object.(Content); ok {
+	if c, ok := object.(Content); ok {
 		// If the object is already a Content, we can return it directly
 		return &CallToolResult{
 			IsError: false,
-			Content: []Content{object.(Content)},
+			Content: []Content{c},
 		}, nil
 	}
-	if _, ok := object.(*Content); ok {
+	if c, ok := object.(*Content); ok {
 		// If the object is already a Content, we can return it directly
 		return &CallToolResult{
 			IsError: false,
-			Content: []Content{*(object.(*Content))},
+			Content: []Content{*c},
 		}, nil
 	}
-	if _, ok := object.([]Content); ok {
+	if c, ok := object.([]Content); ok {
 		// If the object is already a slice of Content, we can return it directly
 		return &CallToolResult{
 			IsError: false,
-			Content: object.([]Content),
+			Content: c,
 		}, nil
 	}
-	if _, ok := object.(*CallToolResult); ok {
+	if c, ok := object.(*CallToolResult); ok {
 		// If the object is already a CallToolResult, we can return it directly
-		return object.(*CallToolResult), nil
+		return c, nil
 	}
 	if res, ok := object.(*Resource); ok {
 		return &CallToolResult{

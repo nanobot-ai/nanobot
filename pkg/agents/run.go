@@ -440,9 +440,10 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 			return nil, err
 		}
 
-		ctx = types.WithConfig(ctx, config)
+		// Use a new context so that we don't leak values.
+		runCtx := types.WithConfig(ctx, config)
 
-		if err := a.run(ctx, config, currentRun, previousRun, opts); err != nil {
+		if err := a.run(runCtx, config, currentRun, previousRun, opts); err != nil {
 			return nil, err
 		}
 
@@ -457,7 +458,7 @@ func (a *Agents) Complete(ctx context.Context, req types.CompletionRequest, opts
 		}
 
 		// This doesn't return an error because any issues we run into should be returned to the LLM for further processing.
-		a.toolCalls(ctx, currentRun, opts)
+		a.toolCalls(runCtx, currentRun, opts)
 
 		if currentRun.Done {
 			if isChat {

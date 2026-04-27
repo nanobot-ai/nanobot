@@ -23,7 +23,13 @@ type Message struct {
 	Result  json.RawMessage `json:"result,omitempty"`
 	Error   *RPCError       `json:"error,omitempty"`
 
-	Session *Session `json:"-"`
+	Session       *Session                `json:"-"`
+	HookMutations map[string]HookMutation `json:"-"`
+}
+
+type HookMutation struct {
+	Mutated bool     `json:"mutated"`
+	Reasons []string `json:"reasons,omitempty"`
 }
 
 func NewMessage(method string, params any) (*Message, error) {
