@@ -707,6 +707,7 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 				Type:    direction,
 				Method:  req.Method,
 				Name:    hook.Name,
+				Tool:    target.Target,
 				Status:  status,
 				Message: hookResponse.Reason,
 			})

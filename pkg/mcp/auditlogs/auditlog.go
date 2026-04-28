@@ -40,6 +40,7 @@ type MCPWebhookStatus struct {
 	Type    string `json:"type,omitempty"`
 	Method  string `json:"method,omitempty"`
 	Name    string `json:"name"`
+	Tool    string `json:"tool"`
 	Status  string `json:"status"`
 	Message string `json:"message,omitempty"`
 }
