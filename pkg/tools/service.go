@@ -958,7 +958,8 @@ func (s *Service) listToolsForReferences(ctx context.Context, toolList []string)
 }
 
 func (s *Service) BuildToolMappings(ctx context.Context, toolList []string, opts ...types.BuildToolMappingsOptions) (types.ToolMappings, error) {
-	tools, err := s.listToolsForReferences(ctx, toolList)
+	// Separate the audit log from the context so that the audit log only reflects the operations for this specific call.
+	tools, err := s.listToolsForReferences(mcp.WithAuditLog(ctx, new(auditlogs.MCPAuditLog)), toolList)
 	if err != nil {
 		return nil, err
 	}
@@ -978,10 +979,6 @@ func hasOnlySampleKeys(args map[string]any) bool {
 		}
 	}
 	return true
-}
-
-func fileAttachmentPath(uri string) (string, error) {
-	return fileuri.Decode(uri)
 }
 
 func attachmentPreview(attachment types.Attachment, decodedPath string) mcp.Content {

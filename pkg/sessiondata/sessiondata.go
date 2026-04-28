@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/http"
 	"slices"
@@ -13,9 +14,9 @@ import (
 
 	"github.com/nanobot-ai/nanobot/pkg/complete"
 	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
 	"github.com/nanobot-ai/nanobot/pkg/schema"
 	"github.com/nanobot-ai/nanobot/pkg/types"
-	"log/slog"
 )
 
 const (
@@ -723,7 +724,9 @@ func (d *Data) BuildResourceMappings(ctx context.Context, refs []string) (types.
 			slog.Error("failed to get client while building resource mappings, skipping", "server", toolRef.Server, "error", err)
 			continue
 		}
-		resources, err := c.ListResources(ctx)
+
+		// Separate the audit log from the context so that the audit log only reflects the operations for this specific call.
+		resources, err := c.ListResources(mcp.WithAuditLog(ctx, new(auditlogs.MCPAuditLog)))
 		if err != nil {
 			slog.Error("failed to get resources while building resource mappings, skipping", "server", toolRef.Server, "error", err)
 			continue
@@ -754,7 +757,9 @@ func (d *Data) BuildResourceTemplateMappings(ctx context.Context, refs []string)
 			slog.Error("failed to get client while building resource template mappings, skipping", "server", toolRef.Server, "error", err)
 			continue
 		}
-		resources, err := c.ListResourceTemplates(ctx)
+
+		// Separate the audit log from the context so that the audit log only reflects the operations for this specific call.
+		resources, err := c.ListResourceTemplates(mcp.WithAuditLog(ctx, new(auditlogs.MCPAuditLog)))
 		if err != nil {
 			slog.Error("failed to get resource templates while building resource template mappings, skipping", "server", toolRef.Server, "error", err)
 		}
