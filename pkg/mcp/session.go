@@ -729,12 +729,10 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 			if auditLog != nil {
 				switch direction {
 				case "request":
-					mutatedMessage, _ := json.Marshal(hookResponse.Message)
-					auditLog.MutatedRequestBody = mutatedMessage
+					auditLog.MutatedRequestBody, _ = json.Marshal(hookResponse.Message)
 				case "response":
 					if auditLog.OriginalResponseBody == nil {
-						originalMessage, _ := json.Marshal(req)
-						auditLog.OriginalResponseBody = originalMessage
+						auditLog.OriginalResponseBody, _ = json.Marshal(req)
 					}
 				}
 			}
