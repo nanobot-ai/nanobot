@@ -12,6 +12,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -40,19 +41,20 @@ func isJWT(token string) bool {
 }
 
 type HTTPClient struct {
-	ctx          context.Context
-	cancel       context.CancelCauseFunc
-	clientLock   sync.RWMutex
-	httpClient   *http.Client
-	handler      WireHandler
-	oauthHandler *oauth
-	baseURL      string
-	messageURL   string
-	serverName   string
-	displayName  string
-	headers      map[string]string
-	waiter       *waiter
-	sse          bool
+	ctx                context.Context
+	cancel             context.CancelCauseFunc
+	clientLock         sync.RWMutex
+	httpClient         *http.Client
+	handler            WireHandler
+	oauthHandler       *oauth
+	baseURL            string
+	messageURL         string
+	serverName         string
+	displayName        string
+	headers            map[string]string
+	passthroughHeaders []string
+	waiter             *waiter
+	sse                bool
 
 	tokenExchangeEndpoint     string
 	tokenExchangeClientID     string
@@ -95,17 +97,18 @@ func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, ses
 	}
 
 	return &HTTPClient{
-		httpClient:        instrumentHTTPClient(http.DefaultClient),
-		oauthHandler:      newOAuth(opts.CallbackHandler, opts.ClientCredLookup, opts.TokenStorage, opts.OAuthClientName, opts.OAuthRedirectURL),
-		baseURL:           config.BaseURL,
-		messageURL:        config.BaseURL,
-		serverName:        serverName,
-		displayName:       complete.First(config.Name, config.ShortName, serverName),
-		headers:           maps.Clone(headers),
-		waiter:            newWaiter(),
-		needReconnect:     watchesEvents,
-		sessionID:         sessionID,
-		initializeRequest: initializeRequest,
+		httpClient:         instrumentHTTPClient(http.DefaultClient),
+		oauthHandler:       newOAuth(opts.CallbackHandler, opts.ClientCredLookup, opts.TokenStorage, opts.OAuthClientName, opts.OAuthRedirectURL),
+		baseURL:            config.BaseURL,
+		messageURL:         config.BaseURL,
+		serverName:         serverName,
+		displayName:        complete.First(config.Name, config.ShortName, serverName),
+		headers:            maps.Clone(headers),
+		passthroughHeaders: slices.Clone(config.PassthroughHeaders),
+		waiter:             newWaiter(),
+		needReconnect:      watchesEvents,
+		sessionID:          sessionID,
+		initializeRequest:  initializeRequest,
 
 		tokenExchangeClientID:     opts.TokenExchangeClientID,
 		tokenExchangeClientSecret: opts.TokenExchangeClientSecret,
@@ -217,6 +220,7 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 	for k, v := range s.headers {
 		req.Header.Set(k, v)
 	}
+	s.addPassthroughHeaders(ctx, req)
 
 	// Perform token exchange if configured and a token was parsed
 	// Check for a token on the context
@@ -250,6 +254,29 @@ func (s *HTTPClient) newRequest(ctx context.Context, method string, in any) (*ht
 	}
 
 	return req, nil
+}
+
+func (s *HTTPClient) addPassthroughHeaders(ctx context.Context, req *http.Request) {
+	incoming := RequestFromContext(ctx)
+	if incoming == nil {
+		return
+	}
+
+	for _, header := range s.passthroughHeaders {
+		header = strings.TrimSpace(header)
+		if header == "" {
+			continue
+		}
+
+		canonicalHeader := http.CanonicalHeaderKey(header)
+		if _, exists := req.Header[canonicalHeader]; exists {
+			continue
+		}
+
+		if values := incoming.Header.Values(header); len(values) != 0 {
+			req.Header[canonicalHeader] = values
+		}
+	}
 }
 
 func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID string) error {
