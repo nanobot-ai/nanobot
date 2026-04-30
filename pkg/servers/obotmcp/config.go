@@ -110,8 +110,11 @@ func sanitizeConfiguredMCPServerPromptField(value string) string {
 
 	var builder strings.Builder
 	builder.Grow(len(value))
-	for _, r := range value {
+	for i, r := range value {
 		switch {
+		case r == '$' && i+1 < len(value) && value[i+1] == '{':
+			// Escape ${ so it is not interpreted as a template expression by EvalString.
+			builder.WriteString(`$\`)
 		case r == '`':
 			builder.WriteRune('\'')
 		case unicode.IsControl(r):
