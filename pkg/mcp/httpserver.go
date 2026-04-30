@@ -247,8 +247,8 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request, aud
 
 type requestKey struct{}
 
-func withRequest(req *http.Request) context.Context {
-	return context.WithValue(req.Context(), requestKey{}, req)
+func WithRequest(ctx context.Context, req *http.Request) context.Context {
+	return context.WithValue(ctx, requestKey{}, req)
 }
 
 func RequestFromContext(ctx context.Context) *http.Request {
@@ -275,7 +275,7 @@ func (h *HTTPServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 }
 
 func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
-	req = req.WithContext(withRequest(req))
+	req = req.WithContext(WithRequest(req.Context(), req))
 	start := time.Now()
 	// Determine audit log method and session ID based on HTTP method
 	sessionID := h.sessions.ExtractID(req)

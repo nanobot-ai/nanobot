@@ -135,19 +135,20 @@ type Server struct {
 	ShortName   string `json:"shortName,omitempty"`
 	Description string `json:"description,omitempty"`
 
-	Image        string            `json:"image,omitempty"`
-	Dockerfile   string            `json:"dockerfile,omitempty"`
-	Source       ServerSource      `json:"source,omitzero"`
-	Sandboxed    bool              `json:"sandboxed,omitempty"`
-	Env          map[string]string `json:"env,omitempty"`
-	Command      string            `json:"command,omitempty"`
-	Args         []string          `json:"args,omitempty"`
-	BaseURL      string            `json:"url,omitempty"`
-	Ports        []string          `json:"ports,omitempty"`
-	ReversePorts []int             `json:"reversePorts,omitempty"`
-	Cwd          string            `json:"cwd,omitempty"`
-	Workdir      string            `json:"workdir,omitempty"`
-	Headers      map[string]string `json:"headers,omitempty"`
+	Image              string            `json:"image,omitempty"`
+	Dockerfile         string            `json:"dockerfile,omitempty"`
+	Source             ServerSource      `json:"source,omitzero"`
+	Sandboxed          bool              `json:"sandboxed,omitempty"`
+	Env                map[string]string `json:"env,omitempty"`
+	Command            string            `json:"command,omitempty"`
+	Args               []string          `json:"args,omitempty"`
+	BaseURL            string            `json:"url,omitempty"`
+	Ports              []string          `json:"ports,omitempty"`
+	ReversePorts       []int             `json:"reversePorts,omitempty"`
+	Cwd                string            `json:"cwd,omitempty"`
+	Workdir            string            `json:"workdir,omitempty"`
+	Headers            map[string]string `json:"headers,omitempty"`
+	PassthroughHeaders []string          `json:"passthroughHeaders,omitempty"`
 
 	// If providing tool overrides, any tools not included will be implicitly disabled.
 	// If providing no tool overrides, all tools will be enabled.

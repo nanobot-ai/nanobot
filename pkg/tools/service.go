@@ -549,6 +549,9 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 	}
 
 	sessionCtx := session.Context()
+	if req := mcp.RequestFromContext(ctx); req != nil {
+		sessionCtx = mcp.WithRequest(sessionCtx, req)
+	}
 	token := mcp.TokenFromContext(ctx)
 	if token != "" {
 		sessionCtx = mcp.WithToken(sessionCtx, token)

@@ -349,6 +349,14 @@ definitions:
           A map of headers that will be sent with requests to the MCP Server.
           This is useful for authentication or other custom headers that the
           MCP Server requires.
+      passthroughHeaders:
+        type: array
+        items:
+          type: string
+        description: |
+          A list of incoming HTTP request headers that will be forwarded to the
+          MCP Server. Static headers configured in `headers` take precedence
+          when the same header is configured in both places.
       env:
         $ref: "#/definitions/StringMap"
         description: |
