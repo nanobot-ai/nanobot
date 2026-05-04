@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	log2 "log"
 	"log/slog"
 	"os/exec"
 	"strings"
@@ -96,9 +95,8 @@ func (s *Stdio) Start(ctx context.Context, handler WireHandler) error {
 		s.Close(false)
 	})
 	go func() {
-		err := s.start(ctx, handler)
-		if err != nil {
-			log2.Fatal(err)
+		if err := s.start(ctx, handler); err != nil {
+			slog.Error("mcp stdio reader exited", "server", s.server, "error", err)
 		}
 	}()
 	return nil
