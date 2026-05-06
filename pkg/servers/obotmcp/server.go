@@ -3,8 +3,8 @@ package obotmcp
 import (
 	"context"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/version"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/version"
 )
 
 type Server struct {

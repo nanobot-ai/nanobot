@@ -13,13 +13,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/nanobot-ai/nanobot/pkg/agents"
-	"github.com/nanobot-ai/nanobot/pkg/config"
-	"github.com/nanobot-ai/nanobot/pkg/llm"
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/runtime"
-	"github.com/nanobot-ai/nanobot/pkg/servers/system"
-	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/obot-platform/nanobot/pkg/agents"
+	"github.com/obot-platform/nanobot/pkg/config"
+	"github.com/obot-platform/nanobot/pkg/llm"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/runtime"
+	"github.com/obot-platform/nanobot/pkg/servers/system"
+	"github.com/obot-platform/nanobot/pkg/types"
 )
 
 var numRuns = flag.Int("runs", 5, "number of times to run each prompt")

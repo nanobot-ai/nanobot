@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nanobot-ai/nanobot/pkg/agents"
-	"github.com/nanobot-ai/nanobot/pkg/llm"
-	"github.com/nanobot-ai/nanobot/pkg/llm/anthropic"
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/obot-platform/nanobot/pkg/agents"
+	"github.com/obot-platform/nanobot/pkg/llm"
+	"github.com/obot-platform/nanobot/pkg/llm/anthropic"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/types"
 )
 
 // setupWorkflowListing creates a recorder that mocks the glob tool with a pair of

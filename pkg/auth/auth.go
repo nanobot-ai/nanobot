@@ -10,11 +10,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/types"
 	"github.com/obot-platform/mcp-oauth-proxy/pkg/oauth/validate"
 	"github.com/obot-platform/mcp-oauth-proxy/pkg/proxy"
 	proxytypes "github.com/obot-platform/mcp-oauth-proxy/pkg/types"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/types"
 )
 
 type Auth struct {

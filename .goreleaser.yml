@@ -20,8 +20,8 @@ builds:
     ldflags:
       - -s
       - -w
-      - -X "github.com/nanobot-ai/nanobot/pkg/version.Tag=v{{ .Version }}"
-      - -X "github.com/nanobot-ai/nanobot/pkg/version.BaseImage=ghcr.io/nanobot-ai/nanobot:v{{ .Version }}"
+      - -X "github.com/obot-platform/nanobot/pkg/version.Tag=v{{ .Version }}"
+      - -X "github.com/obot-platform/nanobot/pkg/version.BaseImage=ghcr.io/obot-platform/nanobot:v{{ .Version }}"
 universal_binaries:
   - id: mac
     ids:
@@ -51,13 +51,13 @@ changelog:
       - Merge branch
 release:
   github:
-    owner: nanobot-ai
+    owner: obot-platform
     name: nanobot
   prerelease: auto
 dockers:
   - image_templates:
-      - "ghcr.io/nanobot-ai/nanobot:v{{ .Version }}-amd64"
-      - "ghcr.io/nanobot-ai/nanobot:latest-amd64"
+      - "ghcr.io/obot-platform/nanobot:v{{ .Version }}-amd64"
+      - "ghcr.io/obot-platform/nanobot:latest-amd64"
     dockerfile: Dockerfile
     use: buildx
     extra_files:
@@ -73,8 +73,8 @@ dockers:
       - "--label=org.opencontainers.image.description=Nanobot CLI"
     goarch: amd64
   - image_templates:
-      - "ghcr.io/nanobot-ai/nanobot:v{{ .Version }}-arm64"
-      - "ghcr.io/nanobot-ai/nanobot:latest-arm64"
+      - "ghcr.io/obot-platform/nanobot:v{{ .Version }}-arm64"
+      - "ghcr.io/obot-platform/nanobot:latest-arm64"
     dockerfile: Dockerfile
     use: buildx
     extra_files:
@@ -90,8 +90,8 @@ dockers:
       - "--label=org.opencontainers.image.description=Nanobot CLI"
     goarch: arm64
   - image_templates:
-      - "ghcr.io/nanobot-ai/nanobot-agent:v{{ .Version }}-amd64"
-      - "ghcr.io/nanobot-ai/nanobot-agent:latest-amd64"
+      - "ghcr.io/obot-platform/nanobot-agent:v{{ .Version }}-amd64"
+      - "ghcr.io/obot-platform/nanobot-agent:latest-amd64"
     dockerfile: Dockerfile.agent
     use: buildx
     extra_files:
@@ -108,8 +108,8 @@ dockers:
       - "--label=org.opencontainers.image.description=Nanobot agent image with browser automation support"
     goarch: amd64
   - image_templates:
-      - "ghcr.io/nanobot-ai/nanobot-agent:v{{ .Version }}-arm64"
-      - "ghcr.io/nanobot-ai/nanobot-agent:latest-arm64"
+      - "ghcr.io/obot-platform/nanobot-agent:v{{ .Version }}-arm64"
+      - "ghcr.io/obot-platform/nanobot-agent:latest-arm64"
     dockerfile: Dockerfile.agent
     use: buildx
     extra_files:
@@ -126,31 +126,19 @@ dockers:
       - "--label=org.opencontainers.image.description=Nanobot agent image with browser automation support"
     goarch: arm64
 docker_manifests:
-  - name_template: "ghcr.io/nanobot-ai/nanobot:v{{ .Version }}"
+  - name_template: "ghcr.io/obot-platform/nanobot:v{{ .Version }}"
     image_templates:
-      - "ghcr.io/nanobot-ai/nanobot:v{{ .Version }}-amd64"
-      - "ghcr.io/nanobot-ai/nanobot:v{{ .Version }}-arm64"
-  - name_template: "ghcr.io/nanobot-ai/nanobot:latest"
+      - "ghcr.io/obot-platform/nanobot:v{{ .Version }}-amd64"
+      - "ghcr.io/obot-platform/nanobot:v{{ .Version }}-arm64"
+  - name_template: "ghcr.io/obot-platform/nanobot:latest"
     image_templates:
-      - "ghcr.io/nanobot-ai/nanobot:latest-amd64"
-      - "ghcr.io/nanobot-ai/nanobot:latest-arm64"
-  - name_template: "ghcr.io/nanobot-ai/nanobot-agent:v{{ .Version }}"
+      - "ghcr.io/obot-platform/nanobot:latest-amd64"
+      - "ghcr.io/obot-platform/nanobot:latest-arm64"
+  - name_template: "ghcr.io/obot-platform/nanobot-agent:v{{ .Version }}"
     image_templates:
-      - "ghcr.io/nanobot-ai/nanobot-agent:v{{ .Version }}-amd64"
-      - "ghcr.io/nanobot-ai/nanobot-agent:v{{ .Version }}-arm64"
-  - name_template: "ghcr.io/nanobot-ai/nanobot-agent:latest"
+      - "ghcr.io/obot-platform/nanobot-agent:v{{ .Version }}-amd64"
+      - "ghcr.io/obot-platform/nanobot-agent:v{{ .Version }}-arm64"
+  - name_template: "ghcr.io/obot-platform/nanobot-agent:latest"
     image_templates:
-      - "ghcr.io/nanobot-ai/nanobot-agent:latest-amd64"
-      - "ghcr.io/nanobot-ai/nanobot-agent:latest-arm64"
-brews:
-  - name: nanobot
-    description: "Nanobot cli"
-    install: |
-      bin.install "nanobot"
-    homepage: "https://nanobot.ai"
-    skip_upload: false
-    directory: Formula
-    repository:
-      owner: nanobot-ai
-      name: homebrew-tap
-      token: "{{ .Env.GHCR_TOKEN }}"
+      - "ghcr.io/obot-platform/nanobot-agent:latest-amd64"
+      - "ghcr.io/obot-platform/nanobot-agent:latest-arm64"

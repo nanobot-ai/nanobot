@@ -3,9 +3,9 @@ package meta
 import (
 	"context"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/session"
-	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/session"
+	"github.com/obot-platform/nanobot/pkg/types"
 )
 
 func (s *Server) updateChat(ctx context.Context, data struct {

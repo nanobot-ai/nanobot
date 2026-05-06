@@ -11,7 +11,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/obot-platform/nanobot/pkg/types"
 	tiktoken "github.com/pkoukk/tiktoken-go"
 	"golang.org/x/image/webp"
 )

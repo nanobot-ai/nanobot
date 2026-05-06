@@ -2,7 +2,7 @@
 set -e
 set -o noglob
 
-GITHUB_URL=https://github.com/nanobot-ai/nanobot/releases
+GITHUB_URL=https://github.com/obot-platform/nanobot/releases
 DOWNLOADER=
 SHA=
 ARCH=
@@ -141,10 +141,10 @@ get_release_version() {
   info "Finding latest release"
   case $DOWNLOADER in
   curl)
-    VERSION_NANOBOT=$(curl -w '%{url_effective}' -L -s -S 'https://github.com/nanobot-ai/nanobot/releases/latest/download' -o /dev/null | sed -e 's|.*/||')
+    VERSION_NANOBOT=$(curl -w '%{url_effective}' -L -s -S 'https://github.com/obot-platform/nanobot/releases/latest/download' -o /dev/null | sed -e 's|.*/||')
     ;;
   wget)
-    VERSION_NANOBOT=$(wget -SqO /dev/null 'https://github.com/nanobot-ai/nanobot/releases/latest/download' 2>&1 | grep -i Location | sed -e 's|.*/||')
+    VERSION_NANOBOT=$(wget -SqO /dev/null 'https://github.com/obot-platform/nanobot/releases/latest/download' 2>&1 | grep -i Location | sed -e 's|.*/||')
     ;;
   *)
     fatal "Incorrect downloader executable '$DOWNLOADER'"

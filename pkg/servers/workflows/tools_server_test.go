@@ -8,9 +8,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/session"
-	"github.com/nanobot-ai/nanobot/pkg/skillformat"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/session"
+	"github.com/obot-platform/nanobot/pkg/skillformat"
 )
 
 func TestRecordWorkflowRun_DeduplicatesURI(t *testing.T) {

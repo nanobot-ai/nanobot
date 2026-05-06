@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/types"
 )
 
 func TestToInput_ToolCallResultInUserMessage(t *testing.T) {

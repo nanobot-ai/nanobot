@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/packages/ui"
+	"github.com/obot-platform/nanobot/packages/ui"
 )
 
 var browserProxy = newBrowserProxy()

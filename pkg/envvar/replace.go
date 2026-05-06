@@ -9,7 +9,7 @@ import (
 
 	"log/slog"
 
-	"github.com/nanobot-ai/nanobot/pkg/expr"
+	"github.com/obot-platform/nanobot/pkg/expr"
 )
 
 func ReplaceString(envs map[string]string, str string) string {

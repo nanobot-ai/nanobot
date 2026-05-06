@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/servers/system/skills"
-	"github.com/nanobot-ai/nanobot/pkg/skillformat"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/servers/system/skills"
+	"github.com/obot-platform/nanobot/pkg/skillformat"
 	"gopkg.in/yaml.v3"
 )
 

@@ -1,4 +1,4 @@
-module github.com/nanobot-ai/nanobot
+module github.com/obot-platform/nanobot
 
 go 1.26.2
 

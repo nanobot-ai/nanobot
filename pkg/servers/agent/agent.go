@@ -7,13 +7,13 @@ import (
 	"log/slog"
 	"slices"
 
-	"github.com/nanobot-ai/nanobot/pkg/agents"
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/sampling"
-	"github.com/nanobot-ai/nanobot/pkg/sessiondata"
-	"github.com/nanobot-ai/nanobot/pkg/tools"
-	"github.com/nanobot-ai/nanobot/pkg/types"
-	"github.com/nanobot-ai/nanobot/pkg/version"
+	"github.com/obot-platform/nanobot/pkg/agents"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/sampling"
+	"github.com/obot-platform/nanobot/pkg/sessiondata"
+	"github.com/obot-platform/nanobot/pkg/tools"
+	"github.com/obot-platform/nanobot/pkg/types"
+	"github.com/obot-platform/nanobot/pkg/version"
 )
 
 type Server struct {

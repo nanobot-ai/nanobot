@@ -7,7 +7,7 @@ import (
 
 var (
 	Tag       = "v0.0.0-dev"
-	BaseImage = "ghcr.io/nanobot-ai/nanobot:main"
+	BaseImage = "ghcr.io/obot-platform/nanobot:main"
 	Name      = "nanobot"
 )
 

@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/servers/obotmcp"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/servers/obotmcp"
 )
 
 const mcpCLIClientName = "MCP_CLIENT_NAME=Obot Agent mcp-cli"

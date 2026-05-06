@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
-	"github.com/nanobot-ai/nanobot/pkg/servers/installzip"
-	obotconfig "github.com/nanobot-ai/nanobot/pkg/servers/obot"
-	"github.com/nanobot-ai/nanobot/pkg/skillformat"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/servers/agent"
+	"github.com/obot-platform/nanobot/pkg/servers/installzip"
+	obotconfig "github.com/obot-platform/nanobot/pkg/servers/obot"
+	"github.com/obot-platform/nanobot/pkg/skillformat"
 )
 
 type installArtifactParams struct {

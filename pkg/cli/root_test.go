@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nanobot-ai/nanobot/pkg/config"
+	"github.com/obot-platform/nanobot/pkg/config"
 )
 
 func TestNanobotConfigPathsDefault(t *testing.T) {

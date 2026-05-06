@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nanobot-ai/nanobot/pkg/skillformat"
+	"github.com/obot-platform/nanobot/pkg/skillformat"
 )
 
 // testdataDir returns the absolute path to the testdata directory

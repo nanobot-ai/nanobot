@@ -7,16 +7,16 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/envvar"
-	"github.com/nanobot-ai/nanobot/pkg/llm/anthropic"
-	"github.com/nanobot-ai/nanobot/pkg/llm/bifrost"
-	"github.com/nanobot-ai/nanobot/pkg/llm/completions"
-	"github.com/nanobot-ai/nanobot/pkg/llm/progress"
-	"github.com/nanobot-ai/nanobot/pkg/llm/responses"
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/types"
-	"github.com/nanobot-ai/nanobot/pkg/uuid"
+	"github.com/obot-platform/nanobot/pkg/complete"
+	"github.com/obot-platform/nanobot/pkg/envvar"
+	"github.com/obot-platform/nanobot/pkg/llm/anthropic"
+	"github.com/obot-platform/nanobot/pkg/llm/bifrost"
+	"github.com/obot-platform/nanobot/pkg/llm/completions"
+	"github.com/obot-platform/nanobot/pkg/llm/progress"
+	"github.com/obot-platform/nanobot/pkg/llm/responses"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/types"
+	"github.com/obot-platform/nanobot/pkg/uuid"
 )
 
 var _ types.Completer = (*Client)(nil)

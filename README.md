@@ -32,7 +32,7 @@ Here are some examples of Nanobots in action:
 Nanobot can be installed via [Homebrew](https://brew.sh/):
 
 ```bash
-brew install nanobot-ai/tap/nanobot
+brew install obot-platform/tap/nanobot
 ```
 
 This will give you the `nanobot` CLI, which you can use to run and manage your MCP host.
@@ -292,4 +292,4 @@ Nanobot is licensed under the [Apache 2.0 License](LICENSE).
 ## Links
 
 - Website: [nanobot.ai](https://nanobot.ai)
-- GitHub: [github.com/nanobot-ai/nanobot](https://github.com/nanobot-ai/nanobot)
+- GitHub: [github.com/obot-platform/nanobot](https://github.com/obot-platform/nanobot)

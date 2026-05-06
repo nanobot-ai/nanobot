@@ -9,9 +9,9 @@ import (
 
 	"log/slog"
 
-	"github.com/nanobot-ai/nanobot/pkg/reverseproxy"
-	"github.com/nanobot-ai/nanobot/pkg/supervise"
-	"github.com/nanobot-ai/nanobot/pkg/version"
+	"github.com/obot-platform/nanobot/pkg/reverseproxy"
+	"github.com/obot-platform/nanobot/pkg/supervise"
+	"github.com/obot-platform/nanobot/pkg/version"
 )
 
 func startReversePort(ctx context.Context, targetContainerName string, port int, cancel func()) error {

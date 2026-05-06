@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/obot-platform/nanobot/pkg/types"
 )
 
 func TestLoadFromDirectory_Simple(t *testing.T) {

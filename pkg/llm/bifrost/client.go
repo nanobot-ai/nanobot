@@ -14,11 +14,11 @@ import (
 	"log/slog"
 
 	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/nanobot-ai/nanobot/pkg/complete"
-	llmProgress "github.com/nanobot-ai/nanobot/pkg/llm/progress"
-	"github.com/nanobot-ai/nanobot/pkg/log"
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/obot-platform/nanobot/pkg/complete"
+	llmProgress "github.com/obot-platform/nanobot/pkg/llm/progress"
+	"github.com/obot-platform/nanobot/pkg/log"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/types"
 )
 
 type Client struct {

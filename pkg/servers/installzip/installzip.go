@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/skillformat"
+	"github.com/obot-platform/nanobot/pkg/skillformat"
 )
 
 const (

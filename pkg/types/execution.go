@@ -1,6 +1,6 @@
 package types
 
-import "github.com/nanobot-ai/nanobot/pkg/mcp"
+import "github.com/obot-platform/nanobot/pkg/mcp"
 
 const PreviousExecutionKey = "thread"
 

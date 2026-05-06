@@ -3,7 +3,7 @@ package mcp
 import (
 	"context"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
+	"github.com/obot-platform/nanobot/pkg/mcp/auditlogs"
 )
 
 var sessionKey = struct{}{}

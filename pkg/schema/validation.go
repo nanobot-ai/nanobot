@@ -3,7 +3,7 @@ package schema
 import (
 	"encoding/json"
 
-	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/obot-platform/nanobot/pkg/types"
 )
 
 // ValidateAndFixToolSchema validates and fixes tool input schemas to ensure they meet

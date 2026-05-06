@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nanobot-ai/nanobot/pkg/servers/installzip"
-	"github.com/nanobot-ai/nanobot/pkg/skillformat"
+	"github.com/obot-platform/nanobot/pkg/servers/installzip"
+	"github.com/obot-platform/nanobot/pkg/skillformat"
 )
 
 func createTestZIP(t *testing.T, fm skillformat.Frontmatter, body string, files map[string]string) []byte {

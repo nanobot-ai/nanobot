@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/obot-platform/nanobot/pkg/types"
 	"sigs.k8s.io/yaml"
 )
 

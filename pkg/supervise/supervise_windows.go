@@ -4,7 +4,7 @@ import (
 	"context"
 	"os/exec"
 
-	"github.com/nanobot-ai/nanobot/pkg/system"
+	"github.com/obot-platform/nanobot/pkg/system"
 )
 
 func Cmd(ctx context.Context, command string, args ...string) *exec.Cmd {

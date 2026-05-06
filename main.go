@@ -3,9 +3,9 @@ package main
 import (
 	"os"
 
-	"github.com/nanobot-ai/nanobot/pkg/cli"
-	"github.com/nanobot-ai/nanobot/pkg/cmd"
-	"github.com/nanobot-ai/nanobot/pkg/supervise"
+	"github.com/obot-platform/nanobot/pkg/cli"
+	"github.com/obot-platform/nanobot/pkg/cmd"
+	"github.com/obot-platform/nanobot/pkg/supervise"
 )
 
 func main() {

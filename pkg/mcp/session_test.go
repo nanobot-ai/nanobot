@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
+	"github.com/obot-platform/nanobot/pkg/mcp/auditlogs"
 )
 
 type staticHookRunner struct {

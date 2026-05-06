@@ -12,11 +12,11 @@ import (
 
 	"log/slog"
 
-	"github.com/nanobot-ai/nanobot/pkg/fileuri"
-	"github.com/nanobot-ai/nanobot/pkg/fswatch"
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/skillformat"
-	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/obot-platform/nanobot/pkg/fileuri"
+	"github.com/obot-platform/nanobot/pkg/fswatch"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/skillformat"
+	"github.com/obot-platform/nanobot/pkg/types"
 )
 
 const sessionsDir = "sessions"

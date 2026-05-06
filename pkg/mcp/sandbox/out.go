@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
+	"github.com/obot-platform/nanobot/pkg/log"
 )
 
 func PipeOut(ctx context.Context, outRead io.Reader, serverName string) {

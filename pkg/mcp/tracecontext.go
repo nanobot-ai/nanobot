@@ -16,7 +16,7 @@ var mcpTracePropagator = propagation.NewCompositeTextMapPropagator(
 )
 
 func startOutboundSpan(ctx context.Context, name string, attrs ...attribute.KeyValue) (context.Context, trace.Span) {
-	return otel.Tracer("github.com/nanobot-ai/nanobot/pkg/mcp").Start(
+	return otel.Tracer("github.com/obot-platform/nanobot/pkg/mcp").Start(
 		ctx,
 		name,
 		trace.WithSpanKind(trace.SpanKindClient),

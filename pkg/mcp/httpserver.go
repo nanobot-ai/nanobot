@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
-	"github.com/nanobot-ai/nanobot/pkg/uuid"
+	"github.com/obot-platform/nanobot/pkg/complete"
+	"github.com/obot-platform/nanobot/pkg/mcp/auditlogs"
+	"github.com/obot-platform/nanobot/pkg/uuid"
 	"github.com/tidwall/gjson"
 )
 

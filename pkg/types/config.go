@@ -10,8 +10,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/complete"
+	"github.com/obot-platform/nanobot/pkg/mcp"
 	"gopkg.in/yaml.v3"
 )
 

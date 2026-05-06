@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nanobot-ai/nanobot/pkg/auth"
-	"github.com/nanobot-ai/nanobot/pkg/confirm"
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
-	"github.com/nanobot-ai/nanobot/pkg/runtime"
-	"github.com/nanobot-ai/nanobot/pkg/session"
-	"github.com/nanobot-ai/nanobot/pkg/types"
+	"github.com/obot-platform/nanobot/pkg/auth"
+	"github.com/obot-platform/nanobot/pkg/confirm"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/mcp/auditlogs"
+	"github.com/obot-platform/nanobot/pkg/runtime"
+	"github.com/obot-platform/nanobot/pkg/session"
+	"github.com/obot-platform/nanobot/pkg/types"
 	"github.com/spf13/cobra"
 )
 

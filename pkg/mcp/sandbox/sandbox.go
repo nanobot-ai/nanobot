@@ -17,9 +17,9 @@ import (
 
 	"log/slog"
 
-	"github.com/nanobot-ai/nanobot/pkg/supervise"
-	"github.com/nanobot-ai/nanobot/pkg/uuid"
-	"github.com/nanobot-ai/nanobot/pkg/version"
+	"github.com/obot-platform/nanobot/pkg/supervise"
+	"github.com/obot-platform/nanobot/pkg/uuid"
+	"github.com/obot-platform/nanobot/pkg/version"
 )
 
 var (

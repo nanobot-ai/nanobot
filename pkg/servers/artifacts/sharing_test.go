@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/mcp"
 )
 
 func artifactTestContext(baseURL string, env map[string]string) context.Context {

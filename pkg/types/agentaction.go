@@ -3,7 +3,7 @@ package types
 import (
 	"encoding/json"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/mcp"
 )
 
 type UIAction struct {

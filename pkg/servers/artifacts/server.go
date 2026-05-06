@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	obotconfig "github.com/nanobot-ai/nanobot/pkg/servers/obot"
-	"github.com/nanobot-ai/nanobot/pkg/version"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	obotconfig "github.com/obot-platform/nanobot/pkg/servers/obot"
+	"github.com/obot-platform/nanobot/pkg/version"
 )
 
 type Server struct {

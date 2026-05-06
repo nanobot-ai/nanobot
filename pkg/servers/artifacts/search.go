@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/url"
 
-	obotconfig "github.com/nanobot-ai/nanobot/pkg/servers/obot"
+	obotconfig "github.com/obot-platform/nanobot/pkg/servers/obot"
 )
 
 type searchArtifactsParams struct {

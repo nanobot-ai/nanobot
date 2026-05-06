@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/nanobot-ai/nanobot/pkg/log"
+	"github.com/obot-platform/nanobot/pkg/log"
 )
 
 type waiter struct {

@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
-	"github.com/nanobot-ai/nanobot/pkg/servers/agent"
-	"github.com/nanobot-ai/nanobot/pkg/servers/installzip"
-	"github.com/nanobot-ai/nanobot/pkg/skillformat"
+	"github.com/obot-platform/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/servers/agent"
+	"github.com/obot-platform/nanobot/pkg/servers/installzip"
+	"github.com/obot-platform/nanobot/pkg/skillformat"
 )
 
 type installSkillParams struct {

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/mcp"
 )
 
 const testSessionID = "test-session-123"

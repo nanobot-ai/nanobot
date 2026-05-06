@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/mcp"
 )
 
 // loadFixture reads testdata to "replay" SSE responses and test parsing. Fixtures are recorded by simply using

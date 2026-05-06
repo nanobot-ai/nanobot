@@ -11,9 +11,9 @@ import (
 
 	"log/slog"
 
-	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/envvar"
-	"github.com/nanobot-ai/nanobot/pkg/version"
+	"github.com/obot-platform/nanobot/pkg/complete"
+	"github.com/obot-platform/nanobot/pkg/envvar"
+	"github.com/obot-platform/nanobot/pkg/version"
 	"go.opentelemetry.io/otel/attribute"
 )
 

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/hexops/autogold/v2"
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/mcp"
 )
 
 func TestCompletionItem_Text(t *testing.T) {

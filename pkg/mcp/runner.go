@@ -14,10 +14,10 @@ import (
 
 	"log/slog"
 
-	"github.com/nanobot-ai/nanobot/pkg/envvar"
-	"github.com/nanobot-ai/nanobot/pkg/mcp/sandbox"
-	"github.com/nanobot-ai/nanobot/pkg/supervise"
-	"github.com/nanobot-ai/nanobot/pkg/system"
+	"github.com/obot-platform/nanobot/pkg/envvar"
+	"github.com/obot-platform/nanobot/pkg/mcp/sandbox"
+	"github.com/obot-platform/nanobot/pkg/supervise"
+	"github.com/obot-platform/nanobot/pkg/system"
 )
 
 type Runner struct {

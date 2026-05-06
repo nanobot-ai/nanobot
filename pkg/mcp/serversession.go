@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/uuid"
+	"github.com/obot-platform/nanobot/pkg/complete"
+	"github.com/obot-platform/nanobot/pkg/uuid"
 )
 
 var (

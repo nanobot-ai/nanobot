@@ -10,8 +10,8 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/nanobot-ai/nanobot/pkg/complete"
-	"github.com/nanobot-ai/nanobot/pkg/mcp/auditlogs"
+	"github.com/obot-platform/nanobot/pkg/complete"
+	"github.com/obot-platform/nanobot/pkg/mcp/auditlogs"
 )
 
 var ErrNoResult = errors.New("no result in response")

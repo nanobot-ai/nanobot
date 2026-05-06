@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nanobot-ai/nanobot/pkg/mcp"
+	"github.com/obot-platform/nanobot/pkg/mcp"
 )
 
 func TestObotMCPBashEnvVarsAddsAPIKeyWithoutMCPCLIRefresh(t *testing.T) {
