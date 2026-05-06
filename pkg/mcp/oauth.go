@@ -16,6 +16,7 @@ import (
 
 	"log/slog"
 
+	"github.com/obot-platform/nanobot/pkg/version"
 	"golang.org/x/oauth2"
 )
 
@@ -31,6 +32,63 @@ type oauth struct {
 	callbackHandler         CallbackHandler
 	clientLookup            ClientCredLookup
 	tokenStorage            TokenStorage
+}
+
+type oauthMetadataDiscovery struct {
+	ProtectedResourceURL            string
+	ProtectedResourceMetadata       protectedResourceMetadata
+	ProtectedResourceMetadataJSON   json.RawMessage
+	AuthorizationServerURL          string
+	AuthorizationServerMetadataURL  string
+	AuthorizationServerMetadata     authorizationServerMetadata
+	AuthorizationServerMetadataJSON json.RawMessage
+	DynamicClientRegistration       bool
+	Scope                           string
+}
+
+// OAuthMetadata contains discovered OAuth metadata for an MCP server.
+type OAuthMetadata struct {
+	ProtectedResourceMetadataURL   string          `json:"protectedResourceMetadataUrl,omitempty"`
+	AuthorizationServerMetadataURL string          `json:"authorizationServerMetadataUrl,omitempty"`
+	ProtectedResourceMetadata      json.RawMessage `json:"protectedResourceMetadata,omitempty"`
+	AuthorizationServerMetadata    json.RawMessage `json:"authorizationServerMetadata,omitempty"`
+	DynamicClientRegistration      bool            `json:"dynamicClientRegistration,omitempty"`
+}
+
+// GetOAuthMetadata discovers OAuth protected resource and authorization server
+// metadata for an HTTP MCP server. Missing metadata endpoints are not errors.
+func GetOAuthMetadata(ctx context.Context, server Server) (OAuthMetadata, error) {
+	if server.BaseURL == "" {
+		return OAuthMetadata{}, nil
+	}
+
+	metadataClient := instrumentHTTPClient(&http.Client{
+		Timeout: 5 * time.Second,
+	})
+
+	authenticateHeader, initialized, err := wwwAuthenticateFromInitialize(ctx, metadataClient, server)
+	if err != nil {
+		return OAuthMetadata{}, err
+	}
+	if initialized {
+		return OAuthMetadata{}, nil
+	}
+
+	discovery, ok, err := discoverOAuthMetadata(ctx, metadataClient, server.BaseURL, authenticateHeader, server.Headers, true)
+	if err != nil {
+		return OAuthMetadata{}, err
+	}
+	if !ok {
+		return OAuthMetadata{}, nil
+	}
+
+	return OAuthMetadata{
+		ProtectedResourceMetadataURL:   discovery.ProtectedResourceURL,
+		AuthorizationServerMetadataURL: discovery.AuthorizationServerMetadataURL,
+		ProtectedResourceMetadata:      discovery.ProtectedResourceMetadataJSON,
+		AuthorizationServerMetadata:    discovery.AuthorizationServerMetadataJSON,
+		DynamicClientRegistration:      discovery.DynamicClientRegistration,
+	}, nil
 }
 
 func newOAuth(callbackHandler CallbackHandler, clientLookup ClientCredLookup, tokenStorage TokenStorage, clientName, redirectURL string) *oauth {
@@ -73,21 +131,74 @@ func (o *oauth) loadFromStorage(ctx context.Context, connectURL string) *http.Cl
 	return nil
 }
 
-func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, authenticateHeader string) (*http.Client, error) {
-	slog.Info("starting oauth flow", "server", c.serverName, "connect_url", connectURL)
-
-	if httpClient := o.loadFromStorage(ctx, connectURL); httpClient != nil {
-		slog.Info("oauth flow skipped, using stored token", "server", c.serverName, "connect_url", connectURL)
-		return httpClient, nil
-	}
-
-	if o.callbackHandler == nil || o.redirectURL == "" {
-		return nil, fmt.Errorf("oauth callback server is not configured")
-	}
-
-	u, err := url.Parse(c.baseURL)
+func discoverOAuthMetadata(ctx context.Context, client *http.Client, baseURL, authenticateHeader string, headers map[string]string, requireProtectedResourceMetadata bool) (oauthMetadataDiscovery, bool, error) {
+	resourceMetadataURL, scope, u, err := oauthResourceMetadataURL(baseURL, authenticateHeader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse MCP URL: %w", err)
+		return oauthMetadataDiscovery{}, false, err
+	}
+	slog.Info("fetching protected resource metadata", "url", resourceMetadataURL)
+
+	protectedResourceMetadataJSON, ok, err := getOAuthMetadataJSON(ctx, client, resourceMetadataURL, headers)
+	if err != nil {
+		return oauthMetadataDiscovery{}, false, fmt.Errorf("failed to get protected resource metadata: %w", err)
+	}
+	if !ok && requireProtectedResourceMetadata {
+		return oauthMetadataDiscovery{}, false, nil
+	}
+
+	var protectedResourceMetadata protectedResourceMetadata
+	if ok {
+		protectedResourceMetadata, err = parseProtectedResourceMetadata(bytes.NewReader(protectedResourceMetadataJSON))
+		if err != nil {
+			return oauthMetadataDiscovery{}, false, fmt.Errorf("failed to parse protected resource metadata: %w", err)
+		}
+	}
+
+	// If no scopes were found in the WWW-Authenticate header, use the ones from the protected resource metadata as a fallback.
+	// This follows the scope selection strategy outlined here: https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#scope-selection-strategy
+	if scope == "" {
+		scope = strings.Join(protectedResourceMetadata.ScopesSupported, " ")
+	}
+
+	if len(protectedResourceMetadata.AuthorizationServers) == 0 {
+		protectedResourceMetadata.AuthorizationServers = []string{fmt.Sprintf("%s://%s", u.Scheme, u.Host)}
+	}
+	authorizationServerURL := protectedResourceMetadata.AuthorizationServers[0]
+
+	authorizationServerMetadata, authorizationServerMetadataURL, authorizationServerMetadataJSON, ok, err := getAuthServerMetadata(ctx, client, authorizationServerURL, headers)
+	if err != nil {
+		return oauthMetadataDiscovery{}, false, fmt.Errorf("failed to get authorization server metadata: %w", err)
+	}
+	if !ok {
+		return oauthMetadataDiscovery{}, false, nil
+	}
+
+	var rawAuthorizationServerMetadata struct {
+		RegistrationEndpoint string `json:"registration_endpoint"`
+	}
+	if len(authorizationServerMetadataJSON) > 0 {
+		if err := json.Unmarshal(authorizationServerMetadataJSON, &rawAuthorizationServerMetadata); err != nil {
+			return oauthMetadataDiscovery{}, false, fmt.Errorf("failed to parse authorization server metadata: %w", err)
+		}
+	}
+
+	return oauthMetadataDiscovery{
+		ProtectedResourceURL:            resourceMetadataURL,
+		ProtectedResourceMetadata:       protectedResourceMetadata,
+		ProtectedResourceMetadataJSON:   protectedResourceMetadataJSON,
+		AuthorizationServerURL:          authorizationServerURL,
+		AuthorizationServerMetadataURL:  authorizationServerMetadataURL,
+		AuthorizationServerMetadata:     authorizationServerMetadata,
+		AuthorizationServerMetadataJSON: authorizationServerMetadataJSON,
+		DynamicClientRegistration:       rawAuthorizationServerMetadata.RegistrationEndpoint != "",
+		Scope:                           scope,
+	}, true, nil
+}
+
+func oauthResourceMetadataURL(baseURL, authenticateHeader string) (string, string, *url.URL, error) {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to parse MCP URL: %w", err)
 	}
 
 	var (
@@ -103,42 +214,34 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 		u.Path = "/.well-known/oauth-protected-resource"
 		resourceMetadataURL = u.String()
 	}
-	slog.Info("fetching protected resource metadata", "server", c.serverName, "url", resourceMetadataURL)
 
-	// Get the protected resource metadata
-	protectedResourceResp, err := o.metadataClient.Get(resourceMetadataURL)
+	return resourceMetadataURL, scope, u, nil
+}
+
+func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, authenticateHeader string) (*http.Client, error) {
+	slog.Info("starting oauth flow", "server", c.serverName, "connect_url", connectURL)
+
+	if httpClient := o.loadFromStorage(ctx, connectURL); httpClient != nil {
+		slog.Info("oauth flow skipped, using stored token", "server", c.serverName, "connect_url", connectURL)
+		return httpClient, nil
+	}
+
+	if o.callbackHandler == nil || o.redirectURL == "" {
+		return nil, fmt.Errorf("oauth callback server is not configured")
+	}
+
+	discovery, ok, err := discoverOAuthMetadata(ctx, o.metadataClient, c.baseURL, authenticateHeader, nil, false)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get protected resource metadata: %w", err)
+		return nil, err
 	}
-	defer protectedResourceResp.Body.Close()
-
-	var protectedResourceMetadata protectedResourceMetadata
-	if protectedResourceResp.StatusCode != http.StatusOK && protectedResourceResp.StatusCode != http.StatusNotFound {
-		body, _ := io.ReadAll(protectedResourceResp.Body)
-		return nil, fmt.Errorf("unexpected status getting protected resource metadata (%d): %s", protectedResourceResp.StatusCode, string(body))
-	} else if protectedResourceResp.StatusCode == http.StatusOK {
-		protectedResourceMetadata, err = parseProtectedResourceMetadata(protectedResourceResp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse protected resource metadata: %w", err)
-		}
+	if !ok {
+		return nil, fmt.Errorf("failed to get authorization server metadata")
 	}
-
-	// If no scopes were found in the WWW-Authenticate header, use the ones from the protected resource metadata as a fallback.
-	// This follows the scope selection strategy outlined here: https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#scope-selection-strategy
-	if scope == "" {
-		scope = strings.Join(protectedResourceMetadata.ScopesSupported, " ")
-	}
+	protectedResourceMetadata := discovery.ProtectedResourceMetadata
+	authorizationServerMetadata := discovery.AuthorizationServerMetadata
+	scope := discovery.Scope
 	slog.Info("resolved oauth scope for server", "server", c.serverName, "scope", scope)
-
-	if len(protectedResourceMetadata.AuthorizationServers) == 0 {
-		protectedResourceMetadata.AuthorizationServers = []string{fmt.Sprintf("%s://%s", u.Scheme, u.Host)}
-	}
-	slog.Info("resolved authorization server", "server", c.serverName, "authorization_server", protectedResourceMetadata.AuthorizationServers[0])
-
-	authorizationServerMetadata, err := o.getAuthServerMetadata(protectedResourceMetadata.AuthorizationServers[0])
-	if err != nil {
-		return nil, fmt.Errorf("failed to get authorization server metadata: %w", err)
-	}
+	slog.Info("resolved authorization server", "server", c.serverName, "authorization_server", discovery.AuthorizationServerURL)
 
 	clientMetadata := authServerMetadataToClientRegistration(authorizationServerMetadata, scope)
 	clientMetadata.RedirectURIs = []string{o.redirectURL}
@@ -271,62 +374,50 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	return oauth2.NewClient(ctx, newTokenSource(ctx, o.tokenStorage, connectURL, conf, tok)), nil
 }
 
-func (o *oauth) getAuthServerMetadata(authURL string) (authorizationServerMetadata, error) {
+func getAuthServerMetadata(ctx context.Context, client *http.Client, authURL string, headers map[string]string) (authorizationServerMetadata, string, json.RawMessage, bool, error) {
 	authServerURL := strings.TrimSuffix(authURL, "/")
 
 	authServerMetadata := authServerURL
 	// If the authServer URL has a path, then the well-known path is prepended to the path
 	if u, err := url.Parse(authServerMetadata); err != nil {
-		return authorizationServerMetadata{}, fmt.Errorf("failed to parse auth server URL: %w", err)
+		return authorizationServerMetadata{}, "", nil, false, fmt.Errorf("failed to parse auth server URL: %w", err)
 	} else if u.Path != "" {
 		u.Path = "/.well-known/oauth-authorization-server" + u.Path
 		authServerMetadata = u.String()
 	} else {
 		authServerMetadata = fmt.Sprintf("%s/.well-known/oauth-authorization-server", authServerMetadata)
 	}
-	oauthMetadataResp, err := o.metadataClient.Get(authServerMetadata)
-	if err != nil {
-		return authorizationServerMetadata{}, fmt.Errorf("failed to get authorization server metadata: %w", err)
+
+	metadataURLs := []string{
+		authServerMetadata,
+		strings.Replace(authServerMetadata, "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration", 1),
+		strings.Replace(authServerMetadata, "/.well-known/oauth-authorization-server", "", 1) + "/.well-known/openid-configuration",
 	}
-	defer oauthMetadataResp.Body.Close()
 
-	var authorizationServerMetadataContent authorizationServerMetadata
-	if oauthMetadataResp.StatusCode != http.StatusOK && oauthMetadataResp.StatusCode != http.StatusNotFound {
-		body, _ := io.ReadAll(oauthMetadataResp.Body)
-		return authorizationServerMetadata{}, fmt.Errorf("unexpeted status getting authorization server metadata (%d): %s", oauthMetadataResp.StatusCode, string(body))
-	} else if oauthMetadataResp.StatusCode == http.StatusOK {
-		authorizationServerMetadataContent, err = parseAuthorizationServerMetadata(oauthMetadataResp.Body)
+	var (
+		authorizationServerMetadataContent authorizationServerMetadata
+		authorizationServerMetadataJSON    json.RawMessage
+		metadataURL                        string
+		found                              bool
+	)
+	for _, metadataURL = range metadataURLs {
+		var err error
+		authorizationServerMetadataJSON, found, err = getOAuthMetadataJSON(ctx, client, metadataURL, headers)
 		if err != nil {
-			return authorizationServerMetadata{}, fmt.Errorf("failed to parse authorization server metadata: %w", err)
+			return authorizationServerMetadata{}, "", nil, false, err
 		}
-	} else {
-		// We couldn't find the oauth-authorization-server endpoint, so look for the openid-configuration endpoint.
-		openIDConfigResp, err := o.metadataClient.Get(strings.Replace(authServerMetadata, "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration", 1))
+		if !found {
+			continue
+		}
+
+		authorizationServerMetadataContent, err = parseAuthorizationServerMetadata(bytes.NewReader(authorizationServerMetadataJSON))
 		if err != nil {
-			return authorizationServerMetadata{}, fmt.Errorf("failed to get openid-configuration: %w", err)
+			return authorizationServerMetadata{}, "", nil, false, fmt.Errorf("failed to parse authorization server metadata: %w", err)
 		}
-		defer openIDConfigResp.Body.Close()
-
-		if openIDConfigResp.StatusCode == http.StatusOK {
-			authorizationServerMetadataContent, err = parseAuthorizationServerMetadata(openIDConfigResp.Body)
-			if err != nil {
-				return authorizationServerMetadata{}, fmt.Errorf("failed to parse openid configuration: %w", err)
-			}
-		} else {
-			_ = openIDConfigResp.Body.Close()
-			// The last URL we check is appending the openid-configuration path to the end.
-			openIDConfigResp, err := o.metadataClient.Get(strings.Replace(authServerMetadata, "/.well-known/oauth-authorization-server", "", 1) + "/.well-known/openid-configuration")
-			if err != nil {
-				return authorizationServerMetadata{}, fmt.Errorf("failed to get openid-configuration: %w", err)
-			}
-			defer openIDConfigResp.Body.Close()
-
-			authorizationServerMetadataContent, err = parseAuthorizationServerMetadata(openIDConfigResp.Body)
-			if err != nil {
-				return authorizationServerMetadata{}, fmt.Errorf("failed to parse openid configuration: %w", err)
-			}
-		}
-
+		break
+	}
+	if !found {
+		return authorizationServerMetadata{}, "", nil, false, nil
 	}
 
 	if authorizationServerMetadataContent.AuthorizationEndpoint == "" {
@@ -339,7 +430,100 @@ func (o *oauth) getAuthServerMetadata(authURL string) (authorizationServerMetada
 		authorizationServerMetadataContent.RegistrationEndpoint = fmt.Sprintf("%s/register", authServerURL)
 	}
 
-	return authorizationServerMetadataContent, nil
+	return authorizationServerMetadataContent, metadataURL, authorizationServerMetadataJSON, true, nil
+}
+
+func wwwAuthenticateFromInitialize(ctx context.Context, httpClient *http.Client, server Server) (string, bool, error) {
+	msg, err := NewMessageWithID("initialize", InitializeRequest{
+		ProtocolVersion: "2025-06-18",
+		ClientInfo: ClientInfo{
+			Name:    "Nanobot MCP OAuth Metadata Client",
+			Version: version.Get().String(),
+		},
+	})
+	if err != nil {
+		return "", false, err
+	}
+
+	s := &HTTPClient{
+		httpClient: httpClient,
+		baseURL:    server.BaseURL,
+		messageURL: server.BaseURL,
+		headers:    server.Headers,
+	}
+	req, err := s.newRequest(ctx, http.MethodPost, msg)
+	if err != nil {
+		return "", false, err
+	}
+	delete(req.Header, SessionIDHeader)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", false, err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode == http.StatusOK {
+		if sessionID := resp.Header.Get(SessionIDHeader); sessionID != "" {
+			s.sessionID = &sessionID
+			deleteReq, err := s.newRequest(ctx, http.MethodDelete, nil)
+			if err != nil {
+				return "", true, err
+			}
+			deleteResp, err := httpClient.Do(deleteReq)
+			if err != nil {
+				return "", true, err
+			}
+			_, _ = io.Copy(io.Discard, deleteResp.Body)
+			deleteResp.Body.Close()
+		}
+		return "", true, nil
+	}
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		return "", false, nil
+	}
+
+	return resp.Header.Get("WWW-Authenticate"), false, nil
+}
+
+func getOAuthMetadataJSON(ctx context.Context, client *http.Client, metadataURL string, headers map[string]string) (json.RawMessage, bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metadataURL, nil)
+	if err != nil {
+		return nil, false, err
+	}
+	req.Header.Set("Accept", "application/json")
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
+		// 400-level error means that the endpoint is not present or not accessible, which is not an error for our purposes, but log it for debugging.
+		body, _ := io.ReadAll(resp.Body)
+		slog.Debug("metadata endpoint did not return 200 OK", "url", metadataURL, "status_code", resp.StatusCode, "response_body", string(body))
+		return nil, false, nil
+	} else if resp.StatusCode >= http.StatusInternalServerError {
+		// 500-level error means that the endpoint is present but there is a problem with it, which is an error for our purposes.
+		// Limit the amount of body we read here to avoid potential issues with very large error responses.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
+		return nil, false, fmt.Errorf("metadata endpoint returned server error: %d - %s", resp.StatusCode, string(body))
+	}
+
+	metadata, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, false, err
+	}
+	if !json.Valid(metadata) {
+		return nil, false, fmt.Errorf("invalid JSON metadata")
+	}
+
+	return metadata, true, nil
 }
 
 // parseAuthorizationServerMetadata parses OAuth 2.0 Authorization Server Metadata
