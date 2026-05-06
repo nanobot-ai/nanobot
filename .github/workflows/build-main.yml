@@ -17,6 +17,19 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check for agent runtime changes
+        id: changes
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        with:
+          filters: |
+            agent-runtime:
+              - Dockerfile.agent-runtime
+              - scripts/agent-entrypoint.sh
+              - scripts/prefetch-tiktoken-encodings.sh
+              - .github/workflows/build-main.yml
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -74,12 +87,32 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=Nanobot CLI
 
+      - name: Build and push agent runtime Docker image
+        if: steps.changes.outputs['agent-runtime'] == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.agent-runtime
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/obot-platform/nanobot-agent-runtime:main
+            ghcr.io/obot-platform/nanobot-agent-runtime:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.title=nanobot-agent-runtime
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=main
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=Nanobot agent runtime dependencies
+
       - name: Build and push agent Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile.agent
           platforms: linux/amd64,linux/arm64
+          pull: true
           push: true
           target: release
           tags: |

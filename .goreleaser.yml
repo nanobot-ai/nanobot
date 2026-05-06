@@ -94,12 +94,10 @@ dockers:
       - "ghcr.io/obot-platform/nanobot-agent:latest-amd64"
     dockerfile: Dockerfile.agent
     use: buildx
-    extra_files:
-      - scripts/agent-entrypoint.sh
-      - scripts/prefetch-tiktoken-encodings.sh
     build_flag_templates:
       - "--target=release"
       - "--platform=linux/amd64"
+      - "--pull"
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.title=nanobot-agent"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
@@ -112,12 +110,10 @@ dockers:
       - "ghcr.io/obot-platform/nanobot-agent:latest-arm64"
     dockerfile: Dockerfile.agent
     use: buildx
-    extra_files:
-      - scripts/agent-entrypoint.sh
-      - scripts/prefetch-tiktoken-encodings.sh
     build_flag_templates:
       - "--target=release"
       - "--platform=linux/arm64"
+      - "--pull"
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.title=nanobot-agent"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"

@@ -3,13 +3,6 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"pnpm": {
-		"onlyBuiltDependencies": [
-			"@tailwindcss/oxide",
-			"esbuild",
-			"node-pty"
-		]
-	},
 	"scripts": {
 		"dev": "cd ./packages/ui && pnpm run dev",
 		"check": "pnpm -r run check",

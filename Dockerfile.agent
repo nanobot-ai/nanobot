@@ -1,5 +1,14 @@
 # syntax=docker/dockerfile:1
 
+ARG NANOBOT_AGENT_RUNTIME_IMAGE=ghcr.io/obot-platform/nanobot-agent-runtime:main
+
+FROM ${NANOBOT_AGENT_RUNTIME_IMAGE} AS runtime
+
+FROM runtime AS release
+
+RUN mkdir -p /usr/local/libexec
+COPY nanobot /usr/local/libexec/nanobot
+
 # Build stage
 FROM golang:1.26-alpine AS builder
 
@@ -17,101 +26,6 @@ COPY . .
 
 # Build UI and binary
 RUN CI=true CGO_ENABLED=0 go generate ./... && go build -o nanobot .
-
-# Final stage
-FROM debian:trixie-slim AS runtime
-
-# Install bash, git, common utilities, and poppler-utils (provides pdftoppm
-# and pdfinfo, used by the built-in read tool to render PDF pages as images).
-# LibreOffice is used by skills to convert between file formats.
-RUN apt-get update && apt-get full-upgrade -y && apt-get install -y --no-install-recommends \
-    bash \
-    git \
-    curl \
-    wget \
-    jq \
-    gzip \
-    unzip \
-    xz-utils \
-    coreutils \
-    findutils \
-    grep \
-    sed \
-    gawk \
-    ripgrep \
-    poppler-utils \
-    ca-certificates \
-    xvfb \
-    x11vnc \
-    x11-xserver-utils \
-    wmctrl \
-    fluxbox \
-    websockify \
-    python3 \
-    python3-venv \
-    nodejs \
-    npm \
-    libreoffice-core \
-    libreoffice-writer \
-    libreoffice-calc \
-    libreoffice-impress \
-    ghostscript \
-    libheif-examples \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh
-
-ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/ms-playwright
-RUN python3 -m venv /opt/playwright-venv \
-    && /opt/playwright-venv/bin/pip install playwright \
-    && /opt/playwright-venv/bin/playwright install chromium --with-deps \
-    && python3 -m venv /opt/browser-use-venv \
-    && /opt/browser-use-venv/bin/pip install "browser-use[cli]" \
-    && ln -sf /opt/browser-use-venv/bin/browser-use /usr/local/bin/browser-use
-
-COPY scripts/agent-entrypoint.sh /usr/local/bin/nanobot
-RUN chmod +x /usr/local/bin/nanobot
-
-ENV DISPLAY=:99
-
-# Install mcp-cli
-ARG TARGETARCH
-RUN ARCH=$(if [ "${TARGETARCH}" = "amd64" ]; then echo "x64"; else echo "${TARGETARCH}"; fi) && \
-    wget "https://github.com/obot-platform/mcp-cli/releases/download/v0.4.0/mcp-cli-linux-${ARCH}" && \
-    mv mcp-cli-linux-${ARCH} /usr/bin/mcp-cli && \
-    chmod +x /usr/bin/mcp-cli
-
-COPY scripts/prefetch-tiktoken-encodings.sh /tmp/prefetch-tiktoken-encodings.sh
-ENV TIKTOKEN_CACHE_DIR=/var/cache/tiktoken
-RUN chmod +x /tmp/prefetch-tiktoken-encodings.sh && \
-    /tmp/prefetch-tiktoken-encodings.sh && \
-    rm /tmp/prefetch-tiktoken-encodings.sh
-
-# Create non-root user with home directory
-RUN useradd -m -d /home/nanobot -s /bin/bash nanobot
-
-# Create data and config directories with proper ownership
-RUN mkdir -p /data /home/nanobot/.nanobot && \
-    chown -R nanobot:nanobot /data /home/nanobot
-
-WORKDIR /home/nanobot
-
-ENV HOME=/home/nanobot
-ENV PATH="/home/nanobot/.local/bin:$PATH"
-ENV NANOBOT_STATE=/data/nanobot.db
-ENV NANOBOT_RUN_LISTEN_ADDRESS=0.0.0.0:8080
-
-EXPOSE 8080
-
-VOLUME ["/data"]
-
-ENTRYPOINT ["/usr/local/bin/nanobot"]
-CMD ["run"]
-
-FROM runtime AS release
-
-RUN mkdir -p /usr/local/libexec
-COPY nanobot /usr/local/libexec/nanobot
 
 FROM runtime AS dev
 
