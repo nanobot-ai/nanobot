@@ -11,6 +11,10 @@ import (
 
 func TestGetOAuthMetadata(t *testing.T) {
 	var serverURL string
+	const (
+		clientName  = "Test Client"
+		redirectURL = "http://localhost/callback"
+	)
 	protectedResourceMetadata := json.RawMessage(`{"resource":"resource","authorization_servers":["issuer"],"scopes_supported":["read"]}`)
 	authorizationServerMetadata := json.RawMessage(`{"issuer":"issuer","authorization_endpoint":"authorize","token_endpoint":"token","registration_endpoint":"register","response_types_supported":["code"]}`)
 
@@ -55,7 +59,7 @@ func TestGetOAuthMetadata(t *testing.T) {
 		Headers: map[string]string{
 			"X-Test": "value",
 		},
-	})
+	}, clientName, redirectURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,13 +79,26 @@ func TestGetOAuthMetadata(t *testing.T) {
 	if !result.DynamicClientRegistration {
 		t.Fatalf("expected dynamic client registration support")
 	}
+	var clientRegistration ClientRegistrationMetadata
+	if err := json.Unmarshal(result.ClientRegistration, &clientRegistration); err != nil {
+		t.Fatalf("failed to parse client registration metadata: %v", err)
+	}
+	if clientRegistration.ClientName != clientName {
+		t.Fatalf("unexpected client name: %s", clientRegistration.ClientName)
+	}
+	if len(clientRegistration.RedirectURIs) != 1 || clientRegistration.RedirectURIs[0] != redirectURL {
+		t.Fatalf("unexpected redirect URIs: %v", clientRegistration.RedirectURIs)
+	}
+	if clientRegistration.Scope != "read" {
+		t.Fatalf("unexpected scope: %s", clientRegistration.Scope)
+	}
 }
 
 func TestGetOAuthMetadataMissingProtectedResource(t *testing.T) {
 	ts := httptest.NewServer(http.NotFoundHandler())
 	defer ts.Close()
 
-	result, err := GetOAuthMetadata(context.Background(), Server{BaseURL: ts.URL})
+	result, err := GetOAuthMetadata(context.Background(), Server{BaseURL: ts.URL}, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +134,7 @@ func TestGetOAuthMetadataInitializeSuccessDeletesSession(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	result, err := GetOAuthMetadata(context.Background(), Server{BaseURL: ts.URL + "/mcp"})
+	result, err := GetOAuthMetadata(context.Background(), Server{BaseURL: ts.URL + "/mcp"}, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +168,7 @@ func TestGetOAuthMetadataAuthorizationServerNoRegistration(t *testing.T) {
 	defer ts.Close()
 	serverURL = ts.URL
 
-	result, err := GetOAuthMetadata(context.Background(), Server{BaseURL: ts.URL})
+	result, err := GetOAuthMetadata(context.Background(), Server{BaseURL: ts.URL}, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

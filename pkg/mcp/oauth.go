@@ -40,10 +40,10 @@ type oauthMetadataDiscovery struct {
 	ProtectedResourceMetadataJSON   json.RawMessage
 	AuthorizationServerURL          string
 	AuthorizationServerMetadataURL  string
-	AuthorizationServerMetadata     authorizationServerMetadata
+	AuthorizationServerMetadata     AuthorizationServerMetadata
 	AuthorizationServerMetadataJSON json.RawMessage
 	DynamicClientRegistration       bool
-	Scope                           string
+	ClientRegistration              ClientRegistrationMetadata
 }
 
 // OAuthMetadata contains discovered OAuth metadata for an MCP server.
@@ -52,43 +52,8 @@ type OAuthMetadata struct {
 	AuthorizationServerMetadataURL string          `json:"authorizationServerMetadataUrl,omitempty"`
 	ProtectedResourceMetadata      json.RawMessage `json:"protectedResourceMetadata,omitempty"`
 	AuthorizationServerMetadata    json.RawMessage `json:"authorizationServerMetadata,omitempty"`
+	ClientRegistration             json.RawMessage `json:"clientRegistration,omitempty"`
 	DynamicClientRegistration      bool            `json:"dynamicClientRegistration,omitempty"`
-}
-
-// GetOAuthMetadata discovers OAuth protected resource and authorization server
-// metadata for an HTTP MCP server. Missing metadata endpoints are not errors.
-func GetOAuthMetadata(ctx context.Context, server Server) (OAuthMetadata, error) {
-	if server.BaseURL == "" {
-		return OAuthMetadata{}, nil
-	}
-
-	metadataClient := instrumentHTTPClient(&http.Client{
-		Timeout: 5 * time.Second,
-	})
-
-	authenticateHeader, initialized, err := wwwAuthenticateFromInitialize(ctx, metadataClient, server)
-	if err != nil {
-		return OAuthMetadata{}, err
-	}
-	if initialized {
-		return OAuthMetadata{}, nil
-	}
-
-	discovery, ok, err := discoverOAuthMetadata(ctx, metadataClient, server.BaseURL, authenticateHeader, server.Headers, true)
-	if err != nil {
-		return OAuthMetadata{}, err
-	}
-	if !ok {
-		return OAuthMetadata{}, nil
-	}
-
-	return OAuthMetadata{
-		ProtectedResourceMetadataURL:   discovery.ProtectedResourceURL,
-		AuthorizationServerMetadataURL: discovery.AuthorizationServerMetadataURL,
-		ProtectedResourceMetadata:      discovery.ProtectedResourceMetadataJSON,
-		AuthorizationServerMetadata:    discovery.AuthorizationServerMetadataJSON,
-		DynamicClientRegistration:      discovery.DynamicClientRegistration,
-	}, nil
 }
 
 func newOAuth(callbackHandler CallbackHandler, clientLookup ClientCredLookup, tokenStorage TokenStorage, clientName, redirectURL string) *oauth {
@@ -131,7 +96,7 @@ func (o *oauth) loadFromStorage(ctx context.Context, connectURL string) *http.Cl
 	return nil
 }
 
-func discoverOAuthMetadata(ctx context.Context, client *http.Client, baseURL, authenticateHeader string, headers map[string]string, requireProtectedResourceMetadata bool) (oauthMetadataDiscovery, bool, error) {
+func discoverOAuthMetadata(ctx context.Context, client *http.Client, baseURL, authenticateHeader, clientName, redirectURL string, headers map[string]string) (oauthMetadataDiscovery, bool, error) {
 	resourceMetadataURL, scope, u, err := oauthResourceMetadataURL(baseURL, authenticateHeader)
 	if err != nil {
 		return oauthMetadataDiscovery{}, false, err
@@ -141,9 +106,6 @@ func discoverOAuthMetadata(ctx context.Context, client *http.Client, baseURL, au
 	protectedResourceMetadataJSON, ok, err := getOAuthMetadataJSON(ctx, client, resourceMetadataURL, headers)
 	if err != nil {
 		return oauthMetadataDiscovery{}, false, fmt.Errorf("failed to get protected resource metadata: %w", err)
-	}
-	if !ok && requireProtectedResourceMetadata {
-		return oauthMetadataDiscovery{}, false, nil
 	}
 
 	var protectedResourceMetadata protectedResourceMetadata
@@ -190,8 +152,8 @@ func discoverOAuthMetadata(ctx context.Context, client *http.Client, baseURL, au
 		AuthorizationServerMetadataURL:  authorizationServerMetadataURL,
 		AuthorizationServerMetadata:     authorizationServerMetadata,
 		AuthorizationServerMetadataJSON: authorizationServerMetadataJSON,
+		ClientRegistration:              AuthServerMetadataToClientRegistration(authorizationServerMetadata, clientName, redirectURL, scope),
 		DynamicClientRegistration:       rawAuthorizationServerMetadata.RegistrationEndpoint != "",
-		Scope:                           scope,
 	}, true, nil
 }
 
@@ -230,7 +192,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 		return nil, fmt.Errorf("oauth callback server is not configured")
 	}
 
-	discovery, ok, err := discoverOAuthMetadata(ctx, o.metadataClient, c.baseURL, authenticateHeader, nil, false)
+	discovery, ok, err := discoverOAuthMetadata(ctx, o.metadataClient, c.baseURL, authenticateHeader, o.clientName, o.redirectURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -239,18 +201,8 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	}
 	protectedResourceMetadata := discovery.ProtectedResourceMetadata
 	authorizationServerMetadata := discovery.AuthorizationServerMetadata
-	scope := discovery.Scope
-	slog.Info("resolved oauth scope for server", "server", c.serverName, "scope", scope)
+	slog.Info("resolved oauth scope for server", "server", c.serverName, "scope", discovery.ClientRegistration.Scope)
 	slog.Info("resolved authorization server", "server", c.serverName, "authorization_server", discovery.AuthorizationServerURL)
-
-	clientMetadata := authServerMetadataToClientRegistration(authorizationServerMetadata, scope)
-	clientMetadata.RedirectURIs = []string{o.redirectURL}
-	clientMetadata.ClientName = o.clientName
-
-	b, err := json.Marshal(clientMetadata)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal client metadata: %w", err)
-	}
 
 	// Before trying to register a client, check if there is a static client configuration.
 	var (
@@ -264,50 +216,28 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 
 	// If we didn't get a result from the lookup, register a client dynamically.
 	if lookupErr != nil || clientInfo.ClientID == "" || clientInfo.ClientSecret == "" {
-		slog.Info("registering oauth client dynamically", "server", c.serverName, "registration_endpoint", authorizationServerMetadata.RegistrationEndpoint)
-		req, err := http.NewRequest(http.MethodPost, authorizationServerMetadata.RegistrationEndpoint, bytes.NewReader(b))
+		clientInfo, err = RegisterOAuthClient(ctx, o.metadataClient, c.serverName, authorizationServerMetadata, discovery.ClientRegistration)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create registration request: %w", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
-
-		resp, err := o.metadataClient.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to register client: %w", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-			body, _ := io.ReadAll(resp.Body)
 			if lookupErr != nil {
-				err = fmt.Errorf("unexpected status registering client (%d): %s - static OAuth client lookup also failed: %v", resp.StatusCode, string(body), lookupErr)
-			} else {
-				err = fmt.Errorf("unexpected status registering client (%d): %s", resp.StatusCode, string(body))
+				return nil, fmt.Errorf("%w - static OAuth client lookup also failed: %v", err, lookupErr)
 			}
 			return nil, err
-		} else {
-			clientInfo, err = parseClientRegistrationResponse(resp.Body)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse client registration response: %w", err)
-			}
-			slog.Info("oauth client registration succeeded", "server", c.serverName, "registration_endpoint", authorizationServerMetadata.RegistrationEndpoint)
 		}
 	}
 
 	conf := &oauth2.Config{
 		ClientID:     clientInfo.ClientID,
 		ClientSecret: clientInfo.ClientSecret,
-		RedirectURL:  clientMetadata.RedirectURIs[0],
+		RedirectURL:  discovery.ClientRegistration.RedirectURIs[0],
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  authorizationServerMetadata.AuthorizationEndpoint,
 			TokenURL: authorizationServerMetadata.TokenEndpoint,
 		},
 	}
-	if clientMetadata.Scope != "" {
-		conf.Scopes = strings.Split(clientMetadata.Scope, " ")
+	if discovery.ClientRegistration.Scope != "" {
+		conf.Scopes = strings.Split(discovery.ClientRegistration.Scope, " ")
 	}
-	switch clientMetadata.TokenEndpointAuthMethod {
+	switch discovery.ClientRegistration.TokenEndpointAuthMethod {
 	case "client_secret_basic":
 		conf.Endpoint.AuthStyle = oauth2.AuthStyleInHeader
 	case "client_secret_post":
@@ -316,18 +246,9 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 		conf.Endpoint.AuthStyle = oauth2.AuthStyleAutoDetect
 	}
 
-	// use PKCE to protect against CSRF attacks
-	// https://www.ietf.org/archive/id/draft-ietf-oauth-security-topics-22.html#name-countermeasures-6
-	verifier := oauth2.GenerateVerifier()
-
-	state, ch, err := o.callbackHandler.NewState(ctx, conf, verifier)
+	authURL, ch, verifier, err := GetOAuthAuthorizationURL(ctx, o.callbackHandler, conf, authorizationServerMetadata.AuthorizationEndpoint, connectURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create state: %w", err)
-	}
-
-	authURL, err := authCodeURL(conf, authorizationServerMetadata.AuthorizationEndpoint, connectURL, state, verifier)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate auth code URL: %w", err)
+		return nil, err
 	}
 
 	slog.Info("handing oauth authorization url to callback handler", "server", c.serverName, "auth_url", authorizationServerMetadata.AuthorizationEndpoint)
@@ -355,9 +276,9 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 		}
 	}
 
-	tok, err := conf.Exchange(ctx, cb.Code, oauth2.VerifierOption(verifier))
+	tok, err := ExchangeOAuthToken(ctx, conf, cb.Code, verifier)
 	if err != nil {
-		return nil, fmt.Errorf("failed to exchange code for token: %w", err)
+		return nil, err
 	}
 	slog.Info("oauth code exchange succeeded", "server", c.serverName)
 
@@ -374,13 +295,125 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	return oauth2.NewClient(ctx, newTokenSource(ctx, o.tokenStorage, connectURL, conf, tok)), nil
 }
 
-func getAuthServerMetadata(ctx context.Context, client *http.Client, authURL string, headers map[string]string) (authorizationServerMetadata, string, json.RawMessage, bool, error) {
+// GetOAuthMetadata discovers OAuth protected resource and authorization server
+// metadata for an HTTP MCP server. Missing metadata endpoints are not errors.
+func GetOAuthMetadata(ctx context.Context, server Server, clientName, redirectURL string) (OAuthMetadata, error) {
+	if server.BaseURL == "" {
+		return OAuthMetadata{}, nil
+	}
+
+	metadataClient := instrumentHTTPClient(&http.Client{
+		Timeout: 5 * time.Second,
+	})
+
+	authenticateHeader, initialized, err := wwwAuthenticateFromInitialize(ctx, metadataClient, server)
+	if err != nil {
+		return OAuthMetadata{}, err
+	}
+	if initialized {
+		return OAuthMetadata{}, nil
+	}
+
+	discovery, ok, err := discoverOAuthMetadata(ctx, metadataClient, server.BaseURL, authenticateHeader, clientName, redirectURL, server.Headers)
+	if err != nil {
+		return OAuthMetadata{}, err
+	}
+	if !ok {
+		return OAuthMetadata{}, nil
+	}
+
+	clientRegistrationJSON, err := json.Marshal(discovery.ClientRegistration)
+	if err != nil {
+		return OAuthMetadata{}, fmt.Errorf("failed to marshal client registration: %w", err)
+	}
+
+	return OAuthMetadata{
+		ProtectedResourceMetadataURL:   discovery.ProtectedResourceURL,
+		AuthorizationServerMetadataURL: discovery.AuthorizationServerMetadataURL,
+		ProtectedResourceMetadata:      discovery.ProtectedResourceMetadataJSON,
+		AuthorizationServerMetadata:    discovery.AuthorizationServerMetadataJSON,
+		ClientRegistration:             clientRegistrationJSON,
+		DynamicClientRegistration:      discovery.DynamicClientRegistration,
+	}, nil
+}
+
+// RegisterOAuthClient dynamically registers an OAuth client with an
+// authorization server.
+func RegisterOAuthClient(ctx context.Context, client *http.Client, serverName string, authServer AuthorizationServerMetadata, clientRegistration ClientRegistrationMetadata) (clientRegistrationResponse, error) {
+	if authServer.RegistrationEndpoint == "" {
+		return clientRegistrationResponse{}, fmt.Errorf("registration endpoint is not set")
+	}
+
+	b, err := json.Marshal(clientRegistration)
+	if err != nil {
+		return clientRegistrationResponse{}, fmt.Errorf("failed to marshal client metadata: %w", err)
+	}
+
+	slog.Info("registering oauth client dynamically", "server", serverName, "registration_endpoint", authServer.RegistrationEndpoint)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, authServer.RegistrationEndpoint, bytes.NewReader(b))
+	if err != nil {
+		return clientRegistrationResponse{}, fmt.Errorf("failed to create registration request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return clientRegistrationResponse{}, fmt.Errorf("failed to register client: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return clientRegistrationResponse{}, fmt.Errorf("unexpected status registering client (%d): %s", resp.StatusCode, string(body))
+	}
+
+	clientInfo, err := parseClientRegistrationResponse(resp.Body)
+	if err != nil {
+		return clientRegistrationResponse{}, fmt.Errorf("failed to parse client registration response: %w", err)
+	}
+	slog.Info("oauth client registration succeeded", "server", serverName, "registration_endpoint", authServer.RegistrationEndpoint)
+
+	return clientInfo, nil
+}
+
+// GetOAuthAuthorizationURL constructs the OAuth authorization URL and callback
+// state for the authorization code flow.
+func GetOAuthAuthorizationURL(ctx context.Context, callbackHandler CallbackHandler, conf *oauth2.Config, authorizationEndpoint, connectURL string) (string, <-chan CallbackPayload, string, error) {
+	// use PKCE to protect against CSRF attacks
+	// https://www.ietf.org/archive/id/draft-ietf-oauth-security-topics-22.html#name-countermeasures-6
+	verifier := oauth2.GenerateVerifier()
+
+	state, ch, err := callbackHandler.NewState(ctx, conf, verifier)
+	if err != nil {
+		return "", nil, "", fmt.Errorf("failed to create state: %w", err)
+	}
+
+	authURL, err := AuthCodeURL(conf, authorizationEndpoint, connectURL, state, verifier)
+	if err != nil {
+		return "", nil, "", fmt.Errorf("failed to generate auth code URL: %w", err)
+	}
+
+	return authURL, ch, verifier, nil
+}
+
+// ExchangeOAuthToken exchanges an OAuth authorization code for a token.
+func ExchangeOAuthToken(ctx context.Context, conf *oauth2.Config, code, verifier string) (*oauth2.Token, error) {
+	tok, err := conf.Exchange(ctx, code, oauth2.VerifierOption(verifier))
+	if err != nil {
+		return nil, fmt.Errorf("failed to exchange code for token: %w", err)
+	}
+
+	return tok, nil
+}
+
+func getAuthServerMetadata(ctx context.Context, client *http.Client, authURL string, headers map[string]string) (AuthorizationServerMetadata, string, json.RawMessage, bool, error) {
 	authServerURL := strings.TrimSuffix(authURL, "/")
 
 	authServerMetadata := authServerURL
 	// If the authServer URL has a path, then the well-known path is prepended to the path
 	if u, err := url.Parse(authServerMetadata); err != nil {
-		return authorizationServerMetadata{}, "", nil, false, fmt.Errorf("failed to parse auth server URL: %w", err)
+		return AuthorizationServerMetadata{}, "", nil, false, fmt.Errorf("failed to parse auth server URL: %w", err)
 	} else if u.Path != "" {
 		u.Path = "/.well-known/oauth-authorization-server" + u.Path
 		authServerMetadata = u.String()
@@ -395,7 +428,7 @@ func getAuthServerMetadata(ctx context.Context, client *http.Client, authURL str
 	}
 
 	var (
-		authorizationServerMetadataContent authorizationServerMetadata
+		authorizationServerMetadataContent AuthorizationServerMetadata
 		authorizationServerMetadataJSON    json.RawMessage
 		metadataURL                        string
 		found                              bool
@@ -404,7 +437,7 @@ func getAuthServerMetadata(ctx context.Context, client *http.Client, authURL str
 		var err error
 		authorizationServerMetadataJSON, found, err = getOAuthMetadataJSON(ctx, client, metadataURL, headers)
 		if err != nil {
-			return authorizationServerMetadata{}, "", nil, false, err
+			return AuthorizationServerMetadata{}, "", nil, false, err
 		}
 		if !found {
 			continue
@@ -412,12 +445,12 @@ func getAuthServerMetadata(ctx context.Context, client *http.Client, authURL str
 
 		authorizationServerMetadataContent, err = parseAuthorizationServerMetadata(bytes.NewReader(authorizationServerMetadataJSON))
 		if err != nil {
-			return authorizationServerMetadata{}, "", nil, false, fmt.Errorf("failed to parse authorization server metadata: %w", err)
+			return AuthorizationServerMetadata{}, "", nil, false, fmt.Errorf("failed to parse authorization server metadata: %w", err)
 		}
 		break
 	}
 	if !found {
-		return authorizationServerMetadata{}, "", nil, false, nil
+		return AuthorizationServerMetadata{}, "", nil, false, nil
 	}
 
 	if authorizationServerMetadataContent.AuthorizationEndpoint == "" {
@@ -528,8 +561,8 @@ func getOAuthMetadataJSON(ctx context.Context, client *http.Client, metadataURL 
 
 // parseAuthorizationServerMetadata parses OAuth 2.0 Authorization Server Metadata
 // from a reader containing JSON data as defined in RFC 8414
-func parseAuthorizationServerMetadata(reader io.Reader) (authorizationServerMetadata, error) {
-	var metadata authorizationServerMetadata
+func parseAuthorizationServerMetadata(reader io.Reader) (AuthorizationServerMetadata, error) {
+	var metadata AuthorizationServerMetadata
 	if err := json.NewDecoder(reader).Decode(&metadata); err != nil {
 		return metadata, fmt.Errorf("failed to decode authorization server metadata: %w", err)
 	}
@@ -613,7 +646,8 @@ func parseScopeFromAuthenticateHeader(authenticateHeader string) string {
 	return matches[1]
 }
 
-func authCodeURL(conf *oauth2.Config, urlFromMetadata, resourceURL, state, verifier string) (string, error) {
+// AuthCodeURL returns the authorization code URL for the given configuration and resource URL.
+func AuthCodeURL(conf *oauth2.Config, urlFromMetadata, resourceURL, state, verifier string) (string, error) {
 	authEndpoint, err := url.Parse(urlFromMetadata)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse authorization endpoint: %w", err)
@@ -680,9 +714,9 @@ type protectedResourceMetadata struct {
 	DPoPBoundAccessTokensRequired bool `json:"dpop_bound_access_tokens_required,omitempty"`
 }
 
-// authorizationServerMetadata represents OAuth 2.0 Authorization Server Metadata
+// AuthorizationServerMetadata represents OAuth 2.0 Authorization Server Metadata
 // as defined in RFC 8414
-type authorizationServerMetadata struct {
+type AuthorizationServerMetadata struct {
 	// REQUIRED. The authorization server's issuer identifier
 	Issuer string `json:"issuer"`
 
@@ -750,9 +784,9 @@ type authorizationServerMetadata struct {
 	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported,omitempty"`
 }
 
-// clientRegistrationMetadata represents OAuth 2.0 Dynamic Client Registration metadata
+// ClientRegistrationMetadata represents OAuth 2.0 Dynamic Client Registration metadata
 // as defined in RFC 7591, merged from protected resource and authorization server metadata
-type clientRegistrationMetadata struct {
+type ClientRegistrationMetadata struct {
 	// Array of redirection URI strings for use in redirect-based flows
 	RedirectURIs []string `json:"redirect_uris,omitempty"`
 
@@ -799,8 +833,9 @@ type clientRegistrationMetadata struct {
 	SoftwareVersion string `json:"software_version,omitempty"`
 }
 
-func authServerMetadataToClientRegistration(authServer authorizationServerMetadata, scope string) clientRegistrationMetadata {
-	merged := clientRegistrationMetadata{}
+// AuthServerMetadataToClientRegistration converts an AuthorizationServerMetadata to a ClientRegistrationMetadata for dynamic registration.
+func AuthServerMetadataToClientRegistration(authServer AuthorizationServerMetadata, clientName, redirectURL, scope string) ClientRegistrationMetadata {
+	merged := ClientRegistrationMetadata{}
 
 	// Set default values based on OAuth 2.0 specifications
 
@@ -828,10 +863,12 @@ func authServerMetadataToClientRegistration(authServer authorizationServerMetada
 	if scope != "" {
 		merged.Scope = scope
 	}
-
-	// Note: redirect_uris, logo_uri, contacts, jwks, software_id, and software_version
-	// are typically client-specific and would need to be provided by the client application
-	// These fields are left empty as they cannot be derived from server metadata
+	if clientName != "" {
+		merged.ClientName = clientName
+	}
+	if redirectURL != "" {
+		merged.RedirectURIs = []string{redirectURL}
+	}
 
 	return merged
 }
