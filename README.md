@@ -293,3 +293,93 @@ Nanobot is licensed under the [Apache 2.0 License](LICENSE).
 
 - Website: [nanobot.ai](https://nanobot.ai)
 - GitHub: [github.com/obot-platform/nanobot](https://github.com/obot-platform/nanobot)
+## FAQ
+
+### What is an MCP Host?
+
+An MCP Host is the service that combines MCP servers with an LLM and context to present an agent experience to users. It's the runtime environment that connects your agents to tools, resources, and prompts through the Model Context Protocol.
+
+### How does Nanobot differ from other MCP frameworks?
+
+Nanobot is designed as a **standalone MCP host** rather than an embedded one (like VSCode, Claude, Cursor, ChatGPT). This makes it ideal for building custom chatbots or integrating MCP-powered agents into your own applications.
+
+**Key differences:**
+- Standalone deployment vs. embedded in existing apps
+- Open-source vs. proprietary
+- Full MCP + MCP-UI compliance target
+- Flexible YAML/Markdown configuration
+
+### How do I install Nanobot?
+
+```bash
+brew install obot-platform/tap/nanobot
+```
+
+This gives you the `nanobot` CLI for running and managing MCP hosts.
+
+### What LLM providers are supported?
+
+**Built-in providers (no config needed):**
+- OpenAI (set `OPENAI_API_KEY`)
+- Anthropic (set `ANTHROPIC_API_KEY`)
+
+**Configurable providers:**
+- Azure OpenAI, Azure Anthropic
+- AWS Bedrock
+- Ollama (local models)
+- Any OpenResponses-compatible endpoint
+
+Use `{provider}/{model}` format in config or configure custom providers in `llmProviders`.
+
+### What configuration formats are supported?
+
+1. **Single File**: `nanobot.yaml` with agents and mcpServers
+2. **Directory-Based**: `nanobot.yaml` + `agents/*.md` files
+
+Directory-based is recommended for complex setups — each agent gets its own Markdown file with YAML front-matter.
+
+### How do I define MCP servers?
+
+In `nanobot.yaml`:
+
+```yaml
+mcpServers:
+  myserver:
+    url: https://example.com/mcp
+    headers:
+      Authorization: Bearer ${MY_TOKEN}
+```
+
+### How do I create an agent?
+
+**Directory-based (recommended):**
+
+Create `agents/main.md`:
+
+```markdown
+---
+name: My Agent
+model: anthropic/claude-3-7-sonnet-latest
+mcpServers:
+  - myserver
+---
+
+You are a helpful assistant.
+```
+
+**Single file:**
+
+```yaml
+agents:
+  myagent:
+    name: My Agent
+    model: gpt-4.1
+    mcpServers: myserver
+```
+
+### Where can I find help?
+
+- **Documentation**: [nanobot.ai](https://nanobot.ai)
+- **Examples**: See `./examples/` directory for working configurations
+- **GitHub**: [github.com/obot-platform/nanobot](https://github.com/obot-platform/nanobot)
+- **Issues**: Open an issue on GitHub for bugs or feature requests
