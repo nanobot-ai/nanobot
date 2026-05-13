@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -100,6 +101,9 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
+		if err := unsupportedNonReasoningModelError(body); err != nil {
+			return nil, "", "", err
+		}
 		return nil, "", "", fmt.Errorf("failed to get response from OpenAI Responses API: %s %q", httpResp.Status, string(body))
 	}
 
@@ -117,4 +121,25 @@ func (c *Client) complete(ctx context.Context, agentName string, req Request, op
 	}
 
 	return &response, inputReplacement, toolCallPolicyViolation, nil
+}
+
+func unsupportedNonReasoningModelError(body []byte) error {
+	var resp struct {
+		Error *ResponseError `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil || resp.Error == nil {
+		return nil
+	}
+	if !isUnsupportedNonReasoningModelError(resp.Error) {
+		return nil
+	}
+
+	return errors.New("non-reasoning models are currently unsupported")
+}
+
+func isUnsupportedNonReasoningModelError(err *ResponseError) bool {
+	if err.Code == "unsupported_parameter" && err.Param == "reasoning.effort" {
+		return true
+	}
+	return err.Param == "include" && strings.Contains(err.Message, "Encrypted content is not supported with this model")
 }

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/obot-platform/nanobot/pkg/types"
@@ -23,10 +22,6 @@ const (
 	StatusFailed Status = "failed"
 )
 
-var (
-	reasoningPrefix = regexp.MustCompile("^(o[0-9]|gpt-5)")
-)
-
 type Request struct {
 	Input              Input              `json:"input,omitempty"`
 	Model              string             `json:"model,omitempty"`
@@ -40,11 +35,9 @@ type Request struct {
 	ServiceTier        *string            `json:"service_tier,omitempty"`
 	Store              *bool              `json:"store,omitempty"`
 	Stream             *bool              `json:"stream,omitempty"`
-	Temperature        *json.Number       `json:"temperature,omitempty"`
 	Text               *TextFormatting    `json:"text,omitempty"`
 	ToolChoice         *ToolChoice        `json:"tool_choice,omitempty"`
 	Tools              []Tool             `json:"tools,omitempty,omitzero"`
-	TopP               *json.Number       `json:"top_p,omitempty"`
 	Truncation         *string            `json:"truncation,omitempty"`
 	User               string             `json:"user,omitempty"`
 }
@@ -810,6 +803,8 @@ type IncompleteDetails struct {
 type ResponseError struct {
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
+	Param   string `json:"param,omitempty"`
+	Type    string `json:"type,omitempty"`
 }
 
 type ResponseOutput struct {

@@ -93,35 +93,27 @@ func toSamplingMessageFromOutputMessage(output *Message) (result []types.Complet
 
 func toRequest(completion *types.CompletionRequest) (req Request, _ error) {
 	req = Request{
-		Model: completion.Model,
-		Store: new(false),
+		Model:     completion.Model,
+		Store:     new(false),
+		Reasoning: &ResponseReasoning{},
 	}
 
-	if reasoningPrefix.MatchString(req.Model) {
-		req.Include = append(req.Include, "reasoning.encrypted_content")
-		req.Reasoning = &ResponseReasoning{}
-		if completion.Reasoning != nil && completion.Reasoning.Summary != "" {
-			req.Reasoning.Summary = &completion.Reasoning.Summary
-		} else {
-			req.Reasoning.Summary = new("auto")
-		}
-		if completion.Reasoning != nil && completion.Reasoning.Effort != "" {
-			req.Reasoning.Effort = &completion.Reasoning.Effort
-		} else {
-			req.Reasoning.Effort = new("medium")
-		}
+	req.Include = append(req.Include, "reasoning.encrypted_content")
+	if completion.Reasoning != nil && completion.Reasoning.Summary != "" {
+		req.Reasoning.Summary = &completion.Reasoning.Summary
+	} else {
+		summary := "auto"
+		req.Reasoning.Summary = &summary
+	}
+	if completion.Reasoning != nil && completion.Reasoning.Effort != "" {
+		req.Reasoning.Effort = &completion.Reasoning.Effort
+	} else {
+		effort := "medium"
+		req.Reasoning.Effort = &effort
 	}
 
 	if completion.Truncation != "" {
 		req.Truncation = &completion.Truncation
-	}
-
-	if completion.Temperature != nil && !reasoningPrefix.MatchString(req.Model) {
-		req.Temperature = completion.Temperature
-	}
-
-	if completion.TopP != nil && !reasoningPrefix.MatchString(req.Model) {
-		req.TopP = completion.TopP
 	}
 
 	if len(completion.Metadata) > 0 {
