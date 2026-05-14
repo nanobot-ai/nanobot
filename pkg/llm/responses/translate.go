@@ -102,14 +102,12 @@ func toRequest(completion *types.CompletionRequest) (req Request, _ error) {
 	if completion.Reasoning != nil && completion.Reasoning.Summary != "" {
 		req.Reasoning.Summary = &completion.Reasoning.Summary
 	} else {
-		summary := "auto"
-		req.Reasoning.Summary = &summary
+		req.Reasoning.Summary = new("auto")
 	}
 	if completion.Reasoning != nil && completion.Reasoning.Effort != "" {
 		req.Reasoning.Effort = &completion.Reasoning.Effort
 	} else {
-		effort := "medium"
-		req.Reasoning.Effort = &effort
+		req.Reasoning.Effort = new("medium")
 	}
 
 	if completion.Truncation != "" {
