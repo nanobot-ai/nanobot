@@ -157,6 +157,8 @@ func mcpProxy(auth Auth, dsn string, next http.Handler) (http.Handler, error) {
 		Mode:                 "middleware",
 		MCPPaths:             []string{"/mcp", "/api"},
 		OAuthJWKSURL:         auth.OAuthJWKSURL,
+		TrustedIssuer:        auth.TrustedIssuer,
+		TrustedAudiences:     auth.TrustedAudiences,
 		CookieNamePrefix:     "nanobot_",
 		APIKeyAuthWebhookURL: auth.APIKeyAuthWebhookURL,
 		MCPServerID:          auth.MCPServerID,
