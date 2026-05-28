@@ -826,7 +826,7 @@ func (s *HTTPClient) readResponse(resp *http.Response) (bool, error) {
 	}
 
 	if data[0] != '{' {
-		return false, fmt.Errorf("invalid response format, expected JSON object, got: %s", data)
+		return false, fmt.Errorf("invalid response format, expected JSON object")
 	}
 
 	var message Message
