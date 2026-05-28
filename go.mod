@@ -14,7 +14,7 @@ require (
 	github.com/google/jsonschema-go v0.4.2
 	github.com/google/uuid v1.6.0
 	github.com/hexops/autogold/v2 v2.3.0
-	github.com/maximhq/bifrost/core v1.5.2
+	github.com/maximhq/bifrost/core v1.5.12
 	github.com/obot-platform/mcp-oauth-proxy v0.0.3-0.20260526141817-32b8278fcf00
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/robfig/cron/v3 v3.0.1

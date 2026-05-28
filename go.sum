@@ -124,8 +124,8 @@ github.com/mattn/go-colorable v0.1.14 h1:9A9LHSqF/7dyVVX6g0U9cwm9pG3kP9gSzcuIPHP
 github.com/mattn/go-colorable v0.1.14/go.mod h1:6LmQG8QLFO4G5z1gPvYEzlUgJ2wF+stgPZH1UqBm1s8=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
-github.com/maximhq/bifrost/core v1.5.2 h1:4Si3+hkTMwg4WOW53rMUZN0xQcyyjViaHpq1ZxQS1fQ=
-github.com/maximhq/bifrost/core v1.5.2/go.mod h1:BAKGmgCnMdhZZ92UG9oCRuFJxasTfAtMeeF1pHc5AMQ=
+github.com/maximhq/bifrost/core v1.5.12 h1:tm4FVr9Vyy4Srr4Gg91kLrXFuZrMytGV6Rkrdpw3kXI=
+github.com/maximhq/bifrost/core v1.5.12/go.mod h1:bzcFxKjI2NCRtOeQOwA0KxKJkjsY/UgnXd/cmg7Q+4U=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/ncruces/go-strftime v0.1.9 h1:bY0MQC28UADQmHmaF5dgpLmImcShSi2kHU9XLdhx/f4=

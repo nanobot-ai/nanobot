@@ -70,7 +70,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req *schemas.Bi
 
 	data, err := json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal bifrost request: %w", err)
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 	log.Messages(ctx, "bifrost-request", true, data)
 
@@ -96,7 +96,7 @@ func (c *Client) complete(ctx context.Context, agentName string, req *schemas.Bi
 
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
-		return nil, fmt.Errorf("bifrost request failed: %s %q", httpResp.Status, string(body))
+		return nil, fmt.Errorf("request failed: %q", string(body))
 	}
 
 	result, err := c.parseStream(ctx, agentName, httpResp.Body, opt.ProgressToken)
@@ -141,7 +141,7 @@ func (c *Client) parseStream(ctx context.Context, agentName string, body io.Read
 
 		var event schemas.BifrostResponsesStreamResponse
 		if err := json.Unmarshal([]byte(body), &event); err != nil {
-			slog.Error("bifrost: failed to decode stream event", "error", err, "body", body)
+			slog.Error("failed to decode stream event", "error", err, "body", body)
 			continue
 		}
 
@@ -252,9 +252,9 @@ func (c *Client) parseStream(ctx context.Context, agentName string, body io.Read
 
 		case schemas.ResponsesStreamResponseTypeFailed, schemas.ResponsesStreamResponseTypeIncomplete:
 			if event.Response != nil && event.Response.Error != nil {
-				return nil, fmt.Errorf("bifrost stream error: %s %s", event.Response.Error.Code, event.Response.Error.Message)
+				return nil, fmt.Errorf("stream error: %s %s", event.Response.Error.Code, event.Response.Error.Message)
 			}
-			return nil, fmt.Errorf("bifrost stream ended with status: %s", event.Type)
+			return nil, fmt.Errorf("stream ended with status: %s", event.Type)
 		}
 	}
 
@@ -290,10 +290,10 @@ func (c *Client) parseStream(ctx context.Context, agentName string, body io.Read
 
 			return result, nil
 		}
-		return nil, fmt.Errorf("bifrost stream read error: %w", err)
+		return nil, fmt.Errorf("stream read error: %w", err)
 	}
 	if !started {
-		return nil, fmt.Errorf("bifrost stream ended without a completed response")
+		return nil, fmt.Errorf("stream ended without a completed response")
 	}
 	return result, nil
 }
