@@ -247,7 +247,7 @@ func (c *clientFactory) get(envHash string) (*mcp.Client, error) {
 	}
 
 	if c.client != nil {
-		c.client.Close(false)
+		c.client.Close(true)
 		c.client = nil
 	}
 
@@ -258,6 +258,20 @@ func (c *clientFactory) get(envHash string) (*mcp.Client, error) {
 	c.client = newClient
 	c.envHash = envHash
 	return c.client, nil
+}
+
+// Close releases the live client, sending a DELETE to the upstream MCP server
+// so its session is freed and its reader goroutine stops. A factory is only
+// closed when its client is being permanently discarded (session teardown or
+// config refresh); the upstream session will not be resumed, so it is always
+// deleted regardless of the caller's deleteSession hint.
+func (c *clientFactory) Close(bool) {
+	c.clientLock.Lock()
+	defer c.clientLock.Unlock()
+	if c.client != nil {
+		c.client.Close(true)
+		c.client = nil
+	}
 }
 
 func (c *clientFactory) Serialize() (any, error) {
