@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/obot-platform/nanobot/pkg/mcp"
 )
@@ -26,11 +27,20 @@ func fakeMCPServer(deletes *int32) *httptest.Server {
 				ID     json.RawMessage `json:"id"`
 				Method string          `json:"method"`
 			}
-			_ = json.Unmarshal(body, &msg)
+			if err := json.Unmarshal(body, &msg); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 			if msg.Method == "initialize" {
+				// Always emit a valid JSON-RPC id; default to null if the
+				// request omitted one so the response can never be malformed.
+				id := string(msg.ID)
+				if id == "" {
+					id = "null"
+				}
 				w.Header().Set("Mcp-Session-Id", "test-session-1")
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":` + string(msg.ID) +
+				_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":` + id +
 					`,"result":{"protocolVersion":"2025-06-18","capabilities":{},` +
 					`"serverInfo":{"name":"fake","version":"1"}}}`))
 				return
@@ -76,6 +86,14 @@ func TestClientFactoryCloseDeletesUpstreamSession(t *testing.T) {
 
 	f.Close(false)
 
+	// Close sends the upstream DELETE synchronously today, but poll so the test
+	// stays correct even if client teardown ever becomes asynchronous. A
+	// trailing settle confirms exactly one DELETE is sent (no duplicates).
+	deadline := time.Now().Add(2 * time.Second)
+	for atomic.LoadInt32(&deletes) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond)
 	if got := atomic.LoadInt32(&deletes); got != 1 {
 		t.Fatalf("expected exactly one upstream DELETE after factory close, got %d", got)
 	}
