@@ -461,6 +461,23 @@ func (s *Session) Attributes() map[string]any {
 }
 
 func (s *Session) Close(deleteSession bool) {
+	// Close any attribute that owns a closable resource (e.g. downstream MCP
+	// client factories). Otherwise those clients are orphaned when the session
+	// is torn down: their upstream session is never deleted and their reader
+	// goroutines leak. Snapshot under the lock, then close without holding it so
+	// a closer may call back into the session without deadlocking.
+	s.lock.Lock()
+	var closers []interface{ Close(bool) }
+	for _, v := range s.attributes {
+		if c, ok := v.(interface{ Close(bool) }); ok {
+			closers = append(closers, c)
+		}
+	}
+	s.lock.Unlock()
+	for _, c := range closers {
+		c.Close(deleteSession)
+	}
+
 	if s.wire != nil {
 		s.wire.Close(deleteSession)
 	}
