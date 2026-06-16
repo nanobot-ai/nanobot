@@ -35,21 +35,22 @@ type Runtime struct {
 }
 
 type Options struct {
-	Roots                     []mcp.Root
-	Profiles                  []string
-	MaxConcurrency            int
-	CallbackHandler           mcp.CallbackHandler
-	TokenStorage              mcp.TokenStorage
-	OAuthRedirectURL          string
-	DSN                       string
-	Store                     *session.Store
-	TokenExchangeEndpoint     string
-	TokenExchangeClientID     string
-	TokenExchangeClientSecret string
-	AuditLogCollector         *auditlogs.Collector
-	DefaultModel              string
-	ConfigDir                 string
-	LoopbackURL               string
+	Roots                         []mcp.Root
+	Profiles                      []string
+	MaxConcurrency                int
+	CallbackHandler               mcp.CallbackHandler
+	TokenStorage                  mcp.TokenStorage
+	OAuthRedirectURL              string
+	DSN                           string
+	Store                         *session.Store
+	TokenExchangeEndpoint         string
+	TokenExchangeClientID         string
+	TokenExchangeClientSecret     string
+	OAuthClientIDMetadataDocument string
+	AuditLogCollector             *auditlogs.Collector
+	DefaultModel                  string
+	ConfigDir                     string
+	LoopbackURL                   string
 }
 
 func (o Options) Merge(other Options) (result Options) {
@@ -64,6 +65,7 @@ func (o Options) Merge(other Options) (result Options) {
 	result.TokenExchangeEndpoint = complete.Last(o.TokenExchangeEndpoint, other.TokenExchangeEndpoint)
 	result.TokenExchangeClientID = complete.Last(o.TokenExchangeClientID, other.TokenExchangeClientID)
 	result.TokenExchangeClientSecret = complete.Last(o.TokenExchangeClientSecret, other.TokenExchangeClientSecret)
+	result.OAuthClientIDMetadataDocument = complete.Last(o.OAuthClientIDMetadataDocument, other.OAuthClientIDMetadataDocument)
 	result.AuditLogCollector = complete.Last(o.AuditLogCollector, other.AuditLogCollector)
 	result.DefaultModel = complete.Last(o.DefaultModel, other.DefaultModel)
 	result.ConfigDir = complete.Last(o.ConfigDir, other.ConfigDir)
@@ -87,15 +89,16 @@ func NewRuntime(ctx context.Context, cfg llm.Config, opts ...Options) (*Runtime,
 
 	completer := llm.NewClient(cfg)
 	registry := tools.NewToolsService(tools.Options{
-		Roots:                     opt.Roots,
-		Concurrency:               opt.MaxConcurrency,
-		CallbackHandler:           opt.CallbackHandler,
-		OAuthRedirectURL:          opt.OAuthRedirectURL,
-		TokenStorage:              opt.TokenStorage,
-		TokenExchangeEndpoint:     opt.TokenExchangeEndpoint,
-		TokenExchangeClientID:     opt.TokenExchangeClientID,
-		TokenExchangeClientSecret: opt.TokenExchangeClientSecret,
-		AuditLogCollector:         opt.AuditLogCollector,
+		Roots:                         opt.Roots,
+		Concurrency:                   opt.MaxConcurrency,
+		CallbackHandler:               opt.CallbackHandler,
+		OAuthRedirectURL:              opt.OAuthRedirectURL,
+		TokenStorage:                  opt.TokenStorage,
+		TokenExchangeEndpoint:         opt.TokenExchangeEndpoint,
+		TokenExchangeClientID:         opt.TokenExchangeClientID,
+		TokenExchangeClientSecret:     opt.TokenExchangeClientSecret,
+		OAuthClientIDMetadataDocument: opt.OAuthClientIDMetadataDocument,
+		AuditLogCollector:             opt.AuditLogCollector,
 	})
 	agentsService := agents.New(completer, registry)
 	sampler := sampling.NewSampler(agentsService)

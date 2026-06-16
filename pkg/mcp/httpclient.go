@@ -69,14 +69,15 @@ type HTTPClient struct {
 }
 
 type HTTPClientOptions struct {
-	OAuthClientName           string
-	OAuthRedirectURL          string
-	CallbackHandler           CallbackHandler
-	ClientCredLookup          ClientCredLookup
-	TokenStorage              TokenStorage
-	TokenExchangeEndpoint     string
-	TokenExchangeClientID     string
-	TokenExchangeClientSecret string
+	OAuthClientName               string
+	OAuthRedirectURL              string
+	CallbackHandler               CallbackHandler
+	ClientCredLookup              ClientCredLookup
+	TokenStorage                  TokenStorage
+	TokenExchangeEndpoint         string
+	TokenExchangeClientID         string
+	TokenExchangeClientSecret     string
+	OAuthClientIDMetadataDocument string
 }
 
 func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, sessionState *SessionState, headers map[string]string, watchesEvents bool) (*HTTPClient, error) {
@@ -98,7 +99,7 @@ func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, ses
 
 	return &HTTPClient{
 		httpClient:         instrumentHTTPClient(http.DefaultClient),
-		oauthHandler:       newOAuth(opts.CallbackHandler, opts.ClientCredLookup, opts.TokenStorage, opts.OAuthClientName, opts.OAuthRedirectURL),
+		oauthHandler:       newOAuth(opts.CallbackHandler, opts.ClientCredLookup, opts.TokenStorage, opts.OAuthClientName, opts.OAuthRedirectURL, opts.OAuthClientIDMetadataDocument),
 		baseURL:            config.BaseURL,
 		messageURL:         config.BaseURL,
 		serverName:         serverName,

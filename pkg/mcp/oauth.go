@@ -26,41 +26,45 @@ var (
 )
 
 type oauth struct {
-	redirectURL, clientName string
-	currentToken            oauth2.Token
-	metadataClient          *http.Client
-	callbackHandler         CallbackHandler
-	clientLookup            ClientCredLookup
-	tokenStorage            TokenStorage
+	redirectURL, clientName  string
+	clientIDMetadataDocument string
+	currentToken             oauth2.Token
+	metadataClient           *http.Client
+	callbackHandler          CallbackHandler
+	clientLookup             ClientCredLookup
+	tokenStorage             TokenStorage
 }
 
 type oauthMetadataDiscovery struct {
-	ProtectedResourceURL            string
-	ProtectedResourceMetadata       protectedResourceMetadata
-	ProtectedResourceMetadataJSON   json.RawMessage
-	AuthorizationServerURL          string
-	AuthorizationServerMetadataURL  string
-	AuthorizationServerMetadata     AuthorizationServerMetadata
-	AuthorizationServerMetadataJSON json.RawMessage
-	DynamicClientRegistration       bool
-	ClientRegistration              ClientRegistrationMetadata
+	ProtectedResourceURL              string
+	ProtectedResourceMetadata         protectedResourceMetadata
+	ProtectedResourceMetadataJSON     json.RawMessage
+	AuthorizationServerURL            string
+	AuthorizationServerMetadataURL    string
+	AuthorizationServerMetadata       AuthorizationServerMetadata
+	AuthorizationServerMetadataJSON   json.RawMessage
+	DynamicClientRegistration         bool
+	ClientRegistration                ClientRegistrationMetadata
+	ClientIDMetadataDocumentSupported bool
 }
 
 // OAuthMetadata contains discovered OAuth metadata for an MCP server.
 type OAuthMetadata struct {
-	ProtectedResourceMetadataURL   string          `json:"protectedResourceMetadataUrl,omitempty"`
-	AuthorizationServerMetadataURL string          `json:"authorizationServerMetadataUrl,omitempty"`
-	ProtectedResourceMetadata      json.RawMessage `json:"protectedResourceMetadata,omitempty"`
-	AuthorizationServerMetadata    json.RawMessage `json:"authorizationServerMetadata,omitempty"`
-	ClientRegistration             json.RawMessage `json:"clientRegistration,omitempty"`
-	DynamicClientRegistration      bool            `json:"dynamicClientRegistration,omitempty"`
+	ProtectedResourceMetadataURL      string          `json:"protectedResourceMetadataUrl,omitempty"`
+	AuthorizationServerMetadataURL    string          `json:"authorizationServerMetadataUrl,omitempty"`
+	ProtectedResourceMetadata         json.RawMessage `json:"protectedResourceMetadata,omitempty"`
+	AuthorizationServerMetadata       json.RawMessage `json:"authorizationServerMetadata,omitempty"`
+	ClientRegistration                json.RawMessage `json:"clientRegistration,omitempty"`
+	DynamicClientRegistration         bool            `json:"dynamicClientRegistration,omitempty"`
+	ClientIDMetadataDocumentSupported bool            `json:"clientIdMetadataDocumentSupported,omitempty"`
 }
 
-func newOAuth(callbackHandler CallbackHandler, clientLookup ClientCredLookup, tokenStorage TokenStorage, clientName, redirectURL string) *oauth {
+func newOAuth(callbackHandler CallbackHandler, clientLookup ClientCredLookup, tokenStorage TokenStorage, clientName, redirectURL, clientIDMetadataDocument string) *oauth {
 	return &oauth{
-		clientName:      clientName,
-		redirectURL:     redirectURL,
-		callbackHandler: callbackHandler,
+		clientName:               clientName,
+		redirectURL:              redirectURL,
+		clientIDMetadataDocument: clientIDMetadataDocument,
+		callbackHandler:          callbackHandler,
 		metadataClient: instrumentHTTPClient(&http.Client{
 			Timeout: 5 * time.Second,
 		}),
@@ -145,15 +149,16 @@ func discoverOAuthMetadata(ctx context.Context, client *http.Client, baseURL, au
 	}
 
 	return oauthMetadataDiscovery{
-		ProtectedResourceURL:            resourceMetadataURL,
-		ProtectedResourceMetadata:       protectedResourceMetadata,
-		ProtectedResourceMetadataJSON:   protectedResourceMetadataJSON,
-		AuthorizationServerURL:          authorizationServerURL,
-		AuthorizationServerMetadataURL:  authorizationServerMetadataURL,
-		AuthorizationServerMetadata:     authorizationServerMetadata,
-		AuthorizationServerMetadataJSON: authorizationServerMetadataJSON,
-		ClientRegistration:              AuthServerMetadataToClientRegistration(authorizationServerMetadata, clientName, redirectURL, scope),
-		DynamicClientRegistration:       rawAuthorizationServerMetadata.RegistrationEndpoint != "",
+		ProtectedResourceURL:              resourceMetadataURL,
+		ProtectedResourceMetadata:         protectedResourceMetadata,
+		ProtectedResourceMetadataJSON:     protectedResourceMetadataJSON,
+		AuthorizationServerURL:            authorizationServerURL,
+		AuthorizationServerMetadataURL:    authorizationServerMetadataURL,
+		AuthorizationServerMetadata:       authorizationServerMetadata,
+		AuthorizationServerMetadataJSON:   authorizationServerMetadataJSON,
+		ClientRegistration:                AuthServerMetadataToClientRegistration(authorizationServerMetadata, clientName, redirectURL, scope),
+		DynamicClientRegistration:         rawAuthorizationServerMetadata.RegistrationEndpoint != "",
+		ClientIDMetadataDocumentSupported: authorizationServerMetadata.ClientIDMetadataDocumentSupported,
 	}, true, nil
 }
 
@@ -199,30 +204,13 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	if !ok {
 		return nil, fmt.Errorf("failed to get authorization server metadata")
 	}
-	protectedResourceMetadata := discovery.ProtectedResourceMetadata
 	authorizationServerMetadata := discovery.AuthorizationServerMetadata
 	slog.Info("resolved oauth scope for server", "server", c.serverName, "scope", discovery.ClientRegistration.Scope)
 	slog.Info("resolved authorization server", "server", c.serverName, "authorization_server", discovery.AuthorizationServerURL)
 
-	// Before trying to register a client, check if there is a static client configuration.
-	var (
-		clientInfo clientRegistrationResponse
-		lookupErr  error
-	)
-	clientInfo.ClientID, clientInfo.ClientSecret, lookupErr = o.clientLookup.Lookup(ctx, protectedResourceMetadata.AuthorizationServers[0])
-	if lookupErr == nil && clientInfo.ClientID != "" && clientInfo.ClientSecret != "" {
-		slog.Info("using static oauth client credentials", "server", c.serverName, "authorization_server", protectedResourceMetadata.AuthorizationServers[0])
-	}
-
-	// If we didn't get a result from the lookup, register a client dynamically.
-	if lookupErr != nil || clientInfo.ClientID == "" || clientInfo.ClientSecret == "" {
-		clientInfo, err = RegisterOAuthClient(ctx, o.metadataClient, c.serverName, authorizationServerMetadata, discovery.ClientRegistration)
-		if err != nil {
-			if lookupErr != nil {
-				return nil, fmt.Errorf("%w - static OAuth client lookup also failed: %v", err, lookupErr)
-			}
-			return nil, err
-		}
+	clientInfo, err := o.resolveClientInfo(ctx, c.serverName, discovery)
+	if err != nil {
+		return nil, err
 	}
 
 	conf := &oauth2.Config{
@@ -237,15 +225,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	if discovery.ClientRegistration.Scope != "" {
 		conf.Scopes = strings.Split(discovery.ClientRegistration.Scope, " ")
 	}
-	switch discovery.ClientRegistration.TokenEndpointAuthMethod {
-	case "client_secret_basic":
-		conf.Endpoint.AuthStyle = oauth2.AuthStyleInHeader
-	case "client_secret_post":
-		conf.Endpoint.AuthStyle = oauth2.AuthStyleInParams
-	default:
-		conf.Endpoint.AuthStyle = oauth2.AuthStyleAutoDetect
-	}
-
+	conf.Endpoint.AuthStyle = tokenEndpointAuthStyle(discovery.ClientRegistration.TokenEndpointAuthMethod, clientInfo.ClientSecret != "")
 	authURL, ch, verifier, err := GetOAuthAuthorizationURL(ctx, o.callbackHandler, conf, authorizationServerMetadata.AuthorizationEndpoint, connectURL)
 	if err != nil {
 		return nil, err
@@ -295,6 +275,55 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	return oauth2.NewClient(ctx, newTokenSource(ctx, o.tokenStorage, connectURL, conf, tok)), nil
 }
 
+func tokenEndpointAuthStyle(tokenEndpointAuthMethod string, hasClientSecret bool) oauth2.AuthStyle {
+	if !hasClientSecret {
+		return oauth2.AuthStyleInParams
+	}
+
+	switch tokenEndpointAuthMethod {
+	case "client_secret_basic":
+		return oauth2.AuthStyleInHeader
+	case "client_secret_post":
+		return oauth2.AuthStyleInParams
+	default:
+		return oauth2.AuthStyleAutoDetect
+	}
+}
+
+func (o *oauth) resolveClientInfo(ctx context.Context, serverName string, discovery oauthMetadataDiscovery) (clientRegistrationResponse, error) {
+	authorizationServerMetadata := discovery.AuthorizationServerMetadata
+	protectedResourceMetadata := discovery.ProtectedResourceMetadata
+
+	if authorizationServerMetadata.ClientIDMetadataDocumentSupported && o.clientIDMetadataDocument != "" {
+		slog.Info("using oauth client ID metadata document", "server", serverName, "client_id", o.clientIDMetadataDocument)
+		return clientRegistrationResponse{
+			ClientID: o.clientIDMetadataDocument,
+		}, nil
+	}
+
+	// Before trying to register a client, check if there is a static client configuration.
+	var (
+		clientInfo clientRegistrationResponse
+		lookupErr  error
+	)
+	clientInfo.ClientID, clientInfo.ClientSecret, lookupErr = o.clientLookup.Lookup(ctx, protectedResourceMetadata.AuthorizationServers[0])
+	if lookupErr == nil && clientInfo.ClientID != "" && clientInfo.ClientSecret != "" {
+		slog.Info("using static oauth client credentials", "server", serverName, "authorization_server", protectedResourceMetadata.AuthorizationServers[0])
+		return clientInfo, nil
+	}
+
+	// If we didn't get a result from the lookup, register a client dynamically.
+	clientInfo, err := RegisterOAuthClient(ctx, o.metadataClient, serverName, authorizationServerMetadata, discovery.ClientRegistration)
+	if err != nil {
+		if lookupErr != nil {
+			return clientRegistrationResponse{}, fmt.Errorf("%w - static OAuth client lookup also failed: %v", err, lookupErr)
+		}
+		return clientRegistrationResponse{}, err
+	}
+
+	return clientInfo, nil
+}
+
 // GetOAuthMetadata discovers OAuth protected resource and authorization server
 // metadata for an HTTP MCP server. Missing metadata endpoints are not errors.
 func GetOAuthMetadata(ctx context.Context, server Server, clientName, redirectURL string) (OAuthMetadata, error) {
@@ -328,12 +357,13 @@ func GetOAuthMetadata(ctx context.Context, server Server, clientName, redirectUR
 	}
 
 	return OAuthMetadata{
-		ProtectedResourceMetadataURL:   discovery.ProtectedResourceURL,
-		AuthorizationServerMetadataURL: discovery.AuthorizationServerMetadataURL,
-		ProtectedResourceMetadata:      discovery.ProtectedResourceMetadataJSON,
-		AuthorizationServerMetadata:    discovery.AuthorizationServerMetadataJSON,
-		ClientRegistration:             clientRegistrationJSON,
-		DynamicClientRegistration:      discovery.DynamicClientRegistration,
+		ProtectedResourceMetadataURL:      discovery.ProtectedResourceURL,
+		AuthorizationServerMetadataURL:    discovery.AuthorizationServerMetadataURL,
+		ProtectedResourceMetadata:         discovery.ProtectedResourceMetadataJSON,
+		AuthorizationServerMetadata:       discovery.AuthorizationServerMetadataJSON,
+		ClientRegistration:                clientRegistrationJSON,
+		DynamicClientRegistration:         discovery.DynamicClientRegistration,
+		ClientIDMetadataDocumentSupported: discovery.ClientIDMetadataDocumentSupported,
 	}, nil
 }
 
@@ -782,6 +812,9 @@ type AuthorizationServerMetadata struct {
 
 	// OPTIONAL. JSON array containing PKCE code challenge methods
 	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported,omitempty"`
+
+	// OPTIONAL. Boolean indicating whether the client ID metadata document is supported
+	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported,omitempty"`
 }
 
 // ClientRegistrationMetadata represents OAuth 2.0 Dynamic Client Registration metadata

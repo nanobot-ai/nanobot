@@ -45,18 +45,19 @@ func New() *cobra.Command {
 }
 
 type Nanobot struct {
-	Debug                bool     `usage:"Enable debug logging"`
-	Trace                bool     `usage:"Enable trace logging"`
-	Env                  []string `usage:"Environment variables to set in the form of KEY=VALUE, or KEY to load from current environ" short:"e"`
-	EnvFile              string   `usage:"Path to the environment file (default: ./nanobot.env)" default:"./nanobot.env"`
-	EmptyEnv             bool     `usage:"Do not load environment variables from the environment by default"`
-	DefaultModel         string   `usage:"Default model to use for completions" default:"gpt-4.1" env:"NANOBOT_DEFAULT_MODEL" name:"default-model"`
-	DefaultMiniModel     string   `usage:"Default model to use for things like thread summaries" default:"gpt-4.1" env:"NANOBOT_DEFAULT_MINI_MODEL" name:"default-mini-model"`
-	MaxConcurrency       int      `usage:"The maximum number of concurrent tasks in a parallel loop" default:"10" hidden:"true"`
-	Chdir                string   `usage:"Change directory to this path before running the nanobot" default:"." short:"C"`
-	State                string   `usage:"Path to the state file" default:"./nanobot.db"`
-	ConfigPath           []string `usage:"Configuration file, directory, URL, or repo ref. Repeat to merge multiple configs; later entries override earlier ones" name:"config" short:"c"`
-	ExcludeBuiltInAgents bool     `usage:"Exclude built-in agents from the configuration"`
+	Debug                         bool     `usage:"Enable debug logging"`
+	Trace                         bool     `usage:"Enable trace logging"`
+	Env                           []string `usage:"Environment variables to set in the form of KEY=VALUE, or KEY to load from current environ" short:"e"`
+	EnvFile                       string   `usage:"Path to the environment file (default: ./nanobot.env)" default:"./nanobot.env"`
+	EmptyEnv                      bool     `usage:"Do not load environment variables from the environment by default"`
+	DefaultModel                  string   `usage:"Default model to use for completions" default:"gpt-4.1" env:"NANOBOT_DEFAULT_MODEL" name:"default-model"`
+	DefaultMiniModel              string   `usage:"Default model to use for things like thread summaries" default:"gpt-4.1" env:"NANOBOT_DEFAULT_MINI_MODEL" name:"default-mini-model"`
+	OAuthClientIDMetadataDocument string   `usage:"OAuth client ID metadata document URL for MCP server OAuth flows" env:"NANOBOT_OAUTH_CLIENT_ID_METADATA_DOCUMENT" name:"oauth-client-id-metadata-document"`
+	MaxConcurrency                int      `usage:"The maximum number of concurrent tasks in a parallel loop" default:"10" hidden:"true"`
+	Chdir                         string   `usage:"Change directory to this path before running the nanobot" default:"." short:"C"`
+	State                         string   `usage:"Path to the state file" default:"./nanobot.db"`
+	ConfigPath                    []string `usage:"Configuration file, directory, URL, or repo ref. Repeat to merge multiple configs; later entries override earlier ones" name:"config" short:"c"`
+	ExcludeBuiltInAgents          bool     `usage:"Exclude built-in agents from the configuration"`
 
 	otel *telemetry.Otel
 }

@@ -130,15 +130,16 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 	callbackHandler := mcp.NewCallbackServer(confirm.New())
 	configPaths := r.n.ConfigPaths()
 	runtimeOpt := runtime.Options{
-		Roots:                     roots,
-		MaxConcurrency:            r.n.MaxConcurrency,
-		CallbackHandler:           callbackHandler,
-		TokenExchangeEndpoint:     r.Auth.OAuthTokenURL,
-		TokenExchangeClientID:     r.Auth.OAuthClientID,
-		TokenExchangeClientSecret: r.Auth.OAuthClientSecret,
-		DefaultModel:              r.n.DefaultModel,
-		ConfigDir:                 r.n.RuntimeConfigDir(),
-		LoopbackURL:               "http://" + r.ListenAddress + "/mcp/chat",
+		Roots:                         roots,
+		MaxConcurrency:                r.n.MaxConcurrency,
+		CallbackHandler:               callbackHandler,
+		TokenExchangeEndpoint:         r.Auth.OAuthTokenURL,
+		TokenExchangeClientID:         r.Auth.OAuthClientID,
+		TokenExchangeClientSecret:     r.Auth.OAuthClientSecret,
+		OAuthClientIDMetadataDocument: r.n.OAuthClientIDMetadataDocument,
+		DefaultModel:                  r.n.DefaultModel,
+		ConfigDir:                     r.n.RuntimeConfigDir(),
+		LoopbackURL:                   "http://" + r.ListenAddress + "/mcp/chat",
 	}
 
 	cfgFactory := types.ConfigFactory(func(ctx context.Context, profiles string) (types.Config, error) {

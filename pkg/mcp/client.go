@@ -119,6 +119,7 @@ func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
 	result.TokenExchangeEndpoint = complete.Last(c.TokenExchangeEndpoint, other.TokenExchangeEndpoint)
 	result.TokenExchangeClientID = complete.Last(c.TokenExchangeClientID, other.TokenExchangeClientID)
 	result.TokenExchangeClientSecret = complete.Last(c.TokenExchangeClientSecret, other.TokenExchangeClientSecret)
+	result.OAuthClientIDMetadataDocument = complete.Last(c.OAuthClientIDMetadataDocument, other.OAuthClientIDMetadataDocument)
 	result.OAuthClientName = complete.Last(c.OAuthClientName, other.OAuthClientName)
 	result.Env = complete.MergeMap(c.Env, other.Env)
 	result.SessionState = complete.Last(c.SessionState, other.SessionState)

@@ -27,18 +27,19 @@ import (
 )
 
 type Service struct {
-	roots                     []mcp.Root
-	sampler                   Sampler
-	runner                    mcp.Runner
-	callbackHandler           mcp.CallbackHandler
-	oauthRedirectURL          string
-	tokenStorage              mcp.TokenStorage
-	concurrency               int
-	serverFactories           map[string]func(name string) mcp.MessageHandler
-	tokenExchangeEndpoint     string
-	tokenExchangeClientID     string
-	tokenExchangeClientSecret string
-	auditLogCollector         *auditlogs.Collector
+	roots                         []mcp.Root
+	sampler                       Sampler
+	runner                        mcp.Runner
+	callbackHandler               mcp.CallbackHandler
+	oauthRedirectURL              string
+	tokenStorage                  mcp.TokenStorage
+	concurrency                   int
+	serverFactories               map[string]func(name string) mcp.MessageHandler
+	tokenExchangeEndpoint         string
+	tokenExchangeClientID         string
+	tokenExchangeClientSecret     string
+	oauthClientIDMetadataDocument string
+	auditLogCollector             *auditlogs.Collector
 }
 
 type Sampler interface {
@@ -46,15 +47,16 @@ type Sampler interface {
 }
 
 type Options struct {
-	Roots                     []mcp.Root
-	Concurrency               int
-	CallbackHandler           mcp.CallbackHandler
-	OAuthRedirectURL          string
-	TokenStorage              mcp.TokenStorage
-	TokenExchangeEndpoint     string
-	TokenExchangeClientID     string
-	TokenExchangeClientSecret string
-	AuditLogCollector         *auditlogs.Collector
+	Roots                         []mcp.Root
+	Concurrency                   int
+	CallbackHandler               mcp.CallbackHandler
+	OAuthRedirectURL              string
+	TokenStorage                  mcp.TokenStorage
+	TokenExchangeEndpoint         string
+	TokenExchangeClientID         string
+	TokenExchangeClientSecret     string
+	OAuthClientIDMetadataDocument string
+	AuditLogCollector             *auditlogs.Collector
 }
 
 func (r Options) Merge(other Options) (result Options) {
@@ -66,6 +68,7 @@ func (r Options) Merge(other Options) (result Options) {
 	result.TokenExchangeEndpoint = complete.Last(r.TokenExchangeEndpoint, other.TokenExchangeEndpoint)
 	result.TokenExchangeClientID = complete.Last(r.TokenExchangeClientID, other.TokenExchangeClientID)
 	result.TokenExchangeClientSecret = complete.Last(r.TokenExchangeClientSecret, other.TokenExchangeClientSecret)
+	result.OAuthClientIDMetadataDocument = complete.Last(r.OAuthClientIDMetadataDocument, other.OAuthClientIDMetadataDocument)
 	result.AuditLogCollector = complete.Last(r.AuditLogCollector, other.AuditLogCollector)
 	return result
 }
@@ -80,15 +83,16 @@ func (r Options) Complete() Options {
 func NewToolsService(opts ...Options) *Service {
 	opt := complete.Complete(opts...)
 	return &Service{
-		roots:                     opt.Roots,
-		concurrency:               opt.Concurrency,
-		oauthRedirectURL:          opt.OAuthRedirectURL,
-		callbackHandler:           opt.CallbackHandler,
-		tokenStorage:              opt.TokenStorage,
-		tokenExchangeEndpoint:     opt.TokenExchangeEndpoint,
-		tokenExchangeClientID:     opt.TokenExchangeClientID,
-		tokenExchangeClientSecret: opt.TokenExchangeClientSecret,
-		auditLogCollector:         opt.AuditLogCollector,
+		roots:                         opt.Roots,
+		concurrency:                   opt.Concurrency,
+		oauthRedirectURL:              opt.OAuthRedirectURL,
+		callbackHandler:               opt.CallbackHandler,
+		tokenStorage:                  opt.TokenStorage,
+		tokenExchangeEndpoint:         opt.TokenExchangeEndpoint,
+		tokenExchangeClientID:         opt.TokenExchangeClientID,
+		tokenExchangeClientSecret:     opt.TokenExchangeClientSecret,
+		oauthClientIDMetadataDocument: opt.OAuthClientIDMetadataDocument,
+		auditLogCollector:             opt.AuditLogCollector,
 	}
 }
 
@@ -452,12 +456,13 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 		},
 		Runner: &s.runner,
 		HTTPClientOptions: mcp.HTTPClientOptions{
-			OAuthRedirectURL:          oauthRedirectURL,
-			CallbackHandler:           s.callbackHandler,
-			TokenStorage:              s.tokenStorage,
-			TokenExchangeEndpoint:     s.tokenExchangeEndpoint,
-			TokenExchangeClientID:     s.tokenExchangeClientID,
-			TokenExchangeClientSecret: s.tokenExchangeClientSecret,
+			OAuthRedirectURL:              oauthRedirectURL,
+			CallbackHandler:               s.callbackHandler,
+			TokenStorage:                  s.tokenStorage,
+			TokenExchangeEndpoint:         s.tokenExchangeEndpoint,
+			TokenExchangeClientID:         s.tokenExchangeClientID,
+			TokenExchangeClientSecret:     s.tokenExchangeClientSecret,
+			OAuthClientIDMetadataDocument: s.oauthClientIDMetadataDocument,
 		},
 		Wire:         wire,
 		SessionState: state,

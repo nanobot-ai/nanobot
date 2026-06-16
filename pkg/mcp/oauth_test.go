@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+
+	"golang.org/x/oauth2"
 )
 
 func TestGetOAuthMetadata(t *testing.T) {
@@ -16,7 +18,7 @@ func TestGetOAuthMetadata(t *testing.T) {
 		redirectURL = "http://localhost/callback"
 	)
 	protectedResourceMetadata := json.RawMessage(`{"resource":"resource","authorization_servers":["issuer"],"scopes_supported":["read"]}`)
-	authorizationServerMetadata := json.RawMessage(`{"issuer":"issuer","authorization_endpoint":"authorize","token_endpoint":"token","registration_endpoint":"register","response_types_supported":["code"]}`)
+	authorizationServerMetadata := json.RawMessage(`{"issuer":"issuer","authorization_endpoint":"authorize","token_endpoint":"token","registration_endpoint":"register","response_types_supported":["code"],"client_id_metadata_document_supported":true}`)
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		switch req.URL.Path {
@@ -78,6 +80,20 @@ func TestGetOAuthMetadata(t *testing.T) {
 	}
 	if !result.DynamicClientRegistration {
 		t.Fatalf("expected dynamic client registration support")
+	}
+	if !result.ClientIDMetadataDocumentSupported {
+		t.Fatalf("expected client ID metadata document support")
+	}
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("failed to marshal oauth metadata: %v", err)
+	}
+	var resultFields map[string]json.RawMessage
+	if err := json.Unmarshal(resultJSON, &resultFields); err != nil {
+		t.Fatalf("failed to parse oauth metadata: %v", err)
+	}
+	if string(resultFields["clientIdMetadataDocumentSupported"]) != "true" {
+		t.Fatalf("expected clientIdMetadataDocumentSupported JSON field, got %s", resultFields["clientIdMetadataDocumentSupported"])
 	}
 	var clientRegistration ClientRegistrationMetadata
 	if err := json.Unmarshal(result.ClientRegistration, &clientRegistration); err != nil {
@@ -178,5 +194,105 @@ func TestGetOAuthMetadataAuthorizationServerNoRegistration(t *testing.T) {
 	}
 	if result.DynamicClientRegistration {
 		t.Fatalf("expected no dynamic client registration support")
+	}
+}
+
+type testClientCredLookup struct {
+	clientID     string
+	clientSecret string
+	calls        int
+}
+
+func (l *testClientCredLookup) Lookup(context.Context, string) (string, string, error) {
+	l.calls++
+	return l.clientID, l.clientSecret, nil
+}
+
+func TestResolveClientInfoUsesClientIDMetadataDocument(t *testing.T) {
+	lookup := &testClientCredLookup{
+		clientID:     "static-client-id",
+		clientSecret: "static-client-secret",
+	}
+	o := &oauth{
+		clientIDMetadataDocument: "https://client.example/oauth-client-metadata.json",
+		clientLookup:             lookup,
+	}
+
+	clientInfo, err := o.resolveClientInfo(context.Background(), "test-server", oauthMetadataDiscovery{
+		ProtectedResourceMetadata: protectedResourceMetadata{
+			AuthorizationServers: []string{"https://issuer.example"},
+		},
+		AuthorizationServerMetadata: AuthorizationServerMetadata{
+			ClientIDMetadataDocumentSupported: true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if clientInfo.ClientID != o.clientIDMetadataDocument {
+		t.Fatalf("expected metadata document client ID %q, got %q", o.clientIDMetadataDocument, clientInfo.ClientID)
+	}
+	if clientInfo.ClientSecret != "" {
+		t.Fatalf("expected empty client secret, got %q", clientInfo.ClientSecret)
+	}
+	if lookup.calls != 0 {
+		t.Fatalf("static client lookup should not be called, got %d calls", lookup.calls)
+	}
+}
+
+func TestResolveClientInfoFallsBackWhenClientIDMetadataDocumentUnsupported(t *testing.T) {
+	lookup := &testClientCredLookup{
+		clientID:     "static-client-id",
+		clientSecret: "static-client-secret",
+	}
+	o := &oauth{
+		clientIDMetadataDocument: "https://client.example/oauth-client-metadata.json",
+		clientLookup:             lookup,
+	}
+
+	clientInfo, err := o.resolveClientInfo(context.Background(), "test-server", oauthMetadataDiscovery{
+		ProtectedResourceMetadata: protectedResourceMetadata{
+			AuthorizationServers: []string{"https://issuer.example"},
+		},
+		AuthorizationServerMetadata: AuthorizationServerMetadata{
+			ClientIDMetadataDocumentSupported: false,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if clientInfo.ClientID != lookup.clientID {
+		t.Fatalf("expected static client ID %q, got %q", lookup.clientID, clientInfo.ClientID)
+	}
+	if clientInfo.ClientSecret != lookup.clientSecret {
+		t.Fatalf("expected static client secret %q, got %q", lookup.clientSecret, clientInfo.ClientSecret)
+	}
+	if lookup.calls != 1 {
+		t.Fatalf("expected one static client lookup, got %d calls", lookup.calls)
+	}
+}
+
+func TestTokenEndpointAuthStyleUsesParamsWithoutClientSecret(t *testing.T) {
+	if got := tokenEndpointAuthStyle("client_secret_basic", false); got != oauth2.AuthStyleInParams {
+		t.Fatalf("expected params auth style without client secret, got %v", got)
+	}
+}
+
+func TestTokenEndpointAuthStyleHonorsClientSecretMethods(t *testing.T) {
+	tests := []struct {
+		method string
+		want   oauth2.AuthStyle
+	}{
+		{method: "client_secret_basic", want: oauth2.AuthStyleInHeader},
+		{method: "client_secret_post", want: oauth2.AuthStyleInParams},
+		{method: "", want: oauth2.AuthStyleAutoDetect},
+	}
+
+	for _, tt := range tests {
+		if got := tokenEndpointAuthStyle(tt.method, true); got != tt.want {
+			t.Fatalf("expected auth style %v for method %q, got %v", tt.want, tt.method, got)
+		}
 	}
 }
