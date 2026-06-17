@@ -64,12 +64,10 @@ func toRequest(req *types.CompletionRequest) (Request, error) {
 	}
 
 	result := Request{
-		Model:       req.Model,
-		System:      strings.TrimSpace(req.SystemPrompt),
-		MaxTokens:   req.MaxTokens,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		Metadata:    req.Metadata,
+		Model:     req.Model,
+		System:    strings.TrimSpace(req.SystemPrompt),
+		MaxTokens: req.MaxTokens,
+		Metadata:  req.Metadata,
 	}
 
 	for _, tool := range req.Tools {

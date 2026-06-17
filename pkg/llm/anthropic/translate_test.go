@@ -73,3 +73,34 @@ func TestToRequestDropsResourceLinkContent(t *testing.T) {
 		t.Fatalf("request still contains null content: %s", data)
 	}
 }
+
+// TestToRequestOmitsSamplingControls ensures deprecated temperature and top_p fields are omitted.
+func TestToRequestOmitsSamplingControls(t *testing.T) {
+	temperature := json.Number("0.7")
+	topP := json.Number("0.9")
+
+	req, err := toRequest(&types.CompletionRequest{
+		Model:       "claude-opus-4-8",
+		Temperature: &temperature,
+		TopP:        &topP,
+	})
+	if err != nil {
+		t.Fatalf("toRequest failed: %v", err)
+	}
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	if _, ok := raw["temperature"]; ok {
+		t.Fatalf("request includes temperature: %s", data)
+	}
+	if _, ok := raw["top_p"]; ok {
+		t.Fatalf("request includes top_p: %s", data)
+	}
+}

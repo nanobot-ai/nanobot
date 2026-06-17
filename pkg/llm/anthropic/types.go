@@ -11,10 +11,8 @@ type Request struct {
 	StopSequences []string       `json:"stop_sequences,omitempty"`
 	Stream        bool           `json:"stream,omitempty"`
 	System        string         `json:"system,omitempty"`
-	Temperature   *json.Number   `json:"temperature,omitempty"`
 	ToolChoice    *ToolChoice    `json:"tool_choice,omitempty"`
 	Tools         []CustomTool   `json:"tools,omitempty"`
-	TopP          *json.Number   `json:"top_p,omitempty"`
 	Metadata      map[string]any `json:"metadata,omitempty"`
 }
 
