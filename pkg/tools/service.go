@@ -225,7 +225,7 @@ func (c *clientFactory) get(envHash string) (*mcp.Client, error) {
 	c.clientLock.Lock()
 	defer c.clientLock.Unlock()
 
-	if c.client != nil && c.envHash == envHash {
+	if c.client != nil && c.client.Session.IsActive() && c.envHash == envHash {
 		return c.client, nil
 	}
 

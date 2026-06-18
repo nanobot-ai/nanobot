@@ -468,6 +468,15 @@ func (s *Session) Close(deleteSession bool) {
 	s.cancel(fmt.Errorf("session closed: %s, delete=%v", s.ID(), deleteSession))
 }
 
+func (s *Session) IsActive() bool {
+	select {
+	case <-s.ctx.Done():
+		return false
+	default:
+		return true
+	}
+}
+
 func (s *Session) Wait() {
 	if s.wire == nil {
 		<-s.ctx.Done()

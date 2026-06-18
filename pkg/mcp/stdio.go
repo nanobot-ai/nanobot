@@ -126,6 +126,7 @@ func (s *Stdio) start(ctx context.Context, handler WireHandler) error {
 		}
 		go handler(ctx, msg)
 	}
+
 	return buf.Err()
 }
 

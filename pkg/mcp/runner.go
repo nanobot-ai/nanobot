@@ -210,9 +210,6 @@ func (r *Runner) doStream(ctx context.Context, serverName string, cmd *sandbox.C
 
 	go func() {
 		sandbox.PipeOut(ctx, stderrPipe, serverName)
-		if err := cmd.Wait(); err != nil {
-			slog.Error("command exited with error", "server", serverName, "error", err)
-		}
 	}()
 
 	return &streamResult{
@@ -250,6 +247,18 @@ func (r *Runner) Stream(ctx context.Context, roots func(context.Context) ([]Root
 		cancel()
 		return nil, fmt.Errorf("failed to run stdio command: %w", err)
 	}
-	result.Close = cancel
+
+	once := new(sync.Once)
+	result.Close = func() {
+		cancel()
+		if result.cmd != nil {
+			once.Do(func() {
+				if err := result.cmd.Wait(); err != nil {
+					slog.Error("command exited with error", "server", serverName, "error", err)
+				}
+			})
+		}
+	}
+
 	return result, nil
 }
