@@ -56,6 +56,14 @@ type HTTPClient struct {
 	waiter             *waiter
 	sse                bool
 
+	// lazy-auth support. oauthRequired forces the OAuth flow even when the
+	// server returns 200 on initialize (e.g. BigQuery, which only challenges on
+	// tool-call). oauthTokenLoaded records whether a stored token was loaded at Start
+	// (don't re-auth if we already have one). oauthStarted guards against re-entry.
+	oauthRequired    bool
+	oauthTokenLoaded bool
+	oauthStarted     bool
+
 	tokenExchangeEndpoint     string
 	tokenExchangeClientID     string
 	tokenExchangeClientSecret string
@@ -106,6 +114,7 @@ func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, ses
 		displayName:        complete.First(config.Name, config.ShortName, serverName),
 		headers:            maps.Clone(headers),
 		passthroughHeaders: slices.Clone(config.PassthroughHeaders),
+		oauthRequired:      config.OAuthRequired,
 		waiter:             newWaiter(),
 		needReconnect:      watchesEvents,
 		sessionID:          sessionID,
@@ -493,6 +502,7 @@ func (s *HTTPClient) Start(ctx context.Context, handler WireHandler) error {
 
 	if httpClient := s.oauthHandler.loadFromStorage(s.ctx, s.baseURL); httpClient != nil {
 		s.httpClient = instrumentHTTPClient(httpClient)
+		s.oauthTokenLoaded = true
 		slog.Info("mcp client loaded oauth token from storage", "server", s.serverName)
 	}
 
@@ -553,6 +563,19 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 		// The client is marked as initialized in ensureSSE after it receives a successful response to the initialize request
 		// to avoid a race with marking the client as initialized here and sending the notifications/initialized message.
 		return nil
+	}
+
+	// lazy-auth servers (e.g. BigQuery) return 200 on initialize and only
+	// challenge with 401 on tool-call. When this server is flagged OAuthRequired and
+	// we have no token yet, synthesize an auth-required error so the standard OAuth
+	// flow runs now (Send -> oauthClient: discovery + authorization URL via the
+	// callback handler, using static client creds). Guarded so we never delete/replace
+	// an already-loaded token and never loop.
+	if s.oauthRequired && !s.oauthTokenLoaded && !s.oauthStarted {
+		s.oauthStarted = true
+		return AuthRequiredErr{
+			Err: fmt.Errorf("oauth required for server %s: lazy-auth server returned 200 on initialize with no token", s.serverName),
+		}
 	}
 
 	sessionID := resp.Header.Get(SessionIDHeader)

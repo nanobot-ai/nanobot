@@ -341,7 +341,12 @@ func GetOAuthMetadata(ctx context.Context, server Server, clientName, redirectUR
 	if err != nil {
 		return OAuthMetadata{}, err
 	}
-	if initialized {
+	// A clean `initialize` (no 401) normally means the server needs no OAuth, so
+	// we skip discovery. But some servers only challenge on tool calls and never
+	// at connect, while still publishing protected-resource metadata; when the
+	// caller marks the server as OAuthRequired, discover anyway so OAuth is set
+	// up now rather than failing later.
+	if initialized && !server.OAuthRequired {
 		return OAuthMetadata{}, nil
 	}
 
@@ -491,9 +496,11 @@ func getAuthServerMetadata(ctx context.Context, client *http.Client, authURL str
 	if authorizationServerMetadataContent.TokenEndpoint == "" {
 		authorizationServerMetadataContent.TokenEndpoint = fmt.Sprintf("%s/token", authServerURL)
 	}
-	if authorizationServerMetadataContent.RegistrationEndpoint == "" {
-		authorizationServerMetadataContent.RegistrationEndpoint = fmt.Sprintf("%s/register", authServerURL)
-	}
+	// do NOT fabricate a registration endpoint. An absent registration_endpoint
+	// means the authorization server does not support RFC 7591 dynamic client registration
+	// (e.g. Google / accounts.google.com). Fabricating {issuer}/register sends a doomed DCR
+	// request (Google answers 400). Leaving it empty makes the flow rely on static client
+	// credentials (clientLookup) instead, which is the correct behavior for these servers.
 
 	return authorizationServerMetadataContent, metadataURL, authorizationServerMetadataJSON, true, nil
 }

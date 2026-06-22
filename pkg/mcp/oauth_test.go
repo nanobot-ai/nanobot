@@ -165,6 +165,62 @@ func TestGetOAuthMetadataInitializeSuccessDeletesSession(t *testing.T) {
 	}
 }
 
+// TestGetOAuthMetadataOAuthRequiredDiscoversOnCleanInitialize covers servers
+// that complete `initialize` without a 401 (auth enforced only on tool calls)
+// yet still publish protected-resource metadata. By default such a server is
+// treated as open (no discovery); when the caller sets OAuthRequired, discovery
+// runs anyway so OAuth is configured at connect time.
+func TestGetOAuthMetadataOAuthRequiredDiscoversOnCleanInitialize(t *testing.T) {
+	var serverURL string
+	authorizationServerMetadata := json.RawMessage(`{"issuer":"issuer","authorization_endpoint":"authorize","token_endpoint":"token","response_types_supported":["code"]}`)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch {
+		case req.Method == http.MethodPost && req.URL.Path == "/":
+			// initialize succeeds without an auth challenge.
+			_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": 1, "result": map[string]any{}})
+		case req.URL.Path == "/.well-known/oauth-protected-resource":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"resource":              serverURL,
+				"authorization_servers": []string{serverURL},
+				"scopes_supported":      []string{"data.read"},
+			})
+		case req.URL.Path == "/.well-known/oauth-authorization-server":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(authorizationServerMetadata)
+		default:
+			http.NotFound(w, req)
+		}
+	}))
+	defer ts.Close()
+	serverURL = ts.URL
+
+	// Default (OAuthRequired=false): a clean initialize is treated as open.
+	openResult, err := GetOAuthMetadata(context.Background(), Server{BaseURL: ts.URL}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if openResult.ProtectedResourceMetadataURL != "" || len(openResult.ProtectedResourceMetadata) != 0 {
+		t.Fatalf("expected empty result without OAuthRequired: %#v", openResult)
+	}
+
+	// OAuthRequired=true: discover even though initialize succeeded.
+	result, err := GetOAuthMetadata(context.Background(), Server{BaseURL: ts.URL, OAuthRequired: true}, "Test Client", "http://localhost/callback")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := ts.URL + "/.well-known/oauth-protected-resource"; result.ProtectedResourceMetadataURL != want {
+		t.Fatalf("protected resource metadata URL:\n got: %s\nwant: %s", result.ProtectedResourceMetadataURL, want)
+	}
+	var clientRegistration ClientRegistrationMetadata
+	if err := json.Unmarshal(result.ClientRegistration, &clientRegistration); err != nil {
+		t.Fatalf("failed to parse client registration metadata: %v", err)
+	}
+	if clientRegistration.Scope != "data.read" {
+		t.Fatalf("unexpected scope: %q", clientRegistration.Scope)
+	}
+}
+
 func TestGetOAuthMetadataAuthorizationServerNoRegistration(t *testing.T) {
 	var serverURL string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
