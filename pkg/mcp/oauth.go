@@ -226,7 +226,17 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 		conf.Scopes = strings.Split(discovery.ClientRegistration.Scope, " ")
 	}
 	conf.Endpoint.AuthStyle = tokenEndpointAuthStyle(discovery.ClientRegistration.TokenEndpointAuthMethod, clientInfo.ClientSecret != "")
-	authURL, ch, verifier, err := GetOAuthAuthorizationURL(ctx, o.callbackHandler, conf, authorizationServerMetadata.AuthorizationEndpoint, connectURL)
+
+	// Provider-agnostic refresh_token guarantee: if we don't already have a stored
+	// refresh token for this server, force the consent screen so the AS issues one
+	// (e.g. Google only returns refresh_token on first consent unless prompt=consent).
+	// Once a refresh token exists, auto-refresh avoids re-entering this flow.
+	forceConsent := true
+	if _, existingTok, terr := o.tokenStorage.GetTokenConfig(ctx, connectURL); terr == nil && existingTok != nil && existingTok.RefreshToken != "" {
+		forceConsent = false
+	}
+
+	authURL, ch, verifier, err := GetOAuthAuthorizationURL(ctx, o.callbackHandler, conf, authorizationServerMetadata.AuthorizationEndpoint, connectURL, forceConsent)
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +419,7 @@ func RegisterOAuthClient(ctx context.Context, client *http.Client, serverName st
 
 // GetOAuthAuthorizationURL constructs the OAuth authorization URL and callback
 // state for the authorization code flow.
-func GetOAuthAuthorizationURL(ctx context.Context, callbackHandler CallbackHandler, conf *oauth2.Config, authorizationEndpoint, connectURL string) (string, <-chan CallbackPayload, string, error) {
+func GetOAuthAuthorizationURL(ctx context.Context, callbackHandler CallbackHandler, conf *oauth2.Config, authorizationEndpoint, connectURL string, forceConsent bool) (string, <-chan CallbackPayload, string, error) {
 	// use PKCE to protect against CSRF attacks
 	// https://www.ietf.org/archive/id/draft-ietf-oauth-security-topics-22.html#name-countermeasures-6
 	verifier := oauth2.GenerateVerifier()
@@ -419,7 +429,7 @@ func GetOAuthAuthorizationURL(ctx context.Context, callbackHandler CallbackHandl
 		return "", nil, "", fmt.Errorf("failed to create state: %w", err)
 	}
 
-	authURL, err := AuthCodeURL(conf, authorizationEndpoint, connectURL, state, verifier)
+	authURL, err := AuthCodeURL(conf, authorizationEndpoint, connectURL, state, verifier, forceConsent)
 	if err != nil {
 		return "", nil, "", fmt.Errorf("failed to generate auth code URL: %w", err)
 	}
@@ -677,7 +687,7 @@ func parseScopeFromAuthenticateHeader(authenticateHeader string) string {
 }
 
 // AuthCodeURL returns the authorization code URL for the given configuration and resource URL.
-func AuthCodeURL(conf *oauth2.Config, urlFromMetadata, resourceURL, state, verifier string) (string, error) {
+func AuthCodeURL(conf *oauth2.Config, urlFromMetadata, resourceURL, state, verifier string, forceConsent bool) (string, error) {
 	authEndpoint, err := url.Parse(urlFromMetadata)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse authorization endpoint: %w", err)
@@ -693,6 +703,13 @@ func AuthCodeURL(conf *oauth2.Config, urlFromMetadata, resourceURL, state, verif
 	if authEndpoint.Host != "mcp.zoho.com" {
 		// Zoho doesn't support the access_type parameter
 		authCodeURLOpts = append(authCodeURLOpts, oauth2.AccessTypeOffline)
+	}
+	if forceConsent {
+		// Force the consent screen so the authorization server re-issues a refresh_token.
+		// Provider-agnostic: some servers (e.g. Google) only return a refresh_token on the
+		// FIRST consent for a user+client unless prompt=consent is present. The caller gates
+		// this to "no refresh token stored yet", so normal auto-refresh use never re-prompts.
+		authCodeURLOpts = append(authCodeURLOpts, oauth2.SetAuthURLParam("prompt", "consent"))
 	}
 
 	return conf.AuthCodeURL(state, authCodeURLOpts...), nil

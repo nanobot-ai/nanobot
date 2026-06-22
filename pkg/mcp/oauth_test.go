@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync/atomic"
 	"testing"
 
@@ -195,6 +196,48 @@ func TestGetOAuthMetadataAuthorizationServerNoRegistration(t *testing.T) {
 	if result.DynamicClientRegistration {
 		t.Fatalf("expected no dynamic client registration support")
 	}
+}
+
+func TestAuthCodeURLForceConsent(t *testing.T) {
+	conf := &oauth2.Config{
+		ClientID: "client",
+		Endpoint: oauth2.Endpoint{AuthURL: "https://accounts.example.com/o/oauth2/v2/auth"},
+		Scopes:   []string{"scope1"},
+	}
+	const authEndpoint = "https://accounts.example.com/o/oauth2/v2/auth"
+	verifier := oauth2.GenerateVerifier()
+
+	// forceConsent=true: prompt=consent must be present (so the AS re-issues a refresh_token),
+	// alongside access_type=offline.
+	withConsent, err := AuthCodeURL(conf, authEndpoint, "https://resource.example.com/mcp", "state123", verifier, true)
+	if err != nil {
+		t.Fatalf("AuthCodeURL(forceConsent=true): %v", err)
+	}
+	q := mustQuery(t, withConsent)
+	if got := q.Get("prompt"); got != "consent" {
+		t.Fatalf("forceConsent=true: prompt = %q, want %q", got, "consent")
+	}
+	if got := q.Get("access_type"); got != "offline" {
+		t.Fatalf("forceConsent=true: access_type = %q, want %q", got, "offline")
+	}
+
+	// forceConsent=false: no prompt=consent (avoid nagging when a refresh token already exists).
+	withoutConsent, err := AuthCodeURL(conf, authEndpoint, "https://resource.example.com/mcp", "state123", verifier, false)
+	if err != nil {
+		t.Fatalf("AuthCodeURL(forceConsent=false): %v", err)
+	}
+	if got := mustQuery(t, withoutConsent).Get("prompt"); got != "" {
+		t.Fatalf("forceConsent=false: prompt = %q, want empty", got)
+	}
+}
+
+func mustQuery(t *testing.T, rawURL string) url.Values {
+	t.Helper()
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatalf("parse url %q: %v", rawURL, err)
+	}
+	return u.Query()
 }
 
 type testClientCredLookup struct {
