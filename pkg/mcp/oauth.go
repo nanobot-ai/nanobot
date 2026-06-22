@@ -178,7 +178,9 @@ func oauthResourceMetadataURL(baseURL, authenticateHeader string) (string, strin
 	}
 	if resourceMetadataURL == "" {
 		// If the authenticate header was not sent back or it did not have a resource metadata URL, then the spec says we should default to...
-		u.Path = "/.well-known/oauth-protected-resource"
+		// RFC 9728 §3.1: the well-known segment is inserted between host and the resource path (path-aware),
+		// preserving any path component (e.g. /mcp-connect/{id}) and the original scheme of the base URL.
+		u.Path = "/.well-known/oauth-protected-resource" + strings.TrimSuffix(u.Path, "/")
 		resourceMetadataURL = u.String()
 	}
 
