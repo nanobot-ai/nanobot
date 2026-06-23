@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync/atomic"
 	"testing"
 
@@ -107,6 +108,43 @@ func TestGetOAuthMetadata(t *testing.T) {
 	}
 	if clientRegistration.Scope != "read" {
 		t.Fatalf("unexpected scope: %s", clientRegistration.Scope)
+	}
+	if !slices.Equal(clientRegistration.GrantTypes, []string{"authorization_code"}) {
+		t.Fatalf("unexpected grant types: %v", clientRegistration.GrantTypes)
+	}
+}
+
+func TestAuthServerMetadataToClientRegistrationFiltersGrantTypes(t *testing.T) {
+	tests := []struct {
+		name      string
+		supported []string
+		want      []string
+	}{
+		{
+			name:      "keeps only authorization code and refresh token",
+			supported: []string{"client_credentials", "refresh_token", "authorization_code", "implicit"},
+			want:      []string{"authorization_code", "refresh_token"},
+		},
+		{
+			name:      "omits unsupported grant types",
+			supported: []string{"client_credentials", "implicit"},
+		},
+		{
+			name:      "keeps refresh token when advertised",
+			supported: []string{"refresh_token"},
+			want:      []string{"refresh_token"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clientRegistration := AuthServerMetadataToClientRegistration(AuthorizationServerMetadata{
+				GrantTypesSupported: tt.supported,
+			}, "", "", "")
+			if !slices.Equal(clientRegistration.GrantTypes, tt.want) {
+				t.Fatalf("unexpected grant types: got %v, want %v", clientRegistration.GrantTypes, tt.want)
+			}
+		})
 	}
 }
 

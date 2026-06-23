@@ -879,12 +879,7 @@ func AuthServerMetadataToClientRegistration(authServer AuthorizationServerMetada
 		merged.TokenEndpointAuthMethod = "client_secret_basic"
 	}
 
-	// grant_types: default is "authorization_code" if not specified
-	if len(authServer.GrantTypesSupported) > 0 {
-		merged.GrantTypes = authServer.GrantTypesSupported
-	} else {
-		merged.GrantTypes = []string{"authorization_code"}
-	}
+	merged.GrantTypes = supportedClientGrantTypes(authServer.GrantTypesSupported)
 
 	// response_types: default is "code" if not specified
 	if len(authServer.ResponseTypesSupported) > 0 {
@@ -904,6 +899,22 @@ func AuthServerMetadataToClientRegistration(authServer AuthorizationServerMetada
 	}
 
 	return merged
+}
+
+func supportedClientGrantTypes(grantTypesSupported []string) []string {
+	supported := make(map[string]struct{}, len(grantTypesSupported))
+	for _, grantType := range grantTypesSupported {
+		supported[grantType] = struct{}{}
+	}
+
+	var grantTypes []string
+	for _, grantType := range []string{"authorization_code", "refresh_token"} {
+		if _, ok := supported[grantType]; ok {
+			grantTypes = append(grantTypes, grantType)
+		}
+	}
+
+	return grantTypes
 }
 
 // clientRegistrationResponse represents OAuth 2.0 Dynamic Client Registration Response
