@@ -151,6 +151,13 @@ type Server struct {
 	Headers            map[string]string `json:"headers,omitempty"`
 	PassthroughHeaders []string          `json:"passthroughHeaders,omitempty"`
 
+	// OAuthRequired forces OAuth metadata discovery even when the server
+	// completes `initialize` without a 401 challenge. Some MCP servers only
+	// enforce auth on tool calls (never challenging at connect) yet still
+	// publish RFC 9728 protected-resource metadata; set this so OAuth is
+	// configured at connect time instead of failing on the first tool call.
+	OAuthRequired bool `json:"oauthRequired,omitempty"`
+
 	// If providing tool overrides, any tools not included will be implicitly disabled.
 	// If providing no tool overrides, all tools will be enabled.
 	ToolOverrides ToolOverrides `json:"toolOverrides,omitzero"`
