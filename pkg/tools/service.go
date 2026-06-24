@@ -40,6 +40,9 @@ type Service struct {
 	tokenExchangeClientSecret     string
 	oauthClientIDMetadataDocument string
 	auditLogCollector             *auditlogs.Collector
+	blockLoopback                 bool
+	blockPrivateIP                bool
+	blockLinkLocal                bool
 }
 
 type Sampler interface {
@@ -57,6 +60,9 @@ type Options struct {
 	TokenExchangeClientSecret     string
 	OAuthClientIDMetadataDocument string
 	AuditLogCollector             *auditlogs.Collector
+	BlockLoopback                 bool
+	BlockPrivateIP                bool
+	BlockLinkLocal                bool
 }
 
 func (r Options) Merge(other Options) (result Options) {
@@ -70,6 +76,9 @@ func (r Options) Merge(other Options) (result Options) {
 	result.TokenExchangeClientSecret = complete.Last(r.TokenExchangeClientSecret, other.TokenExchangeClientSecret)
 	result.OAuthClientIDMetadataDocument = complete.Last(r.OAuthClientIDMetadataDocument, other.OAuthClientIDMetadataDocument)
 	result.AuditLogCollector = complete.Last(r.AuditLogCollector, other.AuditLogCollector)
+	result.BlockLoopback = r.BlockLoopback || other.BlockLoopback
+	result.BlockPrivateIP = r.BlockPrivateIP || other.BlockPrivateIP
+	result.BlockLinkLocal = r.BlockLinkLocal || other.BlockLinkLocal
 	return result
 }
 
@@ -93,6 +102,9 @@ func NewToolsService(opts ...Options) *Service {
 		tokenExchangeClientSecret:     opt.TokenExchangeClientSecret,
 		oauthClientIDMetadataDocument: opt.OAuthClientIDMetadataDocument,
 		auditLogCollector:             opt.AuditLogCollector,
+		blockLoopback:                 opt.BlockLoopback,
+		blockPrivateIP:                opt.BlockPrivateIP,
+		blockLinkLocal:                opt.BlockLinkLocal,
 	}
 }
 
@@ -463,6 +475,9 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 			TokenExchangeClientID:         s.tokenExchangeClientID,
 			TokenExchangeClientSecret:     s.tokenExchangeClientSecret,
 			OAuthClientIDMetadataDocument: s.oauthClientIDMetadataDocument,
+			BlockLoopback:                 s.blockLoopback,
+			BlockPrivateIP:                s.blockPrivateIP,
+			BlockLinkLocal:                s.blockLinkLocal,
 		},
 		Wire:         wire,
 		SessionState: state,

@@ -59,17 +59,15 @@ type OAuthMetadata struct {
 	ClientIDMetadataDocumentSupported bool            `json:"clientIdMetadataDocumentSupported,omitempty"`
 }
 
-func newOAuth(callbackHandler CallbackHandler, clientLookup ClientCredLookup, tokenStorage TokenStorage, clientName, redirectURL, clientIDMetadataDocument string) *oauth {
+func newOAuth(metadataClient *http.Client, callbackHandler CallbackHandler, clientLookup ClientCredLookup, tokenStorage TokenStorage, clientName, redirectURL, clientIDMetadataDocument string) *oauth {
 	return &oauth{
 		clientName:               clientName,
 		redirectURL:              redirectURL,
 		clientIDMetadataDocument: clientIDMetadataDocument,
 		callbackHandler:          callbackHandler,
-		metadataClient: instrumentHTTPClient(&http.Client{
-			Timeout: 5 * time.Second,
-		}),
-		clientLookup: clientLookup,
-		tokenStorage: tokenStorage,
+		metadataClient:           metadataClient,
+		clientLookup:             clientLookup,
+		tokenStorage:             tokenStorage,
 	}
 }
 
@@ -324,18 +322,26 @@ func (o *oauth) resolveClientInfo(ctx context.Context, serverName string, discov
 	return clientInfo, nil
 }
 
-// GetOAuthMetadata discovers OAuth protected resource and authorization server
-// metadata for an HTTP MCP server. Missing metadata endpoints are not errors.
-func GetOAuthMetadata(ctx context.Context, server Server, clientName, redirectURL string) (OAuthMetadata, error) {
+// GetOAuthMetadataSafely discovers OAuth protected resource and authorization server
+// metadata for an HTTP MCP server blocking loopback, private, and link-local addresses.
+// Missing metadata endpoints are not errors.
+func GetOAuthMetadataSafely(ctx context.Context, server Server, clientName, redirectURL string) (OAuthMetadata, error) {
+	return GetOAuthMetadataWithBlockingConfig(ctx, server, clientName, redirectURL, true, true, true)
+}
+
+func GetOAuthMetadataWithBlockingConfig(ctx context.Context, server Server, clientName, redirectURL string, blockLoopback, blockPrivateIP, blockLinkLocal bool) (OAuthMetadata, error) {
+	return GetOAuthMetadataWithClient(ctx, newSafeHTTPClient(blockLoopback, blockPrivateIP, blockLinkLocal, 5*time.Second), server, clientName, redirectURL)
+}
+
+// GetOAuthMetadataWithClient discovers OAuth protected resource and authorization server
+// metadata for an HTTP MCP server using a custom HTTP client.
+// Missing metadata endpoints are not errors.
+func GetOAuthMetadataWithClient(ctx context.Context, httpClient *http.Client, server Server, clientName, redirectURL string) (OAuthMetadata, error) {
 	if server.BaseURL == "" {
 		return OAuthMetadata{}, nil
 	}
 
-	metadataClient := instrumentHTTPClient(&http.Client{
-		Timeout: 5 * time.Second,
-	})
-
-	authenticateHeader, initialized, err := wwwAuthenticateFromInitialize(ctx, metadataClient, server)
+	authenticateHeader, initialized, err := wwwAuthenticateFromInitialize(ctx, httpClient, server)
 	if err != nil {
 		return OAuthMetadata{}, err
 	}
@@ -343,7 +349,7 @@ func GetOAuthMetadata(ctx context.Context, server Server, clientName, redirectUR
 		return OAuthMetadata{}, nil
 	}
 
-	discovery, ok, err := discoverOAuthMetadata(ctx, metadataClient, server.BaseURL, authenticateHeader, clientName, redirectURL, server.Headers)
+	discovery, ok, err := discoverOAuthMetadata(ctx, httpClient, server.BaseURL, authenticateHeader, clientName, redirectURL, server.Headers)
 	if err != nil {
 		return OAuthMetadata{}, err
 	}
@@ -365,6 +371,13 @@ func GetOAuthMetadata(ctx context.Context, server Server, clientName, redirectUR
 		DynamicClientRegistration:         discovery.DynamicClientRegistration,
 		ClientIDMetadataDocumentSupported: discovery.ClientIDMetadataDocumentSupported,
 	}, nil
+}
+
+// GetOAuthMetadata discovers OAuth protected resource and authorization server
+// metadata for an HTTP MCP server. Missing metadata endpoints are not errors.
+// It uses the default HTTP client.
+func GetOAuthMetadata(ctx context.Context, server Server, clientName, redirectURL string) (OAuthMetadata, error) {
+	return GetOAuthMetadataWithClient(ctx, defaultInstrumentedHTTPClient, server, clientName, redirectURL)
 }
 
 // RegisterOAuthClient dynamically registers an OAuth client with an

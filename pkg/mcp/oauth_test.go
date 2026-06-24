@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/obot-platform/nanobot/pkg/safehttp"
 	"golang.org/x/oauth2"
 )
 
@@ -57,7 +58,7 @@ func TestGetOAuthMetadata(t *testing.T) {
 	defer ts.Close()
 	serverURL = ts.URL
 
-	result, err := GetOAuthMetadata(context.Background(), Server{
+	result, err := GetOAuthMetadataWithClient(t.Context(), safehttp.NewClient(false, true, true), Server{
 		BaseURL: ts.URL + "/mcp",
 		Headers: map[string]string{
 			"X-Test": "value",
@@ -152,7 +153,7 @@ func TestGetOAuthMetadataMissingProtectedResource(t *testing.T) {
 	ts := httptest.NewServer(http.NotFoundHandler())
 	defer ts.Close()
 
-	result, err := GetOAuthMetadata(context.Background(), Server{BaseURL: ts.URL}, "", "")
+	result, err := GetOAuthMetadataWithClient(t.Context(), safehttp.NewClient(false, true, true), Server{BaseURL: ts.URL}, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +189,7 @@ func TestGetOAuthMetadataInitializeSuccessDeletesSession(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	result, err := GetOAuthMetadata(context.Background(), Server{BaseURL: ts.URL + "/mcp"}, "", "")
+	result, err := GetOAuthMetadataWithClient(t.Context(), safehttp.NewClient(false, true, true), Server{BaseURL: ts.URL + "/mcp"}, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +223,7 @@ func TestGetOAuthMetadataAuthorizationServerNoRegistration(t *testing.T) {
 	defer ts.Close()
 	serverURL = ts.URL
 
-	result, err := GetOAuthMetadata(context.Background(), Server{BaseURL: ts.URL}, "", "")
+	result, err := GetOAuthMetadataWithClient(t.Context(), safehttp.NewClient(false, true, true), Server{BaseURL: ts.URL}, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +257,7 @@ func TestResolveClientInfoUsesClientIDMetadataDocument(t *testing.T) {
 		clientLookup:             lookup,
 	}
 
-	clientInfo, err := o.resolveClientInfo(context.Background(), "test-server", oauthMetadataDiscovery{
+	clientInfo, err := o.resolveClientInfo(t.Context(), "test-server", oauthMetadataDiscovery{
 		ProtectedResourceMetadata: protectedResourceMetadata{
 			AuthorizationServers: []string{"https://issuer.example"},
 		},
@@ -289,7 +290,7 @@ func TestResolveClientInfoFallsBackWhenClientIDMetadataDocumentUnsupported(t *te
 		clientLookup:             lookup,
 	}
 
-	clientInfo, err := o.resolveClientInfo(context.Background(), "test-server", oauthMetadataDiscovery{
+	clientInfo, err := o.resolveClientInfo(t.Context(), "test-server", oauthMetadataDiscovery{
 		ProtectedResourceMetadata: protectedResourceMetadata{
 			AuthorizationServers: []string{"https://issuer.example"},
 		},

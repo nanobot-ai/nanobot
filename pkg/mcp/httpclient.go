@@ -20,7 +20,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/obot-platform/nanobot/pkg/complete"
 	"github.com/obot-platform/nanobot/pkg/log"
+	"github.com/obot-platform/nanobot/pkg/safehttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"golang.org/x/oauth2"
 )
 
 const (
@@ -66,6 +68,10 @@ type HTTPClient struct {
 
 	sseLock       sync.RWMutex
 	needReconnect bool
+
+	blockLoopback  bool
+	blockPrivateIP bool
+	blockLinkLocal bool
 }
 
 type HTTPClientOptions struct {
@@ -78,6 +84,9 @@ type HTTPClientOptions struct {
 	TokenExchangeClientID         string
 	TokenExchangeClientSecret     string
 	OAuthClientIDMetadataDocument string
+	BlockLoopback                 bool
+	BlockPrivateIP                bool
+	BlockLinkLocal                bool
 }
 
 func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, sessionState *SessionState, headers map[string]string, watchesEvents bool) (*HTTPClient, error) {
@@ -98,8 +107,16 @@ func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, ses
 	}
 
 	return &HTTPClient{
-		httpClient:         instrumentHTTPClient(http.DefaultClient),
-		oauthHandler:       newOAuth(opts.CallbackHandler, opts.ClientCredLookup, opts.TokenStorage, opts.OAuthClientName, opts.OAuthRedirectURL, opts.OAuthClientIDMetadataDocument),
+		httpClient: newSafeHTTPClient(opts.BlockLoopback, opts.BlockPrivateIP, opts.BlockLinkLocal, http.DefaultClient.Timeout),
+		oauthHandler: newOAuth(
+			newSafeHTTPClient(opts.BlockLoopback, opts.BlockPrivateIP, opts.BlockLinkLocal, 5*time.Second),
+			opts.CallbackHandler,
+			opts.ClientCredLookup,
+			opts.TokenStorage,
+			opts.OAuthClientName,
+			opts.OAuthRedirectURL,
+			opts.OAuthClientIDMetadataDocument,
+		),
 		baseURL:            config.BaseURL,
 		messageURL:         config.BaseURL,
 		serverName:         serverName,
@@ -114,7 +131,28 @@ func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, ses
 		tokenExchangeClientID:     opts.TokenExchangeClientID,
 		tokenExchangeClientSecret: opts.TokenExchangeClientSecret,
 		tokenExchangeEndpoint:     opts.TokenExchangeEndpoint,
+		blockLoopback:             opts.BlockLoopback,
+		blockPrivateIP:            opts.BlockPrivateIP,
+		blockLinkLocal:            opts.BlockLinkLocal,
 	}, nil
+}
+
+func newSafeHTTPClient(blockLoopback, blockPrivate, blockLinkLocal bool, timeout time.Duration) *http.Client {
+	// Create an HTTP client with the default timeout and configured address blocking.
+	return instrumentHTTPClient(safehttp.NewClientWithTimeout(blockLoopback, blockPrivate, blockLinkLocal, timeout))
+}
+
+func (s *HTTPClient) instrumentMCPHTTPClient(client *http.Client) *http.Client {
+	if client == nil {
+		return newSafeHTTPClient(s.blockLoopback, s.blockPrivateIP, s.blockLinkLocal, http.DefaultClient.Timeout)
+	}
+	cloned := *client
+	if transport, ok := cloned.Transport.(*oauth2.Transport); ok {
+		transportClone := *transport
+		transportClone.Base = safehttp.NewClient(s.blockLoopback, s.blockPrivateIP, s.blockLinkLocal).Transport
+		cloned.Transport = &transportClone
+	}
+	return instrumentHTTPClient(&cloned)
 }
 
 func (s *HTTPClient) SetOAuthCallbackHandler(handler CallbackHandler) {
@@ -492,7 +530,7 @@ func (s *HTTPClient) Start(ctx context.Context, handler WireHandler) error {
 	s.handler = handler
 
 	if httpClient := s.oauthHandler.loadFromStorage(s.ctx, s.baseURL); httpClient != nil {
-		s.httpClient = instrumentHTTPClient(httpClient)
+		s.httpClient = s.instrumentMCPHTTPClient(httpClient)
 		slog.Info("mcp client loaded oauth token from storage", "server", s.serverName)
 	}
 
@@ -609,7 +647,7 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 		}
 
 		s.clientLock.Lock()
-		s.httpClient = instrumentHTTPClient(httpClient)
+		s.httpClient = s.instrumentMCPHTTPClient(httpClient)
 		s.clientLock.Unlock()
 
 		// Make the call to send instead of Send so we don't get stuck in an authentication loop.
@@ -650,7 +688,7 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 			// error that we need to continue the process.
 
 			s.clientLock.Lock()
-			s.httpClient = instrumentHTTPClient(http.DefaultClient)
+			s.httpClient = newSafeHTTPClient(s.blockLoopback, s.blockPrivateIP, s.blockLinkLocal, http.DefaultClient.Timeout)
 			s.clientLock.Unlock()
 
 			// Use the exported Send method here so that we catch the AuthRequiredErr above on the recursed call.

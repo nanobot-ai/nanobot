@@ -33,6 +33,9 @@ type Run struct {
 	AuditLogFlushIntervalSeconds int               `usage:"Interval for flushing audit logs" default:"5"`
 	Roots                        []string          `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
 	EntrypointAgent              string            `usage:"ID of the agent to use for chat" name:"agent"`
+	BlockLoopback                bool              `usage:"Block MCP HTTP requests to loopback IP addresses"`
+	BlockPrivateIP               bool              `usage:"Block MCP HTTP requests to private IP addresses"`
+	BlockLinkLocal               bool              `usage:"Block MCP HTTP requests to link-local IP addresses"`
 	n                            *Nanobot
 }
 
@@ -140,6 +143,9 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		DefaultModel:                  r.n.DefaultModel,
 		ConfigDir:                     r.n.RuntimeConfigDir(),
 		LoopbackURL:                   "http://" + r.ListenAddress + "/mcp/chat",
+		BlockLoopback:                 r.BlockLoopback,
+		BlockPrivateIP:                r.BlockPrivateIP,
+		BlockLinkLocal:                r.BlockLinkLocal,
 	}
 
 	cfgFactory := types.ConfigFactory(func(ctx context.Context, profiles string) (types.Config, error) {

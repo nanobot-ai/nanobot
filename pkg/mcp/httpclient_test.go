@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -41,5 +42,58 @@ func TestHTTPClientPassthroughHeaders(t *testing.T) {
 	}
 	if got := outgoing.Header.Get("X-Not-Allowed"); got != "" {
 		t.Fatalf("X-Not-Allowed = %q, want empty", got)
+	}
+}
+
+func TestHTTPClientBlockingOptions(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer ts.Close()
+
+	blocked, err := newHTTPClient("test", Server{BaseURL: ts.URL}, HTTPClientOptions{
+		BlockLoopback: true,
+	}, nil, nil, false)
+	if err != nil {
+		t.Fatalf("newHTTPClient failed: %v", err)
+	}
+
+	_, err = blocked.oauthHandler.metadataClient.Get(ts.URL)
+	if err == nil {
+		t.Fatal("expected loopback metadata request to be blocked")
+	}
+	if !strings.Contains(err.Error(), "blocked loopback IP") {
+		t.Fatalf("expected loopback block error, got %v", err)
+	}
+
+	_, err = blocked.httpClient.Get(ts.URL)
+	if err == nil {
+		t.Fatal("expected loopback MCP request to be blocked")
+	}
+	if !strings.Contains(err.Error(), "blocked loopback IP") {
+		t.Fatalf("expected loopback block error, got %v", err)
+	}
+
+	allowed, err := newHTTPClient("test", Server{BaseURL: ts.URL}, HTTPClientOptions{}, nil, nil, false)
+	if err != nil {
+		t.Fatalf("newHTTPClient failed: %v", err)
+	}
+
+	resp, err := allowed.oauthHandler.metadataClient.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("expected loopback metadata request to be allowed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+
+	resp, err = allowed.httpClient.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("expected loopback MCP request to be allowed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	}
 }

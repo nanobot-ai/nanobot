@@ -51,6 +51,9 @@ type Options struct {
 	DefaultModel                  string
 	ConfigDir                     string
 	LoopbackURL                   string
+	BlockLoopback                 bool
+	BlockPrivateIP                bool
+	BlockLinkLocal                bool
 }
 
 func (o Options) Merge(other Options) (result Options) {
@@ -70,6 +73,9 @@ func (o Options) Merge(other Options) (result Options) {
 	result.DefaultModel = complete.Last(o.DefaultModel, other.DefaultModel)
 	result.ConfigDir = complete.Last(o.ConfigDir, other.ConfigDir)
 	result.LoopbackURL = complete.Last(o.LoopbackURL, other.LoopbackURL)
+	result.BlockLoopback = o.BlockLoopback || other.BlockLoopback
+	result.BlockPrivateIP = o.BlockPrivateIP || other.BlockPrivateIP
+	result.BlockLinkLocal = o.BlockLinkLocal || other.BlockLinkLocal
 	return
 }
 
@@ -99,6 +105,9 @@ func NewRuntime(ctx context.Context, cfg llm.Config, opts ...Options) (*Runtime,
 		TokenExchangeClientSecret:     opt.TokenExchangeClientSecret,
 		OAuthClientIDMetadataDocument: opt.OAuthClientIDMetadataDocument,
 		AuditLogCollector:             opt.AuditLogCollector,
+		BlockLoopback:                 opt.BlockLoopback,
+		BlockPrivateIP:                opt.BlockPrivateIP,
+		BlockLinkLocal:                opt.BlockLinkLocal,
 	})
 	agentsService := agents.New(completer, registry)
 	sampler := sampling.NewSampler(agentsService)
