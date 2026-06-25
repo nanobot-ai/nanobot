@@ -630,10 +630,16 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 
 	// Check for an authentication-required error and put the user through the OAuth process.
 	if oauthErr, ok := errors.AsType[AuthRequiredErr](err); ok {
+		resourceMetadataURL := parseResourceMetadata(oauthErr.ProtectedResourceValue)
+		scope := parseScopeFromAuthenticateHeader(oauthErr.ProtectedResourceValue)
 		slog.Info("mcp client authentication required",
 			"server", s.serverName,
+			"connect_url", s.baseURL,
 			"method", msg.Method,
-			"request_id", MessageIDString(msg.ID))
+			"request_id", MessageIDString(msg.ID),
+			"has_www_authenticate", oauthErr.ProtectedResourceValue != "",
+			"resource_metadata", resourceMetadataURL,
+			"scope", scope)
 
 		// If there is an existing token, it doesn't work, so delete it.
 		if err := s.oauthHandler.tokenStorage.DeleteTokenConfig(ctx, s.baseURL); err != nil {
@@ -679,6 +685,7 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 		if strings.HasPrefix(unwrappedErr.Error(), "oauth2:") {
 			slog.Warn("mcp client oauth2 transport error, retrying unauthenticated",
 				"server", s.serverName,
+				"connect_url", s.baseURL,
 				"method", msg.Method,
 				"request_id", MessageIDString(msg.ID),
 				"error", unwrappedErr)

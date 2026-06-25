@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/obot-platform/mcp-oauth-proxy/pkg/oauth/validate"
@@ -145,7 +146,15 @@ func mcpProxy(auth Auth, dsn string, next http.Handler) (http.Handler, error) {
 	if !strings.Contains(dsn, "postgres") {
 		dsn = strings.TrimSuffix(dsn, ".db") + "_auth.db"
 	}
-	slog.Info("initializing oauth proxy")
+	slog.Info("initializing oauth proxy",
+		"oauth_authorize_host", urlHost(auth.OAuthAuthorizeURL),
+		"oauth_token_host", urlHost(auth.OAuthTokenURL),
+		"oauth_jwks_configured", auth.OAuthJWKSURL != "",
+		"trusted_issuer_configured", auth.TrustedIssuer != "",
+		"trusted_audience_count", len(auth.TrustedAudiences),
+		"scope_count", len(auth.OAuthScopes),
+		"api_key_auth_webhook_configured", auth.APIKeyAuthWebhookURL != "",
+		"mcp_server_id_configured", auth.MCPServerID != "")
 
 	proxy, err := proxy.NewOAuthProxy(&proxytypes.Config{
 		DatabaseDSN:          dsn,
@@ -170,4 +179,12 @@ func mcpProxy(auth Auth, dsn string, next http.Handler) (http.Handler, error) {
 	mux := http.NewServeMux()
 	proxy.SetupRoutes(mux, next)
 	return mux, nil
+}
+
+func urlHost(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return u.Host
 }

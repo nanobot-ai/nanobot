@@ -79,8 +79,8 @@ func (o *oauth) loadFromStorage(ctx context.Context, connectURL string) *http.Cl
 	// Read the token config from storage to see if we have valid auth
 	conf, tok, err := o.tokenStorage.GetTokenConfig(ctx, connectURL)
 	if err != nil {
-		slog.Info("failed to read token config", "error", err)
-		slog.Info("continuing with authentication")
+		slog.Info("failed to read token config", "connect_url", connectURL, "error", err)
+		slog.Info("continuing with authentication", "connect_url", connectURL)
 	}
 
 	if conf != nil && tok != nil {
@@ -92,7 +92,7 @@ func (o *oauth) loadFromStorage(ctx context.Context, connectURL string) *http.Cl
 			return oauth2.NewClient(ctx, ts)
 		}
 
-		slog.Info("stored oauth token is not usable, re-authentication required", "connect_url", connectURL)
+		slog.Info("stored oauth token is not usable, re-authentication required", "connect_url", connectURL, "error", err)
 	}
 
 	return nil
@@ -197,9 +197,11 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 
 	discovery, ok, err := discoverOAuthMetadata(ctx, o.metadataClient, c.baseURL, authenticateHeader, o.clientName, o.redirectURL, nil)
 	if err != nil {
+		slog.Warn("oauth metadata discovery failed", "server", c.serverName, "base_url", c.baseURL, "connect_url", connectURL, "error", err)
 		return nil, err
 	}
 	if !ok {
+		slog.Warn("oauth metadata discovery did not find authorization server metadata", "server", c.serverName, "base_url", c.baseURL, "connect_url", connectURL)
 		return nil, fmt.Errorf("failed to get authorization server metadata")
 	}
 	authorizationServerMetadata := discovery.AuthorizationServerMetadata
@@ -256,6 +258,13 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 
 	tok, err := ExchangeOAuthToken(ctx, conf, cb.Code, verifier)
 	if err != nil {
+		slog.Warn("oauth code exchange failed",
+			"server", c.serverName,
+			"connect_url", connectURL,
+			"token_endpoint", conf.Endpoint.TokenURL,
+			"token_endpoint_auth_method", discovery.ClientRegistration.TokenEndpointAuthMethod,
+			"has_client_secret", clientInfo.ClientSecret != "",
+			"error", err)
 		return nil, err
 	}
 	slog.Info("oauth code exchange succeeded", "server", c.serverName)
@@ -264,7 +273,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 
 	if o.tokenStorage != nil {
 		if err = o.tokenStorage.SetTokenConfig(ctx, connectURL, conf, tok); err != nil {
-			slog.Info("failed to save token config", "error", err)
+			slog.Info("failed to save token config", "server", c.serverName, "connect_url", connectURL, "error", err)
 		} else {
 			slog.Info("saved oauth token config", "server", c.serverName, "connect_url", connectURL)
 		}
@@ -309,10 +318,24 @@ func (o *oauth) resolveClientInfo(ctx context.Context, serverName string, discov
 		slog.Info("using static oauth client credentials", "server", serverName, "authorization_server", protectedResourceMetadata.AuthorizationServers[0])
 		return clientInfo, nil
 	}
+	if lookupErr != nil {
+		slog.Debug("static oauth client credential lookup failed", "server", serverName, "authorization_server", protectedResourceMetadata.AuthorizationServers[0], "error", lookupErr)
+	} else {
+		slog.Debug("static oauth client credentials not configured",
+			"server", serverName,
+			"authorization_server", protectedResourceMetadata.AuthorizationServers[0],
+			"has_client_id", clientInfo.ClientID != "",
+			"has_client_secret", clientInfo.ClientSecret != "")
+	}
 
 	// If we didn't get a result from the lookup, register a client dynamically.
 	clientInfo, err := RegisterOAuthClient(ctx, o.metadataClient, serverName, authorizationServerMetadata, discovery.ClientRegistration)
 	if err != nil {
+		slog.Warn("oauth dynamic client registration failed",
+			"server", serverName,
+			"authorization_server", protectedResourceMetadata.AuthorizationServers[0],
+			"registration_endpoint", authorizationServerMetadata.RegistrationEndpoint,
+			"error", err)
 		if lookupErr != nil {
 			return clientRegistrationResponse{}, fmt.Errorf("%w - static OAuth client lookup also failed: %v", err, lookupErr)
 		}
@@ -493,8 +516,10 @@ func getAuthServerMetadata(ctx context.Context, client *http.Client, authURL str
 		break
 	}
 	if !found {
+		slog.Debug("authorization server metadata not found", "authorization_server", authServerURL, "metadata_urls", metadataURLs)
 		return AuthorizationServerMetadata{}, "", nil, false, nil
 	}
+	slog.Debug("authorization server metadata found", "authorization_server", authServerURL, "metadata_url", metadataURL)
 
 	if authorizationServerMetadataContent.AuthorizationEndpoint == "" {
 		authorizationServerMetadataContent.AuthorizationEndpoint = fmt.Sprintf("%s/authorize", authServerURL)
