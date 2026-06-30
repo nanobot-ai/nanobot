@@ -2,6 +2,7 @@
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import Threads from '$lib/components/Threads.svelte';
+	import MemoryEditor from '$lib/components/MemoryEditor.svelte';
 	import Notifications from '$lib/components/Notifications.svelte';
 	import { defaultChatApi } from '$lib/chat.svelte';
 	import { NotificationStore } from '$lib/stores/notifications.svelte';
@@ -171,7 +172,7 @@
 			<div class="flex-1 overflow-hidden {!isSidebarCollapsed ? 'min-w-80' : ''}">
 				<div class="flex h-full flex-col">
 					<!-- Threads section (takes up ~40% of available space) -->
-					<div class='flex-shrink-0 overflow-y-auto'>
+					<div class='flex-shrink-0 overflow-y-auto' style="max-height: 40%;">
 						<Threads
 							{threads}
 							onRename={handleRenameThread}
@@ -179,6 +180,10 @@
 							{isLoading}
 							onThreadClick={closeMobileSidebar}
 						/>
+					</div>
+					<!-- Memory Editor section -->
+					<div class="flex-1 overflow-hidden border-t border-base-300">
+						<MemoryEditor />
 					</div>
 				</div>
 			</div>
