@@ -609,15 +609,31 @@ func (c CallOption) Merge(other CallOption) (result CallOption) {
 func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOption) (result *CallToolResult, err error) {
 	opt := complete.Complete(opts...)
 	result = new(CallToolResult)
+	if c.noTools {
+		return result, fmt.Errorf("no tools available")
+	}
 
 	// Strip the per-server tool prefix before reverse-resolving any override
 	// rename — the upstream server only knows the original (or override) name.
 	tool = strings.TrimPrefix(tool, c.toolPrefix)
 
-	for name, o := range c.toolOverrides {
-		if o.Name != "" && tool == o.Name {
-			tool = name
-			break
+	// A non-nil ToolOverrides map is an allow-list: tools absent from it are
+	// hidden from tools/list and must not be callable by their upstream name.
+	if c.toolOverrides != nil {
+		var ok bool
+		for name, o := range c.toolOverrides {
+			if tool == name {
+				ok = true
+				break
+			}
+			if o.Name != "" && tool == o.Name {
+				tool = name
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return result, fmt.Errorf("tool %q not found", tool)
 		}
 	}
 
