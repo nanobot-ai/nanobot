@@ -20,6 +20,7 @@ import (
 type Client struct {
 	Session       *Session
 	serverName    string
+	noTools       bool
 	toolOverrides ToolOverrides
 	toolPrefix    string
 }
@@ -157,6 +158,7 @@ type Server struct {
 	// If providing tool overrides, any tools not included will be implicitly disabled.
 	// If providing no tool overrides, all tools will be enabled.
 	ToolOverrides ToolOverrides `json:"toolOverrides,omitzero"`
+	NoTools       bool          `json:"noTools,omitempty"`
 
 	// ToolPrefix is prepended to the name of every tool this server exposes
 	// (after any ToolOverrides rename). Incoming tool calls are stripped of the
@@ -380,6 +382,7 @@ func NewClient(ctx context.Context, serverName string, config Server, opts ...Cl
 	c := &Client{
 		Session:       session,
 		serverName:    serverName,
+		noTools:       config.NoTools,
 		toolOverrides: config.ToolOverrides,
 		toolPrefix:    config.ToolPrefix,
 	}
@@ -538,6 +541,10 @@ func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 	ctx, span := startOutboundSpan(ctx, "mcp.tools.list",
 		attribute.String("mcp.server.name", c.serverName),
 	)
+	if c.noTools {
+		finishOutboundSpan(span, nil)
+		return &ListToolsResult{}, nil
+	}
 	if c.Session.InitializeResult.Capabilities.Tools == nil {
 		finishOutboundSpan(span, nil)
 		return &ListToolsResult{}, nil
@@ -545,7 +552,7 @@ func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 
 	var tools ListToolsResult
 	err := c.Session.Exchange(ctx, "tools/list", struct{}{}, &tools)
-	if err == nil && len(c.toolOverrides) > 0 {
+	if err == nil && c.toolOverrides != nil {
 		filtered := tools.Tools[:0] // reuse the backing array
 		for _, tool := range tools.Tools {
 			override, ok := c.toolOverrides[tool.Name]
