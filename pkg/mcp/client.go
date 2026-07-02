@@ -620,20 +620,17 @@ func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOp
 	// A non-nil ToolOverrides map is an allow-list: tools absent from it are
 	// hidden from tools/list and must not be callable by their upstream name.
 	if c.toolOverrides != nil {
-		var ok bool
-		for name, o := range c.toolOverrides {
-			if tool == name {
-				ok = true
-				break
+		if _, ok := c.toolOverrides[tool]; !ok {
+			for name, o := range c.toolOverrides {
+				if o.Name != "" && tool == o.Name {
+					tool = name
+					ok = true
+					break
+				}
 			}
-			if o.Name != "" && tool == o.Name {
-				tool = name
-				ok = true
-				break
+			if !ok {
+				return result, fmt.Errorf("tool %q not found", tool)
 			}
-		}
-		if !ok {
-			return result, fmt.Errorf("tool %q not found", tool)
 		}
 	}
 
