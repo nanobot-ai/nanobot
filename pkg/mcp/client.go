@@ -158,7 +158,8 @@ type Server struct {
 	// If providing tool overrides, any tools not included will be implicitly disabled.
 	// If providing no tool overrides, all tools will be enabled.
 	ToolOverrides ToolOverrides `json:"toolOverrides,omitzero"`
-	NoTools       bool          `json:"noTools,omitempty"`
+	// NoTools is used to differentiate between empty ToolOverrides meaning "all enabled" or "none enalbed"
+	NoTools bool `json:"noTools,omitempty"`
 
 	// ToolPrefix is prepended to the name of every tool this server exposes
 	// (after any ToolOverrides rename). Incoming tool calls are stripped of the
