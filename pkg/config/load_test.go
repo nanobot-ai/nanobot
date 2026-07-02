@@ -54,6 +54,7 @@ func TestSchema(t *testing.T) {
 	"mcpServers": {
 		"server1": {
 			"command": "command1",
+			"noTools": true,
 			"workdir": "/path/to/workdir",
 			"args": ["arg1", "arg2"],
 			"url": "http://example.com",

@@ -552,7 +552,7 @@ func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 
 	var tools ListToolsResult
 	err := c.Session.Exchange(ctx, "tools/list", struct{}{}, &tools)
-	if err == nil && c.toolOverrides != nil {
+	if err == nil && len(c.toolOverrides) > 0 {
 		filtered := tools.Tools[:0] // reuse the backing array
 		for _, tool := range tools.Tools {
 			override, ok := c.toolOverrides[tool.Name]
@@ -617,10 +617,14 @@ func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOp
 	// rename — the upstream server only knows the original (or override) name.
 	tool = strings.TrimPrefix(tool, c.toolPrefix)
 
-	// A non-nil ToolOverrides map is an allow-list: tools absent from it are
+	// A non-empty ToolOverrides map is an allow-list: tools absent from it are
 	// hidden from tools/list and must not be callable by their upstream name.
-	if c.toolOverrides != nil {
-		if _, ok := c.toolOverrides[tool]; !ok {
+	if len(c.toolOverrides) > 0 {
+		if override, ok := c.toolOverrides[tool]; ok {
+			if override.Name != "" && override.Name != tool {
+				return result, fmt.Errorf("tool %q not found", tool)
+			}
+		} else {
 			for name, o := range c.toolOverrides {
 				if o.Name != "" && tool == o.Name {
 					tool = name

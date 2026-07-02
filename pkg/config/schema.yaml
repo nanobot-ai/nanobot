@@ -377,6 +377,10 @@ definitions:
           or input schema, or to disable specific tools.
         additionalProperties:
           $ref: "#/definitions/ToolOverride"
+      noTools:
+        type: boolean
+        description: |
+          Disable all tools from this MCP Server. Prompts and resources remain available.
       toolPrefix:
         type: string
         description: |
