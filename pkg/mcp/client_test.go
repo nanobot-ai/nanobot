@@ -36,3 +36,11 @@ func TestClientCallToolOverridesDisableOriginalRenamedTool(t *testing.T) {
 		t.Fatalf("expected tool not found error, got %v", err)
 	}
 }
+
+func TestClientCallEmptyToolOverridesDoesNotDisableTools(t *testing.T) {
+	s := NewEmptySession(t.Context())
+	_, err := (&Client{Session: s, toolOverrides: ToolOverrides{}}).Call(context.Background(), "someTool", nil)
+	if err == nil || strings.Contains(err.Error(), `tool "someTool" not found`) {
+		t.Fatalf("expected call to reach session exchange (not be blocked by empty ToolOverrides), got %v", err)
+	}
+}
