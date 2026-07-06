@@ -621,21 +621,20 @@ func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOp
 	// A non-empty ToolOverrides map is an allow-list: tools absent from it are
 	// hidden from tools/list and must not be callable by their upstream name.
 	if len(c.toolOverrides) > 0 {
-		if override, ok := c.toolOverrides[tool]; ok {
-			if override.Name != "" && override.Name != tool {
-				return result, fmt.Errorf("tool %q not found", tool)
+		found := false
+		for name, o := range c.toolOverrides {
+			if tool == name && (o.Name == "" || o.Name == tool) {
+				found = true
+				break
 			}
-		} else {
-			for name, o := range c.toolOverrides {
-				if o.Name != "" && tool == o.Name {
-					tool = name
-					ok = true
-					break
-				}
+			if o.Name != "" && tool == o.Name {
+				tool = name
+				found = true
+				break
 			}
-			if !ok {
-				return result, fmt.Errorf("tool %q not found", tool)
-			}
+		}
+		if !found {
+			return result, fmt.Errorf("tool %q not found", tool)
 		}
 	}
 
