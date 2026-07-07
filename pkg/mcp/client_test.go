@@ -18,7 +18,7 @@ func TestClientListToolsNoToolsDoesNotNeedSession(t *testing.T) {
 
 func TestClientCallNoToolsDoesNotNeedSession(t *testing.T) {
 	_, err := (&Client{noTools: true}).Call(context.Background(), "hidden", nil)
-	if err == nil || !strings.Contains(err.Error(), "no tools available") {
+	if err == nil || !strings.Contains(err.Error(), "no tools allowed") {
 		t.Fatalf("expected no tools error, got %v", err)
 	}
 }

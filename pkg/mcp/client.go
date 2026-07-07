@@ -607,7 +607,7 @@ func (c *Client) Call(ctx context.Context, tool string, args any, opts ...CallOp
 	opt := complete.Complete(opts...)
 	result = new(CallToolResult)
 	if c.noTools {
-		return result, fmt.Errorf("no tools available")
+		return result, fmt.Errorf("no tools allowed")
 	}
 
 	// Strip the per-server tool prefix before reverse-resolving any override
