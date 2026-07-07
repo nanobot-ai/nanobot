@@ -39,7 +39,7 @@ type Service struct {
 	tokenExchangeClientID         string
 	tokenExchangeClientSecret     string
 	oauthClientIDMetadataDocument string
-	auditLogCollector             *auditlogs.Collector
+	auditLogCollector             auditlogs.Collector
 	blockLoopback                 bool
 	blockPrivateIP                bool
 	blockLinkLocal                bool
@@ -59,7 +59,7 @@ type Options struct {
 	TokenExchangeClientID         string
 	TokenExchangeClientSecret     string
 	OAuthClientIDMetadataDocument string
-	AuditLogCollector             *auditlogs.Collector
+	AuditLogCollector             auditlogs.Collector
 	BlockLoopback                 bool
 	BlockPrivateIP                bool
 	BlockLinkLocal                bool
@@ -138,6 +138,7 @@ func buildAuditLog(msg *mcp.Message, session *mcp.Session) *auditlogs.MCPAuditLo
 	session.Get("subject", &auditLog.Subject)
 	session.Get("clientIP", &auditLog.ClientIP)
 	session.Get("apiKey", &auditLog.APIKey)
+	session.Get("auditLogMetadata", &auditLog.Metadata)
 
 	return auditLog
 }
@@ -376,7 +377,7 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 	}
 
 	var oauthRedirectURL string
-	if session.Get(types.PublicURLSessionKey, &oauthRedirectURL) {
+	if s.callbackHandler != nil && session.Get(types.PublicURLSessionKey, &oauthRedirectURL) {
 		u, err := url.Parse(oauthRedirectURL)
 		if err == nil {
 			oauthRedirectURL = u.Scheme + "://" + u.Host
@@ -384,6 +385,16 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 		oauthRedirectURL = strings.TrimSuffix(oauthRedirectURL, "/") + "/oauth/callback"
 	} else {
 		oauthRedirectURL = s.oauthRedirectURL
+	}
+
+	tokenExchangeEndpoint, tokenExchangeClientID, tokenExchangeClientSecret := s.tokenExchangeEndpoint, s.tokenExchangeClientID, s.tokenExchangeClientSecret
+	if config.Auth != nil {
+		if config.Auth.OAuthClientID != "" {
+			tokenExchangeClientID = config.Auth.OAuthClientID
+		}
+		if config.Auth.OAuthClientSecret != "" {
+			tokenExchangeClientSecret = config.Auth.OAuthClientSecret
+		}
 	}
 
 	clientOpts := mcp.ClientOption{
@@ -471,9 +482,9 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 			OAuthRedirectURL:              oauthRedirectURL,
 			CallbackHandler:               s.callbackHandler,
 			TokenStorage:                  s.tokenStorage,
-			TokenExchangeEndpoint:         s.tokenExchangeEndpoint,
-			TokenExchangeClientID:         s.tokenExchangeClientID,
-			TokenExchangeClientSecret:     s.tokenExchangeClientSecret,
+			TokenExchangeEndpoint:         tokenExchangeEndpoint,
+			TokenExchangeClientID:         tokenExchangeClientID,
+			TokenExchangeClientSecret:     tokenExchangeClientSecret,
 			OAuthClientIDMetadataDocument: s.oauthClientIDMetadataDocument,
 			BlockLoopback:                 s.blockLoopback,
 			BlockPrivateIP:                s.blockPrivateIP,

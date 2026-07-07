@@ -87,7 +87,14 @@ func buildAuditLog(req *http.Request, method string, sessionID string) auditlogs
 	}
 	headersJSON, _ := json.Marshal(sanitizedHeaders)
 
+	metadata := AuditLogMetadataFromContext(req.Context())
+	subject := UserFromContext(req.Context()).Sub
+	if subject == "" {
+		subject = metadata["userID"]
+	}
+
 	return auditlogs.MCPAuditLog{
+		Subject:        subject,
 		CreatedAt:      startTime,
 		ClientIP:       strings.TrimSpace(clientIP),
 		CallType:       method,
@@ -95,6 +102,7 @@ func buildAuditLog(req *http.Request, method string, sessionID string) auditlogs
 		APIKey:         redactedAPIKey,
 		UserAgent:      req.Header.Get("User-Agent"),
 		RequestHeaders: headersJSON,
+		Metadata:       metadata,
 	}
 }
 
@@ -112,7 +120,7 @@ type HTTPServer struct {
 	healthErr       *error
 	healthMu        sync.RWMutex
 
-	auditLogCollector *auditlogs.Collector
+	auditLogCollector auditlogs.Collector
 }
 
 type HTTPServerOptions struct {
@@ -121,7 +129,7 @@ type HTTPServerOptions struct {
 	HealthCheckPath   string
 	ResourceName      string
 	RunHealthChecker  bool
-	AuditLogCollector *auditlogs.Collector
+	AuditLogCollector auditlogs.Collector
 }
 
 func (h HTTPServerOptions) Complete() HTTPServerOptions {
@@ -131,7 +139,9 @@ func (h HTTPServerOptions) Complete() HTTPServerOptions {
 	if h.BaseContext == nil {
 		h.BaseContext = context.Background()
 	}
-
+	if h.AuditLogCollector == nil {
+		h.AuditLogCollector = auditlogs.NewNoopCollector()
+	}
 	if h.ResourceName == "" {
 		h.ResourceName = "Nanobot MCP Server"
 	}
@@ -148,7 +158,7 @@ func (h HTTPServerOptions) Merge(other HTTPServerOptions) (result HTTPServerOpti
 	return h
 }
 
-func NewHTTPServer(ctx context.Context, envProvider func() (map[string]string, error), handler MessageHandler, opts ...HTTPServerOptions) (*HTTPServer, error) {
+func NewHTTPServer(envProvider func() (map[string]string, error), handler MessageHandler, opts ...HTTPServerOptions) (*HTTPServer, error) {
 	o := complete.Complete(opts...)
 	h := &HTTPServer{
 		MessageHandler:    handler,
@@ -321,7 +331,6 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	ctx := req.Context()
-	auditLog.Subject = UserFromContext(ctx).Sub
 	if req.Method == http.MethodGet {
 		h.streamEvents(rw, req, auditLog)
 		return
@@ -426,6 +435,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		streamingSession.session.Set("subject", auditLog.Subject)
 		streamingSession.session.Set("clientIP", auditLog.ClientIP)
 		streamingSession.session.Set("apiKey", auditLog.APIKey)
+		streamingSession.session.Set("auditLogMetadata", auditLog.Metadata)
 
 		auditLog.ClientName = streamingSession.session.InitializeRequest.ClientInfo.Name
 		auditLog.ClientVersion = streamingSession.session.InitializeRequest.ClientInfo.Version

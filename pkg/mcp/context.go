@@ -62,6 +62,17 @@ func AuditLogFromContext(ctx context.Context) *auditlogs.MCPAuditLog {
 	return auditLog
 }
 
+type auditLogMetadataKey struct{}
+
+func WithAuditLogMetadata(ctx context.Context, metadata map[string]string) context.Context {
+	return context.WithValue(ctx, auditLogMetadataKey{}, metadata)
+}
+
+func AuditLogMetadataFromContext(ctx context.Context) map[string]string {
+	metadata, _ := ctx.Value(auditLogMetadataKey{}).(map[string]string)
+	return metadata
+}
+
 type mcpServerConfigKey struct{}
 
 func WithMCPServerConfig(ctx context.Context, config Server) context.Context {

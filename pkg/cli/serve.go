@@ -182,7 +182,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 
 	slog.Info("config", "json", once.Redacted())
 
-	var auditLogCollector *auditlogs.Collector
+	var auditLogCollector *auditlogs.HTTPCollector
 	if r.AuditLogSendURL != "" {
 		auditLogCollector = auditlogs.NewCollector(r.AuditLogSendURL, r.AuditLogToken, r.AuditLogBatchSize, time.Duration(r.AuditLogFlushIntervalSeconds)*time.Second, r.AuditLogMetadata)
 		defer auditLogCollector.Close()

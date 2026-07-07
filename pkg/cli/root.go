@@ -276,7 +276,7 @@ type mcpOpts struct {
 	StartUI            bool
 }
 
-func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, auditLogCollector *auditlogs.Collector, store *session.Store, opts mcpOpts) error {
+func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, auditLogCollector auditlogs.Collector, store *session.Store, opts mcpOpts) error {
 	envProvider := func() (map[string]string, error) {
 		return n.loadEnv()
 	}
@@ -322,7 +322,7 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 		return nil
 	}
 
-	httpServer, err := mcp.NewHTTPServer(ctx, envProvider, mcpServer, mcp.HTTPServerOptions{
+	httpServer, err := mcp.NewHTTPServer(envProvider, mcpServer, mcp.HTTPServerOptions{
 		HealthCheckPath:   opts.HealthzPath,
 		RunHealthChecker:  opts.HealthzPath != "" && os.Getenv("NANOBOT_DISABLE_HEALTH_CHECKER") != "true",
 		SessionStore:      sessionManager,

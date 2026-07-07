@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"sync"
 	"time"
@@ -13,7 +14,12 @@ import (
 	"log/slog"
 )
 
-type Collector struct {
+type Collector interface {
+	CollectMCPAuditEntry(entry MCPAuditLog)
+	Close()
+}
+
+type HTTPCollector struct {
 	auditBuffer      []MCPAuditLog
 	auditLock        sync.Mutex
 	auditLogMetadata map[string]string
@@ -22,8 +28,8 @@ type Collector struct {
 	sendURL, token   string
 }
 
-func NewCollector(sendURL, token string, batchSize int, flushInterval time.Duration, auditLogMetadata map[string]string) *Collector {
-	c := &Collector{
+func NewCollector(sendURL, token string, batchSize int, flushInterval time.Duration, auditLogMetadata map[string]string) *HTTPCollector {
+	c := &HTTPCollector{
 		sendURL:          sendURL,
 		token:            token,
 		done:             make(chan struct{}),
@@ -38,7 +44,7 @@ func NewCollector(sendURL, token string, batchSize int, flushInterval time.Durat
 }
 
 // Close closes the collector and waits for all pending audit logs to be persisted.
-func (c *Collector) Close() {
+func (c *HTTPCollector) Close() {
 	if c == nil {
 		return
 	}
@@ -47,14 +53,18 @@ func (c *Collector) Close() {
 	<-c.done
 }
 
-func (c *Collector) CollectMCPAuditEntry(entry MCPAuditLog) {
+func (c *HTTPCollector) CollectMCPAuditEntry(entry MCPAuditLog) {
 	if c == nil || entry.CallType == "" {
 		// If the call type is empty, then this is a response to a request.
 		// The audit log will be handled elsewhere.
 		return
 	}
 
-	entry.Metadata = c.auditLogMetadata
+	if len(c.auditLogMetadata) != 0 {
+		merged := maps.Clone(c.auditLogMetadata)
+		maps.Copy(merged, entry.Metadata)
+		entry.Metadata = merged
+	}
 
 	c.auditLock.Lock()
 	defer c.auditLock.Unlock()
@@ -68,7 +78,7 @@ func (c *Collector) CollectMCPAuditEntry(entry MCPAuditLog) {
 	}
 }
 
-func (c *Collector) runPersistenceLoop(flushInterval time.Duration) {
+func (c *HTTPCollector) runPersistenceLoop(flushInterval time.Duration) {
 	timer := time.NewTimer(flushInterval)
 	defer timer.Stop()
 	defer close(c.done)
@@ -93,7 +103,7 @@ func (c *Collector) runPersistenceLoop(flushInterval time.Duration) {
 	}
 }
 
-func (c *Collector) persistAuditLogs() error {
+func (c *HTTPCollector) persistAuditLogs() error {
 	c.auditLock.Lock()
 	if len(c.auditBuffer) == 0 {
 		c.auditLock.Unlock()
@@ -117,7 +127,7 @@ func (c *Collector) persistAuditLogs() error {
 	return nil
 }
 
-func (c *Collector) sendMCPAuditLogs(ctx context.Context, logs []MCPAuditLog) error {
+func (c *HTTPCollector) sendMCPAuditLogs(ctx context.Context, logs []MCPAuditLog) error {
 	h := http.Client{
 		Timeout: 10 * time.Second,
 	}

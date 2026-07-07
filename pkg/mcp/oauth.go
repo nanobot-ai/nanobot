@@ -184,8 +184,6 @@ func oauthResourceMetadataURL(baseURL, authenticateHeader string) (string, strin
 }
 
 func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, authenticateHeader string) (*http.Client, error) {
-	slog.Info("starting oauth flow", "server", c.serverName, "connect_url", connectURL)
-
 	if httpClient := o.loadFromStorage(ctx, connectURL); httpClient != nil {
 		slog.Info("oauth flow skipped, using stored token", "server", c.serverName, "connect_url", connectURL)
 		return httpClient, nil
@@ -194,6 +192,8 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	if o.callbackHandler == nil || o.redirectURL == "" {
 		return nil, fmt.Errorf("oauth callback server is not configured")
 	}
+
+	slog.Info("starting oauth flow", "server", c.serverName, "connect_url", connectURL)
 
 	discovery, ok, err := discoverOAuthMetadata(ctx, o.metadataClient, c.baseURL, authenticateHeader, o.clientName, o.redirectURL, nil)
 	if err != nil {

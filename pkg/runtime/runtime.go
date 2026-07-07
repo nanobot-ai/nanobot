@@ -47,7 +47,7 @@ type Options struct {
 	TokenExchangeClientID         string
 	TokenExchangeClientSecret     string
 	OAuthClientIDMetadataDocument string
-	AuditLogCollector             *auditlogs.Collector
+	AuditLogCollector             auditlogs.Collector
 	DefaultModel                  string
 	ConfigDir                     string
 	LoopbackURL                   string
