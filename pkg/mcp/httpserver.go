@@ -379,6 +379,9 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		auditLog.CallIdentifier = gjson.GetBytes(msg.Params, "uri").String()
 	case "tools/call", "prompts/get":
 		auditLog.CallIdentifier = gjson.GetBytes(msg.Params, "name").String()
+		if msg.Method == "tools/call" {
+			auditLog.ObotAuditCorrelationID = extractObotAuditCorrelationID(msg)
+		}
 	default:
 	}
 	slog.Debug("mcp server received message",
@@ -522,6 +525,21 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		http.Error(rw, fmt.Sprintf(`{"http_error": "Failed to encode response: %v"}`, err), http.StatusInternalServerError)
 		return
 	}
+}
+
+func extractObotAuditCorrelationID(msg Message) string {
+	if msg.Method != "tools/call" || len(msg.Params) == 0 {
+		return ""
+	}
+	for _, path := range []string{
+		"arguments._meta.obotAuditCorrelationID",
+		"_meta.obotAuditCorrelationID",
+	} {
+		if value := strings.TrimSpace(gjson.GetBytes(msg.Params, path).String()); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func respondWithUnauthorized(rw http.ResponseWriter, req *http.Request) {
