@@ -542,11 +542,7 @@ func (c *Client) ListTools(ctx context.Context) (*ListToolsResult, error) {
 	ctx, span := startOutboundSpan(ctx, "mcp.tools.list",
 		attribute.String("mcp.server.name", c.serverName),
 	)
-	if c.noTools {
-		finishOutboundSpan(span, nil)
-		return &ListToolsResult{}, nil
-	}
-	if c.Session.InitializeResult.Capabilities.Tools == nil {
+	if c.noTools || c.Session.InitializeResult.Capabilities.Tools == nil {
 		finishOutboundSpan(span, nil)
 		return &ListToolsResult{}, nil
 	}
