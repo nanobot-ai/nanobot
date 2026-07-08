@@ -72,6 +72,7 @@ type HTTPClient struct {
 	blockLoopback  bool
 	blockPrivateIP bool
 	blockLinkLocal bool
+	allowedHosts   []string
 }
 
 type HTTPClientOptions struct {
@@ -87,6 +88,7 @@ type HTTPClientOptions struct {
 	BlockLoopback                 bool
 	BlockPrivateIP                bool
 	BlockLinkLocal                bool
+	AllowedHosts                  []string
 }
 
 func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, sessionState *SessionState, headers map[string]string, watchesEvents bool) (*HTTPClient, error) {
@@ -107,9 +109,9 @@ func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, ses
 	}
 
 	return &HTTPClient{
-		httpClient: newSafeHTTPClient(opts.BlockLoopback, opts.BlockPrivateIP, opts.BlockLinkLocal, http.DefaultClient.Timeout),
+		httpClient: newSafeHTTPClient(opts.BlockLoopback, opts.BlockPrivateIP, opts.BlockLinkLocal, opts.AllowedHosts, http.DefaultClient.Timeout),
 		oauthHandler: newOAuth(
-			newSafeHTTPClient(opts.BlockLoopback, opts.BlockPrivateIP, opts.BlockLinkLocal, 5*time.Second),
+			newSafeHTTPClient(opts.BlockLoopback, opts.BlockPrivateIP, opts.BlockLinkLocal, opts.AllowedHosts, 5*time.Second),
 			opts.CallbackHandler,
 			opts.ClientCredLookup,
 			opts.TokenStorage,
@@ -134,22 +136,23 @@ func newHTTPClient(serverName string, config Server, opts HTTPClientOptions, ses
 		blockLoopback:             opts.BlockLoopback,
 		blockPrivateIP:            opts.BlockPrivateIP,
 		blockLinkLocal:            opts.BlockLinkLocal,
+		allowedHosts:              slices.Clone(opts.AllowedHosts),
 	}, nil
 }
 
-func newSafeHTTPClient(blockLoopback, blockPrivate, blockLinkLocal bool, timeout time.Duration) *http.Client {
+func newSafeHTTPClient(blockLoopback, blockPrivate, blockLinkLocal bool, allowedHosts []string, timeout time.Duration) *http.Client {
 	// Create an HTTP client with the default timeout and configured address blocking.
-	return instrumentHTTPClient(safehttp.NewClientWithTimeout(blockLoopback, blockPrivate, blockLinkLocal, timeout))
+	return instrumentHTTPClient(safehttp.NewClientWithAllowListAndTimeout(blockLoopback, blockPrivate, blockLinkLocal, allowedHosts, timeout))
 }
 
 func (s *HTTPClient) instrumentMCPHTTPClient(client *http.Client) *http.Client {
 	if client == nil {
-		return newSafeHTTPClient(s.blockLoopback, s.blockPrivateIP, s.blockLinkLocal, http.DefaultClient.Timeout)
+		return newSafeHTTPClient(s.blockLoopback, s.blockPrivateIP, s.blockLinkLocal, s.allowedHosts, http.DefaultClient.Timeout)
 	}
 	cloned := *client
 	if transport, ok := cloned.Transport.(*oauth2.Transport); ok {
 		transportClone := *transport
-		transportClone.Base = safehttp.NewClient(s.blockLoopback, s.blockPrivateIP, s.blockLinkLocal).Transport
+		transportClone.Base = safehttp.NewClientWithAllowList(s.blockLoopback, s.blockPrivateIP, s.blockLinkLocal, s.allowedHosts).Transport
 		cloned.Transport = &transportClone
 	}
 	return instrumentHTTPClient(&cloned)
@@ -695,7 +698,7 @@ func (s *HTTPClient) Send(ctx context.Context, msg Message) error {
 			// error that we need to continue the process.
 
 			s.clientLock.Lock()
-			s.httpClient = newSafeHTTPClient(s.blockLoopback, s.blockPrivateIP, s.blockLinkLocal, http.DefaultClient.Timeout)
+			s.httpClient = newSafeHTTPClient(s.blockLoopback, s.blockPrivateIP, s.blockLinkLocal, s.allowedHosts, http.DefaultClient.Timeout)
 			s.clientLock.Unlock()
 
 			// Use the exported Send method here so that we catch the AuthRequiredErr above on the recursed call.

@@ -43,6 +43,7 @@ type Service struct {
 	blockLoopback                 bool
 	blockPrivateIP                bool
 	blockLinkLocal                bool
+	allowedHosts                  []string
 }
 
 type Sampler interface {
@@ -63,6 +64,7 @@ type Options struct {
 	BlockLoopback                 bool
 	BlockPrivateIP                bool
 	BlockLinkLocal                bool
+	AllowedHosts                  []string
 }
 
 func (r Options) Merge(other Options) (result Options) {
@@ -79,6 +81,7 @@ func (r Options) Merge(other Options) (result Options) {
 	result.BlockLoopback = r.BlockLoopback || other.BlockLoopback
 	result.BlockPrivateIP = r.BlockPrivateIP || other.BlockPrivateIP
 	result.BlockLinkLocal = r.BlockLinkLocal || other.BlockLinkLocal
+	result.AllowedHosts = append(append([]string{}, r.AllowedHosts...), other.AllowedHosts...)
 	return result
 }
 
@@ -105,6 +108,7 @@ func NewToolsService(opts ...Options) *Service {
 		blockLoopback:                 opt.BlockLoopback,
 		blockPrivateIP:                opt.BlockPrivateIP,
 		blockLinkLocal:                opt.BlockLinkLocal,
+		allowedHosts:                  slices.Clone(opt.AllowedHosts),
 	}
 }
 
@@ -489,6 +493,7 @@ func (s *Service) newClient(ctx context.Context, name string, state *mcp.Session
 			BlockLoopback:                 s.blockLoopback,
 			BlockPrivateIP:                s.blockPrivateIP,
 			BlockLinkLocal:                s.blockLinkLocal,
+			AllowedHosts:                  s.allowedHosts,
 		},
 		Wire:         wire,
 		SessionState: state,

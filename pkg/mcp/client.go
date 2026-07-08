@@ -124,6 +124,7 @@ func (c ClientOption) Merge(other ClientOption) (result ClientOption) {
 	result.BlockLoopback = c.BlockLoopback || other.BlockLoopback
 	result.BlockPrivateIP = c.BlockPrivateIP || other.BlockPrivateIP
 	result.BlockLinkLocal = c.BlockLinkLocal || other.BlockLinkLocal
+	result.AllowedHosts = append(c.AllowedHosts, other.AllowedHosts...)
 	result.OAuthClientName = complete.Last(c.OAuthClientName, other.OAuthClientName)
 	result.Env = complete.MergeMap(c.Env, other.Env)
 	result.SessionState = complete.Last(c.SessionState, other.SessionState)

@@ -54,6 +54,7 @@ type Options struct {
 	BlockLoopback                 bool
 	BlockPrivateIP                bool
 	BlockLinkLocal                bool
+	AllowedHosts                  []string
 }
 
 func (o Options) Merge(other Options) (result Options) {
@@ -76,6 +77,7 @@ func (o Options) Merge(other Options) (result Options) {
 	result.BlockLoopback = o.BlockLoopback || other.BlockLoopback
 	result.BlockPrivateIP = o.BlockPrivateIP || other.BlockPrivateIP
 	result.BlockLinkLocal = o.BlockLinkLocal || other.BlockLinkLocal
+	result.AllowedHosts = append(append([]string{}, o.AllowedHosts...), other.AllowedHosts...)
 	return
 }
 
@@ -108,6 +110,7 @@ func NewRuntime(ctx context.Context, cfg llm.Config, opts ...Options) (*Runtime,
 		BlockLoopback:                 opt.BlockLoopback,
 		BlockPrivateIP:                opt.BlockPrivateIP,
 		BlockLinkLocal:                opt.BlockLinkLocal,
+		AllowedHosts:                  opt.AllowedHosts,
 	})
 	agentsService := agents.New(completer, registry)
 	sampler := sampling.NewSampler(agentsService)

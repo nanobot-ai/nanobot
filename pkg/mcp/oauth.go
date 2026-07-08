@@ -353,7 +353,11 @@ func GetOAuthMetadataSafely(ctx context.Context, server Server, clientName, redi
 }
 
 func GetOAuthMetadataWithBlockingConfig(ctx context.Context, server Server, clientName, redirectURL string, blockLoopback, blockPrivateIP, blockLinkLocal bool) (OAuthMetadata, error) {
-	return GetOAuthMetadataWithClient(ctx, newSafeHTTPClient(blockLoopback, blockPrivateIP, blockLinkLocal, 5*time.Second), server, clientName, redirectURL)
+	return GetOAuthMetadataWithBlockingConfigAndAllowList(ctx, server, clientName, redirectURL, blockLoopback, blockPrivateIP, blockLinkLocal, nil)
+}
+
+func GetOAuthMetadataWithBlockingConfigAndAllowList(ctx context.Context, server Server, clientName, redirectURL string, blockLoopback, blockPrivateIP, blockLinkLocal bool, allowedHosts []string) (OAuthMetadata, error) {
+	return GetOAuthMetadataWithClient(ctx, newSafeHTTPClient(blockLoopback, blockPrivateIP, blockLinkLocal, allowedHosts, 5*time.Second), server, clientName, redirectURL)
 }
 
 // GetOAuthMetadataWithClient discovers OAuth protected resource and authorization server

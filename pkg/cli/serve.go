@@ -36,6 +36,7 @@ type Run struct {
 	BlockLoopback                bool              `usage:"Block MCP HTTP requests to loopback IP addresses"`
 	BlockPrivateIP               bool              `usage:"Block MCP HTTP requests to private IP addresses"`
 	BlockLinkLocal               bool              `usage:"Block MCP HTTP requests to link-local IP addresses"`
+	AllowedHost                  []string          `usage:"Allow MCP HTTP requests to specific hosts even if they resolve to blocked IP ranges. Supports exact hosts, IPs, and wildcard suffixes like *.example.com; optional :port must match exactly" name:"allow-host"`
 	n                            *Nanobot
 }
 
@@ -146,6 +147,7 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		BlockLoopback:                 r.BlockLoopback,
 		BlockPrivateIP:                r.BlockPrivateIP,
 		BlockLinkLocal:                r.BlockLinkLocal,
+		AllowedHosts:                  r.AllowedHost,
 	}
 
 	cfgFactory := types.ConfigFactory(func(ctx context.Context, profiles string) (types.Config, error) {

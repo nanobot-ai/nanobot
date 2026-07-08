@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -74,12 +75,42 @@ func TestHTTPClientBlockingOptions(t *testing.T) {
 		t.Fatalf("expected loopback block error, got %v", err)
 	}
 
+	serverURL, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowListed, err := newHTTPClient("test", Server{BaseURL: ts.URL}, HTTPClientOptions{
+		BlockLoopback: true,
+		AllowedHosts:  []string{serverURL.Host},
+	}, nil, nil, false)
+	if err != nil {
+		t.Fatalf("newHTTPClient failed: %v", err)
+	}
+
+	resp, err := allowListed.oauthHandler.metadataClient.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("expected allow-listed loopback metadata request to be allowed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+
+	resp, err = allowListed.httpClient.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("expected allow-listed loopback MCP request to be allowed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+
 	allowed, err := newHTTPClient("test", Server{BaseURL: ts.URL}, HTTPClientOptions{}, nil, nil, false)
 	if err != nil {
 		t.Fatalf("newHTTPClient failed: %v", err)
 	}
 
-	resp, err := allowed.oauthHandler.metadataClient.Get(ts.URL)
+	resp, err = allowed.oauthHandler.metadataClient.Get(ts.URL)
 	if err != nil {
 		t.Fatalf("expected loopback metadata request to be allowed: %v", err)
 	}
