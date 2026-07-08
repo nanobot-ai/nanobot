@@ -20,7 +20,7 @@ func TestRecordWorkflowRun_DeduplicatesURI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create session store: %v", err)
 	}
-	manager := session.NewManager(store)
+	manager := session.NewManager(t.Context(), store, 0)
 
 	if err := manager.DB.Create(ctx, &session.Session{
 		SessionID: "test-session",

@@ -269,11 +269,12 @@ func (n *Nanobot) Run(cmd *cobra.Command, _ []string) error {
 }
 
 type mcpOpts struct {
-	Auth               auth.Auth
-	ListenAddress      string
-	HealthzPath        string
-	ForceFetchToolList bool
-	StartUI            bool
+	Auth                           auth.Auth
+	ListenAddress                  string
+	HealthzPath                    string
+	ForceFetchToolList             bool
+	StartUI                        bool
+	SessionGarbageCollectionPeriod time.Duration
 }
 
 func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, auditLogCollector auditlogs.Collector, store *session.Store, opts mcpOpts) error {
@@ -306,7 +307,7 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 		return fmt.Errorf("https:// is not supported, use http:// instead")
 	}
 
-	sessionManager := session.NewManager(store)
+	sessionManager := session.NewManager(ctx, store, opts.SessionGarbageCollectionPeriod)
 
 	var mcpServer mcp.MessageHandler = server.NewServer(runt, config, sessionManager, server.Options{
 		ForceFetchToolList: opts.ForceFetchToolList,

@@ -97,6 +97,44 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	return s.db.WithContext(ctx).Where("session_id = ?", id).Delete(&Session{}).Error
 }
 
+func (s *Store) DeleteSessionsUpdatedBefore(ctx context.Context, cutoff time.Time, excludeSessionIDs ...string) (int64, error) {
+	if cutoff.After(time.Now()) {
+		return 0, fmt.Errorf("cutoff cannot be after now")
+	}
+
+	var deleted int64
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		query := tx.Model(&Session{}).Where("updated_at < ?", cutoff)
+		if len(excludeSessionIDs) > 0 {
+			query = query.Where("session_id NOT IN ?", excludeSessionIDs)
+		}
+
+		var sessionIDs []string
+		if err := query.Pluck("session_id", &sessionIDs).Error; err != nil {
+			return err
+		}
+		if len(sessionIDs) == 0 {
+			return nil
+		}
+
+		if err := tx.Where("session_id IN ?", sessionIDs).Delete(&WorkflowRun{}).Error; err != nil {
+			return err
+		}
+
+		result := tx.Unscoped().Where("session_id IN ?", sessionIDs).Delete(&Session{})
+		if result.Error != nil {
+			return result.Error
+		}
+
+		deleted = result.RowsAffected
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+
+	return deleted, nil
+}
+
 func (s *Store) Get(ctx context.Context, id string) (*Session, error) {
 	var session Session
 	err := s.db.WithContext(ctx).Where("session_id = ?", id).First(&session).Error

@@ -31,6 +31,7 @@ type Run struct {
 	AuditLogMetadata             map[string]string `usage:"Metadata to send with audit logs"`
 	AuditLogBatchSize            int               `usage:"Batch size for sending audit logs" default:"1000"`
 	AuditLogFlushIntervalSeconds int               `usage:"Interval for flushing audit logs" default:"5"`
+	SessionGCPeriod              string            `usage:"How long idle sessions are kept before garbage collection; <= 0 disables garbage collection. Examples: 168h, 30m" default:"168h"`
 	Roots                        []string          `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
 	EntrypointAgent              string            `usage:"ID of the agent to use for chat" name:"agent"`
 	BlockLoopback                bool              `usage:"Block MCP HTTP requests to loopback IP addresses"`
@@ -126,6 +127,11 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		return fmt.Errorf("trusted issuer and audience must be set together")
 	}
 
+	sessionGarbageCollectionPeriod, err := time.ParseDuration(r.SessionGCPeriod)
+	if err != nil {
+		return fmt.Errorf("invalid session GC period %q: %w", r.SessionGCPeriod, err)
+	}
+
 	roots, err := r.getRoots()
 	if err != nil {
 		return err
@@ -205,10 +211,11 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 	}
 
 	return r.n.runMCP(cmd.Context(), cfgFactory, runtime, callbackHandler, auditLogCollector, store, mcpOpts{
-		Auth:               auth.Auth(r.Auth),
-		ListenAddress:      r.ListenAddress,
-		HealthzPath:        r.HealthzPath,
-		ForceFetchToolList: r.ForceFetchToolList,
-		StartUI:            !r.DisableUI,
+		Auth:                           auth.Auth(r.Auth),
+		ListenAddress:                  r.ListenAddress,
+		HealthzPath:                    r.HealthzPath,
+		ForceFetchToolList:             r.ForceFetchToolList,
+		StartUI:                        !r.DisableUI,
+		SessionGarbageCollectionPeriod: sessionGarbageCollectionPeriod,
 	})
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/http"
 	"os"
@@ -18,22 +19,25 @@ import (
 	"gorm.io/gorm"
 )
 
-func NewManager(store *Store) *Manager {
-	ctx, cancel := context.WithCancel(context.Background())
-	return &Manager{
+const defaultGarbageCollectionInterval = time.Hour
+
+func NewManager(ctx context.Context, store *Store, gcPeriod time.Duration) *Manager {
+	m := &Manager{
 		ctx:          ctx,
-		close:        cancel,
 		DB:           store,
 		root:         &Session{},
 		liveSessions: make(map[string]liveSession),
 	}
+
+	m.startGarbageCollector(gcPeriod)
+
+	return m
 }
 
 type Manager struct {
-	ctx   context.Context
-	close context.CancelFunc
-	DB    *Store
-	root  *Session
+	ctx  context.Context
+	DB   *Store
+	root *Session
 
 	liveSessionsLock sync.Mutex
 	liveSessions     map[string]liveSession
@@ -268,6 +272,52 @@ func (m *Manager) Release(session *mcp.ServerSession) {
 	} else {
 		session.Close(false)
 	}
+}
+
+func (m *Manager) liveSessionIDs() []string {
+	m.liveSessionsLock.Lock()
+	defer m.liveSessionsLock.Unlock()
+
+	return slices.Collect(maps.Keys(m.liveSessions))
+}
+
+func (m *Manager) garbageCollect(maxIdle time.Duration) (int64, error) {
+	if maxIdle <= 0 {
+		return 0, nil
+	}
+
+	cutoff := time.Now().Add(-maxIdle)
+	return m.DB.DeleteSessionsUpdatedBefore(m.ctx, cutoff, m.liveSessionIDs()...)
+}
+
+func (m *Manager) startGarbageCollector(maxIdle time.Duration) {
+	if maxIdle <= 0 {
+		return
+	}
+
+	go func() {
+		if deleted, err := m.garbageCollect(maxIdle); err != nil {
+			slog.Error("failed to garbage collect sessions", "max_idle", maxIdle, "error", err)
+		} else if deleted > 0 {
+			slog.Info("garbage collected sessions", "max_idle", maxIdle, "deleted", deleted)
+		}
+
+		ticker := time.NewTicker(defaultGarbageCollectionInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-m.ctx.Done():
+				return
+			case <-ticker.C:
+			}
+
+			if deleted, err := m.garbageCollect(maxIdle); err != nil {
+				slog.Error("failed to garbage collect sessions", "max_idle", maxIdle, "error", err)
+			} else if deleted > 0 {
+				slog.Info("garbage collected sessions", "max_idle", maxIdle, "deleted", deleted)
+			}
+		}
+	}()
 }
 
 func (m *Manager) loadSessionFromDatabase(ctx context.Context, server mcp.MessageHandler, id string) (*mcp.ServerSession, bool, error) {
