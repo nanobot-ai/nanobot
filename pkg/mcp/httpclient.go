@@ -31,7 +31,44 @@ const (
 	// Token type URNs for RFC 8693 Token Exchange
 	tokenTypeJWT    = "urn:ietf:params:oauth:token-type:jwt"
 	tokenTypeAPIKey = "urn:obot:token-type:api-key"
+
+	// minStableStreamDuration is how long an SSE event stream must stay
+	// connected before it is considered healthy. A stream that closes sooner
+	// than this without delivering any message is treated as flapping and
+	// triggers reconnect backoff, so a server that repeatedly accepts and
+	// immediately drops the stream (or rejects it, e.g. with 429 Too Many
+	// Requests) cannot be hammered in a tight reconnect loop.
+	minStableStreamDuration = 5 * time.Second
+
+	// baseReconnectBackoff and maxReconnectBackoff bound the exponential
+	// backoff applied between reconnects to a flapping SSE stream.
+	baseReconnectBackoff = 500 * time.Millisecond
+	maxReconnectBackoff  = 30 * time.Second
 )
+
+// streamFlapped reports whether an SSE event stream that has just closed
+// should be treated as flapping: it delivered no messages and stayed connected
+// for less than minStableStreamDuration. Flapping streams are backed off before
+// the next reconnect; healthy ones reset the backoff.
+func streamFlapped(messagesReceived int, streamDuration time.Duration) bool {
+	return messagesReceived == 0 && streamDuration < minStableStreamDuration
+}
+
+// reconnectBackoff returns how long to wait before the Nth consecutive
+// reconnect to a flapping SSE stream, growing exponentially from
+// baseReconnectBackoff and capped at maxReconnectBackoff. A non-positive
+// count yields no delay.
+func reconnectBackoff(consecutiveFailures int) time.Duration {
+	if consecutiveFailures < 1 {
+		return 0
+	}
+	backoff := baseReconnectBackoff << (consecutiveFailures - 1)
+	// A non-positive result means the shift overflowed; cap it.
+	if backoff <= 0 || backoff > maxReconnectBackoff {
+		return maxReconnectBackoff
+	}
+	return backoff
+}
 
 var defaultInstrumentedHTTPClient = instrumentHTTPClient(http.DefaultClient)
 
@@ -66,8 +103,9 @@ type HTTPClient struct {
 	initializeRequest *Message
 	sessionID         *string
 
-	sseLock       sync.RWMutex
-	needReconnect bool
+	sseLock           sync.RWMutex
+	needReconnect     bool
+	reconnectFailures int
 
 	blockLoopback  bool
 	blockPrivateIP bool
@@ -477,6 +515,13 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID st
 
 		close(gotResponse)
 
+		// Track how long this stream stays up and whether it delivers any
+		// messages, so a stream that flaps (connects then closes almost
+		// immediately without delivering anything) can be backed off before
+		// the next reconnect.
+		connectedAt := time.Now()
+		messagesReceived := 0
+
 		for {
 			seenID, message, ok := messages.readNextMessage("message")
 			if seenID != "" {
@@ -508,6 +553,35 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID st
 					s.sseLock.Unlock()
 				}
 
+				// If the stream just flapped (closed quickly without delivering
+				// any messages), back off before reconnecting so we don't hammer
+				// a server that is rejecting or immediately dropping the stream
+				// (e.g. returning 429 Too Many Requests). A stream that stayed
+				// up long enough, or delivered messages, resets the backoff.
+				if streamFlapped(messagesReceived, time.Since(connectedAt)) {
+					s.sseLock.Lock()
+					s.reconnectFailures++
+					failures := s.reconnectFailures
+					s.sseLock.Unlock()
+
+					delay := reconnectBackoff(failures)
+					slog.Warn("mcp client event stream closed prematurely; backing off before reconnect",
+						"server", s.serverName,
+						"session_id", s.SessionID(),
+						"consecutive_failures", failures,
+						"delay", delay.String())
+
+					select {
+					case <-time.After(delay):
+					case <-s.ctx.Done():
+						return s.ctx.Err(), false
+					}
+				} else {
+					s.sseLock.Lock()
+					s.reconnectFailures = 0
+					s.sseLock.Unlock()
+				}
+
 				if err := s.ensureSSE(ctx, msg, lastEventID); err != nil {
 					return fmt.Errorf("failed to reconnect to SSE server: %v", err), false
 				}
@@ -520,6 +594,7 @@ func (s *HTTPClient) ensureSSE(ctx context.Context, msg *Message, lastEventID st
 				continue
 			}
 
+			messagesReceived++
 			log.Messages(ctx, s.serverName, false, []byte(message))
 			s.handler(s.ctx, msg)
 		}
