@@ -19,7 +19,11 @@ func NewDBFromDSN(dsn string) (*gorm.DB, error) {
 
 	switch {
 	case strings.HasPrefix(dsn, "sqlite:") || strings.HasSuffix(dsn, ".db") || strings.Contains(dsn, ":memory:"):
-		dsn = strings.TrimPrefix(dsn, "sqlite:")
+		if sqliteDSN, ok := strings.CutPrefix(dsn, "sqlite://"); ok {
+			dsn = sqliteDSN
+		} else {
+			dsn = strings.TrimPrefix(dsn, "sqlite:")
+		}
 		dialector = sqlite.Open(dsn)
 	case strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://"):
 		dialector = postgres.Open(dsn)
