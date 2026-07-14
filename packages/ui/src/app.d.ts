@@ -1,8 +1,8 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
-import type { ChatService } from '$lib/chat.svelte';
+import type { ChatService } from "$lib/chat.svelte";
 
-declare module '@novnc/novnc/lib/rfb.js' {
+declare module "@novnc/novnc/lib/rfb.js" {
 	const RFB: any;
 	export default RFB;
 }
@@ -18,5 +18,3 @@ declare global {
 		// interface Platform {}
 	}
 }
-
-export {};

@@ -1,168 +1,167 @@
 <script lang="ts">
-	import { ExternalLink } from '@lucide/svelte';
-	import { getFileIcon } from '$lib/components/MessageAttachments.svelte';
-	import type { ChatMessageItemResourceLink, ResourceContents } from '$lib/types';
+import type { ChatMessageItemResourceLink, ResourceContents } from "$lib/types";
 
-	interface Props {
-		item: ChatMessageItemResourceLink;
-		onReadResource?: (uri: string) => Promise<{ contents: ResourceContents[] }>;
+interface Props {
+	item: ChatMessageItemResourceLink;
+	onReadResource?: (uri: string) => Promise<{ contents: ResourceContents[] }>;
+}
+
+const { item, onReadResource }: Props = $props();
+const modal = $state<HTMLDialogElement>();
+let fetchedResource = $state<ResourceContents | null>(null);
+let loading = $state(false);
+let _loadError = $state<string | null>(null);
+let _isMissing = $state(false);
+
+const _displayName = $derived(item.name || getNameFromURI(item.uri));
+const _previewMimeType = $derived(
+	fetchedResource?.mimeType || item.mimeType || inferMimeType(item.uri),
+);
+const _previewBlob = $derived(fetchedResource?.blob || "");
+const _previewText = $derived(fetchedResource?.text || "");
+
+const extensionMimeTypes: Record<string, string> = {
+	txt: "text/plain",
+	md: "text/markdown",
+	markdown: "text/markdown",
+	json: "application/json",
+	yaml: "application/yaml",
+	yml: "application/yaml",
+	xml: "application/xml",
+	html: "text/html",
+	htm: "text/html",
+	csv: "text/csv",
+	js: "application/javascript",
+	ts: "application/typescript",
+	py: "text/x-python",
+	go: "text/x-go",
+	sh: "application/x-sh",
+	log: "text/plain",
+	pdf: "application/pdf",
+	png: "image/png",
+	jpg: "image/jpeg",
+	jpeg: "image/jpeg",
+	gif: "image/gif",
+	webp: "image/webp",
+	svg: "image/svg+xml",
+	mp3: "audio/mpeg",
+	wav: "audio/wav",
+	ogg: "audio/ogg",
+	m4a: "audio/mp4",
+	mp4: "video/mp4",
+	webm: "video/webm",
+};
+
+async function _openModal() {
+	modal?.showModal();
+	if (fetchedResource || loading) {
+		return;
 	}
 
-	let { item, onReadResource }: Props = $props();
-	let modal = $state<HTMLDialogElement>();
-	let fetchedResource = $state<ResourceContents | null>(null);
-	let loading = $state(false);
-	let loadError = $state<string | null>(null);
-	let isMissing = $state(false);
+	if (!onReadResource) {
+		_loadError = "Resource reading is not available.";
+		return;
+	}
 
-	const displayName = $derived(item.name || getNameFromURI(item.uri));
-	const previewMimeType = $derived(
-		fetchedResource?.mimeType || item.mimeType || inferMimeType(item.uri)
+	loading = true;
+	_loadError = null;
+
+	try {
+		const result = await onReadResource(item.uri);
+		const content =
+			result.contents?.find((c) => c.uri === item.uri) || result.contents?.[0];
+		if (!content) {
+			_loadError = "No content available for this resource.";
+			_isMissing = true;
+			return;
+		}
+		fetchedResource = content;
+		_isMissing = false;
+	} catch (e) {
+		const errorMessage = e instanceof Error ? e.message : String(e);
+		_loadError = errorMessage;
+		if (isMissingResourceError(errorMessage)) {
+			_isMissing = true;
+		}
+	} finally {
+		loading = false;
+	}
+}
+
+function getNameFromURI(uri: string): string {
+	try {
+		const url = new URL(uri);
+		const decodedPath = decodeURIComponent(url.pathname || "");
+		const fromPath = decodedPath.split("/").filter(Boolean).pop();
+		if (fromPath) {
+			return fromPath;
+		}
+	} catch {
+		// ignore URL parse failures and fall back to raw URI parsing
+	}
+
+	const sanitized = uri.split("#")[0].split("?")[0];
+	const fromRaw = sanitized.split("/").filter(Boolean).pop();
+	return fromRaw || uri;
+}
+
+function inferMimeType(uri: string): string {
+	const name = getNameFromURI(uri).toLowerCase();
+	const ext = name.includes(".") ? name.split(".").pop() : "";
+	if (!ext) {
+		return "application/octet-stream";
+	}
+	return extensionMimeTypes[ext] || "application/octet-stream";
+}
+
+function isMissingResourceError(message: string): boolean {
+	const lower = message.toLowerCase();
+	return (
+		lower.includes("not found") ||
+		lower.includes("does not exist") ||
+		lower.includes("missing") ||
+		lower.includes("404")
 	);
-	const previewBlob = $derived(fetchedResource?.blob || '');
-	const previewText = $derived(fetchedResource?.text || '');
+}
 
-	const extensionMimeTypes: Record<string, string> = {
-		txt: 'text/plain',
-		md: 'text/markdown',
-		markdown: 'text/markdown',
-		json: 'application/json',
-		yaml: 'application/yaml',
-		yml: 'application/yaml',
-		xml: 'application/xml',
-		html: 'text/html',
-		htm: 'text/html',
-		csv: 'text/csv',
-		js: 'application/javascript',
-		ts: 'application/typescript',
-		py: 'text/x-python',
-		go: 'text/x-go',
-		sh: 'application/x-sh',
-		log: 'text/plain',
-		pdf: 'application/pdf',
-		png: 'image/png',
-		jpg: 'image/jpeg',
-		jpeg: 'image/jpeg',
-		gif: 'image/gif',
-		webp: 'image/webp',
-		svg: 'image/svg+xml',
-		mp3: 'audio/mpeg',
-		wav: 'audio/wav',
-		ogg: 'audio/ogg',
-		m4a: 'audio/mp4',
-		mp4: 'video/mp4',
-		webm: 'video/webm'
-	};
+function _isTextType(mimeType: string): boolean {
+	return (
+		mimeType.startsWith("text/") ||
+		mimeType.includes("json") ||
+		mimeType.includes("xml") ||
+		mimeType.includes("yaml") ||
+		mimeType === "application/javascript" ||
+		mimeType === "application/typescript"
+	);
+}
 
-	async function openModal() {
-		modal?.showModal();
-		if (fetchedResource || loading) {
-			return;
-		}
+function _isPdfType(mimeType: string): boolean {
+	return mimeType === "application/pdf";
+}
 
-		if (!onReadResource) {
-			loadError = 'Resource reading is not available.';
-			return;
-		}
-
-		loading = true;
-		loadError = null;
-
+function _getDecodedText(blob?: string, text?: string): string {
+	if (text) {
 		try {
-			const result = await onReadResource(item.uri);
-			const content = result.contents?.find((c) => c.uri === item.uri) || result.contents?.[0];
-			if (!content) {
-				loadError = 'No content available for this resource.';
-				isMissing = true;
-				return;
-			}
-			fetchedResource = content;
-			isMissing = false;
-		} catch (e) {
-			const errorMessage = e instanceof Error ? e.message : String(e);
-			loadError = errorMessage;
-			if (isMissingResourceError(errorMessage)) {
-				isMissing = true;
-			}
-		} finally {
-			loading = false;
-		}
-	}
-
-	function getNameFromURI(uri: string): string {
-		try {
-			const url = new URL(uri);
-			const decodedPath = decodeURIComponent(url.pathname || '');
-			const fromPath = decodedPath.split('/').filter(Boolean).pop();
-			if (fromPath) {
-				return fromPath;
-			}
+			return JSON.stringify(JSON.parse(text), null, 2);
 		} catch {
-			// ignore URL parse failures and fall back to raw URI parsing
+			return text;
 		}
-
-		const sanitized = uri.split('#')[0].split('?')[0];
-		const fromRaw = sanitized.split('/').filter(Boolean).pop();
-		return fromRaw || uri;
 	}
-
-	function inferMimeType(uri: string): string {
-		const name = getNameFromURI(uri).toLowerCase();
-		const ext = name.includes('.') ? name.split('.').pop() : '';
-		if (!ext) {
-			return 'application/octet-stream';
-		}
-		return extensionMimeTypes[ext] || 'application/octet-stream';
-	}
-
-	function isMissingResourceError(message: string): boolean {
-		const lower = message.toLowerCase();
-		return (
-			lower.includes('not found') ||
-			lower.includes('does not exist') ||
-			lower.includes('missing') ||
-			lower.includes('404')
-		);
-	}
-
-	function isTextType(mimeType: string): boolean {
-		return (
-			mimeType.startsWith('text/') ||
-			mimeType.includes('json') ||
-			mimeType.includes('xml') ||
-			mimeType.includes('yaml') ||
-			mimeType === 'application/javascript' ||
-			mimeType === 'application/typescript'
-		);
-	}
-
-	function isPdfType(mimeType: string): boolean {
-		return mimeType === 'application/pdf';
-	}
-
-	function getDecodedText(blob?: string, text?: string): string {
-		if (text) {
-			try {
-				return JSON.stringify(JSON.parse(text), null, 2);
-			} catch {
-				return text;
-			}
-		}
-		if (!blob) return '';
+	if (!blob) return "";
+	try {
+		// Unicode-safe base64 decoding
+		const binaryString = atob(blob);
+		const bytes = Uint8Array.from(binaryString, (c) => c.charCodeAt(0));
+		const str = new TextDecoder("utf-8").decode(bytes);
 		try {
-			// Unicode-safe base64 decoding
-			const binaryString = atob(blob);
-			const bytes = Uint8Array.from(binaryString, (c) => c.charCodeAt(0));
-			const str = new TextDecoder('utf-8').decode(bytes);
-			try {
-				return JSON.stringify(JSON.parse(str), null, 2);
-			} catch {
-				return str;
-			}
+			return JSON.stringify(JSON.parse(str), null, 2);
 		} catch {
-			return 'Error decoding content';
+			return str;
 		}
+	} catch {
+		return "Error decoding content";
 	}
+}
 </script>
 
 <button

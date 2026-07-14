@@ -1,44 +1,57 @@
 <script lang="ts">
-	import Message from './Message.svelte';
-	import type { ChatMessage, ChatResult, Agent, Attachment, ResourceContents } from '$lib/types';
-	import AgentHeader from '$lib/components/AgentHeader.svelte';
+import type {
+	Agent,
+	Attachment,
+	ChatMessage,
+	ChatResult,
+	ResourceContents,
+} from "$lib/types";
 
-	interface Props {
-		messages: ChatMessage[];
-		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
-		isLoading?: boolean;
-		agent?: Agent;
-		onReadResource?: (uri: string) => Promise<{ contents: ResourceContents[] }>;
-	}
+interface Props {
+	messages: ChatMessage[];
+	onSend?: (
+		message: string,
+		attachments?: Attachment[],
+	) => Promise<ChatResult | undefined>;
+	isLoading?: boolean;
+	agent?: Agent;
+	onReadResource?: (uri: string) => Promise<{ contents: ResourceContents[] }>;
+}
 
-	let { messages, onSend, isLoading = false, agent, onReadResource }: Props = $props();
-	let messageGroups = $derived.by(() => {
-		return messages.reduce((acc, message) => {
-			if (message.role === 'user' || acc.length === 0) {
-				acc.push([message]);
-			} else {
-				acc[acc.length - 1].push(message);
-			}
-			return acc;
-		}, [] as ChatMessage[][]);
-	});
+const {
+	messages,
+	onSend,
+	isLoading = false,
+	agent,
+	onReadResource,
+}: Props = $props();
+const messageGroups = $derived.by(() => {
+	return messages.reduce((acc, message) => {
+		if (message.role === "user" || acc.length === 0) {
+			acc.push([message]);
+		} else {
+			acc[acc.length - 1].push(message);
+		}
+		return acc;
+	}, [] as ChatMessage[][]);
+});
 
-	// Check if any messages have content (text items)
-	let hasMessageContent = $derived(
-		messageGroups[messageGroups.length - 1]?.some(
-			(message) =>
-				message.role === 'assistant' &&
-				message.items &&
-				message.items.some(
-					(item) =>
-						item.type === 'tool' ||
-						(item.type === 'text' && item.text && item.text.trim().length > 0)
-				)
-		)
-	);
+// Check if any messages have content (text items)
+const hasMessageContent = $derived(
+	messageGroups[messageGroups.length - 1]?.some(
+		(message) =>
+			message.role === "assistant" &&
+			message.items &&
+			message.items.some(
+				(item) =>
+					item.type === "tool" ||
+					(item.type === "text" && item.text && item.text.trim().length > 0),
+			),
+	),
+);
 
-	// Show loading indicator when loading and no content has been printed yet
-	let showLoadingIndicator = $derived(isLoading && !hasMessageContent);
+// Show loading indicator when loading and no content has been printed yet
+const _showLoadingIndicator = $derived(isLoading && !hasMessageContent);
 </script>
 
 <div id="message-groups" class="flex flex-col space-y-4 pt-4">

@@ -2,13 +2,12 @@ import { SvelteDate, SvelteSet } from "svelte/reactivity";
 import { getNotificationContext } from "./context/notifications.svelte";
 import { SimpleClient } from "./mcpclient";
 import {
-	ChatPath,
-	UIPath,
 	type Agent,
 	type Agents,
 	type Attachment,
 	type Chat,
 	type ChatMessage,
+	ChatPath,
 	type ChatRequest,
 	type ChatResult,
 	type Elicitation,
@@ -20,6 +19,7 @@ import {
 	type ResourceContents,
 	type Resources,
 	type ToolOutputItem,
+	UIPath,
 	type UploadedFile,
 	type UploadingFile,
 } from "./types";
@@ -247,11 +247,14 @@ export class ChatAPI {
 			created: now(),
 			items: [
 				{
-					id: request.id + "_0",
+					id: `${request.id}_0`,
 					type: "text",
 					text: request.message,
 				},
-				...buildFileAttachmentPreviewItems(request.id, request.attachments || []),
+				...buildFileAttachmentPreviewItems(
+					request.id,
+					request.attachments || [],
+				),
 			],
 		};
 		return {
@@ -326,7 +329,7 @@ export class ChatAPI {
 
 		for (const type of opts?.events ?? []) {
 			eventSource.addEventListener(type, (e) => {
-				const idInt = parseInt(e.lastEventId);
+				const idInt = parseInt(e.lastEventId, 10);
 				const event: Event = {
 					id: idInt || e.lastEventId,
 					type: type as
@@ -426,7 +429,10 @@ function attachmentPreviewName(attachment: Attachment): string | undefined {
 	return decodedPath.split("/").filter(Boolean).pop() || decodedPath;
 }
 
-function buildFileAttachmentPreviewItems(messageID: string, attachments: Attachment[]) {
+function buildFileAttachmentPreviewItems(
+	messageID: string,
+	attachments: Attachment[],
+) {
 	const seen = new SvelteSet<string>();
 	return attachments
 		.filter((attachment) => {
@@ -510,13 +516,13 @@ export class ChatService {
 		}
 
 		this.listResources({ useDefaultSession: true }).then((r) => {
-			if (r && r.resources) {
+			if (r?.resources) {
 				this.resources = r.resources;
 			}
 		});
 
 		this.listPrompts({ useDefaultSession: true }).then((prompts) => {
-			if (prompts && prompts.prompts) {
+			if (prompts?.prompts) {
 				this.prompts = prompts.prompts;
 			}
 		});
@@ -585,26 +591,26 @@ export class ChatService {
 		this.closer = this.api.subscribe(
 			chatId,
 			(event) => {
-				if (event.type == "message" && event.message?.id) {
+				if (event.type === "message" && event.message?.id) {
 					if (this.history) {
 						this.history = appendMessage(this.history, event.message);
 					} else {
 						this.messages = appendMessage(this.messages, event.message);
 					}
-				} else if (event.type == "history-start") {
+				} else if (event.type === "history-start") {
 					this.history = [];
-				} else if (event.type == "history-end") {
+				} else if (event.type === "history-end") {
 					this.messages = this.history || [];
 					this.history = undefined;
-				} else if (event.type == "chat-in-progress") {
+				} else if (event.type === "chat-in-progress") {
 					this.isLoading = true;
-				} else if (event.type == "chat-done") {
+				} else if (event.type === "chat-done") {
 					this.isLoading = false;
 					for (const waiting of this.onChatDone) {
 						waiting();
 					}
 					this.onChatDone = [];
-				} else if (event.type == "elicitation/create") {
+				} else if (event.type === "elicitation/create") {
 					this.elicitations = [
 						...this.elicitations,
 						{
@@ -681,7 +687,7 @@ export class ChatService {
 			this.uploadedFiles = [];
 
 			this.messages = appendMessage(this.messages, result.message);
-			return new Promise<ChatResult | void>((resolve) => {
+			return new Promise<ChatResult | undefined>((resolve) => {
 				this.onChatDone.push(() => {
 					this.isLoading = false;
 					this.currentRequestId = undefined;

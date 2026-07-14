@@ -1,73 +1,71 @@
 <script lang="ts">
-	import { Library } from '@lucide/svelte';
-	import { getFileIcon } from '$lib/components/MessageAttachments.svelte';
-	import type { Resource, ChatMessage } from '$lib/types';
+import type { ChatMessage, Resource } from "$lib/types";
 
-	interface Props {
-		disabled?: boolean;
-		resources?: Resource[];
-		selectedResources: Resource[];
-		toggleResource: (resource: Resource) => void;
-		messages?: ChatMessage[];
-	}
+interface Props {
+	disabled?: boolean;
+	resources?: Resource[];
+	selectedResources: Resource[];
+	toggleResource: (resource: Resource) => void;
+	messages?: ChatMessage[];
+}
 
-	let {
-		disabled = false,
-		resources = [],
-		messages = [],
-		toggleResource,
-		selectedResources
-	}: Props = $props();
+const {
+	disabled = false,
+	resources = [],
+	messages = [],
+	toggleResource,
+	selectedResources,
+}: Props = $props();
 
-	// No need for dropdown state with DaisyUI dropdown
+// No need for dropdown state with DaisyUI dropdown
 
-	// Extract embedded resources from messages and combine with resources prop
-	let allResources = $derived.by(() => {
-		const embeddedResources: Resource[] = [];
+// Extract embedded resources from messages and combine with resources prop
+const _allResources = $derived.by(() => {
+	const embeddedResources: Resource[] = [];
 
-		for (const message of messages || []) {
-			if (message.role !== 'assistant') continue;
+	for (const message of messages || []) {
+		if (message.role !== "assistant") continue;
 
-			for (const item of message.items || []) {
-				if (item.type !== 'tool') continue;
+		for (const item of message.items || []) {
+			if (item.type !== "tool") continue;
 
-				for (const content of item.output?.content || []) {
-					if (content.type === 'resource') {
-						embeddedResources.push({
-							uri: content.resource.uri,
-							name:
-								content.resource.name ||
-								content.resource.uri.split('/').pop() ||
-								content.resource.uri,
-							description: content.resource.description,
-							title: content.resource.title,
-							mimeType: content.resource.mimeType,
-							size: content.resource.size,
-							annotations: content.resource.annotations,
-							_meta: content.resource._meta
-						});
-					} else if (content.type === 'resource_link') {
-						embeddedResources.push({
-							uri: content.uri,
-							name: content.name || content.uri.split('/').pop() || content.uri,
-							title: content.name || content.uri.split('/').pop() || content.uri,
-							description: content.description
-						});
-					}
+			for (const content of item.output?.content || []) {
+				if (content.type === "resource") {
+					embeddedResources.push({
+						uri: content.resource.uri,
+						name:
+							content.resource.name ||
+							content.resource.uri.split("/").pop() ||
+							content.resource.uri,
+						description: content.resource.description,
+						title: content.resource.title,
+						mimeType: content.resource.mimeType,
+						size: content.resource.size,
+						annotations: content.resource.annotations,
+						_meta: content.resource._meta,
+					});
+				} else if (content.type === "resource_link") {
+					embeddedResources.push({
+						uri: content.uri,
+						name: content.name || content.uri.split("/").pop() || content.uri,
+						title: content.name || content.uri.split("/").pop() || content.uri,
+						description: content.description,
+					});
 				}
 			}
 		}
+	}
 
-		// Remove duplicates based on URI and combine with existing resources
-		return [...resources, ...embeddedResources].filter(
-			(resource, index, self) =>
-				index === self.findIndex((r) => r.uri === resource.uri) &&
-				!resource.uri.startsWith('ui:') &&
-				!resource.uri.startsWith('chat:')
-		);
-	});
+	// Remove duplicates based on URI and combine with existing resources
+	return [...resources, ...embeddedResources].filter(
+		(resource, index, self) =>
+			index === self.findIndex((r) => r.uri === resource.uri) &&
+			!resource.uri.startsWith("ui:") &&
+			!resource.uri.startsWith("chat:"),
+	);
+});
 
-	// No need for click handler with DaisyUI dropdown
+// No need for click handler with DaisyUI dropdown
 </script>
 
 <!-- Resources dropdown using DaisyUI -->

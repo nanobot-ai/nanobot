@@ -1,11 +1,11 @@
 <script lang="ts">
-	import type { ChatMessageItemAudio } from '$lib/types';
+import type { ChatMessageItemAudio } from "$lib/types";
 
-	interface Props {
-		item: ChatMessageItemAudio;
-	}
+interface Props {
+	item: ChatMessageItemAudio;
+}
 
-	let { item }: Props = $props();
+const { item }: Props = $props();
 </script>
 
 <div class="mb-3 rounded-lg bg-base-200 p-3">

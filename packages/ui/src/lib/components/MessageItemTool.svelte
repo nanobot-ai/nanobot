@@ -1,98 +1,111 @@
 <script lang="ts">
-	import { Eye, Settings } from '@lucide/svelte';
-	import { renderMarkdown } from '$lib/markdown';
-	import type { Attachment, ChatResult, ChatMessageItemToolCall, ToolOutputItem } from '$lib/types';
-	import '@mcp-ui/client/ui-resource-renderer.wc.js';
-	import MessageItemUI from '$lib/components/MessageItemUI.svelte';
-	import { isUIResource } from '@mcp-ui/client';
+import { renderMarkdown } from "$lib/markdown";
+import type {
+	Attachment,
+	ChatMessageItemToolCall,
+	ChatResult,
+	ToolOutputItem,
+} from "$lib/types";
+import "@mcp-ui/client/ui-resource-renderer.wc.js";
+import { isUIResource } from "@mcp-ui/client";
 
-	interface Props {
-		item: ChatMessageItemToolCall;
-		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
+interface Props {
+	item: ChatMessageItemToolCall;
+	onSend?: (
+		message: string,
+		attachments?: Attachment[],
+	) => Promise<ChatResult | undefined>;
+}
+
+const { item, onSend }: Props = $props();
+const imagePreviewModal = $state<HTMLDialogElement>();
+let _selectedImagePreview = $state<{
+	data: string;
+	mimeType: string;
+	index: number;
+} | null>(null);
+const _singleUIResource = $derived(
+	item.output?.content &&
+		item.output?.content?.filter((i) => {
+			return (
+				isUIResource(i) && !i.resource?._meta?.["ai.nanobo.meta/workspace"]
+			);
+		}).length === 1,
+);
+
+function _parseToolInput(input: string) {
+	try {
+		const parsed = JSON.parse(input);
+		if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+			return { success: true, data: parsed };
+		}
+	} catch {
+		// JSON parsing failed, fall back to string display
+	}
+	return { success: false, data: input };
+}
+
+function _getStyle(
+	item: ToolOutputItem,
+	singleUIResource: boolean = false,
+): Record<string, string> {
+	if (singleUIResource) {
+		return {};
+	}
+	if (
+		isUIResource(item) &&
+		item.resource._meta?.["mcpui.dev/ui-preferred-frame-size"]
+	) {
+		const coords = item.resource._meta["mcpui.dev/ui-preferred-frame-size"];
+		if (Array.isArray(coords) && coords[0] && coords[1]) {
+			return {
+				width: `${coords[0]}`,
+				height: `${coords[1]}`,
+			};
+		} else if (
+			coords &&
+			typeof coords === "object" &&
+			"height" in coords &&
+			"width" in coords
+		) {
+			return {
+				width: `${coords.width}`,
+				height: `${coords.height}`,
+			};
+		}
+	}
+	return {
+		width: "300px",
+		height: "400px",
+	};
+}
+
+function _parseToolOutput(output: string) {
+	try {
+		const parsed = JSON.parse(output);
+		const formattedJson = JSON.stringify(parsed, null, 2);
+		const highlightedJson = renderMarkdown(
+			`\`\`\`json\n${formattedJson}\n\`\`\``,
+		);
+		return { success: true, data: highlightedJson };
+	} catch {
+		// JSON parsing failed, fall back to string display
+	}
+	return { success: false, data: output };
+}
+
+function _openImagePreview(item: ToolOutputItem, index: number) {
+	if (item.type !== "image") {
+		return;
 	}
 
-	let { item, onSend }: Props = $props();
-	let imagePreviewModal = $state<HTMLDialogElement>();
-	let selectedImagePreview = $state<{
-		data: string;
-		mimeType: string;
-		index: number;
-	} | null>(null);
-	let singleUIResource = $derived(
-		item.output?.content &&
-			item.output?.content?.filter((i) => {
-				return isUIResource(i) && !i.resource?._meta?.['ai.nanobo.meta/workspace'];
-			}).length === 1
-	);
-
-	function parseToolInput(input: string) {
-		try {
-			const parsed = JSON.parse(input);
-			if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-				return { success: true, data: parsed };
-			}
-		} catch {
-			// JSON parsing failed, fall back to string display
-		}
-		return { success: false, data: input };
-	}
-
-	function getStyle(
-		item: ToolOutputItem,
-		singleUIResource: boolean = false
-	): Record<string, string> {
-		if (singleUIResource) {
-			return {};
-		}
-		if (isUIResource(item) && item.resource._meta?.['mcpui.dev/ui-preferred-frame-size']) {
-			const coords = item.resource._meta['mcpui.dev/ui-preferred-frame-size'];
-			if (Array.isArray(coords) && coords[0] && coords[1]) {
-				return {
-					width: `${coords[0]}`,
-					height: `${coords[1]}`
-				};
-			} else if (
-				coords &&
-				typeof coords === 'object' &&
-				'height' in coords &&
-				'width' in coords
-			) {
-				return {
-					width: `${coords.width}`,
-					height: `${coords.height}`
-				};
-			}
-		}
-		return {
-			width: '300px',
-			height: '400px'
-		};
-	}
-
-	function parseToolOutput(output: string) {
-		try {
-			const parsed = JSON.parse(output);
-			const formattedJson = JSON.stringify(parsed, null, 2);
-			const highlightedJson = renderMarkdown('```json\n' + formattedJson + '\n```');
-			return { success: true, data: highlightedJson };
-		} catch {
-			// JSON parsing failed, fall back to string display
-		}
-		return { success: false, data: output };
-	}
-
-	function openImagePreview(item: ToolOutputItem, index: number) {
-		if (item.type !== 'image') {
-			return;
-		}
-
-		selectedImagePreview = {
-			data: item.data,
-			mimeType: item.mimeType || 'image/png',
-			index,
-		};
-		imagePreviewModal?.showModal();
-	}
+	_selectedImagePreview = {
+		data: item.data,
+		mimeType: item.mimeType || "image/png",
+		index,
+	};
+	imagePreviewModal?.showModal();
+}
 </script>
 
 <div

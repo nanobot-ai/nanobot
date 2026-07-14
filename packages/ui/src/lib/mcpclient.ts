@@ -378,7 +378,10 @@ export class SimpleClient {
 			}
 			this.#clearSession();
 			// Retry once with new session
-			return this.exchange(method, params, { abort: opts?.abort, requestId: request.id });
+			return this.exchange(method, params, {
+				abort: opts?.abort,
+				requestId: request.id,
+			});
 		}
 
 		if (!resp.ok) {
@@ -526,7 +529,9 @@ export class SimpleClient {
 							// Fetch the updated resource details
 							this.#fetchResourceDetails(uri).then((resource) => {
 								if (resource) {
-									callbacks.forEach((callback) => callback(resource));
+									callbacks.forEach((callback) => {
+										callback(resource);
+									});
 								}
 							});
 						}
@@ -581,7 +586,7 @@ export class SimpleClient {
 		if (!this.#sseSubscriptions.has(prefix)) {
 			this.#sseSubscriptions.set(prefix, new Set());
 		}
-		this.#sseSubscriptions.get(prefix)!.add(callback);
+		this.#sseSubscriptions.get(prefix)?.add(callback);
 
 		// Ensure SSE connection is established
 		this.#ensureSSEConnection().then(async () => {

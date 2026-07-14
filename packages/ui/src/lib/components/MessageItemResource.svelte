@@ -1,79 +1,79 @@
 <script lang="ts">
-	import { AlertTriangle } from '@lucide/svelte';
-	import { getFileIcon } from '$lib/components/MessageAttachments.svelte';
-	import type { ChatMessageItemResource } from '$lib/types';
+import type { ChatMessageItemResource } from "$lib/types";
 
-	interface Props {
-		item: ChatMessageItemResource;
-	}
+interface Props {
+	item: ChatMessageItemResource;
+}
 
-	let { item }: Props = $props();
+const { item }: Props = $props();
 
-	let isError = $derived(item.resource.mimeType === 'application/vnd.nanobot.error+json');
-	let modal = $state<HTMLDialogElement>();
+const _isError = $derived(
+	item.resource.mimeType === "application/vnd.nanobot.error+json",
+);
+const modal = $state<HTMLDialogElement>();
 
-	function openModal() {
-		modal?.showModal();
-	}
+function _openModal() {
+	modal?.showModal();
+}
 
-	function isTextType(mimeType: string): boolean {
-		return (
-			mimeType.startsWith('text/') ||
-			mimeType.includes('json') ||
-			mimeType.includes('xml') ||
-			mimeType === 'application/javascript' ||
-			mimeType === 'application/typescript'
-		);
-	}
+function _isTextType(mimeType: string): boolean {
+	return (
+		mimeType.startsWith("text/") ||
+		mimeType.includes("json") ||
+		mimeType.includes("xml") ||
+		mimeType === "application/javascript" ||
+		mimeType === "application/typescript"
+	);
+}
 
-	function isPdfType(mimeType: string): boolean {
-		return mimeType === 'application/pdf';
-	}
+function _isPdfType(mimeType: string): boolean {
+	return mimeType === "application/pdf";
+}
 
-	function getResourceDisplayName(): string {
-		// Use title or name if available, otherwise generate from MIME type
-		if (item.resource.title) return item.resource.title;
-		if (item.resource.name) return item.resource.name;
+function _getResourceDisplayName(): string {
+	// Use title or name if available, otherwise generate from MIME type
+	if (item.resource.title) return item.resource.title;
+	if (item.resource.name) return item.resource.name;
 
-		// Generate friendly name from MIME type
-		const mimeType = item.resource.mimeType;
-		if (mimeType === 'application/json') return 'JSON Data';
-		if (mimeType === 'application/xml') return 'XML Document';
-		if (mimeType === 'application/pdf') return 'PDF Document';
-		if (mimeType.startsWith('text/')) return 'Text Document';
-		if (mimeType.startsWith('image/')) return 'Image';
-		if (mimeType.includes('json')) return 'JSON Resource';
-		if (mimeType.includes('html')) return 'HTML Document';
-		if (mimeType.includes('csv')) return 'CSV Data';
-		if (mimeType.includes('markdown')) return 'Markdown';
+	// Generate friendly name from MIME type
+	const mimeType = item.resource.mimeType;
+	if (mimeType === "application/json") return "JSON Data";
+	if (mimeType === "application/xml") return "XML Document";
+	if (mimeType === "application/pdf") return "PDF Document";
+	if (mimeType.startsWith("text/")) return "Text Document";
+	if (mimeType.startsWith("image/")) return "Image";
+	if (mimeType.includes("json")) return "JSON Resource";
+	if (mimeType.includes("html")) return "HTML Document";
+	if (mimeType.includes("csv")) return "CSV Data";
+	if (mimeType.includes("markdown")) return "Markdown";
 
-		// Fallback to MIME type
-		return mimeType;
-	}
+	// Fallback to MIME type
+	return mimeType;
+}
 
-	function formatFileSize(bytes?: number): string {
-		if (!bytes) return '';
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-	}
+function _formatFileSize(bytes?: number): string {
+	if (!bytes) return "";
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
-	function getDecodedText(): string {
-		if (!item.resource.blob) return '';
+function _getDecodedText(): string {
+	if (!item.resource.blob) return "";
+	try {
+		// Unicode-safe base64 decoding
+		const binaryString = atob(item.resource.blob);
+		const bytes = Uint8Array.from(binaryString, (c) => c.charCodeAt(0));
+		const str = new TextDecoder("utf-8").decode(bytes);
 		try {
-			// Unicode-safe base64 decoding
-			const binaryString = atob(item.resource.blob);
-			const bytes = Uint8Array.from(binaryString, (c) => c.charCodeAt(0));
-			const str = new TextDecoder('utf-8').decode(bytes);
-			try {
-				return JSON.stringify(JSON.parse(str), null, 2);
-			} catch {
-				return str;
-			}
+			return JSON.stringify(JSON.parse(str), null, 2);
 		} catch {
-			return 'Error decoding content';
+			return str;
 		}
+	} catch {
+		return "Error decoding content";
 	}
+}
 </script>
 
 {#if isError}

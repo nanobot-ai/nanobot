@@ -1,30 +1,30 @@
-import { Marked } from 'marked';
-import { markedHighlight } from 'marked-highlight';
-import hljs from 'highlight.js';
+import hljs from "highlight.js";
+import { Marked } from "marked";
+import { markedHighlight } from "marked-highlight";
 
 const marked = new Marked(
 	markedHighlight({
-		emptyLangClass: 'hljs',
-		langPrefix: 'hljs language-',
+		emptyLangClass: "hljs",
+		langPrefix: "hljs language-",
 		highlight(code, lang) {
-			const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+			const language = hljs.getLanguage(lang) ? lang : "plaintext";
 			return hljs.highlight(code, { language }).value;
-		}
-	})
+		},
+	}),
 );
 
 marked.setOptions({
 	breaks: true,
-	gfm: true
+	gfm: true,
 });
 
 marked.use({
 	renderer: {
 		link(arg) {
 			const base = marked.Renderer.prototype.link.call(this, arg);
-			return base.replace('<a', '<a target="_blank" rel="noopener noreferrer"');
-		}
-	}
+			return base.replace("<a", '<a target="_blank" rel="noopener noreferrer"');
+		},
+	},
 });
 
 /** Regex pattern for matching code fence lines */
@@ -56,7 +56,7 @@ function parseFenceLine(line: string): FenceLine | null {
 	return {
 		indent: match[1],
 		backtickCount: match[2].length,
-		lang: match[3] || ''
+		lang: match[3] || "",
 	};
 }
 
@@ -80,11 +80,13 @@ function identifyCodeFences(lines: string[]): FenceInfo[] {
 				lineIndex: i,
 				backtickCount: parsed.backtickCount,
 				isOpening: false,
-				lang: '',
-				matchedWith: openFence.startIndex
+				lang: "",
+				matchedWith: openFence.startIndex,
 			});
 
-			const openingInfo = fences.find((f) => f.lineIndex === openFence.startIndex && f.isOpening);
+			const openingInfo = fences.find(
+				(f) => f.lineIndex === openFence.startIndex && f.isOpening,
+			);
 			if (openingInfo) {
 				openingInfo.matchedWith = i;
 			}
@@ -94,7 +96,7 @@ function identifyCodeFences(lines: string[]): FenceInfo[] {
 				lineIndex: i,
 				backtickCount: parsed.backtickCount,
 				isOpening: true,
-				lang: parsed.lang
+				lang: parsed.lang,
 			});
 		}
 	}
@@ -102,10 +104,18 @@ function identifyCodeFences(lines: string[]): FenceInfo[] {
 	return fences;
 }
 
-function findMaxInnerBackticks(fences: FenceInfo[], startLine: number, endLine: number): number {
+function findMaxInnerBackticks(
+	fences: FenceInfo[],
+	startLine: number,
+	endLine: number,
+): number {
 	let max = 0;
 	for (const fence of fences) {
-		if (fence.isOpening && fence.lineIndex > startLine && fence.lineIndex < endLine) {
+		if (
+			fence.isOpening &&
+			fence.lineIndex > startLine &&
+			fence.lineIndex < endLine
+		) {
 			max = Math.max(max, fence.backtickCount);
 		}
 	}
@@ -118,7 +128,11 @@ function calculateAdjustments(fences: FenceInfo[]): Map<number, number> {
 	for (const fence of fences) {
 		if (!fence.isOpening || fence.matchedWith === undefined) continue;
 
-		const maxInnerBackticks = findMaxInnerBackticks(fences, fence.lineIndex, fence.matchedWith);
+		const maxInnerBackticks = findMaxInnerBackticks(
+			fences,
+			fence.lineIndex,
+			fence.matchedWith,
+		);
 
 		if (maxInnerBackticks >= fence.backtickCount) {
 			const newCount = maxInnerBackticks + 1;
@@ -130,7 +144,10 @@ function calculateAdjustments(fences: FenceInfo[]): Map<number, number> {
 	return adjustments;
 }
 
-function applyAdjustments(lines: string[], adjustments: Map<number, number>): string[] {
+function applyAdjustments(
+	lines: string[],
+	adjustments: Map<number, number>,
+): string[] {
 	return lines.map((line, i) => {
 		const newBacktickCount = adjustments.get(i);
 		if (newBacktickCount === undefined) return line;
@@ -138,7 +155,7 @@ function applyAdjustments(lines: string[], adjustments: Map<number, number>): st
 		const parsed = parseFenceLine(line);
 		if (!parsed) return line;
 
-		return parsed.indent + '`'.repeat(newBacktickCount) + parsed.lang;
+		return parsed.indent + "`".repeat(newBacktickCount) + parsed.lang;
 	});
 }
 
@@ -148,15 +165,15 @@ function applyAdjustments(lines: string[], adjustments: Map<number, number>): st
  * the outer fence is expanded to use more backticks to avoid premature closing.
  */
 function fixNestedCodeFences(content: string): string {
-	const lines = content.split('\n');
+	const lines = content.split("\n");
 	const fences = identifyCodeFences(lines);
 	const adjustments = calculateAdjustments(fences);
 	const adjustedLines = applyAdjustments(lines, adjustments);
-	return adjustedLines.join('\n');
+	return adjustedLines.join("\n");
 }
 
 export function renderMarkdown(content: string): string {
-	if (!content) return '';
+	if (!content) return "";
 	const processedContent = fixNestedCodeFences(content);
 	return marked.parse(processedContent) as string;
 }

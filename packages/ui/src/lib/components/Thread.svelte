@@ -1,8 +1,4 @@
 <script lang="ts">
-import { ChevronDown, Monitor, Upload } from "@lucide/svelte";
-import Elicitation from "$lib/components/Elicitation.svelte";
-import Prompt from "$lib/components/Prompt.svelte";
-import BrowserViewer from "$lib/components/BrowserViewer.svelte";
 import type {
 	Agent,
 	Attachment,
@@ -16,8 +12,6 @@ import type {
 	UploadedFile,
 	UploadingFile,
 } from "$lib/types";
-import MessageInput from "./MessageInput.svelte";
-import Messages from "./Messages.svelte";
 
 interface Props {
 	messages: ChatMessage[];
@@ -31,7 +25,7 @@ interface Props {
 	onSendMessage?: (
 		message: string,
 		attachments?: Attachment[],
-	) => Promise<ChatResult | void>;
+	) => Promise<ChatResult | undefined>;
 	onFileUpload?: (
 		file: File,
 		opts?: { controller?: AbortController },
@@ -70,12 +64,12 @@ const {
 }: Props = $props();
 
 let messagesContainer: HTMLElement;
-let showScrollButton = $state(false);
+let _showScrollButton = $state(false);
 let previousLastMessageId = $state<string | null>(null);
-const hasMessages = $derived(messages && messages.length > 0);
-let selectedPrompt = $state<string | undefined>();
-let showBrowserViewer = $state(false);
-let browserViewerWidth = $state(50); // percentage
+const _hasMessages = $derived(messages && messages.length > 0);
+const _selectedPrompt = $state<string | undefined>();
+let _showBrowserViewer = $state(false);
+let _browserViewerWidth = $state(50); // percentage
 let isResizing = $state(false);
 let browserAvailable = $state(false);
 
@@ -87,7 +81,7 @@ function browserStatusUrl() {
 	return new URL("/browser/status", window.location.origin).toString();
 }
 
-function startResize(e: MouseEvent) {
+function _startResize(e: MouseEvent) {
 	isResizing = true;
 	e.preventDefault();
 }
@@ -96,7 +90,7 @@ function stopResize() {
 	isResizing = false;
 }
 
-function resize(e: MouseEvent) {
+function _resize(e: MouseEvent) {
 	if (!isResizing) return;
 	const container = e.currentTarget as HTMLElement;
 	if (!container) return;
@@ -105,7 +99,7 @@ function resize(e: MouseEvent) {
 	const newWidth = ((rect.right - e.clientX) / rect.width) * 100;
 
 	// Constrain between 20% and 80%
-	browserViewerWidth = Math.max(20, Math.min(80, newWidth));
+	_browserViewerWidth = Math.max(20, Math.min(80, newWidth));
 }
 
 $effect(() => {
@@ -124,10 +118,12 @@ $effect(() => {
 
 	const handleStatus = (event: Event) => {
 		try {
-			const data = JSON.parse((event as MessageEvent<string>).data) as { available?: boolean };
+			const data = JSON.parse((event as MessageEvent<string>).data) as {
+				available?: boolean;
+			};
 			browserAvailable = !!data.available;
 			if (!browserAvailable) {
-				showBrowserViewer = false;
+				_showBrowserViewer = false;
 			}
 		} catch {
 			// Ignore malformed status events and keep the last known state.
@@ -143,10 +139,10 @@ $effect(() => {
 });
 
 // Split elicitations: question type renders inline, others render as modal
-const questionElicitation = $derived(
+const _questionElicitation = $derived(
 	elicitations?.find((e) => e._meta?.["ai.nanobot.meta/question"]) ?? null,
 );
-const modalElicitation = $derived(
+const _modalElicitation = $derived(
 	elicitations?.find((e) => !e._meta?.["ai.nanobot.meta/question"]) ?? null,
 );
 
@@ -171,12 +167,12 @@ $effect(() => {
 	}
 });
 
-function handleScroll() {
+function _handleScroll() {
 	if (!messagesContainer) return;
 
 	const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
 	const isNearBottom = scrollTop + clientHeight >= scrollHeight - 10; // 10px threshold
-	showScrollButton = !isNearBottom;
+	_showScrollButton = !isNearBottom;
 }
 
 function scrollToBottom() {
@@ -189,33 +185,33 @@ function scrollToBottom() {
 }
 
 // Drag-and-drop file upload
-let isDragging = $state(false);
+let _isDragging = $state(false);
 let dragCounter = 0;
 
-function handleDragEnter(e: DragEvent) {
+function _handleDragEnter(e: DragEvent) {
 	e.preventDefault();
 	dragCounter++;
 	if (e.dataTransfer?.types.includes("Files")) {
-		isDragging = true;
+		_isDragging = true;
 	}
 }
 
-function handleDragLeave(e: DragEvent) {
+function _handleDragLeave(e: DragEvent) {
 	e.preventDefault();
 	dragCounter--;
 	if (dragCounter === 0) {
-		isDragging = false;
+		_isDragging = false;
 	}
 }
 
-function handleDragOver(e: DragEvent) {
+function _handleDragOver(e: DragEvent) {
 	e.preventDefault();
 }
 
-async function handleDrop(e: DragEvent) {
+async function _handleDrop(e: DragEvent) {
 	e.preventDefault();
 	dragCounter = 0;
-	isDragging = false;
+	_isDragging = false;
 
 	if (!onFileUpload || !e.dataTransfer?.files.length) return;
 

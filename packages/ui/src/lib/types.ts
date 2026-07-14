@@ -1,4 +1,4 @@
-import type { ChatService } from '$lib/chat.svelte';
+import type { ChatService } from "$lib/chat.svelte";
 
 export interface Agent {
 	id: string;
@@ -18,7 +18,7 @@ export interface Chat {
 	id: string;
 	title: string;
 	created: string;
-	visibility?: 'public' | 'private';
+	visibility?: "public" | "private";
 	readonly?: boolean;
 	taskURI?: string;
 	workflowURIs?: string[];
@@ -27,12 +27,15 @@ export interface Chat {
 export interface ChatMessage {
 	id: string;
 	created?: string;
-	role: 'user' | 'assistant';
+	role: "user" | "assistant";
 	items?: ChatMessageItem[];
 	hasMore?: boolean;
 }
 
-export type ChatMessageItem = ToolOutputItem | ChatMessageItemToolCall | ChatMessageItemReasoning;
+export type ChatMessageItem =
+	| ToolOutputItem
+	| ChatMessageItemToolCall
+	| ChatMessageItemReasoning;
 
 export type ToolOutputItem =
 	| ChatMessageItemImage
@@ -42,7 +45,7 @@ export type ToolOutputItem =
 	| ChatMessageItemResourceLink;
 
 export interface ChatMessageItemToolCall extends ChatMessageItemBase {
-	type: 'tool';
+	type: "tool";
 	arguments?: string;
 	callID?: string;
 	name?: string;
@@ -54,24 +57,24 @@ export interface ChatMessageItemToolCall extends ChatMessageItemBase {
 }
 
 export interface ChatMessageItemImage extends ChatMessageItemBase {
-	type: 'image';
+	type: "image";
 	data: string;
 	mimeType: string;
 }
 
 export interface ChatMessageItemAudio extends ChatMessageItemBase {
-	type: 'audio';
+	type: "audio";
 	data: string;
 	mimeType: string;
 }
 
 export interface ChatMessageItemText extends ChatMessageItemBase {
-	type: 'text';
+	type: "text";
 	text: string;
 }
 
 export interface ChatMessageItemResourceLink extends ChatMessageItemBase {
-	type: 'resource_link';
+	type: "resource_link";
 	name?: string;
 	description?: string;
 	uri: string;
@@ -79,14 +82,14 @@ export interface ChatMessageItemResourceLink extends ChatMessageItemBase {
 }
 
 export interface ChatMessageItemReasoning extends ChatMessageItemBase {
-	type: 'reasoning';
+	type: "reasoning";
 	summary?: {
 		text: string;
 	}[];
 }
 
 export interface ChatMessageItemResource extends ChatMessageItemBase {
-	type: 'resource';
+	type: "resource";
 	resource: {
 		uri: string;
 		name?: string;
@@ -110,14 +113,14 @@ export interface ChatMessageItemBase {
 	hasMore?: boolean;
 	_meta?: { [key: string]: unknown };
 	type:
-		| 'text'
-		| 'image'
-		| 'audio'
-		| 'toolCall'
-		| 'resource'
-		| 'resource_link'
-		| 'tool'
-		| 'reasoning';
+		| "text"
+		| "image"
+		| "audio"
+		| "toolCall"
+		| "resource"
+		| "resource_link"
+		| "tool"
+		| "reasoning";
 }
 
 export interface ChatRequest {
@@ -141,13 +144,13 @@ export interface ChatResult {
 export interface Event {
 	id?: string | number;
 	type:
-		| 'message'
-		| 'history-start'
-		| 'history-end'
-		| 'chat-in-progress'
-		| 'chat-done'
-		| 'error'
-		| 'elicitation/create';
+		| "message"
+		| "history-start"
+		| "history-end"
+		| "chat-in-progress"
+		| "chat-done"
+		| "error"
+		| "elicitation/create";
 	message?: ChatMessage;
 	data?: unknown;
 	error?: string;
@@ -155,7 +158,7 @@ export interface Event {
 
 export interface Notification {
 	id: string;
-	type: 'success' | 'error' | 'warning' | 'info';
+	type: "success" | "error" | "warning" | "info";
 	title: string;
 	message?: string;
 	timestamp: Date;
@@ -243,7 +246,7 @@ export interface Icon {
 	 *
 	 * If not provided, the client should assume the icon can be used with any theme.
 	 */
-	theme?: 'light' | 'dark';
+	theme?: "light" | "dark";
 }
 
 export interface BaseMetadata {
@@ -266,7 +269,7 @@ export interface Elicitation {
 	id: string | number;
 	message: string;
 	requestedSchema: {
-		type: 'object';
+		type: "object";
 		properties: {
 			[key: string]: PrimitiveSchemaDefinition;
 		};
@@ -276,23 +279,27 @@ export interface Elicitation {
 }
 
 export interface ElicitationResult {
-	action: 'accept' | 'decline' | 'cancel';
+	action: "accept" | "decline" | "cancel";
 	content?: { [key: string]: string | number | boolean };
 }
 
-export type PrimitiveSchemaDefinition = StringSchema | NumberSchema | BooleanSchema | EnumSchema;
+export type PrimitiveSchemaDefinition =
+	| StringSchema
+	| NumberSchema
+	| BooleanSchema
+	| EnumSchema;
 
 export interface StringSchema {
-	type: 'string';
+	type: "string";
 	title?: string;
 	description?: string;
 	minLength?: number;
 	maxLength?: number;
-	format?: 'email' | 'uri' | 'date' | 'date-time';
+	format?: "email" | "uri" | "date" | "date-time";
 }
 
 export interface NumberSchema {
-	type: 'number' | 'integer';
+	type: "number" | "integer";
 	title?: string;
 	description?: string;
 	minimum?: number;
@@ -300,23 +307,23 @@ export interface NumberSchema {
 }
 
 export interface BooleanSchema {
-	type: 'boolean';
+	type: "boolean";
 	title?: string;
 	description?: string;
 	default?: boolean;
 }
 
 export interface EnumSchema {
-	type: 'string';
+	type: "string";
 	title?: string;
 	description?: string;
 	enum: string[];
 	enumNames?: string[]; // Display names for enum values
 }
 
-export const MessageMimeType = 'application/vnd.nanobot.chat.message+json';
-export const HistoryMimeType = 'application/vnd.nanobot.chat.history+json';
-export const ToolResultMimeType = 'application/vnd.nanobot.tool.result+json';
+export const MessageMimeType = "application/vnd.nanobot.chat.message+json";
+export const HistoryMimeType = "application/vnd.nanobot.chat.history+json";
+export const ToolResultMimeType = "application/vnd.nanobot.tool.result+json";
 
 export interface UploadedFile {
 	id: string;
@@ -332,10 +339,10 @@ export interface UploadingFile {
 }
 
 // Workspace types
-export const SessionMimeType = 'application/vnd.nanobot.session+json';
+export const SessionMimeType = "application/vnd.nanobot.session+json";
 
 // Forward declaration for WorkspaceClient
-export type { SimpleClient } from './mcpclient';
+export type { SimpleClient } from "./mcpclient";
 
 export interface Workspace extends Icons {
 	id: string;
@@ -384,7 +391,7 @@ export interface WorkspaceClient {
 export interface InitializationResult {
 	capabilities?: {
 		experimental?: {
-			'ai.nanobot'?: {
+			"ai.nanobot"?: {
 				session?: {
 					ui?: boolean;
 					workspace?: {
@@ -399,5 +406,5 @@ export interface InitializationResult {
 	};
 }
 
-export const UIPath = '/mcp/ui';
-export const ChatPath = '/mcp/chat';
+export const UIPath = "/mcp/ui";
+export const ChatPath = "/mcp/chat";

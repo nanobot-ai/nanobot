@@ -1,11 +1,11 @@
 <script lang="ts">
-	import type { ChatMessageItemImage } from '$lib/types';
+import type { ChatMessageItemImage } from "$lib/types";
 
-	interface Props {
-		item: ChatMessageItemImage;
-	}
+interface Props {
+	item: ChatMessageItemImage;
+}
 
-	let { item }: Props = $props();
+const { item }: Props = $props();
 </script>
 
 <div class="mb-3 rounded-lg bg-base-200 p-3">

@@ -1,55 +1,58 @@
 <script lang="ts">
-	import type { Prompt } from '$lib/types.js';
+import type { Prompt } from "$lib/types.js";
 
-	interface Props {
-		prompts: Prompt[];
-		onPrompt?: (promptName: string) => void;
-		message: string;
-	}
+interface Props {
+	prompts: Prompt[];
+	onPrompt?: (promptName: string) => void;
+	message: string;
+}
 
-	let { prompts, onPrompt, message }: Props = $props();
+const { prompts, onPrompt, message }: Props = $props();
 
-	// Slash command state
-	let showSlashCommands = $derived(message.trim().startsWith('/'));
-	let filteredPrompts = $derived.by(() => {
-		if (!showSlashCommands) return [];
-		const query = message.trim().slice(1).toLowerCase();
-		return prompts.filter(
-			(prompt) =>
-				prompt.name.toLowerCase().includes(query) ||
-				prompt.title?.toLowerCase().includes(query) ||
-				prompt.description?.toLowerCase().includes(query)
-		);
-	});
-	let selectedCommandIndex = $state(0);
-	let slashQuery = $derived(message.trim().slice(1).toLowerCase());
+// Slash command state
+const showSlashCommands = $derived(message.trim().startsWith("/"));
+const filteredPrompts = $derived.by(() => {
+	if (!showSlashCommands) return [];
+	const query = message.trim().slice(1).toLowerCase();
+	return prompts.filter(
+		(prompt) =>
+			prompt.name.toLowerCase().includes(query) ||
+			prompt.title?.toLowerCase().includes(query) ||
+			prompt.description?.toLowerCase().includes(query),
+	);
+});
+let selectedCommandIndex = $state(0);
+const _slashQuery = $derived(message.trim().slice(1).toLowerCase());
 
-	export function handleKeydown(e: KeyboardEvent): boolean {
-		// Handle slash command navigation
-		if (showSlashCommands) {
-			switch (e.key) {
-				case 'ArrowDown':
-					e.preventDefault();
-					selectedCommandIndex = Math.min(selectedCommandIndex + 1, filteredPrompts.length - 1);
-					return true;
-				case 'ArrowUp':
-					e.preventDefault();
-					selectedCommandIndex = Math.max(selectedCommandIndex - 1, 0);
-					return true;
-				case 'Enter':
-					e.preventDefault();
-					if (filteredPrompts[selectedCommandIndex]) {
-						executeSlashCommand(filteredPrompts[selectedCommandIndex]);
-					}
-					return true;
-			}
+export function handleKeydown(e: KeyboardEvent): boolean {
+	// Handle slash command navigation
+	if (showSlashCommands) {
+		switch (e.key) {
+			case "ArrowDown":
+				e.preventDefault();
+				selectedCommandIndex = Math.min(
+					selectedCommandIndex + 1,
+					filteredPrompts.length - 1,
+				);
+				return true;
+			case "ArrowUp":
+				e.preventDefault();
+				selectedCommandIndex = Math.max(selectedCommandIndex - 1, 0);
+				return true;
+			case "Enter":
+				e.preventDefault();
+				if (filteredPrompts[selectedCommandIndex]) {
+					executeSlashCommand(filteredPrompts[selectedCommandIndex]);
+				}
+				return true;
 		}
-		return false;
 	}
+	return false;
+}
 
-	function executeSlashCommand(prompt: Prompt) {
-		onPrompt?.(prompt.name);
-	}
+function executeSlashCommand(prompt: Prompt) {
+	onPrompt?.(prompt.name);
+}
 </script>
 
 {#if showSlashCommands}

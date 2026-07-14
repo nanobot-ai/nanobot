@@ -1,18 +1,18 @@
 <script module lang="ts">
-	export function getFileIcon(type?: string) {
-		if (type?.startsWith('image/')) {
-			return '🖼️';
-		} else if (type === 'application/pdf') {
-			return '📄';
-		} else if (type?.includes('text/') || type?.includes('json')) {
-			return '📝';
-		} else if (type?.includes('spreadsheet') || type?.includes('csv')) {
-			return '📊';
-		} else if (type?.includes('document')) {
-			return '📋';
-		}
-		return '📎';
+export function getFileIcon(type?: string) {
+	if (type?.startsWith("image/")) {
+		return "🖼️";
+	} else if (type === "application/pdf") {
+		return "📄";
+	} else if (type?.includes("text/") || type?.includes("json")) {
+		return "📝";
+	} else if (type?.includes("spreadsheet") || type?.includes("csv")) {
+		return "📊";
+	} else if (type?.includes("document")) {
+		return "📋";
 	}
+	return "📎";
+}
 </script>
 
 <script lang="ts">

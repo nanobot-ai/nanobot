@@ -1,4 +1,4 @@
-declare module '@novnc/novnc/lib/rfb.js' {
+declare module "@novnc/novnc/lib/rfb.js" {
 	interface RFBSecurityFailureDetail {
 		status: number | string;
 	}
@@ -27,7 +27,7 @@ declare module '@novnc/novnc/lib/rfb.js' {
 		addEventListener<K extends keyof RFBEventMap>(
 			type: K,
 			listener: (this: RFB, event: RFBEventMap[K]) => void,
-			options?: boolean | AddEventListenerOptions
+			options?: boolean | AddEventListenerOptions,
 		): void;
 	}
 

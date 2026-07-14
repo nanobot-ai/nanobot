@@ -1,69 +1,74 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { MoreVertical, Edit, Trash2, X, Check } from '@lucide/svelte';
-	import type { Chat } from '$lib/types';
-	import { resolve } from '$app/paths';
+import { goto } from "$app/navigation";
+import { resolve } from "$app/paths";
+import type { Chat } from "$lib/types";
 
-	interface Props {
-		threads: Chat[];
-		onRename: (threadId: string, newTitle: string) => void;
-		onDelete: (threadId: string) => void;
-		isLoading?: boolean;
-		onThreadClick?: () => void;
-	}
+interface Props {
+	threads: Chat[];
+	onRename: (threadId: string, newTitle: string) => void;
+	onDelete: (threadId: string) => void;
+	isLoading?: boolean;
+	onThreadClick?: () => void;
+}
 
-	let { threads, onRename, onDelete, isLoading = false, onThreadClick }: Props = $props();
+const {
+	threads,
+	onRename,
+	onDelete,
+	isLoading = false,
+	onThreadClick,
+}: Props = $props();
 
-	let editingThreadId = $state<string | null>(null);
-	let editTitle = $state('');
+let editingThreadId = $state<string | null>(null);
+let editTitle = $state("");
 
-	function navigateToThread(threadId: string) {
-		goto(resolve(`/c/${threadId}`));
-		onThreadClick?.();
-	}
+function _navigateToThread(threadId: string) {
+	goto(resolve(`/c/${threadId}`));
+	onThreadClick?.();
+}
 
-	function formatTime(timestamp: string): string {
-		const now = new Date();
-		const diff = now.getTime() - new Date(timestamp).getTime();
-		const minutes = Math.floor(diff / (1000 * 60));
-		const hours = Math.floor(diff / (1000 * 60 * 60));
-		const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+function _formatTime(timestamp: string): string {
+	const now = new Date();
+	const diff = now.getTime() - new Date(timestamp).getTime();
+	const minutes = Math.floor(diff / (1000 * 60));
+	const hours = Math.floor(diff / (1000 * 60 * 60));
+	const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-		if (minutes < 1) return 'now';
-		if (minutes < 60) return `${minutes}m`;
-		if (hours < 24) return `${hours}h`;
-		return `${days}d`;
-	}
+	if (minutes < 1) return "now";
+	if (minutes < 60) return `${minutes}m`;
+	if (hours < 24) return `${hours}h`;
+	return `${days}d`;
+}
 
-	function startRename(threadId: string, currentTitle: string) {
-		editingThreadId = threadId;
-		editTitle = currentTitle || '';
-	}
+function _startRename(threadId: string, currentTitle: string) {
+	editingThreadId = threadId;
+	editTitle = currentTitle || "";
+}
 
-	function saveRename() {
-		if (editingThreadId && editTitle.trim()) {
-			onRename(editingThreadId, editTitle.trim());
-			editingThreadId = null;
-			editTitle = '';
-		}
-	}
-
-	function cancelRename() {
+function saveRename() {
+	if (editingThreadId && editTitle.trim()) {
+		onRename(editingThreadId, editTitle.trim());
 		editingThreadId = null;
-		editTitle = '';
+		editTitle = "";
 	}
+}
 
-	function handleDelete(threadId: string) {
-		onDelete(threadId);
-	}
+function cancelRename() {
+	editingThreadId = null;
+	editTitle = "";
+}
 
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter') {
-			saveRename();
-		} else if (e.key === 'Escape') {
-			cancelRename();
-		}
+function _handleDelete(threadId: string) {
+	onDelete(threadId);
+}
+
+function _handleKeydown(e: KeyboardEvent) {
+	if (e.key === "Enter") {
+		saveRename();
+	} else if (e.key === "Escape") {
+		cancelRename();
 	}
+}
 </script>
 
 <div class="flex h-full flex-col">

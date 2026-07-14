@@ -1,13 +1,13 @@
 @import 'tailwindcss';
 @import 'highlight.js/styles/atom-one-dark.css';
-@plugin "@tailwindcss/typography";
+@plugin '@tailwindcss/typography';
 
-@plugin "daisyui" {
+@plugin 'daisyui' {
 	themes:
 		nanobotlight --default,
 		nanobotdark --prefersdark;
 }
-@plugin "daisyui/theme" {
+@plugin 'daisyui/theme' {
 	name: 'nanobotlight';
 	default: true;
 	prefersdark: false;
@@ -41,10 +41,10 @@
 	--border: 1px;
 	--depth: 0;
 	--noise: 0;
-	--logo-url: /assets/nanobot.svg;
+	--logo-url: url('/assets/nanobot.svg');
 }
 
-@plugin "daisyui/theme" {
+@plugin 'daisyui/theme' {
 	name: 'nanobotdark';
 	default: false;
 	prefersdark: true;
@@ -78,7 +78,7 @@
 	--border: 1px;
 	--depth: 0;
 	--noise: 0;
-	--logo-url: /assets/nanobot_dark.svg;
+	--logo-url: url('/assets/nanobot_dark.svg');
 }
 
 /* Enhanced code block styling */

@@ -1,80 +1,91 @@
 <script lang="ts">
-	import type { Attachment, ChatResult, Prompt, PromptArgument } from '$lib/types';
+import type {
+	Attachment,
+	ChatResult,
+	Prompt,
+	PromptArgument,
+} from "$lib/types";
 
-	interface Props {
-		prompt: Prompt;
-		onSend?: (message: string, attachments?: Attachment[]) => Promise<ChatResult | void>;
-		onCancel?: () => void;
-		open?: boolean;
-	}
+interface Props {
+	prompt: Prompt;
+	onSend?: (
+		message: string,
+		attachments?: Attachment[],
+	) => Promise<ChatResult | undefined>;
+	onCancel?: () => void;
+	open?: boolean;
+}
 
-	let { prompt, onSend, onCancel, open: showDialog = false }: Props = $props();
+let { prompt, onSend, onCancel, open: showDialog = false }: Props = $props();
 
-	let formData = $state<{ [key: string]: string }>({});
+let formData = $state<{ [key: string]: string }>({});
 
-	// Initialize form data when dialog opens
-	$effect(() => {
-		if (showDialog && prompt.arguments) {
-			const newFormData: { [key: string]: string } = {};
-			for (const arg of prompt.arguments) {
-				newFormData[arg.name] = '';
-			}
-			formData = newFormData;
-		} else if (showDialog) {
-			executePrompt({});
-		}
-	});
-
-	function handleClick() {
-		if (prompt.arguments && prompt.arguments.length > 0) {
-			showDialog = true;
-		} else {
-			executePrompt({});
-		}
-	}
-
-	function handleKeyDown(event: KeyboardEvent) {
-		if (event.key === 'Enter' || event.key === ' ') {
-			event.preventDefault();
-			handleClick();
-		}
-	}
-
-	function executePrompt(args: { [key: string]: string }) {
-		const promptMessage = JSON.stringify({
-			type: 'prompt',
-			payload: {
-				promptName: prompt.name,
-				params: args
-			}
-		});
-		onSend?.(promptMessage);
-		showDialog = false;
-	}
-
-	function handleAccept() {
-		executePrompt(formData);
-	}
-
-	function handleCancel() {
-		showDialog = false;
-		onCancel?.();
-	}
-
-	function isRequired(arg: PromptArgument): boolean {
-		return arg.required ?? false;
-	}
-
-	function validateForm(): boolean {
-		if (!prompt.arguments) return true;
-
+// Initialize form data when dialog opens
+$effect(() => {
+	if (showDialog && prompt.arguments) {
+		const newFormData: { [key: string]: string } = {};
 		for (const arg of prompt.arguments) {
-			if (isRequired(arg) && (!formData[arg.name] || formData[arg.name].trim() === '')) {
-				return false;
-			}
+			newFormData[arg.name] = "";
 		}
-		return true;
+		formData = newFormData;
+	} else if (showDialog) {
+		executePrompt({});
 	}
+});
+
+function handleClick() {
+	if (prompt.arguments && prompt.arguments.length > 0) {
+		showDialog = true;
+	} else {
+		executePrompt({});
+	}
+}
+
+function _handleKeyDown(event: KeyboardEvent) {
+	if (event.key === "Enter" || event.key === " ") {
+		event.preventDefault();
+		handleClick();
+	}
+}
+
+function executePrompt(args: { [key: string]: string }) {
+	const promptMessage = JSON.stringify({
+		type: "prompt",
+		payload: {
+			promptName: prompt.name,
+			params: args,
+		},
+	});
+	onSend?.(promptMessage);
+	showDialog = false;
+}
+
+function _handleAccept() {
+	executePrompt(formData);
+}
+
+function _handleCancel() {
+	showDialog = false;
+	onCancel?.();
+}
+
+function isRequired(arg: PromptArgument): boolean {
+	return arg.required ?? false;
+}
+
+function _validateForm(): boolean {
+	if (!prompt.arguments) return true;
+
+	for (const arg of prompt.arguments) {
+		if (
+			isRequired(arg) &&
+			(!formData[arg.name] || formData[arg.name].trim() === "")
+		) {
+			return false;
+		}
+	}
+	return true;
+}
 </script>
 
 {#if !open}

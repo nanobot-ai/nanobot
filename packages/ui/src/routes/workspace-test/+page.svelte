@@ -1,351 +1,353 @@
 <script lang="ts">
-  import '$lib/../app.css';
-  import {WorkspaceService, type WorkspaceInstance} from '$lib/workspace.svelte';
-  import {onMount} from 'svelte';
-  import {
-    AlertCircle,
-    RefreshCw,
-    Plus,
-    Edit,
-    Trash2,
-    X,
-    Save,
-    FileText,
-    Download,
-    MessageSquare,
-    Info,
-    List
-  } from '@lucide/svelte';
-  import type {SessionDetails} from "$lib/types";
-  import type {ChatService} from '$lib/chat.svelte';
-  import ThreadFromChat from "$lib/components/ThreadFromChat.svelte";
+import "$lib/../app.css";
+import { onMount } from "svelte";
+import type { ChatService } from "$lib/chat.svelte";
+import type { SessionDetails } from "$lib/types";
+import {
+	type WorkspaceInstance,
+	WorkspaceService,
+} from "$lib/workspace.svelte";
 
-  const workspaceService = new WorkspaceService();
+const workspaceService = new WorkspaceService();
 
-  let loading = $state(false);
-  let error = $state<string | null>(null);
-  let newWorkspaceName = $state('');
-  let newWorkspaceColor = $state('#3b82f6');
-  let newWorkspaceOrder = $state(0);
+let _loading = $state(false);
+let _error = $state<string | null>(null);
+let newWorkspaceName = $state("");
+let newWorkspaceColor = $state("#3b82f6");
+let newWorkspaceOrder = $state(0);
 
-  // Edit mode state
-  let editingWorkspaceId = $state<string | null>(null);
-  let editName = $state('');
-  let editColor = $state('');
-  let editOrder = $state(0);
+// Edit mode state
+let _editingWorkspaceId = $state<string | null>(null);
+let editName = $state("");
+let editColor = $state("");
+let editOrder = $state(0);
 
-  // File operations state
-  let selectedWorkspace = $state<WorkspaceInstance | null>(null);
-  let newFileName = $state('');
-  let newFileContent = $state('');
-  let editingFilePath = $state<string | null>(null);
-  let editFileContent = $state('');
-  let fileReadContent = $state<{ path: string; content: string; mimeType: string } | null>(null);
+// File operations state
+let selectedWorkspace = $state<WorkspaceInstance | null>(null);
+let newFileName = $state("");
+let newFileContent = $state("");
+let _editingFilePath = $state<string | null>(null);
+let editFileContent = $state("");
+let fileReadContent = $state<{
+	path: string;
+	content: string;
+	mimeType: string;
+} | null>(null);
 
-  // Session info state
-  let sessionInfo = $state<SessionDetails | null>(null);
+// Session info state
+let sessionInfo = $state<SessionDetails | null>(null);
 
-  // Active session state
-  let activeSession = $state<ChatService | null>(null);
+// Active session state
+let activeSession = $state<ChatService | null>(null);
 
-  onMount(() => {
-    loadWorkspaces();
-  });
+onMount(() => {
+	loadWorkspaces();
+});
 
-  async function loadWorkspaces() {
-    loading = true;
-    error = null;
-    try {
-      await workspaceService.load();
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
+async function loadWorkspaces() {
+	_loading = true;
+	_error = null;
+	try {
+		await workspaceService.load();
+	} catch (e) {
+		_error = e instanceof Error ? e.message : String(e);
+	} finally {
+		_loading = false;
+	}
+}
 
-  async function createWorkspace() {
-    if (!newWorkspaceName.trim()) {
-      error = 'Workspace name is required';
-      return;
-    }
+async function _createWorkspace() {
+	if (!newWorkspaceName.trim()) {
+		_error = "Workspace name is required";
+		return;
+	}
 
-    loading = true;
-    error = null;
-    try {
-      await workspaceService.createWorkspace({
-        name: newWorkspaceName,
-        color: newWorkspaceColor,
-        order: newWorkspaceOrder
-      });
+	_loading = true;
+	_error = null;
+	try {
+		await workspaceService.createWorkspace({
+			name: newWorkspaceName,
+			color: newWorkspaceColor,
+			order: newWorkspaceOrder,
+		});
 
-      // Reset form
-      newWorkspaceName = '';
-      newWorkspaceColor = '#3b82f6';
-      newWorkspaceOrder = 0;
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
+		// Reset form
+		newWorkspaceName = "";
+		newWorkspaceColor = "#3b82f6";
+		newWorkspaceOrder = 0;
+	} catch (e) {
+		_error = e instanceof Error ? e.message : String(e);
+	} finally {
+		_loading = false;
+	}
+}
 
-  function startEdit(workspaceId: string) {
-    const workspace = workspaceService.workspaces.find(w => w.id === workspaceId);
-    if (workspace) {
-      editingWorkspaceId = workspaceId;
-      editName = workspace.name;
-      editColor = workspace.color || '#3b82f6';
-      editOrder = workspace.order || 0;
-    }
-  }
+function _startEdit(workspaceId: string) {
+	const workspace = workspaceService.workspaces.find(
+		(w) => w.id === workspaceId,
+	);
+	if (workspace) {
+		_editingWorkspaceId = workspaceId;
+		editName = workspace.name;
+		editColor = workspace.color || "#3b82f6";
+		editOrder = workspace.order || 0;
+	}
+}
 
-  function cancelEdit() {
-    editingWorkspaceId = null;
-    editName = '';
-    editColor = '';
-    editOrder = 0;
-  }
+function cancelEdit() {
+	_editingWorkspaceId = null;
+	editName = "";
+	editColor = "";
+	editOrder = 0;
+}
 
-  async function saveEdit(workspaceId: string) {
-    if (!editName.trim()) {
-      error = 'Workspace name is required';
-      return;
-    }
+async function _saveEdit(workspaceId: string) {
+	if (!editName.trim()) {
+		_error = "Workspace name is required";
+		return;
+	}
 
-    const workspace = workspaceService.workspaces.find((w) => w.id === workspaceId);
-    if (!workspace) {
-      error = 'Workspace not found';
-      return;
-    }
+	const workspace = workspaceService.workspaces.find(
+		(w) => w.id === workspaceId,
+	);
+	if (!workspace) {
+		_error = "Workspace not found";
+		return;
+	}
 
-    loading = true;
-    error = null;
-    try {
-      await workspaceService.updateWorkspace({
-        ...workspace,
-        name: editName,
-        color: editColor,
-        order: editOrder
-      });
-      cancelEdit();
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
+	_loading = true;
+	_error = null;
+	try {
+		await workspaceService.updateWorkspace({
+			...workspace,
+			name: editName,
+			color: editColor,
+			order: editOrder,
+		});
+		cancelEdit();
+	} catch (e) {
+		_error = e instanceof Error ? e.message : String(e);
+	} finally {
+		_loading = false;
+	}
+}
 
-  async function deleteWorkspace(workspaceId: string) {
-    if (!confirm('Are you sure you want to delete this workspace?')) {
-      return;
-    }
+async function _deleteWorkspace(workspaceId: string) {
+	if (!confirm("Are you sure you want to delete this workspace?")) {
+		return;
+	}
 
-    loading = true;
-    error = null;
-    try {
-      await workspaceService.deleteWorkspace(workspaceId);
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
+	_loading = true;
+	_error = null;
+	try {
+		await workspaceService.deleteWorkspace(workspaceId);
+	} catch (e) {
+		_error = e instanceof Error ? e.message : String(e);
+	} finally {
+		_loading = false;
+	}
+}
 
-  // File Operations
-  function selectWorkspace(workspaceId: string) {
-    selectedWorkspace = workspaceService.getWorkspace(workspaceId) as WorkspaceInstance;
-    fileReadContent = null;
-    editingFilePath = null;
-    sessionInfo = null;
+// File Operations
+function _selectWorkspace(workspaceId: string) {
+	selectedWorkspace = workspaceService.getWorkspace(
+		workspaceId,
+	) as WorkspaceInstance;
+	fileReadContent = null;
+	_editingFilePath = null;
+	sessionInfo = null;
 
-    // Scroll to file operations section after a brief delay
-    setTimeout(() => {
-      document.getElementById('file-operations')?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      });
-    }, 100);
-  }
+	// Scroll to file operations section after a brief delay
+	setTimeout(() => {
+		document.getElementById("file-operations")?.scrollIntoView({
+			behavior: "smooth",
+			block: "start",
+		});
+	}, 100);
+}
 
-  async function createFile() {
-    if (!selectedWorkspace || !newFileName.trim()) {
-      error = 'Workspace and filename are required';
-      return;
-    }
+async function _createFile() {
+	if (!selectedWorkspace || !newFileName.trim()) {
+		_error = "Workspace and filename are required";
+		return;
+	}
 
-    loading = true;
-    error = null;
-    try {
-      await selectedWorkspace.createFile(newFileName, newFileContent);
-      newFileName = '';
-      newFileContent = '';
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
+	_loading = true;
+	_error = null;
+	try {
+		await selectedWorkspace.createFile(newFileName, newFileContent);
+		newFileName = "";
+		newFileContent = "";
+	} catch (e) {
+		_error = e instanceof Error ? e.message : String(e);
+	} finally {
+		_loading = false;
+	}
+}
 
-  async function readFile(path: string) {
-    if (!selectedWorkspace) return;
+async function readFile(path: string) {
+	if (!selectedWorkspace) return;
 
-    loading = true;
-    error = null;
-    try {
-      const blob = await selectedWorkspace.readFile(path);
-      const content = await blob.text();
-      fileReadContent = {
-        path,
-        content,
-        mimeType: blob.type
-      };
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
+	_loading = true;
+	_error = null;
+	try {
+		const blob = await selectedWorkspace.readFile(path);
+		const content = await blob.text();
+		fileReadContent = {
+			path,
+			content,
+			mimeType: blob.type,
+		};
+	} catch (e) {
+		_error = e instanceof Error ? e.message : String(e);
+	} finally {
+		_loading = false;
+	}
+}
 
-  function startEditFile(path: string) {
-    editingFilePath = path;
-    // Load current content if available
-    if (fileReadContent && fileReadContent.path === path) {
-      editFileContent = fileReadContent.content;
-    } else {
-      editFileContent = '';
-    }
-  }
+function _startEditFile(path: string) {
+	_editingFilePath = path;
+	// Load current content if available
+	if (fileReadContent && fileReadContent.path === path) {
+		editFileContent = fileReadContent.content;
+	} else {
+		editFileContent = "";
+	}
+}
 
-  async function updateFile(path: string) {
-    if (!selectedWorkspace) return;
+async function _updateFile(path: string) {
+	if (!selectedWorkspace) return;
 
-    loading = true;
-    error = null;
-    try {
-      await selectedWorkspace.writeFile(path, editFileContent);
-      editingFilePath = null;
-      editFileContent = '';
-      // Refresh the file content if it was being viewed
-      if (fileReadContent && fileReadContent.path === path) {
-        await readFile(path);
-      }
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
+	_loading = true;
+	_error = null;
+	try {
+		await selectedWorkspace.writeFile(path, editFileContent);
+		_editingFilePath = null;
+		editFileContent = "";
+		// Refresh the file content if it was being viewed
+		if (fileReadContent && fileReadContent.path === path) {
+			await readFile(path);
+		}
+	} catch (e) {
+		_error = e instanceof Error ? e.message : String(e);
+	} finally {
+		_loading = false;
+	}
+}
 
-  function cancelEditFile() {
-    editingFilePath = null;
-    editFileContent = '';
-  }
+function _cancelEditFile() {
+	_editingFilePath = null;
+	editFileContent = "";
+}
 
-  async function deleteFile(path: string) {
-    if (!selectedWorkspace) return;
-    if (!confirm(`Are you sure you want to delete ${path}?`)) {
-      return;
-    }
+async function _deleteFile(path: string) {
+	if (!selectedWorkspace) return;
+	if (!confirm(`Are you sure you want to delete ${path}?`)) {
+		return;
+	}
 
-    loading = true;
-    error = null;
-    try {
-      await selectedWorkspace.deleteFile(path);
-      // Clear read content if the deleted file was being viewed
-      if (fileReadContent && fileReadContent.path === path) {
-        fileReadContent = null;
-      }
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
+	_loading = true;
+	_error = null;
+	try {
+		await selectedWorkspace.deleteFile(path);
+		// Clear read content if the deleted file was being viewed
+		if (fileReadContent && fileReadContent.path === path) {
+			fileReadContent = null;
+		}
+	} catch (e) {
+		_error = e instanceof Error ? e.message : String(e);
+	} finally {
+		_loading = false;
+	}
+}
 
-  async function refreshFiles() {
-    if (!selectedWorkspace) return;
+async function refreshFiles() {
+	if (!selectedWorkspace) return;
 
-    loading = true;
-    error = null;
-    try {
-      await selectedWorkspace.load();
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
+	_loading = true;
+	_error = null;
+	try {
+		await selectedWorkspace.load();
+	} catch (e) {
+		_error = e instanceof Error ? e.message : String(e);
+	} finally {
+		_loading = false;
+	}
+}
 
-  async function readSessionInfo(sessionId: string) {
-    if (!selectedWorkspace) return;
+async function _readSessionInfo(sessionId: string) {
+	if (!selectedWorkspace) return;
 
-    loading = true;
-    error = null;
-    try {
-      sessionInfo = await selectedWorkspace.getSessionDetails(sessionId);
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
+	_loading = true;
+	_error = null;
+	try {
+		sessionInfo = await selectedWorkspace.getSessionDetails(sessionId);
+	} catch (e) {
+		_error = e instanceof Error ? e.message : String(e);
+	} finally {
+		_loading = false;
+	}
+}
 
-  async function deleteSession(sessionId: string) {
-    if (!selectedWorkspace) return;
-    if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
-      return;
-    }
+async function _deleteSession(sessionId: string) {
+	if (!selectedWorkspace) return;
+	if (
+		!confirm(
+			"Are you sure you want to delete this session? This action cannot be undone.",
+		)
+	) {
+		return;
+	}
 
-    loading = true;
-    error = null;
-    try {
-      await selectedWorkspace.deleteSession(sessionId);
+	_loading = true;
+	_error = null;
+	try {
+		await selectedWorkspace.deleteSession(sessionId);
 
-      // Clear session info if the deleted session was being viewed
-      if (sessionInfo && sessionInfo.id === sessionId) {
-        sessionInfo = null;
-      }
+		// Clear session info if the deleted session was being viewed
+		if (sessionInfo && sessionInfo.id === sessionId) {
+			sessionInfo = null;
+		}
 
-      // Clear active session if it was deleted
-      if (activeSession && activeSession.chatId === sessionId) {
-        activeSession = null;
-      }
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
+		// Clear active session if it was deleted
+		if (activeSession && activeSession.chatId === sessionId) {
+			activeSession = null;
+		}
+	} catch (e) {
+		_error = e instanceof Error ? e.message : String(e);
+	} finally {
+		_loading = false;
+	}
+}
 
-  async function createNewSession() {
-    if (!selectedWorkspace) return;
+async function _createNewSession() {
+	if (!selectedWorkspace) return;
 
-    loading = true;
-    error = null;
-    try {
-      activeSession = await selectedWorkspace.newSession({ editor: false });
-      await refreshFiles(); // Refresh to show the new session
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
+	_loading = true;
+	_error = null;
+	try {
+		activeSession = await selectedWorkspace.newSession({ editor: false });
+		await refreshFiles(); // Refresh to show the new session
+	} catch (e) {
+		_error = e instanceof Error ? e.message : String(e);
+	} finally {
+		_loading = false;
+	}
+}
 
-  async function selectSession(sessionId: string) {
-    if (!selectedWorkspace) return;
+async function _selectSession(sessionId: string) {
+	if (!selectedWorkspace) return;
 
-    loading = true;
-    error = null;
-    try {
-      activeSession = await selectedWorkspace.getSession(sessionId);
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loading = false;
-    }
-  }
+	_loading = true;
+	_error = null;
+	try {
+		activeSession = await selectedWorkspace.getSession(sessionId);
+	} catch (e) {
+		_error = e instanceof Error ? e.message : String(e);
+	} finally {
+		_loading = false;
+	}
+}
 </script>
 
 <svelte:head>

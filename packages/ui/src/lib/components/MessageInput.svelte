@@ -1,9 +1,5 @@
 <script lang="ts">
-import { Paperclip, Send, Square } from "@lucide/svelte";
-import MessageAttachments from "$lib/components/MessageAttachments.svelte";
-import MessageResources from "$lib/components/MessageResources.svelte";
 import type MessageSlashPromptsType from "$lib/components/MessageSlashPrompts.svelte";
-import MessageSlashPrompts from "$lib/components/MessageSlashPrompts.svelte";
 import type {
 	Agent,
 	Attachment,
@@ -19,7 +15,7 @@ interface Props {
 	onSend?: (
 		message: string,
 		attachments?: Attachment[],
-	) => Promise<ChatResult | void>;
+	) => Promise<ChatResult | undefined>;
 	onPrompt?: (promptName: string) => void;
 	onFileUpload?: (
 		file: File,
@@ -72,7 +68,7 @@ let slashInput: MessageSlashPromptsType;
 let isUploading = $state(false);
 
 let selectedResources = $state<Resource[]>([]);
-const showAgentDropdown = $derived(agents.length > 1);
+const _showAgentDropdown = $derived(agents.length > 1);
 
 async function handleSubmit(e: Event) {
 	e.preventDefault();
@@ -84,11 +80,11 @@ async function handleSubmit(e: Event) {
 	}
 }
 
-function removeSelectedResource(resource: Resource) {
+function _removeSelectedResource(resource: Resource) {
 	selectedResources = selectedResources.filter((r) => r.uri !== resource.uri);
 }
 
-function toggleResource(resource: Resource) {
+function _toggleResource(resource: Resource) {
 	const isSelected = selectedResources.some((r) => r.uri === resource.uri);
 	if (isSelected) {
 		selectedResources = selectedResources.filter((r) => r.uri !== resource.uri);
@@ -97,11 +93,11 @@ function toggleResource(resource: Resource) {
 	}
 }
 
-function handleAttach() {
+function _handleAttach() {
 	fileInput?.click();
 }
 
-async function handleFileSelect(e: Event) {
+async function _handleFileSelect(e: Event) {
 	const target = e.target as HTMLInputElement;
 	const file = target.files?.[0];
 
@@ -121,7 +117,7 @@ async function handleFileSelect(e: Event) {
 	}
 }
 
-function handleKeydown(e: KeyboardEvent) {
+function _handleKeydown(e: KeyboardEvent) {
 	if (slashInput.handleKeydown(e)) {
 		return;
 	}
