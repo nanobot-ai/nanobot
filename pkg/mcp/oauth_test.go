@@ -15,6 +15,7 @@ import (
 
 func TestGetOAuthMetadata(t *testing.T) {
 	var serverURL string
+	var pathMetadataRequested, rootMetadataRequested atomic.Bool
 	const (
 		clientName  = "Test Client"
 		redirectURL = "http://localhost/callback"
@@ -29,9 +30,13 @@ func TestGetOAuthMetadata(t *testing.T) {
 				http.NotFound(w, req)
 				return
 			}
-			w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+serverURL+`/.well-known/oauth-protected-resource/mcp"`)
+			w.Header().Set("WWW-Authenticate", "Bearer")
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 		case "/.well-known/oauth-protected-resource/mcp":
+			pathMetadataRequested.Store(true)
+			http.NotFound(w, req)
+		case "/.well-known/oauth-protected-resource":
+			rootMetadataRequested.Store(true)
 			if req.Header.Get("X-Test") != "value" {
 				http.Error(w, "missing test header", http.StatusBadRequest)
 				return
@@ -68,8 +73,11 @@ func TestGetOAuthMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if result.ProtectedResourceMetadataURL != ts.URL+"/.well-known/oauth-protected-resource/mcp" {
+	if result.ProtectedResourceMetadataURL != ts.URL+"/.well-known/oauth-protected-resource" {
 		t.Fatalf("unexpected protected resource URL: %s", result.ProtectedResourceMetadataURL)
+	}
+	if !pathMetadataRequested.Load() || !rootMetadataRequested.Load() {
+		t.Fatalf("expected path and root protected resource metadata URLs to be requested")
 	}
 	if result.AuthorizationServerMetadataURL != ts.URL+"/.well-known/oauth-authorization-server/issuer" {
 		t.Fatalf("unexpected authorization server URL: %s", result.AuthorizationServerMetadataURL)
@@ -112,6 +120,62 @@ func TestGetOAuthMetadata(t *testing.T) {
 	}
 	if !slices.Equal(clientRegistration.GrantTypes, []string{"authorization_code"}) {
 		t.Fatalf("unexpected grant types: %v", clientRegistration.GrantTypes)
+	}
+}
+
+func TestOAuthResourceMetadataURLs(t *testing.T) {
+	tests := []struct {
+		name               string
+		baseURL            string
+		authenticateHeader string
+		wantURLs           []string
+		wantScope          string
+	}{
+		{
+			name:    "defaults to path-specific then root metadata without an auth header",
+			baseURL: "https://mcp.example.com/mcp",
+			wantURLs: []string{
+				"https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
+				"https://mcp.example.com/.well-known/oauth-protected-resource",
+			},
+		},
+		{
+			name:               "retains challenge scope for default metadata URLs",
+			baseURL:            "https://mcp.example.com/v1/mcp",
+			authenticateHeader: `Bearer scope="read write"`,
+			wantURLs: []string{
+				"https://mcp.example.com/.well-known/oauth-protected-resource/v1/mcp",
+				"https://mcp.example.com/.well-known/oauth-protected-resource",
+			},
+			wantScope: "read write",
+		},
+		{
+			name:               "uses advertised resource metadata URL exclusively",
+			baseURL:            "https://mcp.example.com/mcp",
+			authenticateHeader: `Bearer resource_metadata="https://auth.example.com/resources/mcp" scope="read"`,
+			wantURLs:           []string{"https://auth.example.com/resources/mcp"},
+			wantScope:          "read",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			urls, scope, err := oauthResourceMetadataURLs(tt.baseURL, tt.authenticateHeader)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			gotURLs := make([]string, len(urls))
+			for i, u := range urls {
+				gotURLs[i] = u.String()
+			}
+			if !slices.Equal(gotURLs, tt.wantURLs) {
+				t.Fatalf("unexpected resource metadata URLs: got %v, want %v", gotURLs, tt.wantURLs)
+			}
+			if scope != tt.wantScope {
+				t.Fatalf("unexpected scope: got %q, want %q", scope, tt.wantScope)
+			}
+		})
 	}
 }
 
