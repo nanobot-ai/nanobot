@@ -20,6 +20,8 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+const DefaultEventStreamMaxLifetime = 5 * time.Minute
+
 // responseRecorder is an http.ResponseWriter that captures the response for audit logging
 type responseRecorder struct {
 	http.ResponseWriter
@@ -120,24 +122,30 @@ type HTTPServer struct {
 	healthErr       *error
 	healthMu        sync.RWMutex
 
-	auditLogCollector auditlogs.Collector
+	auditLogCollector      auditlogs.Collector
+	eventStreamMaxLifetime time.Duration
 }
 
 type HTTPServerOptions struct {
-	SessionStore      SessionStore
-	BaseContext       context.Context
-	HealthCheckPath   string
-	ResourceName      string
-	RunHealthChecker  bool
-	AuditLogCollector auditlogs.Collector
+	SessionStore                SessionStore
+	InMemorySessionStoreOptions InMemorySessionStoreOptions
+	BaseContext                 context.Context
+	HealthCheckPath             string
+	ResourceName                string
+	RunHealthChecker            bool
+	AuditLogCollector           auditlogs.Collector
+	EventStreamMaxLifetime      time.Duration
 }
 
 func (h HTTPServerOptions) Complete() HTTPServerOptions {
-	if h.SessionStore == nil {
-		h.SessionStore = NewInMemorySessionStore()
-	}
 	if h.BaseContext == nil {
 		h.BaseContext = context.Background()
+	}
+	if h.SessionStore == nil {
+		if h.InMemorySessionStoreOptions.BaseContext == nil {
+			h.InMemorySessionStoreOptions.BaseContext = h.BaseContext
+		}
+		h.SessionStore = NewInMemorySessionStoreWithOptions(h.InMemorySessionStoreOptions)
 	}
 	if h.AuditLogCollector == nil {
 		h.AuditLogCollector = auditlogs.NewNoopCollector()
@@ -145,28 +153,36 @@ func (h HTTPServerOptions) Complete() HTTPServerOptions {
 	if h.ResourceName == "" {
 		h.ResourceName = "Nanobot MCP Server"
 	}
+	if h.EventStreamMaxLifetime == 0 {
+		h.EventStreamMaxLifetime = DefaultEventStreamMaxLifetime
+	} else if h.EventStreamMaxLifetime < 0 {
+		h.EventStreamMaxLifetime = 0
+	}
 	return h
 }
 
 func (h HTTPServerOptions) Merge(other HTTPServerOptions) (result HTTPServerOptions) {
 	h.SessionStore = complete.Last(h.SessionStore, other.SessionStore)
+	h.InMemorySessionStoreOptions = h.InMemorySessionStoreOptions.Merge(other.InMemorySessionStoreOptions)
 	h.BaseContext = complete.Last(h.BaseContext, other.BaseContext)
 	h.RunHealthChecker = complete.Last(h.RunHealthChecker, other.RunHealthChecker)
 	h.HealthCheckPath = complete.Last(h.HealthCheckPath, other.HealthCheckPath)
 	h.ResourceName = complete.Last(h.ResourceName, other.ResourceName)
 	h.AuditLogCollector = complete.Last(h.AuditLogCollector, other.AuditLogCollector)
+	h.EventStreamMaxLifetime = complete.Last(h.EventStreamMaxLifetime, other.EventStreamMaxLifetime)
 	return h
 }
 
 func NewHTTPServer(envProvider func() (map[string]string, error), handler MessageHandler, opts ...HTTPServerOptions) (*HTTPServer, error) {
 	o := complete.Complete(opts...)
 	h := &HTTPServer{
-		MessageHandler:    handler,
-		mux:               http.NewServeMux(),
-		envProvider:       envProvider,
-		sessions:          o.SessionStore,
-		ctx:               o.BaseContext,
-		auditLogCollector: o.AuditLogCollector,
+		MessageHandler:         handler,
+		mux:                    http.NewServeMux(),
+		envProvider:            envProvider,
+		sessions:               o.SessionStore,
+		ctx:                    o.BaseContext,
+		auditLogCollector:      o.AuditLogCollector,
+		eventStreamMaxLifetime: o.EventStreamMaxLifetime,
 	}
 
 	if o.HealthCheckPath != "" {
@@ -236,10 +252,20 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request, aud
 	// message is delivered to all of them. The done channel signals session
 	// closure so we don't hang after the session is torn down.
 	ch, done := session.Subscribe(req.Context())
+	var lifetime <-chan time.Time
+	var lifetimeTimer *time.Timer
+	if h.eventStreamMaxLifetime > 0 {
+		lifetimeTimer = time.NewTimer(h.eventStreamMaxLifetime)
+		lifetime = lifetimeTimer.C
+		defer lifetimeTimer.Stop()
+	}
 
 	for {
 		select {
-		case msg := <-ch:
+		case msg, ok := <-ch:
+			if !ok {
+				return
+			}
 			data, _ := json.Marshal(msg)
 			_, err := rw.Write([]byte("data: " + string(data) + "\n\n"))
 			if err != nil {
@@ -250,6 +276,11 @@ func (h *HTTPServer) streamEvents(rw http.ResponseWriter, req *http.Request, aud
 			}
 		case <-done:
 			slog.Debug("mcp server event stream closed", "session_id", id)
+			return
+		case <-lifetime:
+			slog.Info("mcp server event stream reached maximum lifetime",
+				"session_id", id,
+				"max_lifetime", h.eventStreamMaxLifetime)
 			return
 		}
 	}
@@ -478,6 +509,17 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	releaseReservation := func() {}
+	if reserver, ok := h.sessions.(SessionStoreReserver); ok {
+		releaseReservation, err = reserver.Reserve(ctx)
+		if err != nil {
+			slog.Warn("mcp server failed to reserve session capacity", "error", err)
+			respondSessionStoreError(rw, err)
+			return
+		}
+		defer releaseReservation()
+	}
+
 	session, err := NewServerSession(h.ctx, h.MessageHandler, ServerSessionOptions{
 		DefaultAgent: req.Header.Get("X-Nanobot-Default-Agent"),
 	})
@@ -522,6 +564,9 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 	if err := h.sessions.Store(ctx, session.ID(), session); err != nil {
 		slog.Error("mcp server failed to persist session", "session_id", session.ID(), "error", err)
 		session.Close(true)
+		if respondSessionStoreError(rw, err) {
+			return
+		}
 		http.Error(rw, fmt.Sprintf(`{"http_error": "Failed to store session: %v"}`, err), http.StatusInternalServerError)
 		return
 	}
@@ -532,6 +577,20 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		http.Error(rw, fmt.Sprintf(`{"http_error": "Failed to encode response: %v"}`, err), http.StatusInternalServerError)
 		return
 	}
+}
+
+func respondSessionStoreError(rw http.ResponseWriter, err error) bool {
+	if errors.Is(err, ErrSessionCapacity) {
+		rw.Header().Set("Retry-After", "1")
+		http.Error(rw, `{"http_error": "Session capacity reached"}`, http.StatusServiceUnavailable)
+		return true
+	}
+	if errors.Is(err, ErrSessionStoreClosed) {
+		rw.Header().Set("Retry-After", "1")
+		http.Error(rw, `{"http_error": "Session store is shutting down"}`, http.StatusServiceUnavailable)
+		return true
+	}
+	return false
 }
 
 func respondWithUnauthorized(rw http.ResponseWriter, req *http.Request) {
@@ -629,6 +688,16 @@ func (h *HTTPServer) ensureInternalSession(ctx context.Context) (*ServerSession,
 	h.healthMu.RUnlock()
 	if s != nil {
 		return s, nil
+	}
+
+	releaseReservation := func() {}
+	if reserver, ok := h.sessions.(SessionStoreReserver); ok {
+		var err error
+		releaseReservation, err = reserver.Reserve(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to reserve internal session capacity: %w", err)
+		}
+		defer releaseReservation()
 	}
 
 	session, err := NewServerSession(h.ctx, h.MessageHandler)
