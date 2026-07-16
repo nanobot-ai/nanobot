@@ -608,8 +608,8 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 		"status_code", resp.StatusCode)
 
 	go func() {
-		if err = s.ensureSSE(ctx, nil, ""); err != nil {
-			slog.Error("failed to initialize SSE", "error", err)
+		if sseErr := s.ensureSSE(ctx, nil, ""); sseErr != nil {
+			slog.Error("failed to initialize SSE", "error", sseErr)
 		}
 	}()
 
