@@ -32,6 +32,9 @@ type Run struct {
 	AuditLogBatchSize            int               `usage:"Batch size for sending audit logs" default:"1000"`
 	AuditLogFlushIntervalSeconds int               `usage:"Interval for flushing audit logs" default:"5"`
 	SessionGCPeriod              string            `usage:"How long idle sessions are kept before garbage collection; <= 0 disables garbage collection. Examples: 168h, 30m" default:"168h"`
+	LiveSessionIdleTTL           string            `usage:"How long an unreferenced live MCP session may retain downstream resources" default:"10s" env:"NANOBOT_LIVE_SESSION_IDLE_TTL"`
+	MaxLiveSessions              int               `usage:"Maximum live MCP sessions that may retain downstream resources" default:"4" env:"NANOBOT_MAX_LIVE_SESSIONS"`
+	EventStreamMaxLifetime       string            `usage:"Maximum lifetime of one MCP event stream before the client must reconnect" default:"5m" env:"NANOBOT_EVENT_STREAM_MAX_LIFETIME"`
 	Roots                        []string          `usage:"Roots to expose the MCP server in the form of name:directory" short:"r"`
 	EntrypointAgent              string            `usage:"ID of the agent to use for chat" name:"agent"`
 	BlockLoopback                bool              `usage:"Block MCP HTTP requests to loopback IP addresses"`
@@ -127,9 +130,9 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		return fmt.Errorf("trusted issuer and audience must be set together")
 	}
 
-	sessionGarbageCollectionPeriod, err := time.ParseDuration(r.SessionGCPeriod)
+	sessionManagerOptions, eventStreamMaxLifetime, err := r.sessionLifecycleOptions()
 	if err != nil {
-		return fmt.Errorf("invalid session GC period %q: %w", r.SessionGCPeriod, err)
+		return err
 	}
 
 	roots, err := r.getRoots()
@@ -211,11 +214,40 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 	}
 
 	return r.n.runMCP(cmd.Context(), cfgFactory, runtime, callbackHandler, auditLogCollector, store, mcpOpts{
-		Auth:                           auth.Auth(r.Auth),
-		ListenAddress:                  r.ListenAddress,
-		HealthzPath:                    r.HealthzPath,
-		ForceFetchToolList:             r.ForceFetchToolList,
-		StartUI:                        !r.DisableUI,
-		SessionGarbageCollectionPeriod: sessionGarbageCollectionPeriod,
+		Auth:                   auth.Auth(r.Auth),
+		ListenAddress:          r.ListenAddress,
+		HealthzPath:            r.HealthzPath,
+		ForceFetchToolList:     r.ForceFetchToolList,
+		StartUI:                !r.DisableUI,
+		EventStreamMaxLifetime: eventStreamMaxLifetime,
+		SessionManagerOptions:  sessionManagerOptions,
 	})
+}
+
+func (r *Run) sessionLifecycleOptions() (session.ManagerOptions, time.Duration, error) {
+	sessionGarbageCollectionPeriod, err := time.ParseDuration(r.SessionGCPeriod)
+	if err != nil {
+		return session.ManagerOptions{}, 0,
+			fmt.Errorf("invalid session GC period %q: %w", r.SessionGCPeriod, err)
+	}
+	liveSessionIdleTTL, err := time.ParseDuration(r.LiveSessionIdleTTL)
+	if err != nil || liveSessionIdleTTL <= 0 {
+		return session.ManagerOptions{}, 0,
+			fmt.Errorf("invalid live session idle TTL %q: must be a positive duration", r.LiveSessionIdleTTL)
+	}
+	eventStreamMaxLifetime, err := time.ParseDuration(r.EventStreamMaxLifetime)
+	if err != nil || eventStreamMaxLifetime <= 0 {
+		return session.ManagerOptions{}, 0,
+			fmt.Errorf("invalid event stream max lifetime %q: must be a positive duration", r.EventStreamMaxLifetime)
+	}
+	if r.MaxLiveSessions <= 0 {
+		return session.ManagerOptions{}, 0,
+			fmt.Errorf("invalid max live sessions %d: must be positive", r.MaxLiveSessions)
+	}
+
+	return session.ManagerOptions{
+		DatabaseGarbageCollectionPeriod: sessionGarbageCollectionPeriod,
+		LiveSessionIdleTTL:              liveSessionIdleTTL,
+		MaxLiveSessions:                 r.MaxLiveSessions,
+	}, eventStreamMaxLifetime, nil
 }
