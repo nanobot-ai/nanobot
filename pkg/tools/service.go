@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/obot-platform/nanobot/pkg/complete"
@@ -224,55 +225,90 @@ func (s *Service) GetPrompt(ctx context.Context, target, prompt string, args map
 }
 
 type clientFactory struct {
-	clientLock *sync.Mutex
-	client     *mcp.Client
+	state *clientFactoryState
+}
+
+// clientFactory values are copied out of session attributes. Keep all mutable
+// state behind a pointer so every copy continues to own and close the same
+// downstream client.
+type clientFactoryState struct {
+	clientLock sync.Mutex
+	client     atomic.Pointer[mcp.Client]
+	deleted    bool
 	oldState   *mcp.SessionState
 	envHash    string
 	new        func(client *mcp.SessionState) (*mcp.Client, error)
 }
 
+var errClientFactoryClosed = errors.New("client factory is closed")
+
 func newClientFactory(f func(state *mcp.SessionState) (*mcp.Client, error)) clientFactory {
 	return clientFactory{
-		clientLock: &sync.Mutex{},
-		new:        f,
+		state: &clientFactoryState{
+			new: f,
+		},
 	}
 }
 
-func (c *clientFactory) get(envHash string) (*mcp.Client, error) {
-	c.clientLock.Lock()
-	defer c.clientLock.Unlock()
-
-	if c.client != nil && c.client.Session.IsActive() && c.envHash == envHash {
-		return c.client, nil
+func (c *clientFactory) get(ownerCtx context.Context, envHash string) (*mcp.Client, error) {
+	c.state.clientLock.Lock()
+	defer c.state.clientLock.Unlock()
+	if c.state.deleted {
+		return nil, errClientFactoryClosed
+	}
+	if cause := context.Cause(ownerCtx); cause != nil {
+		return nil, fmt.Errorf("%w: owner session: %w", errClientFactoryClosed, cause)
 	}
 
-	if c.client != nil {
-		c.client.Close(false)
-		c.client = nil
+	client := c.state.client.Load()
+	if client != nil && client.Session.IsActive() && c.state.envHash == envHash {
+		return client, nil
 	}
 
-	newClient, err := c.new(c.oldState)
+	if client != nil {
+		client.Close(false)
+		c.state.client.Store(nil)
+	}
+
+	newClient, err := c.state.new(c.state.oldState)
 	if err != nil {
 		return nil, err
 	}
-	c.client = newClient
-	c.envHash = envHash
-	return c.client, nil
+	c.state.client.Store(newClient)
+	c.state.envHash = envHash
+	return newClient, nil
+}
+
+func (c *clientFactory) Close(deleteSession bool) {
+	c.state.clientLock.Lock()
+	defer c.state.clientLock.Unlock()
+	if c.state.deleted {
+		return
+	}
+	c.state.deleted = deleteSession
+
+	client := c.state.client.Swap(nil)
+	c.state.envHash = ""
+	if client != nil {
+		client.Close(deleteSession)
+	}
 }
 
 func (c *clientFactory) Serialize() (any, error) {
-	if c.client == nil || c.client.Session.ID() == "" {
+	client := c.state.client.Load()
+	if client == nil || client.Session.ID() == "" {
 		return nil, nil
 	}
-	return c.client.Session.State()
+	return client.Session.State()
 }
 
 func (c *clientFactory) Deserialize(data any) (_ any, err error) {
 	if data == nil {
 		return &clientFactory{
-			clientLock: &sync.Mutex{},
-			envHash:    c.envHash,
-			new:        c.new,
+			state: &clientFactoryState{
+				envHash: c.state.envHash,
+				new:     c.state.new,
+			},
 		}, nil
 	}
 
@@ -284,10 +320,11 @@ func (c *clientFactory) Deserialize(data any) (_ any, err error) {
 	}
 
 	return &clientFactory{
-		clientLock: &sync.Mutex{},
-		oldState:   &state,
-		envHash:    c.envHash,
-		new:        c.new,
+		state: &clientFactoryState{
+			oldState: &state,
+			envHash:  c.state.envHash,
+			new:      c.state.new,
+		},
 	}, nil
 }
 
@@ -306,15 +343,8 @@ func (s *Service) GetClient(ctx context.Context, name string) (*mcp.Client, erro
 	factory := newClientFactory(func(state *mcp.SessionState) (*mcp.Client, error) {
 		return s.newClient(ctx, name, state)
 	})
-	if session.Get(sessionKey, &factory) {
-		return factory.get(envHash)
-	}
-
-	// ensure we are holding the same object
-	session.Set(sessionKey, &factory)
-	session.Get(sessionKey, &factory)
-
-	return factory.get(envHash)
+	session.GetOrSetSessionCloser(sessionKey, &factory, &factory)
+	return factory.get(session.Context(), envHash)
 }
 
 func envMapHash(env map[string]string) (string, error) {

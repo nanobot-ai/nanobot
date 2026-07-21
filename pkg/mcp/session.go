@@ -31,7 +31,7 @@ func (f MessageHandlerFunc) OnMessage(ctx context.Context, msg Message) {
 type MessageFilter func(ctx context.Context, msg *Message) (*Message, error)
 
 type Wire interface {
-	Close(deleteSession bool)
+	SessionCloser
 	Wait()
 	Start(ctx context.Context, handler WireHandler) error
 	Send(ctx context.Context, req Message) error
@@ -52,6 +52,7 @@ type Session struct {
 	HookRunner        HookRunner
 	attributes        map[string]any
 	lock              sync.Mutex
+	explicitlyDeleted bool
 	filters           []filterRegistration
 	filterID          int
 	sessionManager    SessionStore
@@ -356,8 +357,17 @@ func (s *Session) Set(key string, value any) {
 	if s == nil {
 		return
 	}
+
 	s.lock.Lock()
+	if s.explicitlyDeleted {
+		s.lock.Unlock()
+		if closer, ok := value.(SessionCloser); ok {
+			closer.Close(true)
+		}
+		return
+	}
 	defer s.lock.Unlock()
+
 	if s.attributes == nil {
 		s.attributes = make(map[string]any)
 	}
@@ -410,6 +420,21 @@ func (s *Session) Get(key string, out any) (ret bool) {
 
 	s.lock.Lock()
 	defer s.lock.Unlock()
+	if s.explicitlyDeleted {
+		// A SessionCloser may create external state while deserializing. Once an
+		// explicit deletion starts, do not let a persisted closer be hydrated
+		// and re-attached after the deletion snapshot.
+		if _, ok := out.(SessionCloser); ok {
+			return false
+		}
+	}
+	return s.getLocked(key, out)
+}
+
+// getLocked is like get, but assumes the caller has already acquired the lock.
+// Callers must hold the lock when calling this method.
+// It returns true if the value was found and copied into out, false otherwise.
+func (s *Session) getLocked(key string, out any) bool {
 	v, ok := s.attributes[key]
 	if !ok {
 		return false
@@ -443,6 +468,41 @@ func (s *Session) Get(key string, out any) (ret bool) {
 	panic(fmt.Sprintf("can not marshal %T to type: %T", v, out))
 }
 
+// GetOrSetSessionCloser atomically resolves key into out, storing closer when
+// the key has no usable value. Persisted values are deserialized through out in
+// the same critical section so concurrent callers cannot replace each other's
+// closers. It returns false once explicit session deletion has begun.
+func (s *Session) GetOrSetSessionCloser(key string, closer SessionCloser, out any) bool {
+	if s == nil {
+		return false
+	}
+	ok, closeCloser := s.getOrSetSessionCloser(key, closer, out)
+	if closeCloser {
+		closer.Close(true)
+	}
+	return ok
+}
+
+func (s *Session) getOrSetSessionCloser(key string, closer SessionCloser, out any) (ok, closeCloser bool) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if s.explicitlyDeleted {
+		return false, true
+	}
+	if s.getLocked(key, out) {
+		return true, false
+	}
+	if s.attributes == nil {
+		s.attributes = make(map[string]any)
+	}
+	s.attributes[key] = closer
+	if s.copyInto(out, closer) {
+		return true, false
+	}
+	delete(s.attributes, key)
+	return false, true
+}
+
 func (s *Session) Attributes() map[string]any {
 	if s == nil || len(s.attributes) == 0 {
 		return nil
@@ -460,12 +520,58 @@ func (s *Session) Attributes() map[string]any {
 	return attributes
 }
 
+type SessionCloser interface {
+	Close(deleteSession bool)
+}
+
+func (s *Session) takeSessionClosers(deleteSession bool) []SessionCloser {
+	// Downstream clients are owned by the root server session. Idle session
+	// eviction uses Close(false) so those remote sessions can be restored later;
+	// only an explicit session deletion should be propagated to them.
+	if !deleteSession {
+		return nil
+	}
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.explicitlyDeleted = true
+	if s.Parent != nil {
+		return nil
+	}
+
+	var closers []SessionCloser
+	for key, value := range s.attributes {
+		if closer, ok := value.(SessionCloser); ok {
+			closers = append(closers, closer)
+			// Detach the closer while holding the lock so repeated closes cannot
+			// send duplicate deletion requests and State cannot persist it again.
+			delete(s.attributes, key)
+		}
+	}
+	return closers
+}
+
 func (s *Session) Close(deleteSession bool) {
+	if s == nil {
+		return
+	}
+
+	// Stop existing and new work before taking the deletion snapshot. Any
+	// closer registered before the snapshot is collected below; registrations
+	// after it are rejected by Set once explicitlyDeleted is set.
+	s.cancel(fmt.Errorf("session closed: %s, delete=%v", s.ID(), deleteSession))
+
 	if s.wire != nil {
 		s.wire.Close(deleteSession)
 	}
 	s.pendingRequest.Close()
-	s.cancel(fmt.Errorf("session closed: %s, delete=%v", s.ID(), deleteSession))
+
+	closers := s.takeSessionClosers(deleteSession)
+
+	// Invoke external cleanup without holding the session attribute lock.
+	for _, closer := range closers {
+		closer.Close(true)
+	}
 }
 
 func (s *Session) IsActive() bool {

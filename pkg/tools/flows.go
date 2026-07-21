@@ -56,8 +56,8 @@ func (s *Service) newGlobals(ctx context.Context, vars map[string]any, opt ...Ca
 			continue
 		}
 		var instructions string
-		if cf.client != nil && cf.client.Session != nil {
-			instructions = cf.client.Session.InitializeResult.Instructions
+		if client := cf.state.client.Load(); client != nil && client.Session != nil {
+			instructions = client.Session.InitializeResult.Instructions
 		}
 		servers[serverName] = map[string]any{
 			"instructions": instructions,

@@ -23,10 +23,102 @@ type sequenceHookRunner struct {
 	next      int
 }
 
+type recordingDeleteSessionCloser struct {
+	calls []bool
+}
+
+func (r *recordingDeleteSessionCloser) Close(deleteSession bool) {
+	r.calls = append(r.calls, deleteSession)
+}
+
+type closeCallbackWire struct {
+	onClose func(bool)
+}
+
+func (c *closeCallbackWire) Close(deleteSession bool) {
+	c.onClose(deleteSession)
+}
+
+func (*closeCallbackWire) Wait() {}
+
+func (*closeCallbackWire) Start(context.Context, WireHandler) error {
+	return nil
+}
+
+func (*closeCallbackWire) Send(context.Context, Message) error {
+	return nil
+}
+
+func (*closeCallbackWire) SessionID() string {
+	return "test-session"
+}
+
 func (r *sequenceHookRunner) RunHook(_ context.Context, _, out any, _ string) (bool, error) {
 	*(out.(*SessionMessageHook)) = r.responses[r.next]
 	r.next++
 	return true, nil
+}
+
+func TestSessionClosePropagatesExplicitDeleteToOwnedClosers(t *testing.T) {
+	session := NewEmptySession(context.Background())
+	closer := &recordingDeleteSessionCloser{}
+	session.Set("clients/downstream", closer)
+
+	session.Close(true)
+	session.Close(true)
+
+	if !slices.Equal(closer.calls, []bool{true}) {
+		t.Fatalf("close calls = %v, want [true]", closer.calls)
+	}
+}
+
+func TestSessionCloseDoesNotPropagateIdleCloseToOwnedClosers(t *testing.T) {
+	session := NewEmptySession(context.Background())
+	closer := &recordingDeleteSessionCloser{}
+	session.Set("clients/downstream", closer)
+
+	session.Close(false)
+
+	if len(closer.calls) != 0 {
+		t.Fatalf("close calls = %v, want none", closer.calls)
+	}
+}
+
+func TestSessionCloseCancelsBeforeCollectingOwnedClosers(t *testing.T) {
+	session := NewEmptySession(context.Background())
+	closer := &recordingDeleteSessionCloser{}
+	session.wire = &closeCallbackWire{onClose: func(deleteSession bool) {
+		if !deleteSession {
+			t.Error("wire Close called without explicit deletion")
+		}
+		if session.IsActive() {
+			t.Error("session still active while wire is closing")
+		}
+		// Inject a closer into the old race window. Close must take its snapshot
+		// after the wire has closed so this closer is not missed.
+		session.Set("clients/late", closer)
+	}}
+
+	session.Close(true)
+
+	if !slices.Equal(closer.calls, []bool{true}) {
+		t.Fatalf("close calls = %v, want [true]", closer.calls)
+	}
+}
+
+func TestSessionRejectsCloserAfterExplicitDelete(t *testing.T) {
+	session := NewEmptySession(context.Background())
+	session.Close(true)
+
+	closer := &recordingDeleteSessionCloser{}
+	session.Set("clients/late", closer)
+
+	if !slices.Equal(closer.calls, []bool{true}) {
+		t.Fatalf("close calls = %v, want [true]", closer.calls)
+	}
+	if session.Get("clients/late", nil) {
+		t.Fatal("closer was attached after explicit session deletion")
+	}
 }
 
 func TestCallAllHooksRecordsMutatedToolRequestBody(t *testing.T) {
