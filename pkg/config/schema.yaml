@@ -785,7 +785,6 @@ properties:
             - OpenAIResponses
             - OpenResponses
             - OpenAIChatCompletions
-            - BifrostRequest
           description: |
             The LLM API dialect this provider uses. This informs the agent on how to
             make the API request.
