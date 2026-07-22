@@ -4,7 +4,6 @@ GIT_TAG := $(shell git describe --tags --exact-match 2>/dev/null | xargs -I {} e
 GO_LD_FLAGS := "-s -w $(GIT_TAG)"
 
 build:
-	go generate ./...
 	go build -ldflags=$(GO_LD_FLAGS) -o bin/nanobot .
 
 sandbox-test:
@@ -33,12 +32,6 @@ validate:
 		git diff go.mod go.sum; \
 		exit 1; \
 	fi
-	@echo ""
-	@echo "Running UI validation checks..."
-	@echo "==> Installing UI dependencies..."
-	@pnpm install --frozen-lockfile
-	@echo "==> Running UI type check..."
-	@pnpm run ci
 	@echo "✓ All validation checks passed!"
 
 .PHONY: build sandbox-test sandbox-test-no-cache validate

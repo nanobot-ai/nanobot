@@ -71,6 +71,11 @@ func newBrowserProxy() http.Handler {
 	}
 }
 
+// BrowserHandler proxies browser-view traffic to the local browser service.
+func BrowserHandler() http.Handler {
+	return newBrowserProxy()
+}
+
 func (h *browserProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	switch trimBrowserPrefix(req.URL.Path) {
 	case "/healthz":

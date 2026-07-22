@@ -337,11 +337,11 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 	if oauthCallbackHandler != nil {
 		mux.Handle("/oauth/callback", oauthCallbackHandler)
 	}
-	if opts.StartUI {
-		mux.Handle("/", session.UISession(httpServer, sessionManager, api.Handler(sessionManager, address)))
-	} else {
-		mux.Handle("/", httpServer)
-	}
+	browserHandler := session.BrowserHandler()
+	mux.Handle("/browser", browserHandler)
+	mux.Handle("/browser/", browserHandler)
+	mux.Handle("/api/", api.Handler(sessionManager, address))
+	mux.Handle("/", httpServer)
 
 	handler, err := auth.Wrap(ctx, env, opts.Auth, n.DSN(), opts.HealthzPath, mux)
 	if err != nil {

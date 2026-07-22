@@ -44,26 +44,11 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "25"
-          cache: "pnpm"
-          cache-dependency-path: "pnpm-lock.yaml"
-
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version: "1.26"
           cache: true
-
-      - name: Generate
-        run: go generate ./...
 
       - name: Build
         run: CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/obot-platform/nanobot/pkg/version.Tag=${{ github.sha }} -X github.com/obot-platform/nanobot/pkg/version.BaseImage=ghcr.io/obot-platform/nanobot:${{ github.sha }}" -o nanobot .

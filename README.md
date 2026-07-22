@@ -93,7 +93,7 @@ Start Nanobot with:
 nanobot run ./nanobot.yaml
 ```
 
-The UI will be available at [http://localhost:8080](http://localhost:8080).
+Nanobot serves MCP over HTTP at [http://localhost:8080](http://localhost:8080). Connect it to an MCP-compatible host such as Obot to interact with the agent.
 
 ### Directory-Based Configuration
 
@@ -227,34 +227,6 @@ Contributions are welcome! Nanobot is still in **alpha**, so expect active devel
 make
 ```
 
-### Working on the UI
-
-The Nanobot UI lives in the `./ui` directory. To develop against it:
-
-1. Remove the old build artifacts:
-
-   ```bash
-   rm -rf ./ui/dist
-   ```
-
-2. Rebuild the Nanobot binary:
-
-   ```bash
-   make
-   ```
-
-3. Start the UI in development mode:
-
-   ```bash
-   cd ui
-   npm run dev
-   ```
-
-4. The UI must be served from port **5173**.\
-   Nanobot runs on port **8080** and will forward UI requests to `:5173`.
-
----
-
 ## Features & Roadmap
 
 Nanobot aims to be a **fully compliant MCP Host** and support all MCP + MCP-UI features.
@@ -275,7 +247,6 @@ Nanobot aims to be a **fully compliant MCP Host** and support all MCP + MCP-UI f
 
 - Full MCP + MCP-UI compliance
 - More robust multi-agent support
-- Production-ready UI
 - Expanded model provider support
 - Expanded authentication and security features
 - Frontend integrations (Slack, SMS, email, embedded web agents)

@@ -3,9 +3,6 @@
 # Build stage
 FROM golang:1.26-alpine AS builder
 
-# Install Node.js and pnpm for UI build
-RUN apk add --no-cache nodejs npm && npm install -g pnpm
-
 WORKDIR /build
 
 # Copy go mod files first for better caching
@@ -15,8 +12,8 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build UI and binary
-RUN CI=true CGO_ENABLED=0 go generate ./... && go build -o nanobot .
+# Build binary
+RUN CGO_ENABLED=0 go build -o nanobot .
 
 # Final stage
 FROM cgr.dev/chainguard/wolfi-base:latest AS runtime

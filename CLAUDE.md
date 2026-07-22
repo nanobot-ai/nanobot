@@ -4,19 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Nanobot is a standalone MCP (Model Context Protocol) host that enables building agents with MCP and MCP-UI. Unlike built-in MCP hosts in applications like VSCode, Claude, or ChatGPT, Nanobot is designed to be an open-source, deployable solution that combines MCP servers with LLMs to create agent experiences through various interfaces (chat, voice, SMS, etc.). The project is written in Go (backend) and Svelte 5 + TypeScript (frontend UI).
+Nanobot is a standalone MCP (Model Context Protocol) host that enables building agents with MCP and MCP-UI. Unlike built-in MCP hosts in applications like VSCode, Claude, or ChatGPT, Nanobot is designed to be an open-source, deployable solution that combines MCP servers with LLMs to create agent experiences through external interfaces such as Obot. The project is written in Go.
 
 **Technology Stack:**
-- Backend: Go 1.26.0 with GORM (SQLite, MySQL, PostgreSQL), goja (JavaScript runtime for hooks)
-- Frontend: Svelte 5, SvelteKit (static adapter), TypeScript, TailwindCSS 4, DaisyUI
-- Package Manager: pnpm (for frontend dependencies)
+- Go 1.26.0 with GORM (SQLite, MySQL, PostgreSQL) and goja (JavaScript runtime for hooks)
 
 ## Build and Development Commands
 
 ### Backend (Go)
 
 ```bash
-# Build the nanobot binary (automatically builds UI via go generate)
+# Build the nanobot binary
 make
 
 # Run nanobot with a configuration file
@@ -28,46 +26,9 @@ go test ./...
 # Run a specific test
 go test ./pkg/agents -run TestName
 
-# Generate code (builds UI and runs Go code generation)
-# NOTE: If building manually with `go build`, run this first to ensure UI is embedded
-go generate ./...
-
 # Format Go code
 gofmt -w .
 ```
-
-### Frontend (UI)
-
-The UI is a SvelteKit application located in the `./ui` directory. This project uses **pnpm** as the package manager.
-
-```bash
-cd ui
-
-# Install dependencies (if needed)
-pnpm install
-
-# Start development server (runs on port 5173)
-pnpm run dev
-
-# Build for production
-pnpm run build
-
-# Lint and format
-pnpm run lint
-pnpm run format
-
-# Type checking
-pnpm run check
-```
-
-### Development Workflow for UI
-
-When working on the UI, Nanobot automatically forwards requests to the development server:
-
-1. Remove old build: `rm -rf ./ui/dist`
-2. Rebuild backend: `make`
-3. Start UI dev server: `cd ui && pnpm run dev`
-4. The UI runs on port 5173, while Nanobot backend runs on port 8080 and proxies UI requests
 
 ## Architecture Overview
 
@@ -109,28 +70,7 @@ When working on the UI, Nanobot automatically forwards requests to the developme
 
 - **Sandboxing** - MCP servers can run in Docker containers for isolation. The `pkg/mcp/sandbox/` handles containerization and port mapping.
 
-### Frontend Architecture
-
-**Tech Stack:** Svelte 5 (runes-based reactivity), SvelteKit with static adapter, TypeScript, TailwindCSS 4, DaisyUI, Lucide Icons (@lucide/svelte)
-
-**Key Files:**
-
-- `src/lib/chat.svelte.ts` - Core chat API and state management using Svelte 5 runes
-- `src/lib/types.ts` - TypeScript type definitions for chat, agents, messages, tools
-- `src/lib/components/` - Reusable Svelte components
-- `hooks.ts` (root) - TypeScript definitions for agent hooks (synced with Go types in `pkg/types/hooks.go`)
-
-**UI Components:**
-
-- Use Lucide icons (`@lucide/svelte`) for all icons in the UI
-- DaisyUI components for consistent styling
-- Svelte 5 runes for reactive state management
-
-**UI Communication:**
-
-- UI communicates with backend via HTTP endpoints at `/mcp/ui` (MCP-UI protocol)
-- Event streaming for real-time updates during agent execution
-- Session management via `Mcp-Session-Id` header
+Nanobot does not bundle a frontend. External UIs communicate through MCP endpoints, `/api/events`, and the browser proxy routes.
 
 ## Configuration
 
@@ -220,6 +160,3 @@ When implementing MCP features, refer to:
 ## Code Style
 
 - Go: Follow standard Go conventions, use `gofmt`
-- TypeScript/Svelte: Uses Prettier and ESLint (configs in `ui/`)
-- Use Svelte 5 runes (`$state`, `$derived`, `$effect`) rather than legacy store patterns
-- Icons: Always use Lucide icons from `@lucide/svelte` (e.g., `import { IconName } from '@lucide/svelte'`)
