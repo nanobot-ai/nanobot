@@ -1,12 +1,33 @@
 package cli
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/obot-platform/nanobot/pkg/config"
+	"github.com/obot-platform/nanobot/pkg/mcp"
 )
+
+func TestExternalUIRequest(t *testing.T) {
+	for _, test := range []struct {
+		path string
+		want bool
+	}{
+		{path: "/mcp"},
+		{path: "/mcp/chat"},
+		{path: "/mcp/ui", want: true},
+	} {
+		t.Run(test.path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, test.path, nil)
+			if got := isExternalUIRequest(mcp.WithRequest(t.Context(), req)); got != test.want {
+				t.Fatalf("isExternalUIRequest() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
 
 func TestNanobotConfigPathsDefault(t *testing.T) {
 	n := &Nanobot{}

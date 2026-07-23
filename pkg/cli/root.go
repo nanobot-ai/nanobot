@@ -277,6 +277,11 @@ type mcpOpts struct {
 	SessionGarbageCollectionPeriod time.Duration
 }
 
+func isExternalUIRequest(ctx context.Context) bool {
+	req := mcp.RequestFromContext(ctx)
+	return req != nil && req.URL.Path == "/mcp/ui"
+}
+
 func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, auditLogCollector auditlogs.Collector, store *session.Store, opts mcpOpts) error {
 	envProvider := func() (map[string]string, error) {
 		return n.loadEnv()
@@ -285,6 +290,19 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 	env, err := envProvider()
 	if err != nil {
 		return fmt.Errorf("failed to load environment: %w", err)
+	}
+
+	config := func(ctx context.Context, profile string) (types.Config, error) {
+		cfg, err := baseConfig(ctx, profile)
+		if err != nil {
+			return types.Config{}, err
+		}
+
+		if isExternalUIRequest(ctx) {
+			return config.Merge(cfg, config.UI)
+		}
+
+		return cfg, nil
 	}
 
 	address := opts.ListenAddress
@@ -296,7 +314,7 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 
 	sessionManager := session.NewManager(ctx, store, opts.SessionGarbageCollectionPeriod)
 
-	var mcpServer mcp.MessageHandler = server.NewServer(runt, baseConfig, sessionManager, server.Options{
+	var mcpServer mcp.MessageHandler = server.NewServer(runt, config, sessionManager, server.Options{
 		ForceFetchToolList: opts.ForceFetchToolList,
 	})
 
