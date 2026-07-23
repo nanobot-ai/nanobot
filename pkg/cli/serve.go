@@ -23,7 +23,6 @@ import (
 type Run struct {
 	Auth
 	ListenAddress                string            `usage:"Address to listen on" default:"localhost:8080" short:"a"`
-	DisableUI                    bool              `usage:"Disable the UI"`
 	ForceFetchToolList           bool              `usage:"Always fetch tools when listing instead of using session cache"`
 	HealthzPath                  string            `usage:"Path to serve healthz on"`
 	AuditLogSendURL              string            `usage:"URL to send audit logs to"`
@@ -215,7 +214,6 @@ func (r *Run) Run(cmd *cobra.Command, args []string) (err error) {
 		ListenAddress:                  r.ListenAddress,
 		HealthzPath:                    r.HealthzPath,
 		ForceFetchToolList:             r.ForceFetchToolList,
-		StartUI:                        !r.DisableUI,
 		SessionGarbageCollectionPeriod: sessionGarbageCollectionPeriod,
 	})
 }

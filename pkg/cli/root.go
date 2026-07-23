@@ -273,7 +273,6 @@ type mcpOpts struct {
 	ListenAddress                  string
 	HealthzPath                    string
 	ForceFetchToolList             bool
-	StartUI                        bool
 	SessionGarbageCollectionPeriod time.Duration
 }
 
@@ -287,19 +286,6 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 		return fmt.Errorf("failed to load environment: %w", err)
 	}
 
-	config := func(ctx context.Context, profile string) (types.Config, error) {
-		cfg, err := baseConfig(ctx, profile)
-		if err != nil {
-			return types.Config{}, err
-		}
-
-		if opts.StartUI {
-			return config.Merge(cfg, config.UI)
-		}
-
-		return cfg, nil
-	}
-
 	address := opts.ListenAddress
 	if strings.HasPrefix("address", "http://") {
 		address = strings.TrimPrefix(address, "http://")
@@ -309,7 +295,7 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 
 	sessionManager := session.NewManager(ctx, store, opts.SessionGarbageCollectionPeriod)
 
-	var mcpServer mcp.MessageHandler = server.NewServer(runt, config, sessionManager, server.Options{
+	var mcpServer mcp.MessageHandler = server.NewServer(runt, baseConfig, sessionManager, server.Options{
 		ForceFetchToolList: opts.ForceFetchToolList,
 	})
 
