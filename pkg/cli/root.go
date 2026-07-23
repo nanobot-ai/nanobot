@@ -272,6 +272,7 @@ type mcpOpts struct {
 	Auth                           auth.Auth
 	ListenAddress                  string
 	HealthzPath                    string
+	EnableBrowser                  bool
 	ForceFetchToolList             bool
 	SessionGarbageCollectionPeriod time.Duration
 }
@@ -319,15 +320,7 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 		return fmt.Errorf("failed to create HTTP server: %w", err)
 	}
 
-	mux := http.NewServeMux()
-	if oauthCallbackHandler != nil {
-		mux.Handle("/oauth/callback", oauthCallbackHandler)
-	}
-	browserHandler := session.BrowserHandler()
-	mux.Handle("/browser", browserHandler)
-	mux.Handle("/browser/", browserHandler)
-	mux.Handle("/api/", api.Handler(sessionManager, address))
-	mux.Handle("/", httpServer)
+	mux := newHTTPMux(httpServer, oauthCallbackHandler, api.Handler(sessionManager, address), opts.EnableBrowser)
 
 	handler, err := auth.Wrap(ctx, env, opts.Auth, n.DSN(), opts.HealthzPath, mux)
 	if err != nil {
@@ -361,4 +354,19 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 	}
 	slog.Debug("Server stopped", "error", err)
 	return err
+}
+
+func newHTTPMux(httpServer, oauthCallbackHandler, apiHandler http.Handler, enableBrowser bool) *http.ServeMux {
+	mux := http.NewServeMux()
+	if oauthCallbackHandler != nil {
+		mux.Handle("/oauth/callback", oauthCallbackHandler)
+	}
+	if enableBrowser {
+		browserHandler := session.BrowserHandler()
+		mux.Handle("/browser", browserHandler)
+		mux.Handle("/browser/", browserHandler)
+	}
+	mux.Handle("/api/", apiHandler)
+	mux.Handle("/", httpServer)
+	return mux
 }

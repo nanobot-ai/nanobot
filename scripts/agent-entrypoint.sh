@@ -13,11 +13,23 @@ DEPTH=24
 
 should_start_browser_stack() {
 	for arg in "$@"; do
-		if [ "${arg}" = "--disable-ui" ]; then
+		case "${arg}" in
+		--enable-browser | --enable-browser=true)
+			return 0
+			;;
+		--enable-browser=false)
 			return 1
-		fi
+			;;
+		esac
 	done
-	return 0
+
+	case "${NANOBOT_RUN_ENABLE_BROWSER:-}" in
+	1 | true | TRUE | True)
+		return 0
+		;;
+	esac
+
+	return 1
 }
 
 prepare_runtime_dirs() {
@@ -95,7 +107,7 @@ start_browser_stack() {
 	echo "  - Display: :${DISPLAY_NUM}"
 	echo "  - VNC port: ${VNC_PORT}"
 	echo "  - Internal WebSocket port: ${WEBSOCKET_PORT}"
-	echo "  - Access via Nanobot UI BrowserView on http://localhost:${app_port}"
+	echo "  - Access via the external browser viewer on http://localhost:${app_port}/browser"
 }
 
 if [ "$(id -u)" = "0" ]; then
