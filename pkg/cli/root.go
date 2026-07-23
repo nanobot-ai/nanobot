@@ -272,14 +272,9 @@ type mcpOpts struct {
 	Auth                           auth.Auth
 	ListenAddress                  string
 	HealthzPath                    string
-	EnableBrowser                  bool
 	ForceFetchToolList             bool
+	StartUI                        bool
 	SessionGarbageCollectionPeriod time.Duration
-}
-
-func isExternalUIRequest(ctx context.Context) bool {
-	req := mcp.RequestFromContext(ctx)
-	return req != nil && req.URL.Path == "/mcp/ui"
 }
 
 func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, runt *runtime.Runtime, oauthCallbackHandler mcp.CallbackServer, auditLogCollector auditlogs.Collector, store *session.Store, opts mcpOpts) error {
@@ -298,7 +293,7 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 			return types.Config{}, err
 		}
 
-		if isExternalUIRequest(ctx) {
+		if opts.StartUI {
 			return config.Merge(cfg, config.UI)
 		}
 
@@ -338,7 +333,15 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 		return fmt.Errorf("failed to create HTTP server: %w", err)
 	}
 
-	mux := newHTTPMux(httpServer, oauthCallbackHandler, api.Handler(sessionManager, address), opts.EnableBrowser)
+	mux := http.NewServeMux()
+	if oauthCallbackHandler != nil {
+		mux.Handle("/oauth/callback", oauthCallbackHandler)
+	}
+	browserHandler := session.BrowserHandler()
+	mux.Handle("/browser", browserHandler)
+	mux.Handle("/browser/", browserHandler)
+	mux.Handle("/api/", api.Handler(sessionManager, address))
+	mux.Handle("/", httpServer)
 
 	handler, err := auth.Wrap(ctx, env, opts.Auth, n.DSN(), opts.HealthzPath, mux)
 	if err != nil {
@@ -372,19 +375,4 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 	}
 	slog.Debug("Server stopped", "error", err)
 	return err
-}
-
-func newHTTPMux(httpServer, oauthCallbackHandler, apiHandler http.Handler, enableBrowser bool) *http.ServeMux {
-	mux := http.NewServeMux()
-	if oauthCallbackHandler != nil {
-		mux.Handle("/oauth/callback", oauthCallbackHandler)
-	}
-	if enableBrowser {
-		browserHandler := session.BrowserHandler()
-		mux.Handle("/browser", browserHandler)
-		mux.Handle("/browser/", browserHandler)
-	}
-	mux.Handle("/api/", apiHandler)
-	mux.Handle("/", httpServer)
-	return mux
 }
