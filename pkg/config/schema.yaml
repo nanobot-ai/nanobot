@@ -253,6 +253,11 @@ definitions:
         description: |
           The entrypoint for the Nanobot. This is the tool, agent, or flow that
           will be invoked when "nanobot run" is executed.
+      lazyInitialize:
+        type: boolean
+        description: |
+          Whether to lazily initialize the published MCP servers. Defaults to true
+          when unset, except when publishing a single MCP server as a proxy.
 
   ToolOverride:
     type: object

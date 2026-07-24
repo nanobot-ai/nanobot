@@ -412,14 +412,19 @@ func (s *Server) handleInitialize(ctx context.Context, msg mcp.Message, payload 
 		experimental[types.MetaNanobot] = meta
 	}
 
-	if c.Publish.IsSingleServerProxy() {
-		// This nanobot just exposes a single MCP server. Call the initialize directly and return its response.
-		c, err := s.data.InitializedClient(ctx, c.Publish.MCPServers[0])
-		if err != nil {
-			return fmt.Errorf("failed to initialize client: %w", err)
-		}
+	if !c.Publish.IsLazyInitialize() {
+		// We need to initialize the clients immediately
+		for _, server := range c.Publish.MCPServers {
+			client, err := s.data.InitializedClient(ctx, server)
+			if err != nil {
+				return fmt.Errorf("failed to initialize client for %q: %w", server, err)
+			}
 
-		return msg.Reply(ctx, c.Session.InitializeResult)
+			if c.Publish.IsSingleServerProxy() {
+				// If this is just one server, then return the initialize result all the way back to the client.
+				return msg.Reply(ctx, client.Session.InitializeResult)
+			}
+		}
 	}
 
 	return msg.Reply(ctx, mcp.InitializeResult{
