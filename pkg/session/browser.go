@@ -44,6 +44,25 @@ type browserProxyHandler struct {
 	currentSize string
 }
 
+// BrowserProxy serves the browser and supporting API routes used by external UIs.
+func BrowserProxy(next, apiHandler http.Handler) http.Handler {
+	browserProxy := newBrowserProxy()
+
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/browser" || strings.HasPrefix(req.URL.Path, "/browser/") {
+			browserProxy.ServeHTTP(rw, req)
+			return
+		}
+
+		if req.URL.Path == "/api" || strings.HasPrefix(req.URL.Path, "/api/") {
+			apiHandler.ServeHTTP(rw, req)
+			return
+		}
+
+		next.ServeHTTP(rw, req)
+	})
+}
+
 func newBrowserProxy() http.Handler {
 	target, err := url.Parse(envOrDefault("BROWSER_WEBSOCKET_TARGET", defaultBrowserProxyTarget))
 	if err != nil {

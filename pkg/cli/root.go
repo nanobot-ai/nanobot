@@ -338,7 +338,7 @@ func (n *Nanobot) runMCP(ctx context.Context, baseConfig types.ConfigFactory, ru
 		mux.Handle("/oauth/callback", oauthCallbackHandler)
 	}
 	if opts.StartUI {
-		mux.Handle("/", session.UISession(httpServer, sessionManager, api.Handler(sessionManager, address)))
+		mux.Handle("/", session.BrowserProxy(httpServer, api.Handler(sessionManager, address)))
 	} else {
 		mux.Handle("/", httpServer)
 	}
