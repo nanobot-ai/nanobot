@@ -191,6 +191,12 @@ func (s *HTTPClient) SessionID() string {
 func (s *HTTPClient) Close(deleteSession bool) {
 	sessionID := s.SessionID()
 	slog.Info("mcp client closing", "server", s.serverName, "session_id", sessionID, "delete_session", deleteSession)
+	defer func() {
+		if s.cancel != nil {
+			s.cancel(fmt.Errorf("http client closed session: %v, deleteSession=%v", sessionID, deleteSession))
+		}
+		s.waiter.Close()
+	}()
 
 	if deleteSession {
 		s.initializeLock.RLock()
@@ -204,7 +210,13 @@ func (s *HTTPClient) Close(deleteSession bool) {
 			httpClient := s.httpClient
 			s.clientLock.RUnlock()
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			closeCtx := context.Background()
+			if s.ctx != nil {
+				// Preserve request-scoped values such as passthrough headers and
+				// token-exchange credentials without inheriting cancellation.
+				closeCtx = context.WithoutCancel(s.ctx)
+			}
+			ctx, cancel := context.WithTimeout(closeCtx, 5*time.Second)
 			defer cancel()
 			req, err := s.newRequest(ctx, http.MethodDelete, nil)
 			if err != nil {
@@ -221,15 +233,6 @@ func (s *HTTPClient) Close(deleteSession bool) {
 			resp.Body.Close()
 		}
 	}
-
-	if s.cancel != nil {
-		sid := ""
-		if s.sessionID != nil {
-			sid = *s.sessionID
-		}
-		s.cancel(fmt.Errorf("http client closed session: %v, deleteSession=%v", sid, deleteSession))
-	}
-	s.waiter.Close()
 }
 
 func (s *HTTPClient) Wait() {
@@ -608,7 +611,7 @@ func (s *HTTPClient) initialize(ctx context.Context, msg Message) error {
 		"status_code", resp.StatusCode)
 
 	go func() {
-		if err = s.ensureSSE(ctx, nil, ""); err != nil {
+		if err := s.ensureSSE(ctx, nil, ""); err != nil {
 			slog.Error("failed to initialize SSE", "error", err)
 		}
 	}()

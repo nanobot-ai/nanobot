@@ -1,12 +1,292 @@
 package tools
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/obot-platform/nanobot/pkg/mcp"
 	"github.com/obot-platform/nanobot/pkg/types"
 )
+
+func TestClientFactoryCloseIsTerminal(t *testing.T) {
+	var createCount atomic.Int32
+	factory := newClientFactory(func(*mcp.SessionState) (*mcp.Client, error) {
+		createCount.Add(1)
+		return nil, nil
+	})
+
+	factory.Close(true)
+	client, err := factory.get(context.Background(), "env")
+
+	if !errors.Is(err, errClientFactoryClosed) {
+		t.Fatalf("get error = %v, want %v", err, errClientFactoryClosed)
+	}
+	if client != nil {
+		t.Fatal("closed factory returned a client")
+	}
+	if got := createCount.Load(); got != 0 {
+		t.Fatalf("client create count = %d, want 0", got)
+	}
+}
+
+func TestClientFactoryCloseWithoutDeleteRemainsReusable(t *testing.T) {
+	var createCount atomic.Int32
+	factory := newClientFactory(func(*mcp.SessionState) (*mcp.Client, error) {
+		createCount.Add(1)
+		return nil, nil
+	})
+
+	factory.Close(false)
+	if _, err := factory.get(context.Background(), "env"); err != nil {
+		t.Fatalf("get after non-deleting close returned error: %v", err)
+	}
+	if got := createCount.Load(); got != 1 {
+		t.Fatalf("client create count = %d, want 1", got)
+	}
+}
+
+func TestClientFactoryRejectsCanceledOwnerBeforeResume(t *testing.T) {
+	ownerCtx, cancel := context.WithCancelCause(context.Background())
+	ownerErr := errors.New("owner session deleted")
+	cancel(ownerErr)
+
+	var createCount atomic.Int32
+	factory := newClientFactory(func(*mcp.SessionState) (*mcp.Client, error) {
+		createCount.Add(1)
+		return nil, nil
+	})
+	factory.state.oldState = &mcp.SessionState{ID: "persisted-downstream-session"}
+
+	client, err := factory.get(ownerCtx, "env")
+
+	if !errors.Is(err, errClientFactoryClosed) || !errors.Is(err, ownerErr) {
+		t.Fatalf("get error = %v, want closed factory and owner errors", err)
+	}
+	if client != nil {
+		t.Fatal("factory with canceled owner returned a client")
+	}
+	if got := createCount.Load(); got != 0 {
+		t.Fatalf("client create count = %d, want 0", got)
+	}
+}
+
+func TestClientFactoriesRegisterAtomically(t *testing.T) {
+	session := mcp.NewEmptySession(context.Background())
+	start := make(chan struct{})
+	states := make(chan *clientFactoryState, 2)
+
+	for range 2 {
+		factory := newClientFactory(func(*mcp.SessionState) (*mcp.Client, error) {
+			return nil, errors.New("unexpected client creation")
+		})
+		go func() {
+			<-start
+			if !session.GetOrSetSessionCloser("clients/downstream", &factory, &factory) {
+				states <- nil
+				return
+			}
+			states <- factory.state
+		}()
+	}
+	close(start)
+
+	first, second := <-states, <-states
+	if first == nil || second == nil {
+		t.Fatal("client factory registration unexpectedly failed")
+	}
+	if first != second {
+		t.Fatal("concurrent registrations resolved to different client factories")
+	}
+
+	session.Close(true)
+	closedFactory := clientFactory{state: first}
+	if _, err := closedFactory.get(context.Background(), "env"); !errors.Is(err, errClientFactoryClosed) {
+		t.Fatalf("get error after session deletion = %v, want %v", err, errClientFactoryClosed)
+	}
+}
+
+func TestGetClientDoesNotHydrateAfterParentDelete(t *testing.T) {
+	var requestCount atomic.Int32
+	downstream := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		rw.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(downstream.Close)
+
+	parent, err := mcp.NewServerSession(context.Background(), mcp.MessageHandlerFunc(func(context.Context, mcp.Message) {}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent.GetSession().Set("clients/downstream", mcp.SessionState{ID: "persisted-downstream-session"})
+
+	service := NewToolsService()
+	clientCtx := types.WithConfig(parent.GetSession().Context(), types.Config{
+		MCPServers: map[string]mcp.Server{
+			"downstream": {BaseURL: downstream.URL},
+		},
+	})
+	parent.Close(true)
+
+	client, err := service.GetClient(clientCtx, "downstream")
+
+	if !errors.Is(err, errClientFactoryClosed) {
+		t.Fatalf("GetClient error = %v, want %v", err, errClientFactoryClosed)
+	}
+	if client != nil {
+		t.Fatal("GetClient returned a client after parent deletion")
+	}
+	if got := requestCount.Load(); got != 0 {
+		t.Fatalf("downstream request count = %d, want 0", got)
+	}
+}
+
+func TestHTTPServerDeleteClosesDownstreamHTTPSession(t *testing.T) {
+	const (
+		downstreamSessionID = "downstream-session-2"
+		passthroughHeader   = "X-Downstream-Auth"
+		passthroughValue    = "session-token"
+	)
+
+	type deleteRequest struct {
+		sessionID   string
+		passthrough string
+	}
+	deleteRequests := make(chan deleteRequest, 1)
+	var deleteCount atomic.Int32
+	var initializeCount atomic.Int32
+	downstream := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodDelete:
+			deleteCount.Add(1)
+			select {
+			case deleteRequests <- deleteRequest{
+				sessionID:   req.Header.Get(mcp.SessionIDHeader),
+				passthrough: req.Header.Get(passthroughHeader),
+			}:
+			default:
+			}
+			rw.WriteHeader(http.StatusNoContent)
+		case http.MethodGet:
+			// The client may probe for an event stream after initialization.
+			rw.WriteHeader(http.StatusMethodNotAllowed)
+		case http.MethodPost:
+			var msg mcp.Message
+			if err := json.NewDecoder(req.Body).Decode(&msg); err != nil {
+				http.Error(rw, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if msg.Method != "initialize" {
+				rw.WriteHeader(http.StatusAccepted)
+				return
+			}
+
+			result, err := json.Marshal(mcp.InitializeResult{
+				ProtocolVersion: "2025-06-18",
+				ServerInfo: mcp.ServerInfo{
+					Name:    "downstream",
+					Version: "test",
+				},
+			})
+			if err != nil {
+				http.Error(rw, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			rw.Header().Set(mcp.SessionIDHeader, fmt.Sprintf("downstream-session-%d", initializeCount.Add(1)))
+			rw.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(rw).Encode(mcp.Message{
+				JSONRPC: "2.0",
+				ID:      msg.ID,
+				Result:  result,
+			})
+		default:
+			rw.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	t.Cleanup(downstream.Close)
+
+	parent, err := mcp.NewServerSession(context.Background(), mcp.MessageHandlerFunc(func(context.Context, mcp.Message) {}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { parent.Close(false) })
+
+	service := NewToolsService()
+	clientCtx := types.WithConfig(parent.GetSession().Context(), types.Config{
+		MCPServers: map[string]mcp.Server{
+			"downstream": {
+				BaseURL:            downstream.URL,
+				PassthroughHeaders: []string{passthroughHeader},
+			},
+		},
+	})
+	incoming := httptest.NewRequest(http.MethodPost, "http://nanobot.example/mcp", nil)
+	incoming.Header.Set(passthroughHeader, passthroughValue)
+	clientCtx = mcp.WithRequest(clientCtx, incoming)
+	downstreamClient, err := service.GetClient(clientCtx, "downstream")
+	if err != nil {
+		t.Fatalf("failed to create downstream client: %v", err)
+	}
+	if got := downstreamClient.Session.ID(); got != "downstream-session-1" {
+		t.Fatalf("first downstream session ID = %q, want %q", got, "downstream-session-1")
+	}
+
+	// Force the factory through its copied-value replacement path. The session
+	// attribute must keep ownership of the replacement client so DELETE closes
+	// this second remote session rather than the stale first one.
+	downstreamClient.Close(false)
+	downstreamClient, err = service.GetClient(clientCtx, "downstream")
+	if err != nil {
+		t.Fatalf("failed to replace downstream client: %v", err)
+	}
+	if got := downstreamClient.Session.ID(); got != downstreamSessionID {
+		t.Fatalf("replacement downstream session ID = %q, want %q", got, downstreamSessionID)
+	}
+	if got := deleteCount.Load(); got != 0 {
+		t.Fatalf("downstream DELETE count before parent deletion = %d, want 0", got)
+	}
+
+	sessions := mcp.NewInMemorySessionStore()
+	if err := sessions.Store(context.Background(), parent.ID(), parent); err != nil {
+		t.Fatal(err)
+	}
+	front, err := mcp.NewHTTPServer(nil, mcp.MessageHandlerFunc(func(context.Context, mcp.Message) {}), mcp.HTTPServerOptions{
+		SessionStore: sessions,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "http://nanobot.example/mcp", nil)
+	req.Header.Set(mcp.SessionIDHeader, parent.ID())
+	rw := httptest.NewRecorder()
+	front.ServeHTTP(rw, req)
+
+	if rw.Code != http.StatusOK {
+		t.Fatalf("front DELETE status = %d, want %d; body: %s", rw.Code, http.StatusOK, rw.Body.String())
+	}
+	select {
+	case got := <-deleteRequests:
+		if got.sessionID != downstreamSessionID {
+			t.Fatalf("downstream DELETE session ID = %q, want %q", got.sessionID, downstreamSessionID)
+		}
+		if got.passthrough != passthroughValue {
+			t.Fatalf("downstream DELETE passthrough header = %q, want %q", got.passthrough, passthroughValue)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for downstream DELETE")
+	}
+	if got := deleteCount.Load(); got != 1 {
+		t.Fatalf("downstream DELETE count = %d, want 1", got)
+	}
+}
 
 func testConfig() types.Config {
 	return types.Config{
