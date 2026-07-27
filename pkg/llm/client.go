@@ -10,7 +10,6 @@ import (
 	"github.com/obot-platform/nanobot/pkg/complete"
 	"github.com/obot-platform/nanobot/pkg/envvar"
 	"github.com/obot-platform/nanobot/pkg/llm/anthropic"
-	"github.com/obot-platform/nanobot/pkg/llm/bifrost"
 	"github.com/obot-platform/nanobot/pkg/llm/completions"
 	"github.com/obot-platform/nanobot/pkg/llm/progress"
 	"github.com/obot-platform/nanobot/pkg/llm/responses"
@@ -140,25 +139,16 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 			BaseURL: providerCfg.BaseURL,
 			Headers: providerCfg.Headers,
 		}).Complete(ctx, req, opts...)
-	case types.DialectBifrostRequest:
-		// provider is the key from llmProviders config (e.g. "bedrock", "openai") and is
-		// forwarded to Bifrost handler as the target backend provider name.
-		return bifrost.NewClient(bifrost.Config{
-			APIKey:   providerCfg.APIKey,
-			BaseURL:  providerCfg.BaseURL,
-			Headers:  providerCfg.Headers,
-			Provider: provider,
-		}).Complete(ctx, req, opts...)
-	case types.DialectOpenAIResponses, types.DialectOpenResponses:
+	case "", types.DialectOpenAIResponses, types.DialectOpenResponses:
 		// DialectOpenAIResponses and DialectOpenResponses are intentionally distinct specs that currently
 		// share the same client implementation but may diverge
-		fallthrough
-	default:
 		return responses.NewClient(responses.Config{
 			APIKey:  providerCfg.APIKey,
 			BaseURL: providerCfg.BaseURL,
 			Headers: providerCfg.Headers,
 		}).Complete(ctx, req, opts...)
+	default:
+		return nil, fmt.Errorf("unsupported LLM provider dialect %q", providerCfg.Dialect)
 	}
 }
 

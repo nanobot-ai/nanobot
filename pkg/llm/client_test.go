@@ -104,6 +104,21 @@ func TestCompleteUnknownProvider(t *testing.T) {
 	}
 }
 
+func TestCompleteUnknownDialect(t *testing.T) {
+	session := mcp.NewEmptySession(context.Background())
+	client := NewClient(Config{
+		LLMProviders: map[string]LLMProviderConfig{
+			"custom": {Dialect: "UnknownDialect"},
+		},
+	})
+
+	_, err := client.Complete(session.Context(), types.CompletionRequest{Model: "custom/model"})
+	wantErr := `unsupported LLM provider dialect "UnknownDialect"`
+	if err == nil || err.Error() != wantErr {
+		t.Errorf("got error %v, want %q", err, wantErr)
+	}
+}
+
 func TestDynamicConfigProviderResolution(t *testing.T) {
 	session := mcp.NewEmptySession(context.Background())
 	session.SetEnv(map[string]string{
