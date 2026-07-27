@@ -239,6 +239,14 @@ type Publish struct {
 	ResourceTemplates StringList          `json:"resourceTemplates,omitzero"`
 	MCPServers        StringList          `json:"mcpServers,omitzero"`
 	Entrypoint        StringList          `json:"entrypoint,omitempty"`
+	LazyInitialize    *bool               `json:"lazyInitialize,omitempty"`
+}
+
+func (p Publish) IsLazyInitialize() bool {
+	if p.IsSingleServerProxy() {
+		return false
+	}
+	return p.LazyInitialize == nil || *p.LazyInitialize
 }
 
 func (p Publish) IsSingleServerProxy() bool {
