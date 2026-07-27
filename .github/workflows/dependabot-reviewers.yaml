@@ -106,7 +106,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
 
           # --- Default reviewer config ---
-          REVIEWERS: "ibuildthecloud,njhale,thedadams,g-linville"
+          REVIEWERS: "ibuildthecloud,njhale,thedadams,g-linville,calvinmclean"
           TEAM_REVIEWERS: ""
         shell: bash
         run: |
