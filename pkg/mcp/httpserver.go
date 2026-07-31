@@ -319,7 +319,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 			auditLog.ResponseStatus = recorder.statusCode
 			responseHeaders, _ := json.Marshal(recorder.Header())
 			auditLog.ResponseHeaders = responseHeaders
-			auditLog.ProcessingTimeMs = time.Since(auditLog.CreatedAt).Milliseconds()
+			auditLog.SetProcessingTime()
 			h.auditLogCollector.CollectMCPAuditEntry(auditLog)
 			slog.Debug("mcp server completed http request",
 				"http_method", req.Method,
@@ -403,7 +403,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 		auditLog.ResponseBody = recorder.body.Bytes()
 		responseHeaders, _ := json.Marshal(recorder.Header())
 		auditLog.ResponseHeaders = responseHeaders
-		auditLog.ProcessingTimeMs = time.Since(auditLog.CreatedAt).Milliseconds()
+		auditLog.SetProcessingTime()
 		h.auditLogCollector.CollectMCPAuditEntry(auditLog)
 		slog.Debug("mcp server completed message",
 			"method", msg.Method,

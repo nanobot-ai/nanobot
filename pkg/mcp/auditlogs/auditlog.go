@@ -45,6 +45,17 @@ type MCPWebhookStatus struct {
 	Message string `json:"message,omitempty"`
 }
 
+// SetProcessingTime records the elapsed processing time for a completed audit
+// entry. Durations are reported in whole milliseconds, with sub-millisecond
+// calls rounded up so completed calls are not mistaken for missing durations.
+func (m *MCPAuditLog) SetProcessingTime() {
+	m.ProcessingTimeMs = processingTimeMilliseconds(time.Since(m.CreatedAt))
+}
+
+func processingTimeMilliseconds(elapsed time.Duration) int64 {
+	return max(elapsed.Milliseconds(), 1)
+}
+
 // RedactAPIKey redacts an API key, keeping everything to the third hyphen, or the first 12 characters, whichever is longer.
 // If the API key is less than 20 characters, it compares the third hyphen prefix to the first half and returns whichever is longer.
 func RedactAPIKey(apiKey string) string {

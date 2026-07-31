@@ -154,7 +154,7 @@ func (s *Service) collectAuditLog(auditLog *auditlogs.MCPAuditLog) {
 		return
 	}
 
-	auditLog.ProcessingTimeMs = time.Since(auditLog.CreatedAt).Milliseconds()
+	auditLog.SetProcessingTime()
 	if auditLog.ResponseStatus == 0 {
 		if auditLog.Error != "" {
 			auditLog.ResponseStatus = http.StatusInternalServerError
