@@ -1,6 +1,21 @@
 package auditlogs
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+func TestProcessingTimeMillisecondsRoundsUpSubMillisecondDuration(t *testing.T) {
+	if got := processingTimeMilliseconds(500 * time.Microsecond); got != 1 {
+		t.Fatalf("processingTimeMilliseconds() = %d, want 1", got)
+	}
+}
+
+func TestProcessingTimeMillisecondsPreservesWholeMilliseconds(t *testing.T) {
+	if got := processingTimeMilliseconds(10 * time.Millisecond); got != 10 {
+		t.Fatalf("processingTimeMilliseconds() = %d, want 10", got)
+	}
+}
 
 func TestRedactAPIKey(t *testing.T) {
 	tests := []struct {
