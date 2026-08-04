@@ -111,10 +111,10 @@ func discoverOAuthMetadata(ctx context.Context, client *http.Client, baseURL, au
 		ok                            bool
 	)
 	for _, resourceMetadataURL := range resourceMetadataURLs {
-		finalResourceMetadataURL = resourceMetadataURL
-		slog.Info("fetching protected resource metadata", "url", resourceMetadataURL)
+		finalResourceMetadataURL = resourceMetadataURL.url
+		slog.Info("fetching protected resource metadata", "url", resourceMetadataURL.url)
 
-		protectedResourceMetadataJSON, ok, err = getOAuthMetadataJSON(ctx, client, resourceMetadataURL.String(), headers)
+		protectedResourceMetadataJSON, ok, err = getOAuthMetadataJSON(ctx, client, resourceMetadataURL.url.String(), headers)
 		if err != nil {
 			return oauthMetadataDiscovery{}, false, fmt.Errorf("failed to get protected resource metadata: %w", err)
 		}
@@ -123,6 +123,9 @@ func discoverOAuthMetadata(ctx context.Context, client *http.Client, baseURL, au
 			protectedResourceMetadata, err = parseProtectedResourceMetadata(bytes.NewReader(protectedResourceMetadataJSON))
 			if err != nil {
 				return oauthMetadataDiscovery{}, false, fmt.Errorf("failed to parse protected resource metadata: %w", err)
+			}
+			if protectedResourceMetadata.Resource != resourceMetadataURL.expectedResource {
+				return oauthMetadataDiscovery{}, false, fmt.Errorf("protected resource metadata resource %q does not match expected resource %q", protectedResourceMetadata.Resource, resourceMetadataURL.expectedResource)
 			}
 
 			break
@@ -171,7 +174,12 @@ func discoverOAuthMetadata(ctx context.Context, client *http.Client, baseURL, au
 	}, true, nil
 }
 
-func oauthResourceMetadataURLs(baseURL, authenticateHeader string) ([]*url.URL, string, error) {
+type oauthResourceMetadataURL struct {
+	url              *url.URL
+	expectedResource string
+}
+
+func oauthResourceMetadataURLs(baseURL, authenticateHeader string) ([]oauthResourceMetadataURL, string, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to parse MCP URL: %w", err)
@@ -179,7 +187,7 @@ func oauthResourceMetadataURLs(baseURL, authenticateHeader string) ([]*url.URL, 
 
 	var (
 		resourceMetadataURLFromHeader string
-		resourceMetadataURLs          []*url.URL
+		resourceMetadataURLs          []oauthResourceMetadataURL
 		scope                         string
 	)
 	if authenticateHeader != "" {
@@ -195,17 +203,26 @@ func oauthResourceMetadataURLs(baseURL, authenticateHeader string) ([]*url.URL, 
 		if originalPath != "" {
 			withoutPathSuffix := *u
 			withoutPathSuffix.Path = ".well-known/oauth-protected-resource/" + originalPath
-			resourceMetadataURLs = append(resourceMetadataURLs, &withoutPathSuffix)
+			resourceMetadataURLs = append(resourceMetadataURLs, oauthResourceMetadataURL{
+				url:              &withoutPathSuffix,
+				expectedResource: baseURL,
+			})
 		}
 
 		u.Path = "/.well-known/oauth-protected-resource"
-		resourceMetadataURLs = append(resourceMetadataURLs, u)
+		resourceMetadataURLs = append(resourceMetadataURLs, oauthResourceMetadataURL{
+			url:              u,
+			expectedResource: fmt.Sprintf("%s://%s", u.Scheme, u.Host),
+		})
 	} else {
 		parsedURL, err := url.Parse(resourceMetadataURLFromHeader)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to parse resource metadata URL: %w", err)
 		}
-		resourceMetadataURLs = []*url.URL{parsedURL}
+		resourceMetadataURLs = []oauthResourceMetadataURL{{
+			url:              parsedURL,
+			expectedResource: baseURL,
+		}}
 	}
 
 	return resourceMetadataURLs, scope, nil

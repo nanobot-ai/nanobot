@@ -129,6 +129,7 @@ func TestOAuthResourceMetadataURLs(t *testing.T) {
 		baseURL            string
 		authenticateHeader string
 		wantURLs           []string
+		wantResources      []string
 		wantScope          string
 	}{
 		{
@@ -137,6 +138,10 @@ func TestOAuthResourceMetadataURLs(t *testing.T) {
 			wantURLs: []string{
 				"https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
 				"https://mcp.example.com/.well-known/oauth-protected-resource",
+			},
+			wantResources: []string{
+				"https://mcp.example.com/mcp",
+				"https://mcp.example.com",
 			},
 		},
 		{
@@ -147,6 +152,10 @@ func TestOAuthResourceMetadataURLs(t *testing.T) {
 				"https://mcp.example.com/.well-known/oauth-protected-resource/v1/mcp",
 				"https://mcp.example.com/.well-known/oauth-protected-resource",
 			},
+			wantResources: []string{
+				"https://mcp.example.com/v1/mcp",
+				"https://mcp.example.com",
+			},
 			wantScope: "read write",
 		},
 		{
@@ -154,6 +163,7 @@ func TestOAuthResourceMetadataURLs(t *testing.T) {
 			baseURL:            "https://mcp.example.com/mcp",
 			authenticateHeader: `Bearer resource_metadata="https://auth.example.com/resources/mcp" scope="read"`,
 			wantURLs:           []string{"https://auth.example.com/resources/mcp"},
+			wantResources:      []string{"https://mcp.example.com/mcp"},
 			wantScope:          "read",
 		},
 	}
@@ -166,14 +176,126 @@ func TestOAuthResourceMetadataURLs(t *testing.T) {
 			}
 
 			gotURLs := make([]string, len(urls))
+			gotResources := make([]string, len(urls))
 			for i, u := range urls {
-				gotURLs[i] = u.String()
+				gotURLs[i] = u.url.String()
+				gotResources[i] = u.expectedResource
 			}
 			if !slices.Equal(gotURLs, tt.wantURLs) {
 				t.Fatalf("unexpected resource metadata URLs: got %v, want %v", gotURLs, tt.wantURLs)
 			}
+			if !slices.Equal(gotResources, tt.wantResources) {
+				t.Fatalf("unexpected expected resources: got %v, want %v", gotResources, tt.wantResources)
+			}
 			if scope != tt.wantScope {
 				t.Fatalf("unexpected scope: got %q, want %q", scope, tt.wantScope)
+			}
+		})
+	}
+}
+
+func TestDiscoverOAuthMetadataValidatesResourceIdentifier(t *testing.T) {
+	tests := []struct {
+		name      string
+		discovery string
+		valid     bool
+	}{
+		{name: "path-specific valid", discovery: "path", valid: true},
+		{name: "path-specific mismatch", discovery: "path"},
+		{name: "root fallback valid", discovery: "root", valid: true},
+		{name: "root fallback mismatch", discovery: "root"},
+		{name: "WWW-Authenticate valid", discovery: "header", valid: true},
+		{name: "WWW-Authenticate mismatch", discovery: "header"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var serverURL string
+			var pathMetadataRequested, rootMetadataRequested, headerMetadataRequested, authorizationServerRequested atomic.Bool
+
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				baseURL := serverURL + "/mcp"
+				resource := baseURL
+				if tt.discovery == "root" {
+					resource = serverURL
+				}
+				if !tt.valid {
+					resource += "/mismatch"
+				}
+
+				switch req.URL.Path {
+				case "/.well-known/oauth-protected-resource/mcp":
+					pathMetadataRequested.Store(true)
+					if tt.discovery == "root" {
+						http.NotFound(w, req)
+						return
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"resource":              resource,
+						"authorization_servers": []string{serverURL + "/issuer"},
+					})
+				case "/.well-known/oauth-protected-resource":
+					rootMetadataRequested.Store(true)
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"resource":              resource,
+						"authorization_servers": []string{serverURL + "/issuer"},
+					})
+				case "/advertised-metadata":
+					headerMetadataRequested.Store(true)
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"resource":              resource,
+						"authorization_servers": []string{serverURL + "/issuer"},
+					})
+				case "/.well-known/oauth-authorization-server/issuer":
+					authorizationServerRequested.Store(true)
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"issuer":                   serverURL + "/issuer",
+						"response_types_supported": []string{"code"},
+					})
+				default:
+					http.NotFound(w, req)
+				}
+			}))
+			defer ts.Close()
+			serverURL = ts.URL
+
+			baseURL := serverURL + "/mcp"
+			authenticateHeader := ""
+			if tt.discovery == "header" {
+				authenticateHeader = `Bearer resource_metadata="` + serverURL + `/advertised-metadata"`
+			}
+
+			discovery, ok, err := discoverOAuthMetadata(t.Context(), safehttp.NewClient(false, true, true), baseURL, authenticateHeader, "", "", nil)
+			if tt.valid {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("expected OAuth metadata discovery to succeed")
+				}
+				if discovery.ProtectedResourceMetadata.Resource == "" {
+					t.Fatal("expected protected resource metadata")
+				}
+			} else {
+				if err == nil {
+					t.Fatal("expected resource identifier mismatch")
+				}
+				if ok {
+					t.Fatal("mismatched resource identifier must not produce metadata")
+				}
+			}
+
+			if authorizationServerRequested.Load() != tt.valid {
+				t.Fatalf("authorization server requested = %v, want %v", authorizationServerRequested.Load(), tt.valid)
+			}
+			if pathMetadataRequested.Load() != (tt.discovery != "header") {
+				t.Fatalf("path metadata requested = %v for %s discovery", pathMetadataRequested.Load(), tt.discovery)
+			}
+			if rootMetadataRequested.Load() != (tt.discovery == "root") {
+				t.Fatalf("root metadata requested = %v for %s discovery", rootMetadataRequested.Load(), tt.discovery)
+			}
+			if headerMetadataRequested.Load() != (tt.discovery == "header") {
+				t.Fatalf("advertised metadata requested = %v for %s discovery", headerMetadataRequested.Load(), tt.discovery)
 			}
 		})
 	}
