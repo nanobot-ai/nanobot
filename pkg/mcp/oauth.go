@@ -775,7 +775,7 @@ func (r *resourceIdentifier) UnmarshalJSON(data []byte) error {
 	if len(data) > 0 && data[0] == '[' {
 		var resources []json.RawMessage
 		if err := json.Unmarshal(data, &resources); err != nil {
-			return err
+			return fmt.Errorf("resource must be a string or singleton string array: %w", err)
 		}
 		if len(resources) != 1 {
 			return fmt.Errorf("resource array must contain exactly one identifier")
