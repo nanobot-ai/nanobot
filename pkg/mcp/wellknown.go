@@ -24,7 +24,7 @@ func (h *HTTPServer) protectedMetadata(w http.ResponseWriter, r *http.Request) {
 	if host == "" {
 		host = r.Host
 	}
-	protectedResourceMetadata.Resource = strings.TrimSuffix(fmt.Sprintf("%s://%s/%s", scheme, host, r.PathValue("path")), "/")
+	protectedResourceMetadata.Resource = resourceIdentifier(strings.TrimSuffix(fmt.Sprintf("%s://%s/%s", scheme, host, r.PathValue("path")), "/"))
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(protectedResourceMetadata); err != nil {
