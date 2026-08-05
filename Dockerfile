@@ -24,6 +24,7 @@ RUN apk update && apk upgrade --no-cache && apk add --no-cache \
     bash \
     git \
     curl \
+    "libnghttp2-14>=1.70.0-r0" \
     wget \
     jq \
     gzip \
