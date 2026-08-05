@@ -768,11 +768,38 @@ func AuthCodeURL(conf *oauth2.Config, urlFromMetadata, resourceURL, state, verif
 	return conf.AuthCodeURL(state, authCodeURLOpts...), nil
 }
 
+type resourceIdentifier string
+
+func (r *resourceIdentifier) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) > 0 && data[0] == '[' {
+		var resources []json.RawMessage
+		if err := json.Unmarshal(data, &resources); err != nil {
+			return fmt.Errorf("resource must be a string or singleton string array: %w", err)
+		}
+		if len(resources) != 1 {
+			return fmt.Errorf("resource array must contain exactly one identifier")
+		}
+		data = resources[0]
+	}
+
+	var resource string
+	if err := json.Unmarshal(data, &resource); err != nil {
+		return fmt.Errorf("resource must be a string or singleton string array: %w", err)
+	}
+	if resource == "" {
+		return fmt.Errorf("resource identifier must not be empty")
+	}
+
+	*r = resourceIdentifier(resource)
+	return nil
+}
+
 // protectedResourceMetadata represents OAuth 2.0 Protected Resource Metadata
 // as defined in RFC 8707
 type protectedResourceMetadata struct {
 	// REQUIRED. The protected resource's resource identifier
-	Resource string `json:"resource"`
+	Resource resourceIdentifier `json:"resource"`
 
 	// OPTIONAL. JSON array containing a list of OAuth authorization server issuer identifiers
 	AuthorizationServers []string `json:"authorization_servers,omitempty"`

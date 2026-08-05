@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -120,6 +121,101 @@ func TestGetOAuthMetadata(t *testing.T) {
 	}
 	if !slices.Equal(clientRegistration.GrantTypes, []string{"authorization_code"}) {
 		t.Fatalf("unexpected grant types: %v", clientRegistration.GrantTypes)
+	}
+}
+
+func TestParseProtectedResourceMetadataResourceForms(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		json string
+	}{
+		{
+			name: "string",
+			json: `{"resource":"https://example.com/mcp"}`,
+		},
+		{
+			name: "singleton array",
+			json: `{"resource":["https://example.com/mcp"]}`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			metadata, err := parseProtectedResourceMetadata(strings.NewReader(tt.json))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(metadata.Resource) != "https://example.com/mcp" {
+				t.Fatalf("unexpected resource: %q", metadata.Resource)
+			}
+
+			encoded, err := json.Marshal(metadata)
+			if err != nil {
+				t.Fatalf("failed to marshal protected resource metadata: %v", err)
+			}
+			var output struct {
+				Resource string `json:"resource"`
+			}
+			if err := json.Unmarshal(encoded, &output); err != nil {
+				t.Fatalf("resource was not marshaled as a string: %v", err)
+			}
+			if output.Resource != "https://example.com/mcp" {
+				t.Fatalf("unexpected marshaled resource: %q", output.Resource)
+			}
+		})
+	}
+}
+
+func TestParseProtectedResourceMetadataRejectsInvalidResourceShapes(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		resource string
+	}{
+		{
+			name:     "empty string",
+			resource: `""`,
+		},
+		{
+			name:     "empty array",
+			resource: `[]`,
+		},
+		{
+			name:     "multiple resources",
+			resource: `["https://example.com/one","https://example.com/two"]`,
+		},
+		{
+			name:     "empty array resource",
+			resource: `[""]`,
+		},
+		{
+			name:     "number",
+			resource: `42`,
+		},
+		{
+			name:     "boolean",
+			resource: `true`,
+		},
+		{
+			name:     "null",
+			resource: `null`,
+		},
+		{
+			name:     "object",
+			resource: `{}`,
+		},
+		{
+			name:     "non-string array element",
+			resource: `[42]`,
+		},
+		{
+			name:     "null array element",
+			resource: `[null]`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseProtectedResourceMetadata(strings.NewReader(`{"resource":` + tt.resource + `}`))
+			if err == nil {
+				t.Fatal("expected invalid resource to be rejected")
+			}
+		})
 	}
 }
 

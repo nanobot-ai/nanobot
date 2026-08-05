@@ -819,7 +819,9 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 		}
 	}
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+	// Requests require a response body; notifications and responses do not.
+	isRequest := msg.Method != "" && msg.ID != nil
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted && (resp.StatusCode != http.StatusNoContent || isRequest) {
 		streamingErrorMessage, _ := io.ReadAll(resp.Body)
 		slog.Error("mcp client request failed",
 			"server", s.serverName,
@@ -835,7 +837,7 @@ func (s *HTTPClient) send(ctx context.Context, msg Message) error {
 		"request_id", MessageIDString(msg.ID),
 		"status_code", resp.StatusCode)
 
-	if s.sse || resp.StatusCode == http.StatusAccepted {
+	if s.sse || resp.StatusCode == http.StatusAccepted || resp.StatusCode == http.StatusNoContent {
 		return nil
 	}
 
