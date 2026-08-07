@@ -753,12 +753,25 @@ func AuthCodeURL(conf *oauth2.Config, urlFromMetadata, resourceURL, state, verif
 		return "", fmt.Errorf("failed to parse authorization endpoint: %w", err)
 	}
 
+	isEntra := authEndpoint.Host == "login.microsoftonline.com"
+
 	// Redirect user to consent page to ask for permission for the scopes specified above.
 	authCodeURLOpts := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier)}
-	if authEndpoint.Host != "login.microsoftonline.com" {
+	if !isEntra {
 		// Entra does not like the resource parameter, and including it will often cause things to fail.
 		// VSCode does something similar to this.
 		authCodeURLOpts = append(authCodeURLOpts, oauth2.SetAuthURLParam("resource", resourceURL))
+	}
+	if isEntra && len(conf.Scopes) > 0 && !slices.Contains(conf.Scopes, "offline_access") {
+		// Entra only issues a refresh token when offline_access is requested explicitly.
+		// The access_type parameter below is a Google extension that Entra ignores, so
+		// without this the token response has no refresh_token and the connection breaks
+		// as soon as the access token expires (roughly an hour).
+		// Override the scope parameter rather than mutating the caller's config.
+		scopes := make([]string, 0, len(conf.Scopes)+1)
+		scopes = append(scopes, conf.Scopes...)
+		scopes = append(scopes, "offline_access")
+		authCodeURLOpts = append(authCodeURLOpts, oauth2.SetAuthURLParam("scope", strings.Join(scopes, " ")))
 	}
 	if authEndpoint.Host != "mcp.zoho.com" {
 		// Zoho doesn't support the access_type parameter
