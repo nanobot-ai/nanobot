@@ -6,7 +6,21 @@ import (
 	"testing"
 
 	"github.com/obot-platform/nanobot/pkg/config"
+	"github.com/obot-platform/nanobot/pkg/types"
 )
+
+func TestNanobotLLMConfigIncludesMiniMax(t *testing.T) {
+	provider := (&Nanobot{}).llmConfig().LLMProviders["minimax"]
+	if provider.Dialect != types.DialectOpenAIChatCompletions {
+		t.Fatalf("expected MiniMax to use %q, got %q", types.DialectOpenAIChatCompletions, provider.Dialect)
+	}
+	if provider.APIKey != "${MINIMAX_API_KEY}" {
+		t.Fatalf("expected MiniMax API key placeholder, got %q", provider.APIKey)
+	}
+	if provider.BaseURL != "https://api.minimax.io/v1" {
+		t.Fatalf("expected MiniMax global API endpoint, got %q", provider.BaseURL)
+	}
+}
 
 func TestNanobotConfigPathsDefault(t *testing.T) {
 	n := &Nanobot{}

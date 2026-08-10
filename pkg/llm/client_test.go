@@ -35,7 +35,8 @@ func TestResolveProvider(t *testing.T) {
 		{"openai prefix", "openai/gpt-4o", "gpt-4o", "openai"},
 		{"anthropic prefix", "anthropic/claude-3-7-sonnet-latest", "claude-3-7-sonnet-latest", "anthropic"},
 		{"azure prefix", "azure/gpt-4o", "gpt-4o", "azure"},
-		{"minimax prefix", "minimax/MiniMax-M3", "MiniMax-M3", "minimax"},
+		{"minimax M3 prefix", "minimax/MiniMax-M3", "MiniMax-M3", "minimax"},
+		{"minimax M2.7 prefix", "minimax/MiniMax-M2.7", "MiniMax-M2.7", "minimax"},
 		{"unknown provider prefix", "vertex/gemini-pro", "gemini-pro", "vertex"},
 
 		// Default fallbacks (no prefix)

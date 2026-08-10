@@ -178,7 +178,7 @@ func (n *Nanobot) llmConfig() llm.Config {
 			"minimax": {
 				Dialect: types.DialectOpenAIChatCompletions,
 				APIKey:  "${MINIMAX_API_KEY}",
-				BaseURL: "${MINIMAX_BASE_URL}",
+				BaseURL: "https://api.minimax.io/v1",
 			},
 		},
 	}
