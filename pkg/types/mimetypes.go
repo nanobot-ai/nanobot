@@ -27,6 +27,15 @@ var (
 		"image/jpeg": {},
 		"image/webp": {},
 	}
+	// VideoMimeTypes maps detected MIME types to MIME types accepted in base64 data URLs.
+	VideoMimeTypes = map[string]string{
+		"video/mp4":        "video/mp4",
+		"video/avi":        "video/avi",
+		"video/x-msvideo":  "video/x-msvideo",
+		"video/mov":        "video/mov",
+		"video/quicktime":  "video/mov",
+		"video/x-matroska": "video/x-matroska",
+	}
 	TextMimeTypes = map[string]struct{}{
 		"text/plain":             {},
 		"text/markdown":          {},
