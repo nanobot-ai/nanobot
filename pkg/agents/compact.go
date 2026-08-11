@@ -17,11 +17,19 @@ const (
 	defaultContextWindow     = 200_000
 )
 
-// getContextWindowSize returns the context window size for the given model.
-// If configOverride is > 0, it is used directly. Otherwise, defaults to 200k.
-func getContextWindowSize(configOverride int) int {
+type contextWindowProvider interface {
+	ContextWindow(model string) int
+}
+
+// getContextWindowSize returns the configured or registered context window size.
+func getContextWindowSize(configOverride int, model string, completer types.Completer) int {
 	if configOverride > 0 {
 		return configOverride
+	}
+	if provider, ok := completer.(contextWindowProvider); ok {
+		if contextWindow := provider.ContextWindow(model); contextWindow > 0 {
+			return contextWindow
+		}
 	}
 	return defaultContextWindow
 }

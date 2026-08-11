@@ -3,19 +3,35 @@ package agents
 import (
 	"testing"
 
+	"github.com/obot-platform/nanobot/pkg/llm"
 	"github.com/obot-platform/nanobot/pkg/mcp"
 	"github.com/obot-platform/nanobot/pkg/types"
 )
 
 func TestGetContextWindowSize_ConfigOverride(t *testing.T) {
-	size := getContextWindowSize(50000)
+	size := getContextWindowSize(50000, "minimax/MiniMax-M3", nil)
 	if size != 50000 {
 		t.Errorf("expected config override 50000, got %d", size)
 	}
 }
 
+func TestGetContextWindowSize_ModelConfig(t *testing.T) {
+	client := llm.NewClient(llm.Config{
+		Models: map[string]map[string]llm.ModelConfig{
+			"minimax": {
+				"MiniMax-M3": {ContextWindow: 1_000_000},
+			},
+		},
+	})
+
+	size := getContextWindowSize(0, "minimax/MiniMax-M3", client)
+	if size != 1_000_000 {
+		t.Errorf("expected registered context window 1000000, got %d", size)
+	}
+}
+
 func TestGetContextWindowSize_Default(t *testing.T) {
-	size := getContextWindowSize(0)
+	size := getContextWindowSize(0, "minimax/unknown", nil)
 	if size != defaultContextWindow {
 		t.Errorf("expected default %d, got %d", defaultContextWindow, size)
 	}

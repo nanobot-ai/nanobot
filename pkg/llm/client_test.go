@@ -2,11 +2,112 @@ package llm
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/obot-platform/nanobot/pkg/mcp"
 	"github.com/obot-platform/nanobot/pkg/types"
 )
+
+func TestDynamicConfigUsesRegisteredProviderEndpoint(t *testing.T) {
+	session := mcp.NewEmptySession(context.Background())
+	session.SetEnv(map[string]string{"MINIMAX_API_KEY": "test-key"})
+	client := NewClient(Config{
+		LLMProviders: map[string]LLMProviderConfig{
+			"minimax": {
+				Dialect: types.DialectOpenAIChatCompletions,
+				APIKey:  "${MINIMAX_API_KEY}",
+				BaseURL: "${MINIMAX_BASE_URL}",
+				Region:  "${MINIMAX_REGION}",
+			},
+		},
+		ProviderEndpoints: map[string][]ProviderEndpoint{
+			"minimax": {
+				{Region: "global_en", OpenAIBaseURL: "https://api.minimax.io/v1"},
+				{Region: "cn_zh", OpenAIBaseURL: "https://api.minimaxi.com/v1"},
+			},
+		},
+	})
+
+	dynamic := client.dynamicConfig(session.Context())
+	if got := dynamic.LLMProviders["minimax"].BaseURL; got != "https://api.minimax.io/v1" {
+		t.Fatalf("expected registered MiniMax endpoint, got %q", got)
+	}
+}
+
+func TestDynamicConfigUsesRegisteredRegionalProviderEndpoint(t *testing.T) {
+	session := mcp.NewEmptySession(context.Background())
+	session.SetEnv(map[string]string{
+		"MINIMAX_API_KEY": "test-key",
+		"MINIMAX_REGION":  "cn_zh",
+	})
+	client := NewClient(Config{
+		LLMProviders: map[string]LLMProviderConfig{
+			"minimax": {
+				Dialect: types.DialectOpenAIChatCompletions,
+				APIKey:  "${MINIMAX_API_KEY}",
+				BaseURL: "${MINIMAX_BASE_URL}",
+				Region:  "${MINIMAX_REGION}",
+			},
+		},
+		ProviderEndpoints: map[string][]ProviderEndpoint{
+			"minimax": {
+				{Region: "global_en", OpenAIBaseURL: "https://api.minimax.io/v1"},
+				{Region: "cn_zh", OpenAIBaseURL: "https://api.minimaxi.com/v1"},
+			},
+		},
+	})
+
+	dynamic := client.dynamicConfig(session.Context())
+	provider := dynamic.LLMProviders["minimax"]
+	if provider.Region != "cn_zh" {
+		t.Fatalf("expected MiniMax region cn_zh, got %q", provider.Region)
+	}
+	if provider.BaseURL != "https://api.minimaxi.com/v1" {
+		t.Fatalf("expected MiniMax China endpoint, got %q", provider.BaseURL)
+	}
+}
+
+func TestModelConfig(t *testing.T) {
+	cacheWrite := 0.375
+	client := NewClient(Config{
+		Models: map[string]map[string]ModelConfig{
+			"minimax": {
+				"MiniMax-M2.7": {
+					ContextWindow: 204_800,
+					Pricing: ModelPricing{
+						Input:      0.3,
+						Output:     1.2,
+						CacheRead:  0.06,
+						CacheWrite: &cacheWrite,
+					},
+					InputModalities: []string{"text"},
+					Thinking:        []string{"always_on"},
+				},
+			},
+		},
+	})
+
+	model, ok := client.ModelConfig("minimax/MiniMax-M2.7")
+	if !ok {
+		t.Fatal("expected MiniMax model config")
+	}
+	if model.ContextWindow != 204_800 {
+		t.Fatalf("expected context window 204800, got %d", model.ContextWindow)
+	}
+	if model.Pricing.Input != 0.3 || model.Pricing.Output != 1.2 || model.Pricing.CacheRead != 0.06 {
+		t.Fatalf("unexpected MiniMax model pricing: %+v", model.Pricing)
+	}
+	if model.Pricing.CacheWrite == nil || *model.Pricing.CacheWrite != 0.375 {
+		t.Fatalf("unexpected MiniMax cache write pricing: %v", model.Pricing.CacheWrite)
+	}
+	if !slices.Equal(model.InputModalities, []string{"text"}) {
+		t.Fatalf("unexpected MiniMax input modalities: %v", model.InputModalities)
+	}
+	if !slices.Equal(model.Thinking, []string{"always_on"}) {
+		t.Fatalf("unexpected MiniMax thinking modes: %v", model.Thinking)
+	}
+}
 
 func TestResolveProvider(t *testing.T) {
 	cfg := Config{
