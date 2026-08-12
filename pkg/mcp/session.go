@@ -851,11 +851,13 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 
 		// Use the hook response message if set, otherwise use the last value we have
 		if hookResponse.Mutated && hookResponse.Message != nil {
-			if string(hookResponse.Message.Result) == "null" {
-				hookResponse.Message.Result = nil
-			}
-			if string(hookResponse.Message.Params) == "null" {
-				hookResponse.Message.Params = nil
+			if target.ContractVersion == filtercontract.ContractVersionLegacyMCP {
+				if string(hookResponse.Message.Result) == "null" {
+					hookResponse.Message.Result = nil
+				}
+				if string(hookResponse.Message.Params) == "null" {
+					hookResponse.Message.Params = nil
+				}
 			}
 
 			if auditLog != nil {

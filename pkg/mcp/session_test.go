@@ -645,6 +645,49 @@ func TestCallAllHooksRejectsInvalidV1MutationShape(t *testing.T) {
 	}
 }
 
+func TestCallAllHooksPreservesV1NullResultMutation(t *testing.T) {
+	mutated, err := json.Marshal(&Message{
+		JSONRPC: "2.0",
+		ID:      float64(1),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"search"}`),
+		Result:  json.RawMessage(`null`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := hookRunnerFunc(func(_ context.Context, _, out any, _ string) (bool, error) {
+		*(out.(*filtercontract.Response)) = filtercontract.Response{
+			Decision: filtercontract.DecisionMutate,
+			Payload:  mutated,
+		}
+		return true, nil
+	})
+	s := &Session{HookRunner: runner, hooks: Hooks{{Name: "tools/call", Targets: []HookTarget{{
+		Target: "filter/tool", ContractVersion: filtercontract.ContractVersionV1,
+	}}}}}
+	message, err := s.callAllHooks(t.Context(), &Message{
+		JSONRPC: "2.0",
+		ID:      float64(1),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"search"}`),
+		Result:  json.RawMessage(`{"content":[]}`),
+	}, "response")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(message.Result) != "null" {
+		t.Fatalf("result = %s, want explicit null", message.Result)
+	}
+	var result any
+	if err := s.marshalResponse(*message, &result); err != nil {
+		t.Fatalf("explicit null result failed to marshal: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("result = %#v, want nil JSON value", result)
+	}
+}
+
 func TestCallAllHooksRejectsV1MutationOfMessageIdentity(t *testing.T) {
 	mutated, err := json.Marshal(&Message{
 		JSONRPC: "2.0",
