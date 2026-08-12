@@ -59,6 +59,12 @@ const (
 	DecisionMutate Decision = "mutate"
 )
 
+// ToolRequest is the MCP tool input for a v1 Filter. The wrapper maps directly
+// to an ordinary MCP tool parameter named "request" in SDKs such as FastMCP.
+type ToolRequest struct {
+	Request Request `json:"request"`
+}
+
 // Request is the common v1 Filter request envelope. Payload is the complete
 // value being evaluated; it is never a partial update.
 type Request struct {

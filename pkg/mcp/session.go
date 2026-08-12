@@ -926,7 +926,7 @@ func invokeMCPFilterHooks(
 					err = requestErr
 				} else {
 					var response filtercontract.Response
-					hasOutput, err = r.RunHook(ctx, &request, &response, target.Target)
+					hasOutput, err = r.RunHook(ctx, &filtercontract.ToolRequest{Request: request}, &response, target.Target)
 					if err == nil && !hasOutput {
 						err = errors.New("v1 Filter returned no structured response")
 					} else if err == nil {

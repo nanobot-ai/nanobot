@@ -34,6 +34,30 @@ func TestV1RequestFixtures(t *testing.T) {
 	}
 }
 
+func TestV1ToolRequestWrapsEnvelope(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata/v1", "mcp-request.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var request Request
+	if err := json.Unmarshal(data, &request); err != nil {
+		t.Fatal(err)
+	}
+
+	wrapped, err := json.Marshal(ToolRequest{Request: request})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var value map[string]json.RawMessage
+	if err := json.Unmarshal(wrapped, &value); err != nil {
+		t.Fatal(err)
+	}
+	if len(value) != 1 {
+		t.Fatalf("tool input fields = %v, want only request", value)
+	}
+	assertJSONEquivalent(t, data, json.RawMessage(value["request"]))
+}
+
 func TestV1ResponseFixtures(t *testing.T) {
 	tests := []struct {
 		name      string

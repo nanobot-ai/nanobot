@@ -363,17 +363,29 @@ func TestCallAllHooksAccumulatesMutationReasons(t *testing.T) {
 	assertHookMutation(t, msg.HookMutations, "request", "first mutation", "second mutation")
 }
 
-func TestCallAllHooksUsesV1EnvelopeOnlyWhenMarked(t *testing.T) {
+func TestCallAllHooksUsesWrappedV1EnvelopeOnlyWhenMarked(t *testing.T) {
 	var calls int
 	runner := hookRunnerFunc(func(_ context.Context, in, out any, target string) (bool, error) {
 		calls++
 		if target != "filter/tool" {
 			t.Fatalf("target = %q", target)
 		}
-		request, ok := in.(*filtercontract.Request)
+		toolRequest, ok := in.(*filtercontract.ToolRequest)
 		if !ok {
-			t.Fatalf("input type = %T, want *filter.Request", in)
+			t.Fatalf("input type = %T, want *filter.ToolRequest", in)
 		}
+		inputJSON, err := json.Marshal(toolRequest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var inputFields map[string]json.RawMessage
+		if err := json.Unmarshal(inputJSON, &inputFields); err != nil {
+			t.Fatal(err)
+		}
+		if len(inputFields) != 1 || len(inputFields["request"]) == 0 {
+			t.Fatalf("v1 tool arguments = %s, want only a request wrapper", inputJSON)
+		}
+		request := &toolRequest.Request
 		if request.APIVersion != filtercontract.APIVersionV1 || request.Source != filtercontract.SourceMCP {
 			t.Fatalf("unexpected envelope: %#v", request)
 		}
@@ -436,7 +448,8 @@ func TestCallAllHooksV1MutationChainingAndAggregateRejection(t *testing.T) {
 	}
 	var calls []string
 	runner := hookRunnerFunc(func(_ context.Context, in, out any, target string) (bool, error) {
-		request := in.(*filtercontract.Request)
+		toolRequest := in.(*filtercontract.ToolRequest)
+		request := &toolRequest.Request
 		response := out.(*filtercontract.Response)
 		calls = append(calls, target)
 		switch target {
@@ -495,7 +508,8 @@ func TestCallAllHooksRejectsForbiddenV1Mutation(t *testing.T) {
 		t.Fatal(err)
 	}
 	runner := hookRunnerFunc(func(_ context.Context, in, out any, _ string) (bool, error) {
-		request := in.(*filtercontract.Request)
+		toolRequest := in.(*filtercontract.ToolRequest)
+		request := &toolRequest.Request
 		if request.Capabilities.CanMutate {
 			t.Fatal("mutation capability should be false")
 		}
