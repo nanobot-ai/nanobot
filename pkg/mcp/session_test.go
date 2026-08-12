@@ -398,6 +398,9 @@ func TestCallAllHooksUsesWrappedV1EnvelopeOnlyWhenMarked(t *testing.T) {
 		if request.Context.MCP == nil || request.Context.MCP.ServerName != "server-id" || request.Context.MCP.ServerShortName != "Search Server" {
 			t.Fatalf("unexpected MCP context: %#v", request.Context.MCP)
 		}
+		if request.Context.Trace == nil || request.Context.Trace.SessionID != "test-session" {
+			t.Fatalf("unexpected trace context: %#v", request.Context.Trace)
+		}
 		response, ok := out.(*filtercontract.Response)
 		if !ok {
 			t.Fatalf("output type = %T, want *filter.Response", out)
@@ -408,6 +411,7 @@ func TestCallAllHooksUsesWrappedV1EnvelopeOnlyWhenMarked(t *testing.T) {
 	auditLog := &auditlogs.MCPAuditLog{}
 	s := &Session{
 		HookRunner: runner,
+		Parent:     &Session{wire: &closeCallbackWire{}},
 		hooks: Hooks{{Name: "tools/call", Targets: []HookTarget{{
 			Target:          "filter/tool",
 			ContractVersion: filtercontract.ContractVersionV1,
@@ -496,6 +500,9 @@ func TestCallAllHooksV1MutationChainingAndAggregateRejection(t *testing.T) {
 	if !strings.Contains(string(message.Params), `"query":"redacted"`) {
 		t.Fatalf("effective message = %s", message.Params)
 	}
+	if len(auditLog.WebhookStatuses) != 3 {
+		t.Fatalf("statuses = %#v, want 3", auditLog.WebhookStatuses)
+	}
 	if got := []string{auditLog.WebhookStatuses[0].Status, auditLog.WebhookStatuses[1].Status, auditLog.WebhookStatuses[2].Status}; !slices.Equal(got, []string{"mutated", "rejected", "ok"}) {
 		t.Fatalf("statuses = %v", got)
 	}
@@ -575,6 +582,66 @@ func TestCallAllHooksRejectsInvalidV1MutationPayload(t *testing.T) {
 	}
 	if len(auditLog.WebhookStatuses) != 1 || auditLog.WebhookStatuses[0].Status != "failed" {
 		t.Fatalf("statuses = %#v", auditLog.WebhookStatuses)
+	}
+}
+
+func TestCallAllHooksRejectsInvalidV1MutationShape(t *testing.T) {
+	tests := []struct {
+		name      string
+		direction string
+		message   *Message
+		wantError string
+	}{
+		{
+			name:      "request with result",
+			direction: "request",
+			message: &Message{
+				JSONRPC: "2.0",
+				ID:      float64(1),
+				Method:  "tools/call",
+				Params:  json.RawMessage(`{"name":"search"}`),
+				Result:  json.RawMessage(`{}`),
+			},
+			wantError: "request mutation must not contain result or error",
+		},
+		{
+			name:      "response with result and error",
+			direction: "response",
+			message: &Message{
+				JSONRPC: "2.0",
+				ID:      float64(1),
+				Method:  "tools/call",
+				Params:  json.RawMessage(`{"name":"search"}`),
+				Result:  json.RawMessage(`{}`),
+				Error:   NewRPCError(-32603, "failed"),
+			},
+			wantError: "response mutation must contain exactly one of result or error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload, err := json.Marshal(tt.message)
+			if err != nil {
+				t.Fatal(err)
+			}
+			runner := hookRunnerFunc(func(_ context.Context, _, out any, _ string) (bool, error) {
+				*(out.(*filtercontract.Response)) = filtercontract.Response{Decision: filtercontract.DecisionMutate, Payload: payload}
+				return true, nil
+			})
+			s := &Session{HookRunner: runner, hooks: Hooks{{Name: "tools/call", Targets: []HookTarget{{
+				Target: "filter/tool", ContractVersion: filtercontract.ContractVersionV1,
+			}}}}}
+			_, err = s.callAllHooks(t.Context(), &Message{
+				JSONRPC: "2.0",
+				ID:      float64(1),
+				Method:  "tools/call",
+				Params:  json.RawMessage(`{"name":"search"}`),
+			}, tt.direction)
+			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+				t.Fatalf("error = %v, want %q", err, tt.wantError)
+			}
+		})
 	}
 }
 

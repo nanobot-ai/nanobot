@@ -41,7 +41,7 @@ func newMCPFilterRequest(message *Message, direction, method, identifier string,
 	return request, nil
 }
 
-func normalizeV1FilterResponse(response filtercontract.Response, current *Message, identifier string, capabilities filtercontract.Capabilities) (SessionMessageHook, error) {
+func normalizeV1FilterResponse(response filtercontract.Response, current *Message, direction, identifier string, capabilities filtercontract.Capabilities) (SessionMessageHook, error) {
 	validationCapabilities := capabilities
 	if response.Decision == filtercontract.DecisionMutate {
 		// Validate the replacement payload independently from authorization so a
@@ -69,6 +69,9 @@ func normalizeV1FilterResponse(response filtercontract.Response, current *Messag
 		if message.JSONRPC != current.JSONRPC || message.Method != current.Method || !reflect.DeepEqual(message.ID, current.ID) || getMessageName(&message) != identifier {
 			return SessionMessageHook{}, errors.New("invalid v1 Filter response: mutation changed immutable MCP message identity")
 		}
+		if err := validateMCPMutationShape(&message, direction); err != nil {
+			return SessionMessageHook{}, fmt.Errorf("invalid v1 Filter response: %w", err)
+		}
 		if !capabilities.CanMutate {
 			return SessionMessageHook{
 				Accept:             false,
@@ -85,8 +88,27 @@ func normalizeV1FilterResponse(response filtercontract.Response, current *Messag
 			NormalizedDecision: filtercontract.DecisionMutate,
 		}, nil
 	default:
-		panic("validated Filter response has an unknown decision")
+		return SessionMessageHook{}, fmt.Errorf("invalid v1 Filter response: unhandled decision %q", response.Decision)
 	}
+}
+
+func validateMCPMutationShape(message *Message, direction string) error {
+	hasResult := len(bytes.TrimSpace(message.Result)) != 0
+	hasError := message.Error != nil
+
+	switch direction {
+	case "request":
+		if hasResult || hasError {
+			return errors.New("request mutation must not contain result or error")
+		}
+	case "response":
+		if hasResult == hasError {
+			return errors.New("response mutation must contain exactly one of result or error")
+		}
+	default:
+		return fmt.Errorf("unknown MCP message direction %q", direction)
+	}
+	return nil
 }
 
 func normalizeLegacyFilterResponse(response SessionMessageHook, current *Message, mutateDisallowed bool) (SessionMessageHook, error) {

@@ -794,7 +794,7 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 	}
 
 	filterContext := filtercontract.Context{}
-	if sessionID := s.ID(); sessionID != "" {
+	if sessionID := s.Root().ID(); sessionID != "" {
 		filterContext.Trace = &filtercontract.TraceContext{SessionID: sessionID}
 	}
 	if server.Name != "" || server.ShortName != "" {
@@ -930,7 +930,7 @@ func invokeMCPFilterHooks(
 					if err == nil && !hasOutput {
 						err = errors.New("v1 Filter returned no structured response")
 					} else if err == nil {
-						out, err = normalizeV1FilterResponse(response, current.Message, identifier, capabilities)
+						out, err = normalizeV1FilterResponse(response, current.Message, direction, identifier, capabilities)
 					}
 				}
 			case filtercontract.ContractVersionLegacyMCP:

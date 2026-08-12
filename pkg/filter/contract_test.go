@@ -94,7 +94,14 @@ func TestRequestValidationRejectsBadDiscriminators(t *testing.T) {
 			Phase:   PhaseRequest,
 			Surface: SurfaceUserPrompt,
 		},
+		Context: Context{
+			LocalAgent: &LocalAgentContext{Provider: "test"},
+			Device:     &DeviceContext{ID: "device", DeploymentID: "deployment"},
+		},
 		Payload: json.RawMessage(`"hello"`),
+	}
+	if err := base.Validate(); err != nil {
+		t.Fatalf("valid baseline: %v", err)
 	}
 	tests := map[string]func(*Request){
 		"version": func(r *Request) { r.APIVersion = "v2" },
