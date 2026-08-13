@@ -9,8 +9,6 @@ import (
 	"net/url"
 	"slices"
 	"strings"
-
-	filtercontract "github.com/obot-platform/nanobot/pkg/filter"
 )
 
 type HookRunner interface {
@@ -100,7 +98,6 @@ type HookMapping struct {
 type HookTarget struct {
 	Target           string
 	MutateDisallowed bool
-	ContractVersion  filtercontract.ContractVersion
 }
 
 func (h *HookTarget) UnmarshalJSON(data []byte) error {
@@ -108,33 +105,13 @@ func (h *HookTarget) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &target); err != nil {
 		return err
 	}
-	*h = HookTarget{}
 
-	for {
-		var found bool
-		if target, found = strings.CutPrefix(target, "!mutate:"); found {
-			h.MutateDisallowed = true
-			continue
-		}
-		if target, found = strings.CutPrefix(target, "!filter-v1:"); found {
-			h.ContractVersion = filtercontract.ContractVersionV1
-			continue
-		}
-		break
-	}
-	h.Target = target
+	h.Target, h.MutateDisallowed = strings.CutPrefix(target, "!mutate:")
 	return nil
 }
 
-func (h HookTarget) MarshalJSON() ([]byte, error) {
+func (h *HookTarget) MarshalJSON() ([]byte, error) {
 	target := h.Target
-	switch h.ContractVersion {
-	case filtercontract.ContractVersionLegacyMCP:
-	case filtercontract.ContractVersionV1:
-		target = "!filter-v1:" + target
-	default:
-		return nil, fmt.Errorf("unsupported Filter contract version %q", h.ContractVersion)
-	}
 	if h.MutateDisallowed {
 		target = "!mutate:" + target
 	}
