@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/obot-platform/mcp-oauth-proxy/pkg/providers"
+	filtercontract "github.com/obot-platform/nanobot/pkg/filter"
 )
 
 type User providers.UserInfo
@@ -497,10 +498,11 @@ type SetLogLevelRequest struct {
 type SetLogLevelResult struct{}
 
 type SessionMessageHook struct {
-	Accept  bool     `json:"accept"`
-	Mutated bool     `json:"mutated"`
-	Message *Message `json:"message"`
-	Reason  string   `json:"reason"`
+	Accept             bool                    `json:"accept"`
+	Mutated            bool                    `json:"mutated"`
+	Message            *Message                `json:"message"`
+	Reason             string                  `json:"reason"`
+	NormalizedDecision filtercontract.Decision `json:"-"`
 }
 
 type CancelledNotification struct {

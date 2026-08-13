@@ -1,0 +1,44 @@
+{
+  "apiVersion": "obot.obot.ai/filter/v1",
+  "source": "local_agent",
+  "event": {
+    "type": "tool_call",
+    "phase": "response",
+    "surface": "tool_response",
+    "method": "shell",
+    "identifier": "run_terminal_command"
+  },
+  "context": {
+    "trace": {
+      "eventId": "event-tool-2",
+      "sessionId": "session-123",
+      "turnId": "turn-7",
+      "toolUseId": "tool-9"
+    },
+    "localAgent": {
+      "provider": "vscode",
+      "agentVersion": "1.105.0",
+      "model": "gpt-5",
+      "toolName": "run_terminal_command",
+      "toolKind": "shell"
+    },
+    "device": {
+      "id": "device-123",
+      "deploymentId": "deployment-456"
+    },
+    "environment": {
+      "operatingSystem": "windows",
+      "architecture": "amd64",
+      "workingDirectory": "C:\\workspace\\project"
+    }
+  },
+  "capabilities": {
+    "canReject": true,
+    "canMutate": false
+  },
+  "payload": {
+    "exitCode": 0,
+    "stdout": "ok\n",
+    "stderr": ""
+  }
+}

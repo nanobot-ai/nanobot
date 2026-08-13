@@ -1,0 +1,7 @@
+{
+  "decision": "mutate",
+  "reason": "sensitive content was redacted",
+  "payload": {
+    "redacted": true
+  }
+}

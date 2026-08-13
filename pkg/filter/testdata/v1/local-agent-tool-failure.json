@@ -1,0 +1,43 @@
+{
+  "apiVersion": "obot.obot.ai/filter/v1",
+  "source": "local_agent",
+  "event": {
+    "type": "tool_call",
+    "phase": "failure",
+    "surface": "tool_response",
+    "method": "shell",
+    "identifier": "run_terminal_command"
+  },
+  "context": {
+    "trace": {
+      "eventId": "event-tool-3",
+      "sessionId": "session-123",
+      "turnId": "turn-7",
+      "toolUseId": "tool-10"
+    },
+    "localAgent": {
+      "provider": "codex",
+      "agentVersion": "0.20.0",
+      "model": "gpt-5",
+      "toolName": "run_terminal_command",
+      "toolKind": "shell"
+    },
+    "device": {
+      "id": "device-123",
+      "deploymentId": "deployment-456"
+    },
+    "environment": {
+      "operatingSystem": "darwin",
+      "architecture": "arm64",
+      "workingDirectory": "/workspace/project"
+    }
+  },
+  "capabilities": {
+    "canReject": true,
+    "canMutate": false
+  },
+  "payload": {
+    "exitCode": 1,
+    "error": "command failed"
+  }
+}

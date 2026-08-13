@@ -1,0 +1,42 @@
+{
+  "apiVersion": "obot.obot.ai/filter/v1",
+  "source": "mcp",
+  "event": {
+    "type": "mcp_message",
+    "phase": "response",
+    "method": "tools/call",
+    "identifier": "search"
+  },
+  "context": {
+    "trace": {
+      "sessionId": "session-123"
+    },
+    "mcp": {
+      "serverName": "search-server",
+      "serverShortName": "search"
+    }
+  },
+  "capabilities": {
+    "canReject": true,
+    "canMutate": true
+  },
+  "payload": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "search",
+      "arguments": {
+        "query": "release notes"
+      }
+    },
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "result"
+        }
+      ]
+    }
+  }
+}
