@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/obot-platform/nanobot/pkg/complete"
-	filtercontract "github.com/obot-platform/nanobot/pkg/filter"
 	"github.com/obot-platform/nanobot/pkg/mcp/auditlogs"
 )
 
@@ -775,7 +774,6 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 		hooks    = s.hooks
 		name     = getMessageName(req)
 		auditLog = AuditLogFromContext(ctx)
-		server   = MCPServerConfigFromContext(ctx)
 		errs     []error
 	)
 	if len(hooks) == 0 {
@@ -793,46 +791,31 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 		"method":      req.Method,
 	}
 
-	filterContext := filtercontract.Context{}
-	if sessionID := s.Root().ID(); sessionID != "" {
-		filterContext.Trace = &filtercontract.TraceContext{SessionID: sessionID}
-	}
-	if server.Name != "" || server.ShortName != "" {
-		filterContext.MCP = &filtercontract.MCPContext{
-			ServerName:      server.Name,
-			ServerShortName: server.ShortName,
-		}
-	}
-
 	// errs will be caught in callback, we don't need to handle the return err
-	hookResponse, _ := invokeMCPFilterHooks(ctx, s.HookRunner, hooks, &SessionMessageHook{
-		Accept:             true,
-		Message:            req,
-		NormalizedDecision: filtercontract.DecisionAccept,
-	}, req.Method, params, direction, name, filterContext, func(hook HookMapping, target HookTarget, hookResponse SessionMessageHook, err error) SessionMessageHook {
+	hookResponse, _ := InvokeHooks(ctx, s.HookRunner, hooks, &SessionMessageHook{
+		Accept:  true,
+		Message: req,
+	}, req.Method, params, func(hook HookMapping, target HookTarget, hookResponse SessionMessageHook, err error) SessionMessageHook {
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to run hook %s: %w", hook.Name, err))
-			if auditLog != nil {
-				auditLog.WebhookStatuses = append(auditLog.WebhookStatuses, auditlogs.MCPWebhookStatus{
-					Type:    direction,
-					Method:  req.Method,
-					Name:    hook.Name,
-					Tool:    target.Target,
-					Status:  "failed",
-					Message: err.Error(),
-				})
-			}
 			return hookResponse
 		}
 
+		if hookResponse.Mutated && target.MutateDisallowed {
+			if hookResponse.Reason != "" {
+				hookResponse.Reason += "; "
+			}
+
+			hookResponse.Reason += "mutation not allowed by hook configuration, implicit rejection"
+			hookResponse.Accept = false
+			hookResponse.Mutated = false
+		}
+
 		if auditLog != nil {
-			status := ""
-			switch hookResponse.NormalizedDecision {
-			case filtercontract.DecisionAccept:
-				status = "ok"
-			case filtercontract.DecisionReject:
+			status := "ok"
+			if !hookResponse.Accept {
 				status = "rejected"
-			case filtercontract.DecisionMutate:
+			} else if hookResponse.Mutated {
 				status = "mutated"
 			}
 			auditLog.WebhookStatuses = append(auditLog.WebhookStatuses, auditlogs.MCPWebhookStatus{
@@ -851,13 +834,11 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 
 		// Use the hook response message if set, otherwise use the last value we have
 		if hookResponse.Mutated && hookResponse.Message != nil {
-			if target.ContractVersion == filtercontract.ContractVersionLegacyMCP {
-				if string(hookResponse.Message.Result) == "null" {
-					hookResponse.Message.Result = nil
-				}
-				if string(hookResponse.Message.Params) == "null" {
-					hookResponse.Message.Params = nil
-				}
+			if string(hookResponse.Message.Result) == "null" {
+				hookResponse.Message.Result = nil
+			}
+			if string(hookResponse.Message.Params) == "null" {
+				hookResponse.Message.Params = nil
 			}
 
 			if auditLog != nil {
@@ -890,81 +871,6 @@ func (s *Session) callAllHooks(ctx context.Context, req *Message, direction stri
 	})
 
 	return hookResponse.Message, errors.Join(errs...)
-}
-
-func invokeMCPFilterHooks(
-	ctx context.Context,
-	r HookRunner,
-	hooks Hooks,
-	in *SessionMessageHook,
-	name string,
-	params map[string]string,
-	direction string,
-	identifier string,
-	filterContext filtercontract.Context,
-	callbacks ...HookResponseCallback[SessionMessageHook],
-) (SessionMessageHook, error) {
-	var (
-		current = in
-		matched bool
-		errs    []error
-	)
-	for _, mapping := range hooks {
-		if !mapping.Matches(name, params) {
-			continue
-		}
-		for _, target := range mapping.Targets {
-			matched = true
-			var (
-				out       SessionMessageHook
-				hasOutput bool
-				err       error
-			)
-			switch target.ContractVersion {
-			case filtercontract.ContractVersionV1:
-				capabilities := filtercontract.Capabilities{CanReject: true, CanMutate: !target.MutateDisallowed}
-				request, requestErr := newMCPFilterRequest(current.Message, direction, name, identifier, filterContext, capabilities)
-				if requestErr != nil {
-					err = requestErr
-				} else {
-					var response filtercontract.Response
-					hasOutput, err = r.RunHook(ctx, &filtercontract.ToolRequest{Request: request}, &response, target.Target)
-					if err == nil && !hasOutput {
-						err = errors.New("v1 Filter returned no structured response")
-					} else if err == nil {
-						out, err = normalizeV1FilterResponse(response, current.Message, direction, identifier, capabilities)
-					}
-				}
-			case filtercontract.ContractVersionLegacyMCP:
-				hasOutput, err = r.RunHook(ctx, current, &out, target.Target)
-				if err == nil && hasOutput {
-					out, err = normalizeLegacyFilterResponse(out, current.Message, target.MutateDisallowed)
-				}
-			default:
-				err = fmt.Errorf("unsupported Filter contract version %q", target.ContractVersion)
-			}
-
-			if hasOutput || err != nil {
-				if err != nil {
-					out = *current
-				}
-				for _, cb := range callbacks {
-					out = cb(mapping, target, out, err)
-				}
-			}
-			if err != nil {
-				errs = append(errs, fmt.Errorf("failed to run hook %s: %w", mapping.String(), err))
-				continue
-			}
-			if hasOutput {
-				current = &out
-			}
-		}
-	}
-	if !matched {
-		return *in, errors.Join(errs...)
-	}
-	return *current, errors.Join(errs...)
 }
 
 func addHookMutationsMeta(resp *Message) error {
