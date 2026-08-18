@@ -175,6 +175,17 @@ func (n *Nanobot) llmConfig() llm.Config {
 				APIKey:  "${ANTHROPIC_API_KEY}",
 				BaseURL: "${ANTHROPIC_BASE_URL}",
 			},
+			// OrcaRouter is an OpenAI-compatible router that exposes 200+ models
+			// (e.g. openai/gpt-4o, anthropic/claude-sonnet-4.6) behind one endpoint.
+			// Its model ids carry their own provider prefix, so reference them as
+			// "orcarouter/<provider>/<model>", e.g. "orcarouter/openai/gpt-4o".
+			"orcarouter": {
+				Dialect: types.DialectOpenAIResponses,
+				APIKey:  "${ORCAROUTER_API_KEY}",
+				// Hardcoded: unlike OPENAI_BASE_URL there is no ORCAROUTER_BASE_URL
+				// default, and an empty BaseURL would fall back to api.openai.com/v1.
+				BaseURL: "https://api.orcarouter.ai/v1",
+			},
 		},
 	}
 }

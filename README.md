@@ -111,7 +111,7 @@ my-config/
 
 **LLM Providers**
 
-`openai` and `anthropic` are built-in providers — set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` and they work with no additional config. Use the `{provider}/{model}` format in the `model` field to select a provider.
+`openai`, `anthropic`, and `orcarouter` are built-in providers — set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `ORCAROUTER_API_KEY` and they work with no additional config. Use the `{provider}/{model}` format in the `model` field to select a provider. For OrcaRouter, model ids carry their own provider prefix, so the model field uses the `orcarouter/<provider>/<model>` format, e.g. `orcarouter/openai/gpt-4o`.
 
 Additional providers (Azure, Bedrock, Ollama, etc.) can be configured in `nanobot.yaml` under `llmProviders`. 
 
@@ -139,6 +139,13 @@ llmProviders:
     dialect: AnthropicMessages
     apiKey: ${ANTHROPIC_API_KEY}
     baseURL: ${ANTHROPIC_BASE_URL}  # optional, default: https://api.anthropic.com/v1
+
+  # OrcaRouter: 200+ models behind one OpenAI-compatible endpoint. Model ids
+  # keep their own provider prefix, e.g. "orcarouter/openai/gpt-4o".
+  orcarouter:
+    dialect: OpenAIResponses
+    apiKey: ${ORCAROUTER_API_KEY}
+    baseURL: https://api.orcarouter.ai/v1
 
   # Custom providers pointing at any compatible endpoint
   azureOpenAI:
