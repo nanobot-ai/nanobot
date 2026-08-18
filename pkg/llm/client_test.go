@@ -13,9 +13,10 @@ func TestResolveProvider(t *testing.T) {
 		DefaultModel:     "openai/gpt-4.1",
 		DefaultMiniModel: "anthropic/claude-haiku-4-5",
 		LLMProviders: map[string]LLMProviderConfig{
-			"openai":    {Dialect: types.DialectOpenAIResponses},
-			"anthropic": {Dialect: types.DialectAnthropicMessages},
-			"azure":     {Dialect: types.DialectOpenAIResponses},
+			"openai":     {Dialect: types.DialectOpenAIResponses},
+			"anthropic":  {Dialect: types.DialectAnthropicMessages},
+			"azure":      {Dialect: types.DialectOpenAIResponses},
+			"orcarouter": {Dialect: types.DialectOpenAIResponses},
 		},
 	}
 
@@ -34,6 +35,8 @@ func TestResolveProvider(t *testing.T) {
 		{"openai prefix", "openai/gpt-4o", "gpt-4o", "openai"},
 		{"anthropic prefix", "anthropic/claude-3-7-sonnet-latest", "claude-3-7-sonnet-latest", "anthropic"},
 		{"azure prefix", "azure/gpt-4o", "gpt-4o", "azure"},
+		{"orcarouter prefix", "orcarouter/openai/gpt-4o", "openai/gpt-4o", "orcarouter"},
+		{"orcarouter anthropic model", "orcarouter/anthropic/claude-sonnet-4.6", "anthropic/claude-sonnet-4.6", "orcarouter"},
 		{"unknown provider prefix", "vertex/gemini-pro", "gemini-pro", "vertex"},
 
 		// Default fallbacks (no prefix)
