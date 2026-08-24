@@ -1,9 +1,10 @@
-![Nanobot](docs/header.svg)
+> :warning: **This repository is in maintenance mode.**
+>
+> External pull requests and issues have been disabled. This project served primarily as an MCP client, proxy, and multiplexer for [obot-platform/obot](https://github.com/obot-platform/obot). That functionality is being replaced by a combination of the official [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) and our next-generation project, [mmmcp](https://github.com/obot-platform/mmmcp).
+>
+> No further feature development or external contributions will be accepted here.
 
 # Nanobot - Build MCP Agents
-
-> **Warning**
-> This project is under heavy development and is moving away from its original design and intent. Expect significant breaking changes, architectural shifts, and evolving APIs.
 
 Nanobot enables building agents with MCP and MCP-UI by providing a flexible MCP host.
 While existing applications like VSCode, Claude, Cursor, ChatGPT, and Goose all include an MCP host,
