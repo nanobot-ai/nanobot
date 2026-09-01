@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -493,5 +494,94 @@ func TestTokenEndpointAuthStyleHonorsClientSecretMethods(t *testing.T) {
 		if got := tokenEndpointAuthStyle(tt.method, true); got != tt.want {
 			t.Fatalf("expected auth style %v for method %q, got %v", tt.want, tt.method, got)
 		}
+	}
+}
+
+func TestAuthCodeURLRequestsOfflineAccessForEntra(t *testing.T) {
+	const (
+		entraAuthorize    = "https://login.microsoftonline.com/tenant-id/oauth2/v2.0/authorize"
+		nonEntraAuthorize = "https://example.com/oauth/authorize"
+		zohoAuthorize     = "https://mcp.zoho.com/oauth/v2/auth"
+		resourceURL       = "https://mcp.example.com/mcp"
+	)
+
+	tests := []struct {
+		name           string
+		authorizeURL   string
+		scopes         []string
+		wantScope      string
+		wantResource   bool
+		wantAccessType bool
+	}{
+		{
+			name:           "entra gets offline_access appended",
+			authorizeURL:   entraAuthorize,
+			scopes:         []string{"https://api.fabric.microsoft.com/.default"},
+			wantScope:      "https://api.fabric.microsoft.com/.default offline_access",
+			wantAccessType: true,
+		},
+		{
+			name:           "entra does not duplicate offline_access",
+			authorizeURL:   entraAuthorize,
+			scopes:         []string{"https://graph.microsoft.com/User.Read", "offline_access"},
+			wantScope:      "https://graph.microsoft.com/User.Read offline_access",
+			wantAccessType: true,
+		},
+		{
+			name:           "entra without scopes is left alone",
+			authorizeURL:   entraAuthorize,
+			scopes:         nil,
+			wantScope:      "",
+			wantAccessType: true,
+		},
+		{
+			name:           "non-entra keeps its scopes and gets the resource parameter",
+			authorizeURL:   nonEntraAuthorize,
+			scopes:         []string{"read", "write"},
+			wantScope:      "read write",
+			wantResource:   true,
+			wantAccessType: true,
+		},
+		{
+			name:         "zoho keeps its scopes and does not get access_type",
+			authorizeURL: zohoAuthorize,
+			scopes:       []string{"read"},
+			wantScope:    "read",
+			wantResource: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conf := &oauth2.Config{
+				ClientID: "client-id",
+				Scopes:   slices.Clone(tt.scopes),
+				Endpoint: oauth2.Endpoint{AuthURL: tt.authorizeURL},
+			}
+
+			raw, err := AuthCodeURL(conf, tt.authorizeURL, resourceURL, "state", "verifier")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			parsed, err := url.Parse(raw)
+			if err != nil {
+				t.Fatalf("failed to parse authorization URL: %v", err)
+			}
+			query := parsed.Query()
+
+			if got := query.Get("scope"); got != tt.wantScope {
+				t.Fatalf("unexpected scope: got %q, want %q", got, tt.wantScope)
+			}
+			if got := query.Has("resource"); got != tt.wantResource {
+				t.Fatalf("unexpected resource parameter presence: got %v, want %v", got, tt.wantResource)
+			}
+			if got := query.Get("access_type") == "offline"; got != tt.wantAccessType {
+				t.Fatalf("unexpected access_type parameter presence: got %v, want %v", got, tt.wantAccessType)
+			}
+			if !slices.Equal(conf.Scopes, tt.scopes) {
+				t.Fatalf("AuthCodeURL mutated the caller's scopes: got %v, want %v", conf.Scopes, tt.scopes)
+			}
+		})
 	}
 }
