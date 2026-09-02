@@ -236,7 +236,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	slog.Info("resolved oauth scope for server", "server", c.serverName, "scope", discovery.ClientRegistration.Scope)
 	slog.Info("resolved authorization server", "server", c.serverName, "authorization_server", discovery.AuthorizationServerURL)
 
-	clientInfo, err := o.resolveClientInfo(ctx, c.serverName, discovery)
+	clientInfo, staticClient, err := o.resolveClientInfo(ctx, c.serverName, discovery)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +253,7 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	if discovery.ClientRegistration.Scope != "" {
 		conf.Scopes = strings.Split(discovery.ClientRegistration.Scope, " ")
 	}
-	conf.Endpoint.AuthStyle = tokenEndpointAuthStyle(discovery.ClientRegistration.TokenEndpointAuthMethod, clientInfo.ClientSecret != "")
+	conf.Endpoint.AuthStyle = tokenEndpointAuthStyle(discovery.ClientRegistration.TokenEndpointAuthMethod, staticClient, clientInfo.ClientSecret != "")
 	authURL, ch, verifier, err := GetOAuthAuthorizationURL(ctx, o.callbackHandler, conf, authorizationServerMetadata.AuthorizationEndpoint, connectURL)
 	if err != nil {
 		return nil, err
@@ -310,7 +310,11 @@ func (o *oauth) oauthClient(ctx context.Context, c *HTTPClient, connectURL, auth
 	return oauth2.NewClient(ctx, newTokenSource(ctx, o.tokenStorage, connectURL, conf, tok)), nil
 }
 
-func tokenEndpointAuthStyle(tokenEndpointAuthMethod string, hasClientSecret bool) oauth2.AuthStyle {
+func tokenEndpointAuthStyle(tokenEndpointAuthMethod string, staticClient, hasClientSecret bool) oauth2.AuthStyle {
+	if staticClient {
+		return oauth2.AuthStyleAutoDetect
+	}
+
 	if !hasClientSecret {
 		return oauth2.AuthStyleInParams
 	}
@@ -325,7 +329,7 @@ func tokenEndpointAuthStyle(tokenEndpointAuthMethod string, hasClientSecret bool
 	}
 }
 
-func (o *oauth) resolveClientInfo(ctx context.Context, serverName string, discovery oauthMetadataDiscovery) (clientRegistrationResponse, error) {
+func (o *oauth) resolveClientInfo(ctx context.Context, serverName string, discovery oauthMetadataDiscovery) (clientRegistrationResponse, bool, error) {
 	authorizationServerMetadata := discovery.AuthorizationServerMetadata
 	protectedResourceMetadata := discovery.ProtectedResourceMetadata
 
@@ -333,7 +337,7 @@ func (o *oauth) resolveClientInfo(ctx context.Context, serverName string, discov
 		slog.Info("using oauth client ID metadata document", "server", serverName, "client_id", o.clientIDMetadataDocument)
 		return clientRegistrationResponse{
 			ClientID: o.clientIDMetadataDocument,
-		}, nil
+		}, false, nil
 	}
 
 	// Before trying to register a client, check if there is a static client configuration.
@@ -344,7 +348,7 @@ func (o *oauth) resolveClientInfo(ctx context.Context, serverName string, discov
 	clientInfo.ClientID, clientInfo.ClientSecret, lookupErr = o.clientLookup.Lookup(ctx, protectedResourceMetadata.AuthorizationServers[0])
 	if lookupErr == nil && clientInfo.ClientID != "" && clientInfo.ClientSecret != "" {
 		slog.Info("using static oauth client credentials", "server", serverName, "authorization_server", protectedResourceMetadata.AuthorizationServers[0])
-		return clientInfo, nil
+		return clientInfo, true, nil
 	}
 	if lookupErr != nil {
 		slog.Debug("static oauth client credential lookup failed", "server", serverName, "authorization_server", protectedResourceMetadata.AuthorizationServers[0], "error", lookupErr)
@@ -365,12 +369,12 @@ func (o *oauth) resolveClientInfo(ctx context.Context, serverName string, discov
 			"registration_endpoint", authorizationServerMetadata.RegistrationEndpoint,
 			"error", err)
 		if lookupErr != nil {
-			return clientRegistrationResponse{}, fmt.Errorf("%w - static OAuth client lookup also failed: %v", err, lookupErr)
+			return clientRegistrationResponse{}, false, fmt.Errorf("%w - static OAuth client lookup also failed: %v", err, lookupErr)
 		}
-		return clientRegistrationResponse{}, err
+		return clientRegistrationResponse{}, false, err
 	}
 
-	return clientInfo, nil
+	return clientInfo, false, nil
 }
 
 // GetOAuthMetadataSafely discovers OAuth protected resource and authorization server
