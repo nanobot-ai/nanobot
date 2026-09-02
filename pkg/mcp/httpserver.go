@@ -474,7 +474,7 @@ func (h *HTTPServer) serveHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	if msg.Method != "initialize" {
 		slog.Warn("mcp server rejected non-initialize message without session", "method", msg.Method, "request_id", MessageIDString(msg.ID))
-		http.Error(rw, fmt.Sprintf(`{"http_error": "Method not %q allowed"}`, msg.Method), http.StatusMethodNotAllowed)
+		http.Error(rw, fmt.Sprintf(`{"http_error": "Method %q not allowed prior to initialization"}`, msg.Method), http.StatusMethodNotAllowed)
 		return
 	}
 

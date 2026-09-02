@@ -417,7 +417,7 @@ func TestResolveClientInfoUsesClientIDMetadataDocument(t *testing.T) {
 		clientLookup:             lookup,
 	}
 
-	clientInfo, err := o.resolveClientInfo(t.Context(), "test-server", oauthMetadataDiscovery{
+	clientInfo, staticClient, err := o.resolveClientInfo(t.Context(), "test-server", oauthMetadataDiscovery{
 		ProtectedResourceMetadata: protectedResourceMetadata{
 			AuthorizationServers: []string{"https://issuer.example"},
 		},
@@ -427,6 +427,9 @@ func TestResolveClientInfoUsesClientIDMetadataDocument(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if staticClient {
+		t.Fatal("expected client ID metadata document not to be treated as a static client")
 	}
 
 	if clientInfo.ClientID != o.clientIDMetadataDocument {
@@ -450,7 +453,7 @@ func TestResolveClientInfoFallsBackWhenClientIDMetadataDocumentUnsupported(t *te
 		clientLookup:             lookup,
 	}
 
-	clientInfo, err := o.resolveClientInfo(t.Context(), "test-server", oauthMetadataDiscovery{
+	clientInfo, staticClient, err := o.resolveClientInfo(t.Context(), "test-server", oauthMetadataDiscovery{
 		ProtectedResourceMetadata: protectedResourceMetadata{
 			AuthorizationServers: []string{"https://issuer.example"},
 		},
@@ -460,6 +463,9 @@ func TestResolveClientInfoFallsBackWhenClientIDMetadataDocumentUnsupported(t *te
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !staticClient {
+		t.Fatal("expected configured client credentials to be treated as a static client")
 	}
 
 	if clientInfo.ClientID != lookup.clientID {
@@ -474,7 +480,7 @@ func TestResolveClientInfoFallsBackWhenClientIDMetadataDocumentUnsupported(t *te
 }
 
 func TestTokenEndpointAuthStyleUsesParamsWithoutClientSecret(t *testing.T) {
-	if got := tokenEndpointAuthStyle("client_secret_basic", false); got != oauth2.AuthStyleInParams {
+	if got := tokenEndpointAuthStyle("client_secret_basic", false, false); got != oauth2.AuthStyleInParams {
 		t.Fatalf("expected params auth style without client secret, got %v", got)
 	}
 }
@@ -490,8 +496,14 @@ func TestTokenEndpointAuthStyleHonorsClientSecretMethods(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := tokenEndpointAuthStyle(tt.method, true); got != tt.want {
+		if got := tokenEndpointAuthStyle(tt.method, false, true); got != tt.want {
 			t.Fatalf("expected auth style %v for method %q, got %v", tt.want, tt.method, got)
 		}
+	}
+}
+
+func TestTokenEndpointAuthStyleAutoDetectsForStaticClient(t *testing.T) {
+	if got := tokenEndpointAuthStyle("client_secret_post", true, true); got != oauth2.AuthStyleAutoDetect {
+		t.Fatalf("expected auto-detect auth style for static client, got %v", got)
 	}
 }
