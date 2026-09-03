@@ -181,6 +181,13 @@ func toRequest(req *types.CompletionRequest) (Request, error) {
 										Detail: "auto",
 									},
 								})
+							} else if mimeType, ok := types.VideoMimeTypes[item.Content.Resource.MIMEType]; ok {
+								parts = append(parts, ContentPart{
+									Type: "video_url",
+									VideoURL: &VideoURL{
+										URL: fmt.Sprintf("data:%s;base64,%s", mimeType, item.Content.Resource.Blob),
+									},
+								})
 							} else if _, ok := types.TextMimeTypes[item.Content.Resource.MIMEType]; ok {
 								text := item.Content.Resource.Text
 								if item.Content.Resource.Blob != "" {
