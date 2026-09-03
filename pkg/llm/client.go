@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/obot-platform/nanobot/pkg/complete"
@@ -25,12 +26,37 @@ type LLMProviderConfig struct {
 	Dialect types.Dialect
 	APIKey  string // supports ${VAR} syntax
 	BaseURL string // supports ${VAR} syntax
+	Region  string // supports ${VAR} syntax
 	Headers map[string]string
+}
+
+type ProviderEndpoint struct {
+	Region           string
+	OpenAIBaseURL    string
+	AnthropicBaseURL string
+	DocsRoot         string
+}
+
+// ModelPricing contains USD prices per million tokens.
+type ModelPricing struct {
+	Input      float64
+	Output     float64
+	CacheRead  float64
+	CacheWrite *float64
+}
+
+type ModelConfig struct {
+	ContextWindow   int
+	Pricing         ModelPricing
+	InputModalities []string
+	Thinking        []string
 }
 
 type Config struct {
 	DefaultModel, DefaultMiniModel string
 	LLMProviders                   map[string]LLMProviderConfig
+	ProviderEndpoints              map[string][]ProviderEndpoint
+	Models                         map[string]map[string]ModelConfig
 }
 
 func NewClient(cfg Config) *Client {
@@ -39,6 +65,31 @@ func NewClient(cfg Config) *Client {
 		defaultMiniModel: cfg.DefaultMiniModel,
 		cfg:              cfg,
 	}
+}
+
+func cloneProviderEndpoints(endpoints map[string][]ProviderEndpoint) map[string][]ProviderEndpoint {
+	result := make(map[string][]ProviderEndpoint, len(endpoints))
+	for provider, providerEndpoints := range endpoints {
+		result[provider] = slices.Clone(providerEndpoints)
+	}
+	return result
+}
+
+func cloneModels(models map[string]map[string]ModelConfig) map[string]map[string]ModelConfig {
+	result := make(map[string]map[string]ModelConfig, len(models))
+	for provider, providerModels := range models {
+		result[provider] = make(map[string]ModelConfig, len(providerModels))
+		for model, modelConfig := range providerModels {
+			modelConfig.InputModalities = slices.Clone(modelConfig.InputModalities)
+			modelConfig.Thinking = slices.Clone(modelConfig.Thinking)
+			if modelConfig.Pricing.CacheWrite != nil {
+				cacheWrite := *modelConfig.Pricing.CacheWrite
+				modelConfig.Pricing.CacheWrite = &cacheWrite
+			}
+			result[provider][model] = modelConfig
+		}
+	}
+	return result
 }
 
 type Client struct {
@@ -66,6 +117,64 @@ func resolveProvider(model string, cfg Config) (string, string) {
 		return model, "anthropic"
 	}
 	return model, "openai"
+}
+
+func (c Client) ModelConfig(model string) (ModelConfig, bool) {
+	model, provider := resolveProvider(model, c.cfg)
+	modelConfig, ok := c.cfg.Models[provider][model]
+	if !ok {
+		return ModelConfig{}, false
+	}
+	modelConfig.InputModalities = slices.Clone(modelConfig.InputModalities)
+	modelConfig.Thinking = slices.Clone(modelConfig.Thinking)
+	if modelConfig.Pricing.CacheWrite != nil {
+		cacheWrite := *modelConfig.Pricing.CacheWrite
+		modelConfig.Pricing.CacheWrite = &cacheWrite
+	}
+	return modelConfig, true
+}
+
+func (c Client) ContextWindow(model string) int {
+	modelConfig, ok := c.ModelConfig(model)
+	if !ok {
+		return 0
+	}
+	return modelConfig.ContextWindow
+}
+
+func endpointBaseURL(endpoint ProviderEndpoint, dialect types.Dialect) string {
+	if dialect == types.DialectAnthropicMessages {
+		return endpoint.AnthropicBaseURL
+	}
+	return endpoint.OpenAIBaseURL
+}
+
+func defaultBaseURL(endpoints []ProviderEndpoint, dialect types.Dialect, region string) string {
+	if region != "" {
+		for _, endpoint := range endpoints {
+			if endpoint.Region == region {
+				return endpointBaseURL(endpoint, dialect)
+			}
+		}
+	}
+	for _, endpoint := range endpoints {
+		if baseURL := endpointBaseURL(endpoint, dialect); baseURL != "" {
+			return baseURL
+		}
+	}
+	return ""
+}
+
+func isUnsetEnvReference(env map[string]string, value string) bool {
+	if len(value) < 4 || !strings.HasPrefix(value, "${") || !strings.HasSuffix(value, "}") {
+		return false
+	}
+	name := value[2 : len(value)-1]
+	if name == "" || strings.ContainsAny(name, " \t\n{}") {
+		return false
+	}
+	_, ok := env[name]
+	return !ok
 }
 
 func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts ...types.CompletionOptions) (ret *types.CompletionResponse, err error) {
@@ -154,9 +263,11 @@ func (c Client) Complete(ctx context.Context, req types.CompletionRequest, opts 
 
 func (c Client) dynamicConfig(ctx context.Context) Config {
 	cfg := Config{
-		DefaultModel:     c.defaultModel,
-		DefaultMiniModel: c.defaultMiniModel,
-		LLMProviders:     map[string]LLMProviderConfig{},
+		DefaultModel:      c.defaultModel,
+		DefaultMiniModel:  c.defaultMiniModel,
+		LLMProviders:      map[string]LLMProviderConfig{},
+		ProviderEndpoints: cloneProviderEndpoints(c.cfg.ProviderEndpoints),
+		Models:            cloneModels(c.cfg.Models),
 	}
 
 	// Start with built-in/static provider refs (env var names)
@@ -165,6 +276,7 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 			Dialect: p.Dialect,
 			APIKey:  p.APIKey,
 			BaseURL: p.BaseURL,
+			Region:  p.Region,
 			Headers: maps.Clone(p.Headers),
 		}
 	}
@@ -179,10 +291,12 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 	// Overlay providers defined in the YAML config for this session
 	typesConfig := types.ConfigFromContext(ctx)
 	for name, p := range typesConfig.LLMProviders {
+		builtIn := cfg.LLMProviders[name]
 		cfg.LLMProviders[name] = LLMProviderConfig{
 			Dialect: p.Dialect,
 			APIKey:  p.APIKey,
 			BaseURL: p.BaseURL,
+			Region:  builtIn.Region,
 			Headers: maps.Clone(p.Headers),
 		}
 	}
@@ -197,10 +311,26 @@ func (c Client) dynamicConfig(ctx context.Context) Config {
 
 	// Resolve ${VAR} references in provider config using the session env
 	for name, p := range cfg.LLMProviders {
+		region := p.Region
+		if isUnsetEnvReference(env, region) {
+			region = ""
+		} else {
+			region = envvar.ReplaceString(env, region)
+		}
+		baseURL := p.BaseURL
+		if len(cfg.ProviderEndpoints[name]) == 0 || !isUnsetEnvReference(env, baseURL) {
+			baseURL = envvar.ReplaceString(env, baseURL)
+		} else {
+			baseURL = ""
+		}
+		if baseURL == "" {
+			baseURL = defaultBaseURL(cfg.ProviderEndpoints[name], p.Dialect, region)
+		}
 		cfg.LLMProviders[name] = LLMProviderConfig{
 			Dialect: p.Dialect,
 			APIKey:  envvar.ReplaceString(env, p.APIKey),
-			BaseURL: envvar.ReplaceString(env, p.BaseURL),
+			BaseURL: baseURL,
+			Region:  region,
 			Headers: envvar.ReplaceMap(env, p.Headers),
 		}
 	}

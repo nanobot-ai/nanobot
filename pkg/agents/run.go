@@ -610,7 +610,7 @@ func (a *Agents) run(ctx context.Context, config types.Config, run *types.Execut
 	// Check if compaction is needed
 	agent, agentExists := config.Agents[completionRequest.GetAgent()]
 	if agentExists {
-		ctxWindowSize := getContextWindowSize(agent.ContextWindow)
+		ctxWindowSize := getContextWindowSize(agent.ContextWindow, completionRequest.Model, a.completer)
 		if shouldCompact(completionRequest, ctxWindowSize) {
 			var prevCompacted []types.Message
 			if prev != nil {

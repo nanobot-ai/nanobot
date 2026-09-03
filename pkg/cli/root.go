@@ -159,6 +159,7 @@ func display(obj any, format string) bool {
 }
 
 func (n *Nanobot) llmConfig() llm.Config {
+	cacheWrite := 0.375
 	return llm.Config{
 		DefaultModel:     n.DefaultModel,
 		DefaultMiniModel: n.DefaultMiniModel,
@@ -174,6 +175,53 @@ func (n *Nanobot) llmConfig() llm.Config {
 				Dialect: types.DialectAnthropicMessages,
 				APIKey:  "${ANTHROPIC_API_KEY}",
 				BaseURL: "${ANTHROPIC_BASE_URL}",
+			},
+			"minimax": {
+				Dialect: types.DialectOpenAIChatCompletions,
+				APIKey:  "${MINIMAX_API_KEY}",
+				BaseURL: "${MINIMAX_BASE_URL}",
+				Region:  "${MINIMAX_REGION}",
+			},
+		},
+		ProviderEndpoints: map[string][]llm.ProviderEndpoint{
+			"minimax": {
+				{
+					Region:           "global_en",
+					OpenAIBaseURL:    "https://api.minimax.io/v1",
+					AnthropicBaseURL: "https://api.minimax.io/anthropic",
+					DocsRoot:         "https://platform.minimax.io/docs",
+				},
+				{
+					Region:           "cn_zh",
+					OpenAIBaseURL:    "https://api.minimaxi.com/v1",
+					AnthropicBaseURL: "https://api.minimaxi.com/anthropic",
+					DocsRoot:         "https://platform.minimaxi.com/docs",
+				},
+			},
+		},
+		Models: map[string]map[string]llm.ModelConfig{
+			"minimax": {
+				"MiniMax-M3": {
+					ContextWindow: 1_000_000,
+					Pricing: llm.ModelPricing{
+						Input:     0.6,
+						Output:    2.4,
+						CacheRead: 0.12,
+					},
+					InputModalities: []string{"text", "image", "video"},
+					Thinking:        []string{"adaptive", "disabled"},
+				},
+				"MiniMax-M2.7": {
+					ContextWindow: 204_800,
+					Pricing: llm.ModelPricing{
+						Input:      0.3,
+						Output:     1.2,
+						CacheRead:  0.06,
+						CacheWrite: &cacheWrite,
+					},
+					InputModalities: []string{"text"},
+					Thinking:        []string{"always_on"},
+				},
 			},
 		},
 	}
